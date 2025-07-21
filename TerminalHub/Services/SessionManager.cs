@@ -17,7 +17,7 @@ namespace TerminalHub.Services
         Task<bool> SetActiveSessionAsync(string sessionId);
         string? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
-        event EventHandler<string>? ActiveSessionChanged;
+        // event EventHandler<string>? ActiveSessionChanged;
     }
 
     public class SessionManager : ISessionManager, IDisposable
@@ -31,7 +31,7 @@ namespace TerminalHub.Services
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
 
-        public event EventHandler<string>? ActiveSessionChanged;
+        // public event EventHandler<string>? ActiveSessionChanged;
 
         public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration)
         {

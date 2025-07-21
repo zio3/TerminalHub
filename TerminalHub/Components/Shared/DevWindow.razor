@@ -1,0 +1,217 @@
+@namespace TerminalHub.Components.Shared
+@using TerminalHub.Services
+@inject IJSRuntime JSRuntime
+@inject ILocalStorageService LocalStorageService
+
+@if (IsVisible)
+{
+    <div class="dev-window" style="@GetWindowStyle()">
+        <div class="dev-window-header" @onmousedown="StartDrag" @onmouseup="StopDrag">
+            <span class="dev-window-title">開発ツール</span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Close">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="dev-window-content">
+            <!-- 開発ツールの内容をここに追加 -->
+            <p class="text-muted text-center mt-5">開発ツールの内容は後で追加します</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        dotNetRef = DotNetObjectReference.Create(this);
+        currentInstance = this;
+        
+        // LocalStorageから位置を読み込み
+        var savedPosition = await LocalStorageService.GetAsync<DevWindowPosition>("devWindowPosition");
+        if (savedPosition != null)
+        {
+            windowX = savedPosition.X;
+            windowY = savedPosition.Y;
+        }
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsVisible && firstRender || (IsVisible && !firstRender))
+        {
+            // 画面内に収まっているかチェック
+            await CheckAndAdjustPosition();
+        }
+    }
+    
+    private async Task CheckAndAdjustPosition()
+    {
+        var windowSize = await JSRuntime.InvokeAsync<WindowSize>("eval", 
+            "({ width: window.innerWidth, height: window.innerHeight })");
+        
+        bool adjusted = false;
+        
+        // ウィンドウが画面外にある場合は調整
+        if (windowX < 0 || windowX > windowSize.Width - 100)
+        {
+            windowX = 0;
+            adjusted = true;
+        }
+        
+        if (windowY < 0 || windowY > windowSize.Height - 100)
+        {
+            windowY = 0;
+            adjusted = true;
+        }
+        
+        if (adjusted)
+        {
+            StateHasChanged();
+            await SavePosition();
+        }
+    }
+    
+    private bool isDragging = false;
+    private double startX = 0;
+    private double startY = 0;
+    private double windowX = 100;
+    private double windowY = 100;
+    private DotNetObjectReference<DevWindow>? dotNetRef;
+    private static DevWindow? currentInstance;
+    
+    private string GetWindowStyle()
+    {
+        return $"left: {windowX}px; top: {windowY}px;";
+    }
+    
+    private async Task StartDrag(MouseEventArgs e)
+    {
+        isDragging = true;
+        startX = e.ClientX - windowX;
+        startY = e.ClientY - windowY;
+        
+        await JSRuntime.InvokeVoidAsync("eval", @"
+            if (window.devWindowMouseMove) {
+                document.removeEventListener('mousemove', window.devWindowMouseMove);
+            }
+            if (window.devWindowMouseUp) {
+                document.removeEventListener('mouseup', window.devWindowMouseUp);
+            }
+            
+            document.addEventListener('mousemove', window.devWindowMouseMove = (e) => {
+                DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseMove', e.clientX, e.clientY);
+            });
+            document.addEventListener('mouseup', window.devWindowMouseUp = () => {
+                DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseUp');
+            });
+        ");
+    }
+    
+    private async Task StopDrag()
+    {
+        isDragging = false;
+        await SavePosition();
+        
+        await JSRuntime.InvokeVoidAsync("eval", @"
+            if (window.devWindowMouseMove) {
+                document.removeEventListener('mousemove', window.devWindowMouseMove);
+                window.devWindowMouseMove = null;
+            }
+            if (window.devWindowMouseUp) {
+                document.removeEventListener('mouseup', window.devWindowMouseUp);
+                window.devWindowMouseUp = null;
+            }
+        ");
+    }
+    
+    [JSInvokable]
+    public static void OnDevWindowMouseMove(double x, double y)
+    {
+        if (currentInstance != null && currentInstance.isDragging)
+        {
+            currentInstance.windowX = x - currentInstance.startX;
+            currentInstance.windowY = y - currentInstance.startY;
+            currentInstance.StateHasChanged();
+        }
+    }
+    
+    [JSInvokable]
+    public static async Task OnDevWindowMouseUp()
+    {
+        if (currentInstance != null)
+        {
+            await currentInstance.StopDrag();
+        }
+    }
+    
+    private async Task SavePosition()
+    {
+        var position = new DevWindowPosition { X = windowX, Y = windowY };
+        await LocalStorageService.SetAsync("devWindowPosition", position);
+    }
+    
+    private async Task Close()
+    {
+        await IsVisibleChanged.InvokeAsync(false);
+    }
+    
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+        if (currentInstance == this)
+        {
+            currentInstance = null;
+        }
+    }
+    
+    private class DevWindowPosition
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+    
+    private class WindowSize
+    {
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+}
+
+<style>
+    .dev-window {
+        position: fixed;
+        width: 600px;
+        height: 400px;
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        z-index: 1050;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .dev-window-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.5rem 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: move;
+        border-radius: 0.5rem 0.5rem 0 0;
+    }
+    
+    .dev-window-title {
+        font-weight: 600;
+        user-select: none;
+    }
+    
+    .dev-window-content {
+        flex: 1;
+        padding: 1rem;
+        overflow-y: auto;
+    }
+</style>

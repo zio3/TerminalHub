@@ -5,9 +5,11 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.JSInterop
+@using Microsoft.Extensions.Configuration
 @inject ISessionManager SessionManager
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
+@inject IConfiguration Configuration
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -17,6 +19,7 @@
 <SessionCreateDialog IsVisible="showCreateDialog" 
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
+<DevWindow @bind-IsVisible="showDevWindow" />
 
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -147,12 +150,6 @@
                                         <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行
                                     </div>
                                     <div class="btn-group">
-                                        <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
-                                                @onclick="SendCtrlC" 
-                                                title="Ctrl+C送信 (中断・コピー)"
-                                                style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
-                                            <i class="bi bi-clipboard"></i> Ctrl+C
-                                        </button>
                                         <button class="btn btn-secondary @(isEscapePressed ? "active" : "")" 
                                                 @onclick="SendEscape" 
                                                 title="中断 (Esc)"
@@ -166,6 +163,14 @@
                                                     title="モード切替 (Alt+M)"
                                                     style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
                                                 <i class="bi bi-arrow-repeat"></i> Alt+M
+                                            </button>
+                                        }
+                                        @if (showDevButton)
+                                        {
+                                            <button class="btn btn-secondary" 
+                                                    @onclick="() => showDevWindow = !showDevWindow" 
+                                                    title="開発ツール">
+                                                <i class="bi bi-code-square"></i> Dev
                                             </button>
                                         }
                                         <button class="btn btn-primary" @onclick="SendInput" disabled="@(string.IsNullOrWhiteSpace(inputText))">
@@ -212,10 +217,16 @@
     private bool shouldPreventDefault = false;
     private string? editingMemoSessionId = null;
     private string tempMemoText = "";
+    private bool showDevWindow = false;
+    private bool showDevButton = false;
 
     protected override async Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
+        
+        // 開発モード設定を読み込み
+        showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
+        showDevWindow = Configuration.GetValue<bool>("DevelopmentMode:ShowDevWindowOnStartup", false);
         
         // ローカルストレージからセッション情報を復元
         var savedSessions = await LocalStorageService.LoadSessionsAsync();
@@ -378,7 +389,7 @@
             {
                 await activeTerminal.DisposeAsync();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
             }
@@ -391,7 +402,7 @@
             await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
             // Console.WriteLine($"[SelectSession] すべてのターミナルを非表示にしました");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {ex.Message}");
         }
@@ -424,7 +435,7 @@
                 await Task.Delay(TerminalConstants.MinimalDelay);
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Console.WriteLine($"[SelectSession] div確認エラー: {ex.Message}");
         }
@@ -442,7 +453,7 @@
                 // Console.WriteLine($"[SelectSession] ターミナルリサイズ実行");
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Console.WriteLine($"[SelectSession] リサイズエラー: {ex.Message}");
         }
@@ -481,7 +492,7 @@
             
             // Console.WriteLine($"[InitializeTerminal] ターミナル作成成功");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Console.WriteLine($"[InitializeTerminal] ターミナル作成エラー: {ex.Message}");
         }
@@ -529,7 +540,7 @@
                     await activeTerminal.InvokeVoidAsync("write", data);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
@@ -882,7 +893,6 @@
 
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
-    private bool isCtrlCPressed = false;
 
     private async Task SendEscape()
     {
@@ -931,23 +941,6 @@
         await activeSession.WriteAsync("\r");
     }
 
-    private async Task SendCtrlC()
-    {
-        if (activeSession == null)
-            return;
-
-        // ボタンの押下状態を表示
-        isCtrlCPressed = true;
-        StateHasChanged();
-
-        // Ctrl+C を送信（\x03 はETX - End of Text / Control-C）
-        await activeSession.WriteAsync("\x03");
-
-        // 押下状態を解除
-        await Task.Delay(150);
-        isCtrlCPressed = false;
-        StateHasChanged();
-    }
 
     public async ValueTask DisposeAsync()
     {

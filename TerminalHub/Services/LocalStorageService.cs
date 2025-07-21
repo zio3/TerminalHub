@@ -11,6 +11,8 @@ namespace TerminalHub.Services
         Task SaveActiveSessionIdAsync(string? sessionId);
         Task<string?> LoadActiveSessionIdAsync();
         Task ClearAsync();
+        Task<T?> GetAsync<T>(string key);
+        Task SetAsync<T>(string key, T value);
     }
 
     public class LocalStorageService : ILocalStorageService
@@ -105,6 +107,36 @@ namespace TerminalHub.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error clearing localStorage: {ex.Message}");
+            }
+        }
+        
+        public async Task<T?> GetAsync<T>(string key)
+        {
+            try
+            {
+                var json = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", key);
+                if (string.IsNullOrEmpty(json))
+                    return default;
+                
+                return JsonSerializer.Deserialize<T>(json, _jsonOptions);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading {key} from localStorage: {ex.Message}");
+                return default;
+            }
+        }
+        
+        public async Task SetAsync<T>(string key, T value)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(value, _jsonOptions);
+                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", key, json);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving {key} to localStorage: {ex.Message}");
             }
         }
     }
