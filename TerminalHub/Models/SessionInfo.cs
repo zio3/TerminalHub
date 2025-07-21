@@ -18,6 +18,7 @@ namespace TerminalHub.Models
         public bool IsActive { get; set; }
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
+        public string Memo { get; set; } = string.Empty;
         
         [System.Text.Json.Serialization.JsonIgnore]
         public string? ProcessingStatus { get; set; }

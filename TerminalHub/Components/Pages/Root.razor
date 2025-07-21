@@ -20,7 +20,7 @@
 
 <div class="container-fluid h-100">
     <div class="row h-100">
-        <div class="col-md-3 border-end bg-light p-3" style="height: 100vh; overflow-y: auto;">
+        <div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
             
             <div class="mb-3">
                 <button class="btn btn-primary w-100" @onclick="AddSession" disabled="@isAddingSession">
@@ -28,7 +28,7 @@
                 </button>
             </div>
 
-            <div class="list-group">
+            <div class="list-group flex-grow-1" style="overflow-y: auto;">
                 @foreach (var session in sessions)
                 {
                     <div class="list-group-item list-group-item-action @(session.SessionId == activeSessionId ? "active" : "")" 
@@ -43,7 +43,6 @@
                                         <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                                     }
                                 </h6>
-                                <small class="text-muted">@session.SessionId.Substring(0, TerminalConstants.SessionIdDisplayLength)</small>
                                 @if (!string.IsNullOrEmpty(session.ProcessingStatus))
                                 {
                                     <div>
@@ -59,7 +58,37 @@
                                 <i class="bi bi-x"></i>
                             </button>
                         </div>
-                        <small class="text-muted">作成: @session.CreatedAt.ToString("HH:mm")</small>
+                        <div class="mt-2">
+                            @if (editingMemoSessionId == session.SessionId)
+                            {
+                                <input type="text" class="form-control form-control-sm" 
+                                       placeholder="メモを入力..."
+                                       value="@tempMemoText"
+                                       @onclick:stopPropagation="true"
+                                       @oninput="@((e) => tempMemoText = e.Value?.ToString() ?? "")"
+                                       @onblur="@(async () => await SaveMemo(session.SessionId))"
+                                       @onkeydown="@(async (e) => await HandleMemoKeyDown(e, session.SessionId))"
+                                       @onkeydown:stopPropagation="true"
+                                       style="font-size: 0.875rem;" 
+                                       autofocus />
+                            }
+                            else
+                            {
+                                <div class="text-muted small" 
+                                     @onclick:stopPropagation="true"
+                                     @onclick="() => StartEditingMemo(session.SessionId, session.Memo)"
+                                     style="cursor: pointer; font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03);">
+                                    @if (string.IsNullOrWhiteSpace(session.Memo))
+                                    {
+                                        <span style="font-style: italic; opacity: 0.6;">メモを追加...</span>
+                                    }
+                                    else
+                                    {
+                                        @session.Memo
+                                    }
+                                </div>
+                            }
+                        </div>
                     </div>
                 }
             </div>
@@ -71,8 +100,8 @@
                 </div>
             }
 
-            <!-- デバッグショートカット説明 -->
-            <div class="mt-4 p-2" style="font-size: 0.8rem; color: #6c757d;">
+            <!-- ショートカット説明を最下部に固定 -->
+            <div class="mt-auto p-2 border-top" style="font-size: 0.8rem; color: #6c757d; position: sticky; bottom: 0; background-color: #f8f9fa;">
                 <p class="mb-1"><strong>ショートカット:</strong></p>
                 <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
                 <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
@@ -168,28 +197,6 @@
     </div>
 </div>
 
-<style>
-    .terminal-wrapper {
-        flex: 1;
-        overflow: auto;
-        background-color: #000;
-        padding: 10px;
-    }
-    
-    .terminal-container {
-        width: 100%;
-        height: 100%;
-        min-height: 400px;
-    }
-    
-    .btn {
-        transition: transform 0.1s ease-in-out;
-    }
-    
-    .btn:active {
-        transform: scale(0.95);
-    }
-</style>
 
 @code {
     private List<SessionInfo> sessions = new();
@@ -203,6 +210,8 @@
     private Toast? toast;
     private string inputText = "";
     private bool shouldPreventDefault = false;
+    private string? editingMemoSessionId = null;
+    private string tempMemoText = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -213,16 +222,38 @@
         var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
         
         // 保存されたセッション情報をSessionManagerに復元
+        var restoredSessionIds = new HashSet<string>();
         foreach (var sessionInfo in savedSessions)
         {
+            // 重複チェック（ホットリロード対策）
+            var existingSession = SessionManager.GetSessionInfo(sessionInfo.SessionId);
+            if (existingSession != null)
+            {
+                restoredSessionIds.Add(sessionInfo.SessionId);
+                continue;
+            }
+            
             // セッションを再作成（ターミナルプロセスの起動）
             try
             {
-                await SessionManager.CreateSessionAsync(
+                var newSession = await SessionManager.CreateSessionAsync(
                     sessionInfo.FolderPath,
                     sessionInfo.DisplayName,
                     sessionInfo.TerminalType,
                     sessionInfo.Options);
+                    
+                // メモ情報も復元
+                if (!string.IsNullOrEmpty(sessionInfo.Memo))
+                {
+                    var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
+                    if (createdSession != null)
+                    {
+                        createdSession.Memo = sessionInfo.Memo;
+                        await SessionManager.SaveSessionInfoAsync(createdSession);
+                    }
+                }
+                
+                restoredSessionIds.Add(newSession.SessionId);
             }
             catch (Exception ex)
             {
@@ -509,6 +540,49 @@
         }
         
         // Console.WriteLine($"[ReadOutput] 終了: sessionId={localSessionId}");
+    }
+
+    private void StartEditingMemo(string sessionId, string currentMemo)
+    {
+        editingMemoSessionId = sessionId;
+        tempMemoText = currentMemo ?? "";
+        StateHasChanged();
+    }
+
+    private async Task SaveMemo(string sessionId)
+    {
+        if (editingMemoSessionId == sessionId)
+        {
+            await UpdateSessionMemo(sessionId, tempMemoText);
+            editingMemoSessionId = null;
+            tempMemoText = "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleMemoKeyDown(KeyboardEventArgs e, string sessionId)
+    {
+        if (e.Key == "Enter")
+        {
+            await SaveMemo(sessionId);
+        }
+        else if (e.Key == "Escape")
+        {
+            editingMemoSessionId = null;
+            tempMemoText = "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateSessionMemo(string sessionId, string memo)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null)
+        {
+            session.Memo = memo;
+            // ローカルストレージを更新
+            await LocalStorageService.SaveSessionsAsync(sessions);
+        }
     }
 
     private async Task RemoveSession(string sessionId)
