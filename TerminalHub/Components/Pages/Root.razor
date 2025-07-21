@@ -7,12 +7,16 @@
 @using Microsoft.JSInterop
 @inject ISessionManager SessionManager
 @inject IJSRuntime JSRuntime
+@inject ILocalStorageService LocalStorageService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <PageTitle>マルチセッション ターミナル</PageTitle>
 
 <Toast @ref="toast" />
+<SessionCreateDialog IsVisible="showCreateDialog" 
+                    OnSessionCreate="OnSessionCreate" 
+                    OnCancel="OnDialogCancel" />
 
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -32,8 +36,22 @@
                          style="cursor: pointer;">
                         <div class="d-flex w-100 justify-content-between align-items-center">
                             <div class="flex-fill">
-                                <h6 class="mb-1">@session.GetDisplayName()</h6>
+                                <h6 class="mb-1">
+                                    @session.GetDisplayName()
+                                    @if (session.TerminalType != TerminalType.Terminal)
+                                    {
+                                        <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
+                                    }
+                                </h6>
                                 <small class="text-muted">@session.SessionId.Substring(0, TerminalConstants.SessionIdDisplayLength)</small>
+                                @if (!string.IsNullOrEmpty(session.ProcessingStatus))
+                                {
+                                    <div>
+                                        <small class="text-warning">
+                                            <i class="bi bi-clock-fill me-1"></i>@session.ProcessingStatus
+                                        </small>
+                                    </div>
+                                }
                             </div>
                             <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" 
                                     @onclick="() => RemoveSession(session.SessionId)"
@@ -52,6 +70,14 @@
                     <i class="bi bi-info-circle"></i> ボタンをクリックしてセッションを作成してください
                 </div>
             }
+
+            <!-- デバッグショートカット説明 -->
+            <div class="mt-4 p-2" style="font-size: 0.8rem; color: #6c757d;">
+                <p class="mb-1"><strong>ショートカット:</strong></p>
+                <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
+                <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
+                <p class="mb-0"><kbd>Ctrl+Shift+C</kbd> - ストレージクリア</p>
+            </div>
         </div>
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
@@ -70,7 +96,63 @@
                 
                 <!-- WebUI部分 (30%) -->
                 <div style="height: 30%; overflow-y: auto; border-top: 1px solid #dee2e6; background-color: #f8f9fa;">
-                    <!-- ここにWebUIコンテンツを追加 -->
+                    @{
+                        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+                    }
+                    @if (currentSession != null && (currentSession.TerminalType == TerminalType.ClaudeCode || currentSession.TerminalType == TerminalType.GeminiCLI))
+                    {
+                        <div class="p-3 h-100 d-flex flex-column">
+                            
+                            <div class="flex-grow-1 d-flex flex-column">
+                                <textarea class="form-control flex-grow-1" 
+                                          @bind="inputText"
+                                          @bind:event="oninput"
+                                          @onkeydown="OnTextAreaKeyDown"
+                                          @onkeydown:preventDefault="@shouldPreventDefault"
+                                          placeholder="@(GetPlaceholderText(currentSession.TerminalType))"
+                                          style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
+                                </textarea>
+                                
+                                <div class="mt-2 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行
+                                    </div>
+                                    <div class="btn-group">
+                                        <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
+                                                @onclick="SendCtrlC" 
+                                                title="Ctrl+C送信 (中断・コピー)"
+                                                style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
+                                            <i class="bi bi-clipboard"></i> Ctrl+C
+                                        </button>
+                                        <button class="btn btn-secondary @(isEscapePressed ? "active" : "")" 
+                                                @onclick="SendEscape" 
+                                                title="中断 (Esc)"
+                                                style="@(isEscapePressed ? "transform: scale(0.95);" : "")">
+                                            <i class="bi bi-stop-circle"></i> 中断
+                                        </button>
+                                        @if (currentSession.TerminalType == TerminalType.ClaudeCode)
+                                        {
+                                            <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")" 
+                                                    @onclick="SendModeSwitch" 
+                                                    title="モード切替 (Alt+M)"
+                                                    style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
+                                                <i class="bi bi-arrow-repeat"></i> Alt+M
+                                            </button>
+                                        }
+                                        <button class="btn btn-primary" @onclick="SendInput" disabled="@(string.IsNullOrWhiteSpace(inputText))">
+                                            <i class="bi bi-send"></i> 送信
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="p-3 text-center text-muted">
+                            <p>このセッションタイプではWebUIは使用できません</p>
+                        </div>
+                    }
                 </div>
             }
             else
@@ -99,64 +181,130 @@
         height: 100%;
         min-height: 400px;
     }
+    
+    .btn {
+        transition: transform 0.1s ease-in-out;
+    }
+    
+    .btn:active {
+        transform: scale(0.95);
+    }
 </style>
 
 @code {
     private List<SessionInfo> sessions = new();
     private string? activeSessionId;
     private bool isAddingSession = false;
+    private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
     private CancellationTokenSource? readCts;
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
+    private string inputText = "";
+    private bool shouldPreventDefault = false;
 
     protected override async Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
+        
+        // ローカルストレージからセッション情報を復元
+        var savedSessions = await LocalStorageService.LoadSessionsAsync();
+        var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
+        
+        // 保存されたセッション情報をSessionManagerに復元
+        foreach (var sessionInfo in savedSessions)
+        {
+            // セッションを再作成（ターミナルプロセスの起動）
+            try
+            {
+                await SessionManager.CreateSessionAsync(
+                    sessionInfo.FolderPath,
+                    sessionInfo.DisplayName,
+                    sessionInfo.TerminalType,
+                    sessionInfo.Options);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to restore session {sessionInfo.SessionId}: {ex.Message}");
+            }
+        }
+        
         sessions = SessionManager.GetAllSessions().ToList();
         
-        // 既存のアクティブセッションがあれば選択
-        var activeId = SessionManager.GetActiveSessionId();
-        if (activeId != null && sessions.Any(s => s.SessionId == activeId))
+        // 保存されたアクティブセッションがあれば選択
+        if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
         {
-            await SelectSession(activeId);
+            await SelectSession(savedActiveId);
         }
     }
 
-    protected override Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // 初期化は terminal.js 内で行うため不要
-        return Task.CompletedTask;
+        if (firstRender)
+        {
+            // キーボードショートカットを登録
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                document.addEventListener('keydown', (e) => {
+                    // Ctrl + Shift + D: デバッグ情報を表示
+                    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                        e.preventDefault();
+                        console.log('Debug Info:');
+                        console.log('Sessions:', Object.keys(window.multiSessionTerminals || {}));
+                        console.log('Active terminals:', window.multiSessionTerminals);
+                        console.log('LocalStorage sessions:', localStorage.getItem('terminalHub_sessions'));
+                        console.log('LocalStorage activeSession:', localStorage.getItem('terminalHub_activeSession'));
+                    }
+                    // Ctrl + Shift + C: ローカルストレージをクリア
+                    else if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+                        e.preventDefault();
+                        if (confirm('ローカルストレージをクリアしますか？')) {
+                            localStorage.clear();
+                            console.log('LocalStorage cleared');
+                            location.reload();
+                        }
+                    }
+                    // Ctrl + Shift + N: 新しいセッション（クイック作成）
+                    else if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+                        e.preventDefault();
+                        document.querySelector('button.btn-primary')?.click();
+                    }
+                });
+            ");
+        }
     }
 
     private async Task AddSession()
     {
-        if (isAddingSession)
-            return;
+        showCreateDialog = true;
+        StateHasChanged();
+    }
 
+    private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
+    {
+        showCreateDialog = false;
         isAddingSession = true;
+        
         try
         {
-            // Console.WriteLine($"[AddSession] 新しいセッション作成開始");
-            var sessionInfo = await SessionManager.CreateSessionAsync();
-            // Console.WriteLine($"[AddSession] セッション作成完了: {sessionInfo.SessionId}");
+            var sessionInfo = await SessionManager.CreateSessionAsync(
+                result.FolderPath, 
+                "", // セッション名は空（フォルダ名を使用）
+                result.TerminalType, 
+                result.Options);
             
             sessions = SessionManager.GetAllSessions().ToList();
-            // Console.WriteLine($"[AddSession] セッション数: {sessions.Count}");
             
-            // StateHasChangedを呼び出してUIを更新
+            // ローカルストレージに保存
+            await LocalStorageService.SaveSessionsAsync(sessions);
+            
             StateHasChanged();
             
-            // DOM更新を確実に待つ
             await Task.Delay(TerminalConstants.DomUpdateDelay);
-            
-            // Console.WriteLine($"[AddSession] SelectSession呼び出し");
             await SelectSession(sessionInfo.SessionId);
         }
         catch (Exception ex)
         {
-            // Console.WriteLine($"[AddSession] エラー: {ex.Message}");
             toast?.ShowError($"セッション作成エラー: {ex.Message}");
         }
         finally
@@ -164,6 +312,13 @@
             isAddingSession = false;
         }
     }
+
+    private void OnDialogCancel()
+    {
+        showCreateDialog = false;
+        StateHasChanged();
+    }
+
 
     private async Task SelectSession(string sessionId)
     {
@@ -214,6 +369,9 @@
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
         activeSession = SessionManager.GetSession(sessionId);
+        
+        // アクティブセッションIDをローカルストレージに保存
+        await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
         
         // Console.WriteLine($"[SelectSession] StateHasChanged呼び出し");
         StateHasChanged();
@@ -328,6 +486,15 @@
                         
                     var data = new string(buffer, 0, charsRead);
                     // Console.WriteLine($"[ReadOutput] セッション {localSessionId} に {charsRead} 文字書き込み");
+                    
+                    // Claude Codeセッションの場合、処理状態を解析
+                    var currentSession = sessions.FirstOrDefault(s => s.SessionId == localSessionId);
+                    if (currentSession?.TerminalType == TerminalType.ClaudeCode)
+                    {
+                        // Claude Codeの処理状態パターンを検出
+                        AnalyzeClaudeCodeOutput(data);
+                    }
+                    
                     await activeTerminal.InvokeVoidAsync("write", data);
                 }
             }
@@ -370,10 +537,14 @@
         await SessionManager.RemoveSessionAsync(sessionId);
         sessions = SessionManager.GetAllSessions().ToList();
         
+        // ローカルストレージを更新
+        await LocalStorageService.SaveSessionsAsync(sessions);
+        
         if (activeSessionId == sessionId)
         {
             activeSessionId = null;
             activeSession = null;
+            await LocalStorageService.SaveActiveSessionIdAsync(null);
             
             // 他のセッションがあれば最初のものを選択
             if (sessions.Any())
@@ -494,6 +665,214 @@
             // Console.WriteLine($"[RecreateTerminal] エラー: {ex.Message}");
             toast?.ShowError($"ターミナル再作成エラー: {ex.Message}");
         }
+    }
+
+    private string GetTerminalTypeBadge(TerminalType type)
+    {
+        return type switch
+        {
+            TerminalType.ClaudeCode => "Claude",
+            TerminalType.GeminiCLI => "Gemini",
+            _ => "Terminal"
+        };
+    }
+
+    private void AnalyzeClaudeCodeOutput(string data)
+    {
+        try
+        {
+            // 処理状態パターンの検出
+            var patterns = new[]
+            {
+                @"[·✽]\s*(.*?ing[^(]*)\s*\((\d+)s\s*·\s*([↑↓⚒])\s*(\d+)\s*tokens?\s*·\s*esc to interrupt\)",
+                @"\[Request interrupted by user\]"
+            };
+            
+            foreach (var pattern in patterns)
+            {
+                var regex = new System.Text.RegularExpressions.Regex(pattern);
+                var matches = regex.Matches(data);
+                
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    if (pattern.Contains("Request interrupted"))
+                    {
+                        Console.WriteLine("[Claude Code Status] 処理が中断されました");
+                        UpdateSessionProcessingStatus(null);
+                    }
+                    else if (match.Groups.Count >= 5)
+                    {
+                        var action = match.Groups[1].Value.Trim();
+                        var seconds = match.Groups[2].Value;
+                        var direction = match.Groups[3].Value;
+                        var tokens = match.Groups[4].Value;
+                        
+                        var directionText = direction switch
+                        {
+                            "↑" => "送信",
+                            "↓" => "受信", 
+                            "⚒" => "処理中",
+                            _ => direction
+                        };
+                        
+                        var statusText = $"{seconds}秒 · {directionText} {tokens}トークン";
+                        Console.WriteLine($"[Claude Code Status] {action} - {statusText}");
+                        UpdateSessionProcessingStatus(statusText);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Claude Code Analysis Error] {ex.Message}");
+        }
+    }
+
+    private void UpdateSessionProcessingStatus(string? statusText)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        if (session != null)
+        {
+            Console.WriteLine($"[UI Update] セッション {activeSessionId} の処理状態を更新: {statusText ?? "null"}");
+            
+            session.ProcessingStatus = statusText;
+            if (statusText != null)
+            {
+                session.ProcessingStartTime = DateTime.Now;
+            }
+            else
+            {
+                session.ProcessingStartTime = null;
+            }
+            
+            // UIスレッドで強制的に更新
+            try
+            {
+                InvokeAsync(StateHasChanged);
+                Console.WriteLine("[UI Update] StateHasChanged実行完了");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StateHasChanged Error] {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[UI Update] アクティブセッション {activeSessionId} が見つかりません");
+        }
+    }
+
+    private async Task SendInput()
+    {
+        if (string.IsNullOrWhiteSpace(inputText) || activeSession == null)
+            return;
+
+        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        if (currentSession == null)
+            return;
+
+        // テキストを送信
+        await activeSession.WriteAsync(inputText);
+        
+        // 送信後にEnterキーを送信
+        await Task.Delay(50); // 少し待機
+        await SendEnterKeyDirect();
+        
+        // 入力フィールドをクリア
+        inputText = "";
+        StateHasChanged();
+    }
+
+    private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
+    {
+        // Enter で送信（Shiftキーが押されていない場合）
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            shouldPreventDefault = true;
+            await SendInput();
+            shouldPreventDefault = false;
+        }
+        else
+        {
+            shouldPreventDefault = false;
+        }
+        // Shift+Enter は通常の改行動作（何もしない）
+    }
+
+    private string GetPlaceholderText(TerminalType terminalType)
+    {
+        return terminalType == TerminalType.ClaudeCode 
+            ? "Claude Codeへのメッセージを入力..." 
+            : "Gemini CLIへのメッセージを入力...";
+    }
+
+    private bool isEscapePressed = false;
+    private bool isModeSwitchPressed = false;
+    private bool isCtrlCPressed = false;
+
+    private async Task SendEscape()
+    {
+        if (activeSession == null)
+            return;
+
+        // ボタンの押下状態を表示
+        isEscapePressed = true;
+        StateHasChanged();
+
+        // Escキーを送信（\x1B はESCのエスケープシーケンス）
+        await activeSession.WriteAsync("\x1B");
+
+        // 押下状態を解除
+        await Task.Delay(150);
+        isEscapePressed = false;
+        StateHasChanged();
+    }
+
+    private async Task SendModeSwitch()
+    {
+        if (activeSession == null)
+            return;
+
+        // ボタンの押下状態を表示
+        isModeSwitchPressed = true;
+        StateHasChanged();
+
+        // Alt+M を送信（\x1B はESC、m はM）
+        await activeSession.WriteAsync("\x1Bm");
+
+        // 押下状態を解除
+        await Task.Delay(150);
+        isModeSwitchPressed = false;
+        StateHasChanged();
+    }
+
+
+    private async Task SendEnterKeyDirect()
+    {
+        if (activeSession == null)
+            return;
+
+        // 様々なEnterキーのパターンを試す
+        // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
+        await activeSession.WriteAsync("\r");
+    }
+
+    private async Task SendCtrlC()
+    {
+        if (activeSession == null)
+            return;
+
+        // ボタンの押下状態を表示
+        isCtrlCPressed = true;
+        StateHasChanged();
+
+        // Ctrl+C を送信（\x03 はETX - End of Text / Control-C）
+        await activeSession.WriteAsync("\x03");
+
+        // 押下状態を解除
+        await Task.Delay(150);
+        isCtrlCPressed = false;
+        StateHasChanged();
     }
 
     public async ValueTask DisposeAsync()

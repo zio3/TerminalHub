@@ -13,6 +13,9 @@ builder.Services.AddSingleton<IConPtyService, ConPtyService>();
 // SessionManagerサービスを登録
 builder.Services.AddSingleton<ISessionManager, SessionManager>();
 
+// LocalStorageServiceを登録
+builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

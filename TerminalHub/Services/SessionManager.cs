@@ -9,12 +9,14 @@ namespace TerminalHub.Services
     public interface ISessionManager
     {
         Task<SessionInfo> CreateSessionAsync(string? folderPath = null);
+        Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<bool> RemoveSessionAsync(string sessionId);
         ConPtySession? GetSession(string sessionId);
         IEnumerable<SessionInfo> GetAllSessions();
         SessionInfo? GetSessionInfo(string sessionId);
         Task<bool> SetActiveSessionAsync(string sessionId);
         string? GetActiveSessionId();
+        Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         event EventHandler<string>? ActiveSessionChanged;
     }
 
@@ -41,73 +43,175 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
         {
+            // 既存のメソッドは互換性のために残す
+            var basePath = _configuration.GetValue<string>("SessionSettings:BasePath") 
+                ?? @"C:\Users\info\source\repos\Experimental2025\ClaoudeCodeWebUi\bin\Debug\net9.0";
+            return await CreateSessionAsync(basePath, "", TerminalType.Terminal, new Dictionary<string, string>());
+        }
+
+        public async Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
+        {
             // セッション数の上限チェック
             if (_sessions.Count >= _maxSessions)
             {
                 throw new InvalidOperationException($"最大セッション数（{_maxSessions}）に達しています。");
             }
             
-            // 設定からベースパスを取得
-            var basePath = _configuration.GetValue<string>("SessionSettings:BasePath") 
-                ?? @"C:\Users\info\source\repos\Experimental2025\ClaoudeCodeWebUi\bin\Debug\net9.0";
             var sessionGuid = Guid.NewGuid().ToString();
-            var sessionPath = Path.Combine(basePath, sessionGuid);
             
-            // Console.WriteLine($"[SessionManager] CreateSessionAsync開始: {sessionPath}");
-            
-            // フォルダを作成
-            try
+            // フォルダパスが指定されていない場合はデフォルトを使用
+            if (string.IsNullOrWhiteSpace(folderPath))
             {
-                Directory.CreateDirectory(sessionPath);
-                // Console.WriteLine($"[SessionManager] フォルダ作成成功: {sessionPath}");
+                folderPath = _configuration.GetValue<string>("SessionSettings:BasePath") 
+                    ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
-            catch (Exception ex)
+            
+            // フォルダが存在することを確認
+            if (!Directory.Exists(folderPath))
             {
-                Console.WriteLine($"[SessionManager] フォルダ作成エラー: {ex.Message}");
-                throw;
+                throw new DirectoryNotFoundException($"指定されたフォルダが見つかりません: {folderPath}");
             }
             
             var sessionInfo = new SessionInfo
             {
                 SessionId = sessionGuid,
-                FolderPath = sessionPath,
-                FolderName = sessionGuid
+                FolderPath = folderPath,
+                FolderName = Path.GetFileName(folderPath),
+                DisplayName = sessionName,
+                TerminalType = terminalType,
+                Options = options
             };
-            // Console.WriteLine($"[SessionManager] SessionInfo作成: ID={sessionInfo.SessionId}, Name={sessionInfo.FolderName}");
 
             try
             {
-                // シンプルなcmd.exeを起動
-                // Console.WriteLine($"[SessionManager] ConPtyService.CreateSessionAsync呼び出し");
-                
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 
+                string command;
+                string args;
+                
+                switch (terminalType)
+                {
+                    case TerminalType.ClaudeCode:
+                        // claude.cmdをcmd.exe経由で実行
+                        command = "cmd.exe";
+                        var claudeArgs = BuildClaudeCodeArgs(options);
+                        args = $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        break;
+                        
+                    case TerminalType.GeminiCLI:
+                        // geminiをcmd.exe経由で実行
+                        command = "cmd.exe";
+                        var geminiArgs = BuildGeminiArgs(options);
+                        args = $"/k gemini {geminiArgs}";
+                        break;
+                        
+                    default:
+                        command = options.ContainsKey("command") ? options["command"] : TerminalConstants.DefaultShell;
+                        args = "";
+                        break;
+                }
+                
                 var session = await _conPtyService.CreateSessionAsync(
-                    TerminalConstants.DefaultShell, 
-                    "", 
-                    sessionPath, 
+                    command, 
+                    args, 
+                    folderPath, 
                     cols, 
                     rows);
-                
-                // Console.WriteLine($"[SessionManager] ConPtyセッション作成成功");
 
                 _sessions[sessionInfo.SessionId] = session;
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
-                // Console.WriteLine($"[SessionManager] セッション登録完了: {sessionInfo.SessionId}");
 
-                // 新しいセッションは自動的にアクティブにしない（呼び出し側で制御）
-
-                // Console.WriteLine($"[SessionManager] CreateSessionAsync完了");
                 return sessionInfo;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SessionManager] エラー発生: {ex.Message}");
-                // Console.WriteLine($"[SessionManager] スタックトレース: {ex.StackTrace}");
-                _logger.LogError(ex, "Failed to create Claude Code session for {FolderPath}", folderPath);
-                throw new InvalidOperationException($"Failed to start Claude Code session for {folderPath}", ex);
+                _logger.LogError(ex, "Failed to create session for {FolderPath} with type {TerminalType}", folderPath, terminalType);
+                throw new InvalidOperationException($"Failed to start {terminalType} session for {folderPath}", ex);
             }
+        }
+
+        private string BuildClaudeCodeArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+            
+            if (options.ContainsKey("model"))
+            {
+                args.Add($"--model {options["model"]}");
+            }
+            
+            if (options.ContainsKey("max-tokens"))
+            {
+                args.Add($"--max-tokens {options["max-tokens"]}");
+            }
+            
+            if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
+            {
+                args.Add("--dangerously-skip-permissions");
+            }
+            
+            if (options.ContainsKey("continue") && options["continue"] == "true")
+            {
+                args.Add("--continue");
+            }
+            
+            return string.Join(" ", args);
+        }
+
+        private string BuildGeminiArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+            
+            if (options.ContainsKey("model"))
+            {
+                args.Add($"--model {options["model"]}");
+            }
+            
+            return string.Join(" ", args);
+        }
+
+        private string? FindExecutable(string exeName)
+        {
+            // 1. 環境変数PATHから検索
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (!string.IsNullOrEmpty(pathEnv))
+            {
+                var paths = pathEnv.Split(Path.PathSeparator);
+                foreach (var path in paths)
+                {
+                    var fullPath = Path.Combine(path, exeName);
+                    if (File.Exists(fullPath))
+                    {
+                        _logger.LogInformation($"Found {exeName} at: {fullPath}");
+                        return fullPath;
+                    }
+                }
+            }
+
+            // 2. よくあるインストール場所を確認
+            var commonPaths = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Claude"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Gemini"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Claude"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Gemini"),
+                @"C:\claude",
+                @"C:\gemini"
+            };
+
+            foreach (var basePath in commonPaths)
+            {
+                var fullPath = Path.Combine(basePath, exeName);
+                if (File.Exists(fullPath))
+                {
+                    _logger.LogInformation($"Found {exeName} at: {fullPath}");
+                    return fullPath;
+                }
+            }
+
+            _logger.LogWarning($"Could not find {exeName} in PATH or common locations");
+            return null;
         }
 
         public Task<bool> RemoveSessionAsync(string sessionId)
@@ -190,6 +294,15 @@ namespace TerminalHub.Services
         public string? GetActiveSessionId()
         {
             return _activeSessionId;
+        }
+
+        public Task SaveSessionInfoAsync(SessionInfo sessionInfo)
+        {
+            if (_sessionInfos.ContainsKey(sessionInfo.SessionId))
+            {
+                _sessionInfos[sessionInfo.SessionId] = sessionInfo;
+            }
+            return Task.CompletedTask;
         }
 
         public void Dispose()

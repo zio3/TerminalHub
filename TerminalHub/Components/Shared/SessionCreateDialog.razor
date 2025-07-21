@@ -1,0 +1,238 @@
+@using TerminalHub.Models
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onclick="OnBackdropClick">
+    <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新しいセッションを作成</h5>
+                <button type="button" class="btn-close" @onclick="Cancel"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">フォルダを選択</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" @bind="folderPath" placeholder="フォルダパスを入力または選択" />
+                        <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFolder">
+                            <i class="bi bi-folder-open"></i> 参照
+                        </button>
+                    </div>
+                </div>
+
+
+                <div class="mb-3">
+                    <label class="form-label d-block">ターミナルタイプ</label>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="terminalType" id="terminalType1" 
+                               checked="@(selectedType == TerminalType.Terminal)" 
+                               @onchange="() => selectedType = TerminalType.Terminal" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="terminalType1">
+                            <i class="bi bi-terminal"></i> ターミナル
+                        </label>
+
+                        <input type="radio" class="btn-check" name="terminalType" id="terminalType2" 
+                               checked="@(selectedType == TerminalType.ClaudeCode)" 
+                               @onchange="() => selectedType = TerminalType.ClaudeCode" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="terminalType2">
+                            <i class="bi bi-robot"></i> Claude Code
+                        </label>
+
+                        <input type="radio" class="btn-check" name="terminalType" id="terminalType3" 
+                               checked="@(selectedType == TerminalType.GeminiCLI)" 
+                               @onchange="() => selectedType = TerminalType.GeminiCLI" autocomplete="off">
+                        <label class="btn btn-outline-primary" for="terminalType3">
+                            <i class="bi bi-stars"></i> Gemini CLI
+                        </label>
+                    </div>
+                </div>
+
+                @if (selectedType == TerminalType.ClaudeCode)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Claude Code オプション</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.UseModel" id="claudeModel">
+                            <label class="form-check-label" for="claudeModel">
+                                特定のモデルを使用
+                            </label>
+                        </div>
+                        @if (claudeCodeOptions.UseModel)
+                        {
+                            <input type="text" class="form-control mt-2" @bind="claudeCodeOptions.Model" placeholder="例: claude-3-opus" />
+                        }
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.MaxTokens" id="claudeMaxTokens">
+                            <label class="form-check-label" for="claudeMaxTokens">
+                                最大トークン数を指定
+                            </label>
+                        </div>
+                        @if (claudeCodeOptions.MaxTokens)
+                        {
+                            <input type="number" class="form-control mt-2" @bind="claudeCodeOptions.MaxTokensValue" placeholder="例: 4096" />
+                        }
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.BypassMode" id="claudeBypass">
+                            <label class="form-check-label" for="claudeBypass">
+                                バイパスモード (--dangerously-skip-permissions)
+                            </label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.Continue" id="claudeContinue">
+                            <label class="form-check-label" for="claudeContinue">
+                                コンティニュー (--continue)
+                            </label>
+                        </div>
+                    </div>
+                }
+                else if (selectedType == TerminalType.GeminiCLI)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Gemini CLI オプション</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="geminiOptions.UseModel" id="geminiModel">
+                            <label class="form-check-label" for="geminiModel">
+                                特定のモデルを使用
+                            </label>
+                        </div>
+                        @if (geminiOptions.UseModel)
+                        {
+                            <input type="text" class="form-control mt-2" @bind="geminiOptions.Model" placeholder="例: gemini-pro" />
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label class="form-label">起動コマンド（任意）</label>
+                        <input type="text" class="form-control" @bind="startupCommand" placeholder="例: cmd.exe, powershell.exe" />
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="Cancel">キャンセル</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateSession" disabled="@string.IsNullOrWhiteSpace(folderPath)">
+                    作成
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (IsVisible)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback<SessionCreateResult> OnSessionCreate { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private TerminalType selectedType = TerminalType.Terminal;
+    private string startupCommand = "";
+
+    private ClaudeCodeOptions claudeCodeOptions = new();
+    private GeminiOptions geminiOptions = new();
+
+    private class ClaudeCodeOptions
+    {
+        public bool UseModel { get; set; }
+        public string Model { get; set; } = "";
+        public bool MaxTokens { get; set; }
+        public int MaxTokensValue { get; set; } = 4096;
+        public bool BypassMode { get; set; }
+        public bool Continue { get; set; }
+    }
+
+    private class GeminiOptions
+    {
+        public bool UseModel { get; set; }
+        public string Model { get; set; } = "";
+    }
+
+    public class SessionCreateResult
+    {
+        public string FolderPath { get; set; } = "";
+        public TerminalType TerminalType { get; set; }
+        public Dictionary<string, string> Options { get; set; } = new();
+    }
+
+    private async Task BrowseFolder()
+    {
+        // フォルダ選択ダイアログはブラウザのセキュリティ制限により直接は開けないため、
+        // ユーザーに手動で入力してもらうか、別の方法を検討する必要があります
+        await JSRuntime.InvokeVoidAsync("alert", "フォルダパスを直接入力してください。");
+    }
+
+    private async Task CreateSession()
+    {
+        var result = new SessionCreateResult
+        {
+            FolderPath = folderPath,
+            TerminalType = selectedType,
+            Options = new Dictionary<string, string>()
+        };
+
+        // ターミナルタイプに応じてオプションを設定
+        switch (selectedType)
+        {
+            case TerminalType.Terminal:
+                if (!string.IsNullOrWhiteSpace(startupCommand))
+                {
+                    result.Options["command"] = startupCommand;
+                }
+                break;
+
+            case TerminalType.ClaudeCode:
+                if (claudeCodeOptions.UseModel && !string.IsNullOrWhiteSpace(claudeCodeOptions.Model))
+                {
+                    result.Options["model"] = claudeCodeOptions.Model;
+                }
+                if (claudeCodeOptions.MaxTokens)
+                {
+                    result.Options["max-tokens"] = claudeCodeOptions.MaxTokensValue.ToString();
+                }
+                if (claudeCodeOptions.BypassMode)
+                {
+                    result.Options["bypass-mode"] = "true";
+                }
+                if (claudeCodeOptions.Continue)
+                {
+                    result.Options["continue"] = "true";
+                }
+                break;
+
+            case TerminalType.GeminiCLI:
+                if (geminiOptions.UseModel && !string.IsNullOrWhiteSpace(geminiOptions.Model))
+                {
+                    result.Options["model"] = geminiOptions.Model;
+                }
+                break;
+        }
+
+        await OnSessionCreate.InvokeAsync(result);
+        ResetForm();
+    }
+
+    private async Task Cancel()
+    {
+        ResetForm();
+        await OnCancel.InvokeAsync();
+    }
+
+    private void OnBackdropClick()
+    {
+        _ = Cancel();
+    }
+
+    private void ResetForm()
+    {
+        folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        selectedType = TerminalType.Terminal;
+        startupCommand = "";
+        claudeCodeOptions = new();
+        geminiOptions = new();
+    }
+}
