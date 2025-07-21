@@ -299,7 +299,6 @@
     private async Task AddSession()
     {
         showCreateDialog = true;
-        StateHasChanged();
     }
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
@@ -338,33 +337,45 @@
     private void OnDialogCancel()
     {
         showCreateDialog = false;
-        StateHasChanged();
     }
 
 
     private async Task SelectSession(string sessionId)
     {
-        // Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}, activeSessionId={activeSessionId}");
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}, activeSessionId={activeSessionId}");
         
         if (activeSessionId == sessionId)
+        {
+            Console.WriteLine($"[SelectSession] 既に選択済み: {stopwatch.ElapsedMilliseconds}ms");
             return;
+        }
 
         // 前のセッションをクリーンアップ
-        if (readCts != null)
+        var previousCts = readCts;
+        readCts = null;
+        
+        if (previousCts != null)
         {
-            // Console.WriteLine($"[SelectSession] 前のセッションをクリーンアップ");
-            readCts.Cancel();
-            readCts.Dispose();
-            readCts = null;
-            
-            // 前の読み取りタスクが完全に終了するまで少し待つ
-            await Task.Delay(TerminalConstants.ResizeDelay);
+            var cleanupStart = stopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"[SelectSession] 前のセッションをクリーンアップ開始: {cleanupStart}ms");
+            try
+            {
+                previousCts.Cancel();
+                // キャンセル要求だけ送信して即座に次へ進む
+            }
+            finally
+            {
+                previousCts.Dispose();
+            }
+            Console.WriteLine($"[SelectSession] クリーンアップ完了: {stopwatch.ElapsedMilliseconds - cleanupStart}ms");
         }
         
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
         {
-            // Console.WriteLine($"[SelectSession] 既存のアクティブターミナルを破棄");
+            var disposeStart = stopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"[SelectSession] 既存のアクティブターミナル破棄開始: {disposeStart}ms");
             try
             {
                 await activeTerminal.DisposeAsync();
@@ -374,79 +385,86 @@
                 // Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
             }
             activeTerminal = null;
+            Console.WriteLine($"[SelectSession] ターミナル破棄完了: {stopwatch.ElapsedMilliseconds - disposeStart}ms");
         }
         
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
+        var hideStart = stopwatch.ElapsedMilliseconds;
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
-            // Console.WriteLine($"[SelectSession] すべてのターミナルを非表示にしました");
+            Console.WriteLine($"[SelectSession] すべてのターミナル非表示完了: {stopwatch.ElapsedMilliseconds - hideStart}ms");
         }
         catch (Exception)
         {
-            // Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {ex.Message}");
+            Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {stopwatch.ElapsedMilliseconds - hideStart}ms");
         }
 
         // セッションをアクティブに
+        var activateStart = stopwatch.ElapsedMilliseconds;
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
         activeSession = SessionManager.GetSession(sessionId);
         
+        // アクティブセッション変更を即座にUIに反映
+        StateHasChanged();
+        
         // アクティブセッションIDをローカルストレージに保存
         await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
-        
-        // Console.WriteLine($"[SelectSession] StateHasChanged呼び出し");
-        StateHasChanged();
-        await Task.Delay(TerminalConstants.ResizeDelay); // DOM更新を待つ
+        Console.WriteLine($"[SelectSession] セッション設定完了: {stopwatch.ElapsedMilliseconds - activateStart}ms");
 
         // ターミナルdivが存在するか確認し、表示する
+        var checkStart = stopwatch.ElapsedMilliseconds;
         try
         {
             var divExists = await JSRuntime.InvokeAsync<bool>("terminalHubHelpers.checkElementExists", 
                 $"terminal-{sessionId}");
-            // Console.WriteLine($"[SelectSession] terminal-{sessionId} divの存在: {divExists}");
+            Console.WriteLine($"[SelectSession] terminal-{sessionId} divの存在確認: {divExists}, {stopwatch.ElapsedMilliseconds - checkStart}ms");
             
             if (divExists)
             {
+                var showStart = stopwatch.ElapsedMilliseconds;
                 // 新しいターミナルを表示
                 await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId);
-                
-                // 表示後に最小限の待機
-                await Task.Delay(TerminalConstants.MinimalDelay);
+                Console.WriteLine($"[SelectSession] ターミナル表示完了: {stopwatch.ElapsedMilliseconds - showStart}ms");
             }
         }
         catch (Exception)
         {
-            // Console.WriteLine($"[SelectSession] div確認エラー: {ex.Message}");
+            Console.WriteLine($"[SelectSession] div確認エラー: {stopwatch.ElapsedMilliseconds - checkStart}ms");
         }
 
         // ターミナルを初期化
-        // Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
+        var initStart = stopwatch.ElapsedMilliseconds;
+        Console.WriteLine($"[SelectSession] InitializeTerminal開始: {initStart}ms");
         await InitializeTerminal(sessionId);
+        Console.WriteLine($"[SelectSession] InitializeTerminal完了: {stopwatch.ElapsedMilliseconds - initStart}ms");
         
         // ターミナルのリサイズを強制的に実行
+        var resizeStart = stopwatch.ElapsedMilliseconds;
         try
         {
             if (activeTerminal != null)
             {
                 await activeTerminal.InvokeVoidAsync("resize");
-                // Console.WriteLine($"[SelectSession] ターミナルリサイズ実行");
+                Console.WriteLine($"[SelectSession] ターミナルリサイズ完了: {stopwatch.ElapsedMilliseconds - resizeStart}ms");
             }
         }
         catch (Exception)
         {
-            // Console.WriteLine($"[SelectSession] リサイズエラー: {ex.Message}");
+            Console.WriteLine($"[SelectSession] リサイズエラー: {stopwatch.ElapsedMilliseconds - resizeStart}ms");
         }
         
         // 出力読み取りを開始
         if (activeSession != null)
         {
-            // Console.WriteLine($"[SelectSession] ReadOutput開始");
+            var readStart = stopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"[SelectSession] ReadOutput開始: {readStart}ms");
             readCts = new CancellationTokenSource();
             _ = Task.Run(() => ReadOutput(readCts.Token));
         }
         
-        // Console.WriteLine($"[SelectSession] 完了");
+        Console.WriteLine($"[SelectSession] 全体完了: {stopwatch.ElapsedMilliseconds}ms");
     }
 
     private async Task InitializeTerminal(string sessionId)
@@ -537,7 +555,6 @@
     {
         editingMemoSessionId = sessionId;
         tempMemoText = currentMemo ?? "";
-        StateHasChanged();
     }
 
     private async Task SaveMemo(string sessionId)
@@ -547,7 +564,6 @@
             await UpdateSessionMemo(sessionId, tempMemoText);
             editingMemoSessionId = null;
             tempMemoText = "";
-            StateHasChanged();
         }
     }
 
@@ -561,7 +577,6 @@
         {
             editingMemoSessionId = null;
             tempMemoText = "";
-            StateHasChanged();
         }
     }
 
@@ -581,13 +596,20 @@
         // アクティブセッションの場合、読み取りタスクを停止
         if (sessionId == activeSessionId)
         {
-            if (readCts != null)
+            var ctsToCancel = readCts;
+            readCts = null;
+            
+            if (ctsToCancel != null)
             {
-                readCts.Cancel();
-                readCts.Dispose();
-                readCts = null;
-                // 読み取りタスクが完全に終了するのを待つ
-                await Task.Delay(TerminalConstants.ResizeDelay);
+                try
+                {
+                    ctsToCancel.Cancel();
+                    // キャンセル要求だけ送信して即座に次へ進む
+                }
+                finally
+                {
+                    ctsToCancel.Dispose();
+                }
             }
             
             if (activeTerminal != null)
@@ -609,6 +631,10 @@
         {
             activeSessionId = null;
             activeSession = null;
+            
+            // セッション削除を即座にUIに反映
+            StateHasChanged();
+            
             await LocalStorageService.SaveActiveSessionIdAsync(null);
             
             // 他のセッションがあれば最初のものを選択
@@ -617,8 +643,11 @@
                 await SelectSession(sessions.First().SessionId);
             }
         }
-        
-        StateHasChanged();
+        else
+        {
+            // 削除されたセッションがアクティブでない場合もUIを更新
+            StateHasChanged();
+        }
     }
 
     [JSInvokable]
@@ -709,7 +738,6 @@
                     // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
                     
                     // ターミナルに初期プロンプトを送信して接続を確認
-                    await Task.Delay(TerminalConstants.ResizeDelay);
                     if (activeTerminal != null)
                     {
                         // Enterキーを送信してプロンプトを表示
@@ -840,12 +868,10 @@
         await activeSession.WriteAsync(inputText);
         
         // 送信後にEnterキーを送信
-        await Task.Delay(50); // 少し待機
         await SendEnterKeyDirect();
         
         // 入力フィールドをクリア
         inputText = "";
-        StateHasChanged();
     }
 
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
@@ -881,15 +907,13 @@
 
         // ボタンの押下状態を表示
         isEscapePressed = true;
-        StateHasChanged();
 
         // Escキーを送信（\x1B はESCのエスケープシーケンス）
         await activeSession.WriteAsync("\x1B");
 
         // 押下状態を解除
-        await Task.Delay(150);
+        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
         isEscapePressed = false;
-        StateHasChanged();
     }
 
     private async Task SendModeSwitch()
@@ -899,15 +923,13 @@
 
         // ボタンの押下状態を表示
         isModeSwitchPressed = true;
-        StateHasChanged();
 
         // Alt+M を送信（\x1B はESC、m はM）
         await activeSession.WriteAsync("\x1Bm");
 
         // 押下状態を解除
-        await Task.Delay(150);
+        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
         isModeSwitchPressed = false;
-        StateHasChanged();
     }
 
 
@@ -924,8 +946,20 @@
 
     public async ValueTask DisposeAsync()
     {
-        readCts?.Cancel();
-        readCts?.Dispose();
+        var ctsToDispose = readCts;
+        readCts = null;
+        
+        if (ctsToDispose != null)
+        {
+            try
+            {
+                ctsToDispose.Cancel();
+            }
+            finally
+            {
+                ctsToDispose.Dispose();
+            }
+        }
         
         if (activeTerminal != null)
         {

@@ -114,15 +114,57 @@ window.terminalFunctions = {
                 }
             });
             
+            // xterm.jsのリサイズイベントリスナーを追加
+            term.onResize((size) => {
+                // リサイズ完了時に最下部にスクロール（複数回実行して確実に）
+                const scrollToBottomReliable = () => {
+                    term.scrollToBottom();
+                    // 少し待ってもう一度
+                    setTimeout(() => {
+                        term.scrollToBottom();
+                        console.log(`[JS] xterm.onResize後スクロール実行: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                    }, 50);
+                };
+                
+                requestAnimationFrame(() => {
+                    scrollToBottomReliable();
+                });
+            });
+            
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
                 if (fitAddon) {
                     fitAddon.fit();
-                    // console.log(`[JS] リサイズ: sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
+                    console.log(`[JS] リサイズ: sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
                     
                     if (dotNetRef) {
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
                     }
+                    
+                    // 複数のタイミングでスクロールを試行（より確実に）
+                    const multipleScrollAttempts = () => {
+                        // 即座に1回目
+                        term.scrollToBottom();
+                        
+                        // 次のフレームで2回目
+                        requestAnimationFrame(() => {
+                            term.scrollToBottom();
+                            
+                            // さらに少し待って3回目
+                            setTimeout(() => {
+                                term.scrollToBottom();
+                                console.log(`[JS] ResizeObserver後スクロール実行(複数回): sessionId=${sessionId}`);
+                            }, 100);
+                            
+                            // 最後にもう一度（200ms後）
+                            setTimeout(() => {
+                                term.scrollToBottom();
+                                console.log(`[JS] ResizeObserver後最終スクロール: sessionId=${sessionId}`);
+                            }, 200);
+                        });
+                    };
+                    
+                    multipleScrollAttempts();
                 }
             });
             
@@ -142,10 +184,23 @@ window.terminalFunctions = {
             resize: () => {
                 if (fitAddon) {
                     fitAddon.fit();
+                    // 手動リサイズ時はxterm.onResizeイベントで自動的にスクロールされる
                 }
             },
             getSize: () => {
                 return { cols: term.cols, rows: term.rows };
+            },
+            scrollToBottom: () => {
+                term.scrollToBottom();
+            },
+            scrollToTop: () => {
+                term.scrollToTop();
+            },
+            getScrollPosition: () => {
+                return {
+                    scrollY: term.buffer.active.viewportY,
+                    scrollTop: term.buffer.active.baseY
+                };
             },
             dispose: () => {
                 window.resizeObserverManager.remove(sessionId);

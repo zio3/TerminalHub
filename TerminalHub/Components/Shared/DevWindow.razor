@@ -14,8 +14,24 @@
             </button>
         </div>
         <div class="dev-window-content">
-            <!-- 開発ツールの内容をここに追加 -->
-            <p class="text-muted text-center mt-5">開発ツールの内容は後で追加します</p>
+            <h5>ターミナル制御テスト</h5>
+            <div class="mb-3">
+                <button class="btn btn-primary me-2" @onclick="ScrollToBottom">
+                    <i class="bi bi-arrow-down"></i> 最下部にスクロール
+                </button>
+                <button class="btn btn-secondary me-2" @onclick="ScrollToTop">
+                    <i class="bi bi-arrow-up"></i> 最上部にスクロール
+                </button>
+                <button class="btn btn-info" @onclick="GetScrollPosition">
+                    <i class="bi bi-info-circle"></i> スクロール位置取得
+                </button>
+            </div>
+            <div class="mb-3">
+                <h6>スクロール情報</h6>
+                <small class="text-muted">@scrollInfo</small>
+            </div>
+            <hr />
+            <p class="text-muted">その他の開発ツールは後で追加します</p>
         </div>
     </div>
 }
@@ -80,6 +96,7 @@
     private double windowY = 100;
     private DotNetObjectReference<DevWindow>? dotNetRef;
     private static DevWindow? currentInstance;
+    private string scrollInfo = "スクロール位置情報が表示されます";
     
     private string GetWindowStyle()
     {
@@ -129,6 +146,73 @@
         await LocalStorageService.SetAsync("devWindowPosition", position);
     }
     
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                const activeTerminals = window.multiSessionTerminals;
+                Object.keys(activeTerminals).forEach(sessionId => {
+                    if (activeTerminals[sessionId] && activeTerminals[sessionId].terminal) {
+                        activeTerminals[sessionId].terminal.scrollToBottom();
+                    }
+                });
+            ");
+            scrollInfo = $"最下部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task ScrollToTop()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                const activeTerminals = window.multiSessionTerminals;
+                Object.keys(activeTerminals).forEach(sessionId => {
+                    if (activeTerminals[sessionId] && activeTerminals[sessionId].terminal) {
+                        activeTerminals[sessionId].terminal.scrollToTop();
+                    }
+                });
+            ");
+            scrollInfo = $"最上部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task GetScrollPosition()
+    {
+        try
+        {
+            var result = await JSRuntime.InvokeAsync<object>("eval", @"
+                const activeTerminals = window.multiSessionTerminals;
+                const positions = {};
+                Object.keys(activeTerminals).forEach(sessionId => {
+                    const term = activeTerminals[sessionId].terminal;
+                    if (term && term.buffer && term.buffer.active) {
+                        positions[sessionId] = {
+                            viewportY: term.buffer.active.viewportY,
+                            baseY: term.buffer.active.baseY,
+                            length: term.buffer.active.length
+                        };
+                    }
+                });
+                return positions;
+            ");
+            scrollInfo = $"スクロール位置: {System.Text.Json.JsonSerializer.Serialize(result)} - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
     private async Task Close()
     {
         await IsVisibleChanged.InvokeAsync(false);

@@ -18,6 +18,7 @@ namespace TerminalHub.Constants
         public const int SessionCreationDelay = 100;  // セッション作成待機
         public const int InitializationDelay = 500;   // 初期化待機（必要最小限）
         public const int MinimalDelay = 10;           // 最小待機時間
+        public const int ButtonPressAnimationDelay = 150; // ボタン押下アニメーション
         
         // プロセス
         public const uint ExtendedStartupinfoPresent = 0x00080000;
