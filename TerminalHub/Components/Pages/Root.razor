@@ -1,0 +1,511 @@
+@page "/multisession"
+@page "/"
+@using TerminalHub.Components.Shared
+@using TerminalHub.Constants
+@using TerminalHub.Models
+@using TerminalHub.Services
+@using Microsoft.JSInterop
+@inject ISessionManager SessionManager
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<PageTitle>マルチセッション ターミナル</PageTitle>
+
+<Toast @ref="toast" />
+
+<div class="container-fluid h-100">
+    <div class="row h-100">
+        <div class="col-md-3 border-end bg-light p-3" style="height: 100vh; overflow-y: auto;">
+            
+            <div class="mb-3">
+                <button class="btn btn-primary w-100" @onclick="AddSession" disabled="@isAddingSession">
+                    <i class="bi bi-plus-circle"></i> 新しいセッションを作成
+                </button>
+            </div>
+
+            <div class="list-group">
+                @foreach (var session in sessions)
+                {
+                    <div class="list-group-item list-group-item-action @(session.SessionId == activeSessionId ? "active" : "")" 
+                         @onclick="() => SelectSession(session.SessionId)"
+                         style="cursor: pointer;">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div class="flex-fill">
+                                <h6 class="mb-1">@session.GetDisplayName()</h6>
+                                <small class="text-muted">@session.SessionId.Substring(0, TerminalConstants.SessionIdDisplayLength)</small>
+                            </div>
+                            <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" 
+                                    @onclick="() => RemoveSession(session.SessionId)"
+                                    title="セッション削除">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">作成: @session.CreatedAt.ToString("HH:mm")</small>
+                    </div>
+                }
+            </div>
+
+            @if (!sessions.Any())
+            {
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i> ボタンをクリックしてセッションを作成してください
+                </div>
+            }
+        </div>
+
+        <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
+            @if (activeSessionId != null)
+            {
+                <!-- ターミナル部分 (70%) -->
+                <div style="height: 70%; overflow: hidden;">
+                    <div class="terminal-wrapper h-100">
+                        @foreach (var session in sessions)
+                        {
+                            <div id="terminal-@session.SessionId" class="terminal-container" 
+                                 style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
+                        }
+                    </div>
+                </div>
+                
+                <!-- WebUI部分 (30%) -->
+                <div style="height: 30%; overflow-y: auto; border-top: 1px solid #dee2e6; background-color: #f8f9fa;">
+                    <!-- ここにWebUIコンテンツを追加 -->
+                </div>
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center h-100">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-terminal" style="font-size: 4rem;"></i>
+                        <p class="mt-3">左側からセッションを選択してください</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .terminal-wrapper {
+        flex: 1;
+        overflow: auto;
+        background-color: #000;
+        padding: 10px;
+    }
+    
+    .terminal-container {
+        width: 100%;
+        height: 100%;
+        min-height: 400px;
+    }
+</style>
+
+@code {
+    private List<SessionInfo> sessions = new();
+    private string? activeSessionId;
+    private bool isAddingSession = false;
+    private IJSObjectReference? activeTerminal;
+    private ConPtySession? activeSession;
+    private CancellationTokenSource? readCts;
+    private DotNetObjectReference<Root>? dotNetRef;
+    private Toast? toast;
+
+    protected override async Task OnInitializedAsync()
+    {
+        dotNetRef = DotNetObjectReference.Create(this);
+        sessions = SessionManager.GetAllSessions().ToList();
+        
+        // 既存のアクティブセッションがあれば選択
+        var activeId = SessionManager.GetActiveSessionId();
+        if (activeId != null && sessions.Any(s => s.SessionId == activeId))
+        {
+            await SelectSession(activeId);
+        }
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 初期化は terminal.js 内で行うため不要
+        return Task.CompletedTask;
+    }
+
+    private async Task AddSession()
+    {
+        if (isAddingSession)
+            return;
+
+        isAddingSession = true;
+        try
+        {
+            // Console.WriteLine($"[AddSession] 新しいセッション作成開始");
+            var sessionInfo = await SessionManager.CreateSessionAsync();
+            // Console.WriteLine($"[AddSession] セッション作成完了: {sessionInfo.SessionId}");
+            
+            sessions = SessionManager.GetAllSessions().ToList();
+            // Console.WriteLine($"[AddSession] セッション数: {sessions.Count}");
+            
+            // StateHasChangedを呼び出してUIを更新
+            StateHasChanged();
+            
+            // DOM更新を確実に待つ
+            await Task.Delay(TerminalConstants.DomUpdateDelay);
+            
+            // Console.WriteLine($"[AddSession] SelectSession呼び出し");
+            await SelectSession(sessionInfo.SessionId);
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[AddSession] エラー: {ex.Message}");
+            toast?.ShowError($"セッション作成エラー: {ex.Message}");
+        }
+        finally
+        {
+            isAddingSession = false;
+        }
+    }
+
+    private async Task SelectSession(string sessionId)
+    {
+        // Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}, activeSessionId={activeSessionId}");
+        
+        if (activeSessionId == sessionId)
+            return;
+
+        // 前のセッションをクリーンアップ
+        if (readCts != null)
+        {
+            // Console.WriteLine($"[SelectSession] 前のセッションをクリーンアップ");
+            readCts.Cancel();
+            readCts.Dispose();
+            readCts = null;
+            
+            // 前の読み取りタスクが完全に終了するまで少し待つ
+            await Task.Delay(TerminalConstants.ResizeDelay);
+        }
+        
+        // 既存のアクティブターミナルを破棄
+        if (activeTerminal != null)
+        {
+            // Console.WriteLine($"[SelectSession] 既存のアクティブターミナルを破棄");
+            try
+            {
+                await activeTerminal.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                // Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
+            }
+            activeTerminal = null;
+        }
+        
+        // すべてのターミナルを非表示にする（JavaScriptで直接制御）
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
+            // Console.WriteLine($"[SelectSession] すべてのターミナルを非表示にしました");
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {ex.Message}");
+        }
+
+        // セッションをアクティブに
+        await SessionManager.SetActiveSessionAsync(sessionId);
+        activeSessionId = sessionId;
+        activeSession = SessionManager.GetSession(sessionId);
+        
+        // Console.WriteLine($"[SelectSession] StateHasChanged呼び出し");
+        StateHasChanged();
+        await Task.Delay(TerminalConstants.ResizeDelay); // DOM更新を待つ
+
+        // ターミナルdivが存在するか確認し、表示する
+        try
+        {
+            var divExists = await JSRuntime.InvokeAsync<bool>("eval", 
+                $"document.getElementById('terminal-{sessionId}') !== null");
+            // Console.WriteLine($"[SelectSession] terminal-{sessionId} divの存在: {divExists}");
+            
+            if (divExists)
+            {
+                // 新しいターミナルを表示
+                await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId);
+                
+                // 表示後に最小限の待機
+                await Task.Delay(TerminalConstants.MinimalDelay);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[SelectSession] div確認エラー: {ex.Message}");
+        }
+
+        // ターミナルを初期化
+        // Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
+        await InitializeTerminal(sessionId);
+        
+        // ターミナルのリサイズを強制的に実行
+        try
+        {
+            if (activeTerminal != null)
+            {
+                await activeTerminal.InvokeVoidAsync("resize");
+                // Console.WriteLine($"[SelectSession] ターミナルリサイズ実行");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[SelectSession] リサイズエラー: {ex.Message}");
+        }
+        
+        // 出力読み取りを開始
+        if (activeSession != null)
+        {
+            // Console.WriteLine($"[SelectSession] ReadOutput開始");
+            readCts = new CancellationTokenSource();
+            _ = Task.Run(() => ReadOutput(readCts.Token));
+        }
+        
+        // Console.WriteLine($"[SelectSession] 完了");
+    }
+
+    private async Task InitializeTerminal(string sessionId)
+    {
+        var terminalId = $"terminal-{sessionId}";
+        // Console.WriteLine($"[InitializeTerminal] 開始: terminalId={terminalId}");
+        
+        // JavaScript側の既存ターミナルも削除
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId);
+        }
+        catch { }
+        
+        // Console.WriteLine($"[InitializeTerminal] 新しいターミナルを作成");
+        try
+        {
+            activeTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "terminalFunctions.createMultiSessionTerminal", 
+                terminalId, 
+                sessionId, 
+                dotNetRef);
+            
+            // Console.WriteLine($"[InitializeTerminal] ターミナル作成成功");
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[InitializeTerminal] ターミナル作成エラー: {ex.Message}");
+        }
+    }
+
+    private async Task ReadOutput(CancellationToken cancellationToken)
+    {
+        var localSessionId = activeSessionId; // ローカル変数にコピー
+        // Console.WriteLine($"[ReadOutput] 開始: sessionId={localSessionId}");
+        
+        if (activeSession == null || activeTerminal == null)
+        {
+            // Console.WriteLine($"[ReadOutput] 条件不足で終了");
+            return;
+        }
+
+        var buffer = new char[TerminalConstants.DefaultBufferSize];
+        
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // キャンセルが要求されているか再確認
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+                    
+                var charsRead = await activeSession.ReadAsync(buffer, 0, buffer.Length);
+                if (charsRead > 0)
+                {
+                    // データ書き込み前に再度キャンセルを確認
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+                        
+                    var data = new string(buffer, 0, charsRead);
+                    // Console.WriteLine($"[ReadOutput] セッション {localSessionId} に {charsRead} 文字書き込み");
+                    await activeTerminal.InvokeVoidAsync("write", data);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    // Console.WriteLine($"[ReadOutput] 読み取りエラー: {ex.Message}");
+                }
+                break;
+            }
+        }
+        
+        // Console.WriteLine($"[ReadOutput] 終了: sessionId={localSessionId}");
+    }
+
+    private async Task RemoveSession(string sessionId)
+    {
+        // アクティブセッションの場合、読み取りタスクを停止
+        if (sessionId == activeSessionId)
+        {
+            if (readCts != null)
+            {
+                readCts.Cancel();
+                readCts.Dispose();
+                readCts = null;
+                // 読み取りタスクが完全に終了するのを待つ
+                await Task.Delay(TerminalConstants.ResizeDelay);
+            }
+            
+            if (activeTerminal != null)
+            {
+                await activeTerminal.DisposeAsync();
+                activeTerminal = null;
+            }
+        }
+        
+        // ターミナルのクリーンアップはdestroyTerminalで処理される
+        
+        await SessionManager.RemoveSessionAsync(sessionId);
+        sessions = SessionManager.GetAllSessions().ToList();
+        
+        if (activeSessionId == sessionId)
+        {
+            activeSessionId = null;
+            activeSession = null;
+            
+            // 他のセッションがあれば最初のものを選択
+            if (sessions.Any())
+            {
+                await SelectSession(sessions.First().SessionId);
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task SendInput(string sessionId, string data)
+    {
+        if (activeSession != null && sessionId == activeSessionId)
+        {
+            await activeSession.WriteAsync(data);
+        }
+    }
+
+    [JSInvokable]
+    public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
+    {
+        if (sessionId == activeSessionId && activeSession != null)
+        {
+            activeSession.Resize(cols, rows);
+        }
+    }
+
+    private async Task DestroyTerminal(string sessionId, bool showAlert = true)
+    {
+        // Console.WriteLine($"[DestroyTerminal] セッション {sessionId} のターミナルを破棄");
+        
+        try
+        {
+            // JavaScript側のターミナルを破棄
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.destroyTerminal", sessionId);
+            
+            // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
+            if (activeSessionId == sessionId && activeTerminal != null)
+            {
+                await activeTerminal.DisposeAsync();
+                activeTerminal = null;
+                // Console.WriteLine($"[DestroyTerminal] C#側のターミナル参照を削除");
+            }
+            
+            // アクティブセッションの場合は読み取り処理を停止
+            if (activeSessionId == sessionId && readCts != null)
+            {
+                readCts.Cancel();
+                readCts.Dispose();
+                readCts = null;
+                // Console.WriteLine($"[DestroyTerminal] 読み取り処理を停止");
+            }
+            
+            if (showAlert)
+            {
+                toast?.ShowSuccess("ターミナルを破棄しました");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[DestroyTerminal] エラー: {ex.Message}");
+            if (showAlert)
+            {
+                toast?.ShowError($"ターミナル破棄エラー: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task RecreateTerminal(string sessionId)
+    {
+        // Console.WriteLine($"[RecreateTerminal] セッション {sessionId} のターミナルを再作成");
+        
+        try
+        {
+            // セッションがアクティブな場合のみ再作成
+            if (activeSessionId == sessionId)
+            {
+                // 既存のターミナルを破棄（アラートなし）
+                await DestroyTerminal(sessionId, false);
+                
+                // DOM更新と読み取りタスクの完全な終了を待つ
+                await Task.Delay(TerminalConstants.SessionCreationDelay);
+                
+                // ターミナルdivの表示状態を確実に設定
+                await JSRuntime.InvokeVoidAsync("terminalFunctions.ensureTerminalVisible", sessionId);
+                
+                // 新しいターミナルを初期化
+                await InitializeTerminal(sessionId);
+                
+                // 読み取り処理を再開
+                if (activeSession != null)
+                {
+                    readCts = new CancellationTokenSource();
+                    _ = Task.Run(() => ReadOutput(readCts.Token));
+                    // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
+                    
+                    // ターミナルに初期プロンプトを送信して接続を確認
+                    await Task.Delay(TerminalConstants.ResizeDelay);
+                    if (activeTerminal != null)
+                    {
+                        // Enterキーを送信してプロンプトを表示
+                        await activeSession.WriteAsync("\r\n");
+                        // Console.WriteLine($"[RecreateTerminal] プロンプト送信完了");
+                    }
+                }
+                
+                toast?.ShowSuccess("ターミナルを再作成しました");
+            }
+            else
+            {
+                toast?.ShowWarning("このセッションを選択してからターミナルを再作成してください");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Console.WriteLine($"[RecreateTerminal] エラー: {ex.Message}");
+            toast?.ShowError($"ターミナル再作成エラー: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        readCts?.Cancel();
+        readCts?.Dispose();
+        
+        if (activeTerminal != null)
+        {
+            await activeTerminal.DisposeAsync();
+        }
+        
+        dotNetRef?.Dispose();
+    }
+}

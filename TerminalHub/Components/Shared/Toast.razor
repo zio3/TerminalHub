@@ -1,0 +1,107 @@
+@if (Messages.Any())
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+        @foreach (var message in Messages)
+        {
+            <div class="toast show @GetToastClass(message.Type)" role="alert">
+                <div class="toast-header">
+                    <i class="bi @GetIconClass(message.Type) me-2"></i>
+                    <strong class="me-auto">@GetTitle(message.Type)</strong>
+                    <button type="button" class="btn-close btn-close-sm" @onclick="() => RemoveMessage(message)"></button>
+                </div>
+                <div class="toast-body">
+                    @message.Text
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    public enum ToastType
+    {
+        Success,
+        Error,
+        Warning,
+        Info
+    }
+
+    public class ToastMessage
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Text { get; set; } = "";
+        public ToastType Type { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+
+    private List<ToastMessage> Messages = new();
+    private System.Timers.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += (sender, e) => InvokeAsync(CleanupMessages);
+        _timer.Start();
+    }
+
+    public void ShowMessage(string text, ToastType type = ToastType.Info)
+    {
+        Messages.Add(new ToastMessage { Text = text, Type = type });
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void ShowSuccess(string text) => ShowMessage(text, ToastType.Success);
+    public void ShowError(string text) => ShowMessage(text, ToastType.Error);
+    public void ShowWarning(string text) => ShowMessage(text, ToastType.Warning);
+    public void ShowInfo(string text) => ShowMessage(text, ToastType.Info);
+
+    private void RemoveMessage(ToastMessage message)
+    {
+        Messages.Remove(message);
+        StateHasChanged();
+    }
+
+    private void CleanupMessages()
+    {
+        var cutoff = DateTime.Now.AddSeconds(-5);
+        var toRemove = Messages.Where(m => m.CreatedAt < cutoff).ToList();
+        if (toRemove.Any())
+        {
+            Messages.RemoveAll(m => toRemove.Contains(m));
+            StateHasChanged();
+        }
+    }
+
+    private string GetToastClass(ToastType type) => type switch
+    {
+        ToastType.Success => "border-success",
+        ToastType.Error => "border-danger",
+        ToastType.Warning => "border-warning",
+        ToastType.Info => "border-info",
+        _ => "border-secondary"
+    };
+
+    private string GetIconClass(ToastType type) => type switch
+    {
+        ToastType.Success => "bi-check-circle-fill text-success",
+        ToastType.Error => "bi-x-circle-fill text-danger",
+        ToastType.Warning => "bi-exclamation-triangle-fill text-warning",
+        ToastType.Info => "bi-info-circle-fill text-info",
+        _ => "bi-circle"
+    };
+
+    private string GetTitle(ToastType type) => type switch
+    {
+        ToastType.Success => "成功",
+        ToastType.Error => "エラー",
+        ToastType.Warning => "警告",
+        ToastType.Info => "情報",
+        _ => "通知"
+    };
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}
