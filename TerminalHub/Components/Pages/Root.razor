@@ -286,34 +286,14 @@
         if (firstRender)
         {
             // キーボードショートカットを登録
-            await JSRuntime.InvokeVoidAsync("eval", @"
-                document.addEventListener('keydown', (e) => {
-                    // Ctrl + Shift + D: デバッグ情報を表示
-                    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                        e.preventDefault();
-                        console.log('Debug Info:');
-                        console.log('Sessions:', Object.keys(window.multiSessionTerminals || {}));
-                        console.log('Active terminals:', window.multiSessionTerminals);
-                        console.log('LocalStorage sessions:', localStorage.getItem('terminalHub_sessions'));
-                        console.log('LocalStorage activeSession:', localStorage.getItem('terminalHub_activeSession'));
-                    }
-                    // Ctrl + Shift + C: ローカルストレージをクリア
-                    else if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-                        e.preventDefault();
-                        if (confirm('ローカルストレージをクリアしますか？')) {
-                            localStorage.clear();
-                            console.log('LocalStorage cleared');
-                            location.reload();
-                        }
-                    }
-                    // Ctrl + Shift + N: 新しいセッション（クイック作成）
-                    else if (e.ctrlKey && e.shiftKey && e.key === 'N') {
-                        e.preventDefault();
-                        document.querySelector('button.btn-primary')?.click();
-                    }
-                });
-            ");
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
         }
+    }
+
+    [JSInvokable]
+    public async Task OnShortcutNewSession()
+    {
+        await AddSession();
     }
 
     private async Task AddSession()
@@ -422,8 +402,8 @@
         // ターミナルdivが存在するか確認し、表示する
         try
         {
-            var divExists = await JSRuntime.InvokeAsync<bool>("eval", 
-                $"document.getElementById('terminal-{sessionId}') !== null");
+            var divExists = await JSRuntime.InvokeAsync<bool>("terminalHubHelpers.checkElementExists", 
+                $"terminal-{sessionId}");
             // Console.WriteLine($"[SelectSession] terminal-{sessionId} divの存在: {divExists}");
             
             if (divExists)
@@ -953,5 +933,16 @@
         }
         
         dotNetRef?.Dispose();
+        
+        // JavaScriptのイベントリスナーをクリーンアップ
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.cleanupKeyboardShortcuts");
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.cleanupDevWindowDrag");
+        }
+        catch (Exception)
+        {
+            // Dispose時のエラーは無視
+        }
     }
 }

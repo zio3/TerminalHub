@@ -2,6 +2,7 @@
 @using TerminalHub.Services
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
+@implements IAsyncDisposable
 
 @if (IsVisible)
 {
@@ -48,8 +49,7 @@
     
     private async Task CheckAndAdjustPosition()
     {
-        var windowSize = await JSRuntime.InvokeAsync<WindowSize>("eval", 
-            "({ width: window.innerWidth, height: window.innerHeight })");
+        var windowSize = await JSRuntime.InvokeAsync<WindowSize>("terminalHubHelpers.getWindowSize");
         
         bool adjusted = false;
         
@@ -92,21 +92,7 @@
         startX = e.ClientX - windowX;
         startY = e.ClientY - windowY;
         
-        await JSRuntime.InvokeVoidAsync("eval", @"
-            if (window.devWindowMouseMove) {
-                document.removeEventListener('mousemove', window.devWindowMouseMove);
-            }
-            if (window.devWindowMouseUp) {
-                document.removeEventListener('mouseup', window.devWindowMouseUp);
-            }
-            
-            document.addEventListener('mousemove', window.devWindowMouseMove = (e) => {
-                DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseMove', e.clientX, e.clientY);
-            });
-            document.addEventListener('mouseup', window.devWindowMouseUp = () => {
-                DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseUp');
-            });
-        ");
+        await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupDevWindowDrag", dotNetRef);
     }
     
     private async Task StopDrag()
@@ -114,16 +100,7 @@
         isDragging = false;
         await SavePosition();
         
-        await JSRuntime.InvokeVoidAsync("eval", @"
-            if (window.devWindowMouseMove) {
-                document.removeEventListener('mousemove', window.devWindowMouseMove);
-                window.devWindowMouseMove = null;
-            }
-            if (window.devWindowMouseUp) {
-                document.removeEventListener('mouseup', window.devWindowMouseUp);
-                window.devWindowMouseUp = null;
-            }
-        ");
+        await JSRuntime.InvokeVoidAsync("terminalHubHelpers.cleanupDevWindowDrag");
     }
     
     [JSInvokable]
@@ -157,8 +134,13 @@
         await IsVisibleChanged.InvokeAsync(false);
     }
     
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        if (isDragging)
+        {
+            await StopDrag();
+        }
+        
         dotNetRef?.Dispose();
         if (currentInstance == this)
         {
