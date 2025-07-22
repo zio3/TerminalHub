@@ -16,6 +16,12 @@ builder.Services.AddSingleton<ISessionManager, SessionManager>();
 // LocalStorageServiceを登録
 builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
+// NotificationServiceを登録
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
+// HttpClientFactoryを登録（WebHook用）
+builder.Services.AddHttpClient();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

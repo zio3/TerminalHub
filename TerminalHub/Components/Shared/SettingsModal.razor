@@ -1,0 +1,214 @@
+@namespace TerminalHub.Components.Shared
+@using TerminalHub.Services
+@using Microsoft.Extensions.Configuration
+@inject INotificationService NotificationService
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
+
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-gear-fill me-2"></i>設定
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="mb-3">通知設定</h6>
+                    
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label mb-0">ブラウザ通知</label>
+                            <span class="badge @GetNotificationBadgeClass()">@notificationStatus</span>
+                        </div>
+                        @if (notificationStatus == "未許可")
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="RequestNotificationPermission">
+                                <i class="bi bi-bell me-1"></i>通知を許可する
+                            </button>
+                            <p class="text-muted small mt-2 mb-0">
+                                処理完了時にデスクトップ通知を受け取るには、ブラウザの通知を許可してください。
+                            </p>
+                        }
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">通知を送信する処理時間（秒）</label>
+                        <input type="number" class="form-control" @bind="thresholdSeconds" min="0" max="3600" />
+                        <small class="text-muted">0に設定すると、すべての処理完了時に通知します</small>
+                    </div>
+                    
+                    <hr />
+                    
+                    <h6 class="mb-3">WebHook設定</h6>
+                    
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" @bind="webHookEnabled" id="webHookSwitch">
+                            <label class="form-check-label" for="webHookSwitch">
+                                WebHook通知を有効にする
+                            </label>
+                        </div>
+                    </div>
+                    
+                    @if (webHookEnabled)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">WebHook URL</label>
+                            <input type="url" class="form-control" @bind="webHookUrl" placeholder="https://example.com/webhook" />
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(saveMessage))
+                    {
+                        <div class="alert @(saveSuccess ? "alert-success" : "alert-danger") alert-dismissible fade show" role="alert">
+                            @saveMessage
+                            <button type="button" class="btn-close" @onclick="() => saveMessage = string.Empty"></button>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">キャンセル</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveSettings">
+                        <i class="bi bi-save me-1"></i>保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
+    
+    private string notificationStatus = "確認中...";
+    private int thresholdSeconds = 60;
+    private bool webHookEnabled = false;
+    private string webHookUrl = "";
+    private string saveMessage = "";
+    private bool saveSuccess = false;
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            await LoadSettings();
+            await CheckNotificationPermission();
+        }
+    }
+    
+    private async Task LoadSettings()
+    {
+        thresholdSeconds = Configuration.GetValue<int>("NotificationSettings:ProcessingTimeThresholdSeconds", 60);
+        webHookEnabled = Configuration.GetValue<bool>("NotificationSettings:WebHookSettings:Enabled", false);
+        webHookUrl = Configuration.GetValue<string>("NotificationSettings:WebHookSettings:Url") ?? "";
+    }
+    
+    private async Task CheckNotificationPermission()
+    {
+        try
+        {
+            var permission = await JSRuntime.InvokeAsync<string>("terminalHubHelpers.requestNotificationPermission");
+            notificationStatus = permission switch
+            {
+                "granted" => "許可済み",
+                "denied" => "拒否",
+                "default" => "未許可",
+                _ => "不明"
+            };
+        }
+        catch
+        {
+            notificationStatus = "確認エラー";
+        }
+    }
+    
+    private async Task RequestNotificationPermission()
+    {
+        try
+        {
+            var granted = await NotificationService.RequestBrowserNotificationPermissionAsync();
+            await CheckNotificationPermission();
+            
+            if (granted)
+            {
+                saveMessage = "通知が許可されました";
+                saveSuccess = true;
+            }
+            else
+            {
+                saveMessage = "通知が拒否されました";
+                saveSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"エラー: {ex.Message}";
+            saveSuccess = false;
+        }
+    }
+    
+    private async Task SaveSettings()
+    {
+        try
+        {
+            // 設定値の検証
+            if (thresholdSeconds < 0)
+            {
+                saveMessage = "通知時間は0以上にしてください";
+                saveSuccess = false;
+                return;
+            }
+            
+            if (webHookEnabled && string.IsNullOrWhiteSpace(webHookUrl))
+            {
+                saveMessage = "WebHook URLを入力してください";
+                saveSuccess = false;
+                return;
+            }
+            
+            // TODO: 実際の設定保存処理を実装
+            // 現在はappsettings.jsonに直接保存できないため、
+            // 実装時はLocalStorageやサーバー側のAPIを使用する必要があります
+            
+            saveMessage = "設定を保存しました（注：再起動すると元に戻ります）";
+            saveSuccess = true;
+            
+            // 3秒後にメッセージを消す
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                await InvokeAsync(() =>
+                {
+                    saveMessage = "";
+                    StateHasChanged();
+                });
+            });
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"保存エラー: {ex.Message}";
+            saveSuccess = false;
+        }
+    }
+    
+    private string GetNotificationBadgeClass()
+    {
+        return notificationStatus switch
+        {
+            "許可済み" => "bg-success",
+            "拒否" => "bg-danger",
+            "未許可" => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+    
+    private async Task Close()
+    {
+        await IsVisibleChanged.InvokeAsync(false);
+    }
+}

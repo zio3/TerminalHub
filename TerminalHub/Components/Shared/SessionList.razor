@@ -10,6 +10,21 @@
     .active-session:hover {
         background-color: #d7e9ff !important;
     }
+    
+    @@keyframes bell-ring {
+        0% { transform: rotate(0); }
+        10% { transform: rotate(14deg); }
+        20% { transform: rotate(-8deg); }
+        30% { transform: rotate(14deg); }
+        40% { transform: rotate(-4deg); }
+        50% { transform: rotate(10deg); }
+        60% { transform: rotate(0); }
+        100% { transform: rotate(0); }
+    }
+    
+    .bi-bell-fill {
+        animation: bell-ring 2s ease-in-out infinite;
+    }
 </style>
 
 <div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
@@ -29,17 +44,32 @@
                 <div class="d-flex w-100 justify-content-between align-items-center">
                     <div class="flex-fill">
                         <h6 class="mb-1">
+                            @if (session.HasNotificationPending)
+                            {
+                                <span class="text-danger me-1" title="処理が完了しました">
+                                    <i class="bi bi-bell-fill"></i>
+                                </span>
+                            }
                             @session.GetDisplayName()
                             @if (session.TerminalType != TerminalType.Terminal)
                             {
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                             }
                         </h6>
-                        @if (!string.IsNullOrEmpty(session.ProcessingStatus))
+                        @if (session.ProcessingElapsedSeconds.HasValue)
                         {
                             <div>
                                 <small class="text-warning">
-                                    <i class="bi bi-clock-fill me-1"></i>@session.ProcessingStatus
+                                    <i class="bi bi-clock-fill me-1"></i>
+                                    @(session.ProcessingElapsedSeconds)秒
+                                    @if (!string.IsNullOrEmpty(session.ProcessingDirection))
+                                    {
+                                        <span> · @GetDirectionText(session.ProcessingDirection)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(session.ProcessingTokens))
+                                    {
+                                        <span> @session.ProcessingTokens</span>
+                                    }
                                 </small>
                             </div>
                         }
@@ -92,12 +122,19 @@
         </div>
     }
 
-    <!-- ショートカット説明を最下部に固定 -->
-    <div class="mt-auto p-2 border-top" style="font-size: 0.8rem; color: #6c757d; position: sticky; bottom: 0; background-color: #f8f9fa;">
-        <p class="mb-1"><strong>ショートカット:</strong></p>
-        <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
-        <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
-        <p class="mb-0"><kbd>Ctrl+Shift+C</kbd> - ストレージクリア</p>
+    <!-- 設定ボタンとショートカット説明を最下部に固定 -->
+    <div class="mt-auto border-top" style="position: sticky; bottom: 0; background-color: #f8f9fa;">
+        <div class="p-2">
+            <button class="btn btn-outline-secondary btn-sm w-100" @onclick="OnSettingsClick">
+                <i class="bi bi-gear me-1"></i>設定
+            </button>
+        </div>
+        <div class="p-2 pt-0" style="font-size: 0.8rem; color: #6c757d;">
+            <p class="mb-1"><strong>ショートカット:</strong></p>
+            <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
+            <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
+            <p class="mb-0"><kbd>Ctrl+Shift+C</kbd> - ストレージクリア</p>
+        </div>
     </div>
 </div>
 
@@ -115,6 +152,7 @@
     [Parameter] public Func<Guid, Task> OnMemoSave { get; set; } = _ => Task.CompletedTask;
     [Parameter] public Func<Microsoft.AspNetCore.Components.Web.KeyboardEventArgs, Guid, Task> OnMemoKeyDown { get; set; } = (_, _) => Task.CompletedTask;
     [Parameter] public Action<Guid, string> OnMemoEdit { get; set; } = (_, _) => { };
+    [Parameter] public EventCallback OnSettingsClick { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -128,6 +166,17 @@
             TerminalType.ClaudeCode => "Claude",
             TerminalType.GeminiCLI => "Gemini",
             _ => "Terminal"
+        };
+    }
+    
+    private string GetDirectionText(string direction)
+    {
+        return direction switch
+        {
+            "↑" => "送信",
+            "↓" => "受信", 
+            "⚒" => "処理中",
+            _ => direction
         };
     }
 }

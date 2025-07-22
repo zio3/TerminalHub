@@ -1,7 +1,9 @@
 @namespace TerminalHub.Components.Shared
 @using TerminalHub.Services
+@using TerminalHub.Models
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
+@inject INotificationService NotificationService
 @implements IAsyncDisposable
 
 @if (IsVisible)
@@ -29,6 +31,24 @@
             <div class="mb-3">
                 <h6>スクロール情報</h6>
                 <small class="text-muted">@scrollInfo</small>
+            </div>
+            <hr />
+            <h5>通知テスト</h5>
+            <div class="mb-3">
+                <div class="mb-2">
+                    <label class="form-label">テスト用経過時間（秒）</label>
+                    <input type="number" class="form-control" @bind="testElapsedSeconds" min="1" max="300" />
+                </div>
+                <button class="btn btn-warning me-2" @onclick="TestBrowserNotification">
+                    <i class="bi bi-bell"></i> ブラウザ通知テスト
+                </button>
+                <button class="btn btn-success" @onclick="TestWebHookNotification">
+                    <i class="bi bi-send"></i> WebHook通知テスト
+                </button>
+            </div>
+            <div class="mb-3">
+                <h6>通知テスト結果</h6>
+                <small class="text-muted">@notificationTestResult</small>
             </div>
             <hr />
             <p class="text-muted">その他の開発ツールは後で追加します</p>
@@ -97,6 +117,8 @@
     private DotNetObjectReference<DevWindow>? dotNetRef;
     private static DevWindow? currentInstance;
     private string scrollInfo = "スクロール位置情報が表示されます";
+    private int testElapsedSeconds = 10;
+    private string notificationTestResult = "テスト結果がここに表示されます";
     
     private string GetWindowStyle()
     {
@@ -210,6 +232,61 @@
         catch (Exception ex)
         {
             scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task TestBrowserNotification()
+    {
+        try
+        {
+            // テスト用のSessionInfoを作成
+            var testSession = new SessionInfo
+            {
+                SessionId = Guid.NewGuid(),
+                FolderPath = "C:\\TestFolder",
+                DisplayName = "通知テストセッション",
+                TerminalType = TerminalType.ClaudeCode,
+                ProcessingElapsedSeconds = testElapsedSeconds
+            };
+            
+            notificationTestResult = $"ブラウザ通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            StateHasChanged();
+            
+            await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
+            
+            notificationTestResult = $"ブラウザ通知を送信しました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            notificationTestResult = $"エラー: {ex.Message}";
+        }
+    }
+    
+    private async Task TestWebHookNotification()
+    {
+        try
+        {
+            // テスト用のSessionInfoを作成
+            var testSession = new SessionInfo
+            {
+                SessionId = Guid.NewGuid(),
+                FolderPath = "C:\\TestFolder",
+                DisplayName = "WebHookテストセッション",
+                TerminalType = TerminalType.GeminiCLI,
+                ProcessingElapsedSeconds = testElapsedSeconds
+            };
+            
+            notificationTestResult = $"WebHook通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            StateHasChanged();
+            
+            // WebHookのみ送信するため、直接NotificationServiceを使用
+            await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
+            
+            notificationTestResult = $"WebHook通知を送信しました - {DateTime.Now:HH:mm:ss}\nwebhook.siteで確認してください";
+        }
+        catch (Exception ex)
+        {
+            notificationTestResult = $"エラー: {ex.Message}";
         }
     }
 

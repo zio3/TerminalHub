@@ -73,5 +73,57 @@ window.terminalHubHelpers = {
     // Check if element exists
     checkElementExists: function(elementId) {
         return document.getElementById(elementId) !== null;
+    },
+    
+    // Notification handling
+    requestNotificationPermission: async function() {
+        if (!("Notification" in window)) {
+            console.log("This browser does not support desktop notification");
+            return "unsupported";
+        }
+        
+        if (Notification.permission === "granted") {
+            return "granted";
+        }
+        
+        if (Notification.permission !== "denied") {
+            const permission = await Notification.requestPermission();
+            return permission;
+        }
+        
+        return Notification.permission;
+    },
+    
+    showNotification: function(title, body, tag) {
+        if (!("Notification" in window)) {
+            console.log("This browser does not support desktop notification");
+            return;
+        }
+        
+        if (Notification.permission === "granted") {
+            const notification = new Notification(title, {
+                body: body,
+                icon: '/favicon.ico',
+                tag: tag,
+                requireInteraction: true // 通知を自動的に閉じない
+            });
+            
+            // 通知をクリックしたときの処理
+            notification.onclick = function(event) {
+                event.preventDefault();
+                window.focus(); // ブラウザウィンドウをフォーカス
+                notification.close();
+                
+                // Blazorのメソッドを呼び出してセッションを選択
+                if (window.terminalHubDotNetRef) {
+                    window.terminalHubDotNetRef.invokeMethodAsync('OnNotificationClick', tag);
+                }
+            };
+        }
+    },
+    
+    // Store DotNetRef for notification callback
+    setDotNetRef: function(dotNetRef) {
+        window.terminalHubDotNetRef = dotNetRef;
     }
 };

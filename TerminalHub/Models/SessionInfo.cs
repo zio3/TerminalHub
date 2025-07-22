@@ -26,6 +26,18 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? ProcessingStartTime { get; set; }
         
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int? ProcessingElapsedSeconds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? ProcessingTokens { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? ProcessingDirection { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasNotificationPending { get; set; }
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))
