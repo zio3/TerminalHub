@@ -8,8 +8,8 @@ namespace TerminalHub.Services
     {
         Task SaveSessionsAsync(IEnumerable<SessionInfo> sessions);
         Task<List<SessionInfo>> LoadSessionsAsync();
-        Task SaveActiveSessionIdAsync(string? sessionId);
-        Task<string?> LoadActiveSessionIdAsync();
+        Task SaveActiveSessionIdAsync(Guid? sessionId);
+        Task<Guid?> LoadActiveSessionIdAsync();
         Task ClearAsync();
         Task<T?> GetAsync<T>(string key);
         Task SetAsync<T>(string key, T value);
@@ -65,7 +65,7 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task SaveActiveSessionIdAsync(string? sessionId)
+        public async Task SaveActiveSessionIdAsync(Guid? sessionId)
         {
             try
             {
@@ -75,7 +75,7 @@ namespace TerminalHub.Services
                 }
                 else
                 {
-                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, sessionId);
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, sessionId.ToString());
                 }
             }
             catch (Exception ex)
@@ -84,11 +84,11 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task<string?> LoadActiveSessionIdAsync()
+        public async Task<Guid?> LoadActiveSessionIdAsync()
         {
             try
             {
-                return await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", ActiveSessionKey);
+                return await _jsRuntime.InvokeAsync<Guid?>("localStorage.getItem", ActiveSessionKey);
             }
             catch (Exception ex)
             {

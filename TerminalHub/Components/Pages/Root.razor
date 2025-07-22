@@ -23,94 +23,18 @@
 
 <div class="container-fluid h-100">
     <div class="row h-100">
-        <div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
-            
-            <div class="mb-3">
-                <button class="btn btn-primary w-100" @onclick="AddSession" disabled="@isAddingSession">
-                    <i class="bi bi-plus-circle"></i> 新しいセッションを作成
-                </button>
-            </div>
-
-            <div class="list-group flex-grow-1" style="overflow-y: auto;">
-                @foreach (var session in sessions)
-                {
-                    <div class="list-group-item list-group-item-action @(session.SessionId == activeSessionId ? "active" : "")" 
-                         @onclick="() => SelectSession(session.SessionId)"
-                         style="cursor: pointer;">
-                        <div class="d-flex w-100 justify-content-between align-items-center">
-                            <div class="flex-fill">
-                                <h6 class="mb-1">
-                                    @session.GetDisplayName()
-                                    @if (session.TerminalType != TerminalType.Terminal)
-                                    {
-                                        <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
-                                    }
-                                </h6>
-                                @if (!string.IsNullOrEmpty(session.ProcessingStatus))
-                                {
-                                    <div>
-                                        <small class="text-warning">
-                                            <i class="bi bi-clock-fill me-1"></i>@session.ProcessingStatus
-                                        </small>
-                                    </div>
-                                }
-                            </div>
-                            <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" 
-                                    @onclick="() => RemoveSession(session.SessionId)"
-                                    title="セッション削除">
-                                <i class="bi bi-x"></i>
-                            </button>
-                        </div>
-                        <div class="mt-2">
-                            @if (editingMemoSessionId == session.SessionId)
-                            {
-                                <input type="text" class="form-control form-control-sm" 
-                                       placeholder="メモを入力..."
-                                       value="@tempMemoText"
-                                       @onclick:stopPropagation="true"
-                                       @oninput="@((e) => tempMemoText = e.Value?.ToString() ?? "")"
-                                       @onblur="@(async () => await SaveMemo(session.SessionId))"
-                                       @onkeydown="@(async (e) => await HandleMemoKeyDown(e, session.SessionId))"
-                                       @onkeydown:stopPropagation="true"
-                                       style="font-size: 0.875rem;" 
-                                       autofocus />
-                            }
-                            else
-                            {
-                                <div class="text-muted small" 
-                                     @onclick:stopPropagation="true"
-                                     @onclick="() => StartEditingMemo(session.SessionId, session.Memo)"
-                                     style="cursor: pointer; font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03);">
-                                    @if (string.IsNullOrWhiteSpace(session.Memo))
-                                    {
-                                        <span style="font-style: italic; opacity: 0.6;">メモを追加...</span>
-                                    }
-                                    else
-                                    {
-                                        @session.Memo
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                }
-            </div>
-
-            @if (!sessions.Any())
-            {
-                <div class="alert alert-info mt-3">
-                    <i class="bi bi-info-circle"></i> ボタンをクリックしてセッションを作成してください
-                </div>
-            }
-
-            <!-- ショートカット説明を最下部に固定 -->
-            <div class="mt-auto p-2 border-top" style="font-size: 0.8rem; color: #6c757d; position: sticky; bottom: 0; background-color: #f8f9fa;">
-                <p class="mb-1"><strong>ショートカット:</strong></p>
-                <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
-                <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
-                <p class="mb-0"><kbd>Ctrl+Shift+C</kbd> - ストレージクリア</p>
-            </div>
-        </div>
+        <SessionList Sessions=@sessions
+                     ActiveSessionId=@activeSessionId
+                     IsAddingSession=@isAddingSession
+                     EditingMemoSessionId=@editingMemoSessionId
+                     TempMemoText=@tempMemoText
+                     OnAddSession="AddSession"
+                     OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
+                     OnSessionRemove="async (sessionId) => await RemoveSession(sessionId)"
+                     OnMemoInput="(text) => tempMemoText = text"
+                     OnMemoSave="SaveMemo"
+                     OnMemoKeyDown="HandleMemoKeyDown"
+                     OnMemoEdit="StartEditingMemo" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -205,7 +129,7 @@
 
 @code {
     private List<SessionInfo> sessions = new();
-    private string? activeSessionId;
+    private Guid? activeSessionId;
     private bool isAddingSession = false;
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
@@ -215,7 +139,7 @@
     private Toast? toast;
     private string inputText = "";
     private bool shouldPreventDefault = false;
-    private string? editingMemoSessionId = null;
+    private Guid? editingMemoSessionId = null;
     private string tempMemoText = "";
     private bool showDevWindow = false;
     private bool showDevButton = false;
@@ -233,7 +157,7 @@
         var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
         
         // 保存されたセッション情報をSessionManagerに復元
-        var restoredSessionIds = new HashSet<string>();
+        var restoredSessionIds = new HashSet<Guid>();
         foreach (var sessionInfo in savedSessions)
         {
             // 重複チェック（ホットリロード対策）
@@ -244,10 +168,11 @@
                 continue;
             }
             
-            // セッションを再作成（ターミナルプロセスの起動）
+            // セッションを再作成（ターミナルプロセスの起動）- 元のSessionIDを使用
             try
             {
                 var newSession = await SessionManager.CreateSessionAsync(
+                    sessionInfo.SessionId,
                     sessionInfo.FolderPath,
                     sessionInfo.DisplayName,
                     sessionInfo.TerminalType,
@@ -277,7 +202,7 @@
         // 保存されたアクティブセッションがあれば選択
         if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
         {
-            await SelectSession(savedActiveId);
+            await SelectSession(savedActiveId.Value);
         }
     }
 
@@ -299,6 +224,7 @@
     private async Task AddSession()
     {
         showCreateDialog = true;
+        await Task.CompletedTask; // 必要に応じて非同期処理を追加
     }
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
@@ -340,14 +266,10 @@
     }
 
 
-    private async Task SelectSession(string sessionId)
+    private async Task SelectSession(Guid sessionId)
     {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}, activeSessionId={activeSessionId}");
-        
         if (activeSessionId == sessionId)
         {
-            Console.WriteLine($"[SelectSession] 既に選択済み: {stopwatch.ElapsedMilliseconds}ms");
             return;
         }
 
@@ -357,8 +279,6 @@
         
         if (previousCts != null)
         {
-            var cleanupStart = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[SelectSession] 前のセッションをクリーンアップ開始: {cleanupStart}ms");
             try
             {
                 previousCts.Cancel();
@@ -368,14 +288,11 @@
             {
                 previousCts.Dispose();
             }
-            Console.WriteLine($"[SelectSession] クリーンアップ完了: {stopwatch.ElapsedMilliseconds - cleanupStart}ms");
         }
         
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
         {
-            var disposeStart = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[SelectSession] 既存のアクティブターミナル破棄開始: {disposeStart}ms");
             try
             {
                 await activeTerminal.DisposeAsync();
@@ -385,23 +302,19 @@
                 // Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
             }
             activeTerminal = null;
-            Console.WriteLine($"[SelectSession] ターミナル破棄完了: {stopwatch.ElapsedMilliseconds - disposeStart}ms");
         }
         
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
-        var hideStart = stopwatch.ElapsedMilliseconds;
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
-            Console.WriteLine($"[SelectSession] すべてのターミナル非表示完了: {stopwatch.ElapsedMilliseconds - hideStart}ms");
         }
         catch (Exception)
         {
-            Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {stopwatch.ElapsedMilliseconds - hideStart}ms");
+            // エラーは無視
         }
 
         // セッションをアクティブに
-        var activateStart = stopwatch.ElapsedMilliseconds;
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
         activeSession = SessionManager.GetSession(sessionId);
@@ -411,71 +324,67 @@
         
         // アクティブセッションIDをローカルストレージに保存
         await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
-        Console.WriteLine($"[SelectSession] セッション設定完了: {stopwatch.ElapsedMilliseconds - activateStart}ms");
 
         // ターミナルdivが存在するか確認し、表示する
-        var checkStart = stopwatch.ElapsedMilliseconds;
         try
         {
             var divExists = await JSRuntime.InvokeAsync<bool>("terminalHubHelpers.checkElementExists", 
-                $"terminal-{sessionId}");
-            Console.WriteLine($"[SelectSession] terminal-{sessionId} divの存在確認: {divExists}, {stopwatch.ElapsedMilliseconds - checkStart}ms");
+                $"terminal-{sessionId.ToString()}");
             
             if (divExists)
             {
-                var showStart = stopwatch.ElapsedMilliseconds;
                 // 新しいターミナルを表示
-                await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId);
-                Console.WriteLine($"[SelectSession] ターミナル表示完了: {stopwatch.ElapsedMilliseconds - showStart}ms");
+                await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId.ToString());
             }
         }
         catch (Exception)
         {
-            Console.WriteLine($"[SelectSession] div確認エラー: {stopwatch.ElapsedMilliseconds - checkStart}ms");
+            // エラーは無視
         }
 
         // ターミナルを初期化
-        var initStart = stopwatch.ElapsedMilliseconds;
-        Console.WriteLine($"[SelectSession] InitializeTerminal開始: {initStart}ms");
         await InitializeTerminal(sessionId);
-        Console.WriteLine($"[SelectSession] InitializeTerminal完了: {stopwatch.ElapsedMilliseconds - initStart}ms");
         
         // ターミナルのリサイズを強制的に実行
-        var resizeStart = stopwatch.ElapsedMilliseconds;
         try
         {
             if (activeTerminal != null)
             {
                 await activeTerminal.InvokeVoidAsync("resize");
-                Console.WriteLine($"[SelectSession] ターミナルリサイズ完了: {stopwatch.ElapsedMilliseconds - resizeStart}ms");
             }
         }
         catch (Exception)
         {
-            Console.WriteLine($"[SelectSession] リサイズエラー: {stopwatch.ElapsedMilliseconds - resizeStart}ms");
+            // エラーは無視
         }
         
         // 出力読み取りを開始
         if (activeSession != null)
         {
-            var readStart = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"[SelectSession] ReadOutput開始: {readStart}ms");
             readCts = new CancellationTokenSource();
             _ = Task.Run(() => ReadOutput(readCts.Token));
         }
         
-        Console.WriteLine($"[SelectSession] 全体完了: {stopwatch.ElapsedMilliseconds}ms");
+        // ターミナルを最下段にスクロール
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
+        }
+        catch (Exception)
+        {
+            // エラーは無視
+        }
     }
 
-    private async Task InitializeTerminal(string sessionId)
+    private async Task InitializeTerminal(Guid sessionId)
     {
-        var terminalId = $"terminal-{sessionId}";
+        var terminalId = $"terminal-{sessionId.ToString()}";
         // Console.WriteLine($"[InitializeTerminal] 開始: terminalId={terminalId}");
         
         // JavaScript側の既存ターミナルも削除
         try
         {
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId);
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
         }
         catch { }
         
@@ -485,7 +394,7 @@
             activeTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
                 "terminalFunctions.createMultiSessionTerminal", 
                 terminalId, 
-                sessionId, 
+                sessionId.ToString(), 
                 dotNetRef);
             
             // Console.WriteLine($"[InitializeTerminal] ターミナル作成成功");
@@ -551,23 +460,25 @@
         // Console.WriteLine($"[ReadOutput] 終了: sessionId={localSessionId}");
     }
 
-    private void StartEditingMemo(string sessionId, string currentMemo)
+    private void StartEditingMemo(Guid sessionId, string currentMemo)
     {
         editingMemoSessionId = sessionId;
         tempMemoText = currentMemo ?? "";
+        StateHasChanged();
     }
 
-    private async Task SaveMemo(string sessionId)
+    private async Task SaveMemo(Guid sessionId)
     {
         if (editingMemoSessionId == sessionId)
         {
             await UpdateSessionMemo(sessionId, tempMemoText);
             editingMemoSessionId = null;
             tempMemoText = "";
+            StateHasChanged();
         }
     }
 
-    private async Task HandleMemoKeyDown(KeyboardEventArgs e, string sessionId)
+    private async Task HandleMemoKeyDown(KeyboardEventArgs e, Guid sessionId)
     {
         if (e.Key == "Enter")
         {
@@ -577,10 +488,11 @@
         {
             editingMemoSessionId = null;
             tempMemoText = "";
+            StateHasChanged();
         }
     }
 
-    private async Task UpdateSessionMemo(string sessionId, string memo)
+    private async Task UpdateSessionMemo(Guid sessionId, string memo)
     {
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session != null)
@@ -591,7 +503,7 @@
         }
     }
 
-    private async Task RemoveSession(string sessionId)
+    private async Task RemoveSession(Guid sessionId)
     {
         // アクティブセッションの場合、読み取りタスクを停止
         if (sessionId == activeSessionId)
@@ -653,7 +565,8 @@
     [JSInvokable]
     public async Task SendInput(string sessionId, string data)
     {
-        if (activeSession != null && sessionId == activeSessionId)
+        var guid = Guid.Parse(sessionId);
+        if (activeSession != null && guid == activeSessionId)
         {
             await activeSession.WriteAsync(data);
         }
@@ -662,20 +575,21 @@
     [JSInvokable]
     public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
     {
-        if (sessionId == activeSessionId && activeSession != null)
+        var guid = Guid.Parse(sessionId);
+        if (guid == activeSessionId && activeSession != null)
         {
             activeSession.Resize(cols, rows);
         }
     }
 
-    private async Task DestroyTerminal(string sessionId, bool showAlert = true)
+    private async Task DestroyTerminal(Guid sessionId, bool showAlert = true)
     {
         // Console.WriteLine($"[DestroyTerminal] セッション {sessionId} のターミナルを破棄");
         
         try
         {
             // JavaScript側のターミナルを破棄
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.destroyTerminal", sessionId);
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.destroyTerminal", sessionId.ToString());
             
             // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
             if (activeSessionId == sessionId && activeTerminal != null)
@@ -709,7 +623,7 @@
         }
     }
 
-    private async Task RecreateTerminal(string sessionId)
+    private async Task RecreateTerminal(Guid sessionId)
     {
         // Console.WriteLine($"[RecreateTerminal] セッション {sessionId} のターミナルを再作成");
         
@@ -725,7 +639,7 @@
                 await Task.Delay(TerminalConstants.SessionCreationDelay);
                 
                 // ターミナルdivの表示状態を確実に設定
-                await JSRuntime.InvokeVoidAsync("terminalFunctions.ensureTerminalVisible", sessionId);
+                await JSRuntime.InvokeVoidAsync("terminalFunctions.ensureTerminalVisible", sessionId.ToString());
                 
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
@@ -760,15 +674,6 @@
         }
     }
 
-    private string GetTerminalTypeBadge(TerminalType type)
-    {
-        return type switch
-        {
-            TerminalType.ClaudeCode => "Claude",
-            TerminalType.GeminiCLI => "Gemini",
-            _ => "Terminal"
-        };
-    }
 
     private void AnalyzeClaudeCodeOutput(string data)
     {

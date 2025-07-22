@@ -9,7 +9,7 @@ namespace TerminalHub.Models
 
     public class SessionInfo
     {
-        public string SessionId { get; set; } = Guid.NewGuid().ToString();
+        public Guid SessionId { get; set; } = Guid.NewGuid();
         public string DisplayName { get; set; } = string.Empty;
         public string FolderPath { get; set; } = string.Empty;
         public string FolderName { get; set; } = string.Empty;

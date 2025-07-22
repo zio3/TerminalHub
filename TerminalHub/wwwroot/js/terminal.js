@@ -262,5 +262,23 @@ window.terminalFunctions = {
             terminalDiv.style.display = 'block';
             // console.log('[RecreateTerminal] ターミナルdiv表示設定');
         }
+    },
+
+    // ターミナルを最下段にスクロール
+    scrollToBottom: function(sessionId) {
+        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+            const terminal = window.multiSessionTerminals[sessionId].terminal;
+            if (terminal) {
+                // 複数回実行して確実にスクロール
+                terminal.scrollToBottom();
+                setTimeout(() => {
+                    terminal.scrollToBottom();
+                }, 50);
+                setTimeout(() => {
+                    terminal.scrollToBottom();
+                }, 100);
+                console.log(`[JS] ターミナル ${sessionId} を最下段にスクロール`);
+            }
+        }
     }
 };

@@ -10,24 +10,25 @@ namespace TerminalHub.Services
     {
         Task<SessionInfo> CreateSessionAsync(string? folderPath = null);
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
-        Task<bool> RemoveSessionAsync(string sessionId);
-        ConPtySession? GetSession(string sessionId);
+        Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
+        Task<bool> RemoveSessionAsync(Guid sessionId);
+        ConPtySession? GetSession(Guid sessionId);
         IEnumerable<SessionInfo> GetAllSessions();
-        SessionInfo? GetSessionInfo(string sessionId);
-        Task<bool> SetActiveSessionAsync(string sessionId);
-        string? GetActiveSessionId();
+        SessionInfo? GetSessionInfo(Guid sessionId);
+        Task<bool> SetActiveSessionAsync(Guid sessionId);
+        Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         // event EventHandler<string>? ActiveSessionChanged;
     }
 
     public class SessionManager : ISessionManager, IDisposable
     {
-        private readonly ConcurrentDictionary<string, ConPtySession> _sessions = new();
-        private readonly ConcurrentDictionary<string, SessionInfo> _sessionInfos = new();
+        private readonly ConcurrentDictionary<Guid, ConPtySession> _sessions = new();
+        private readonly ConcurrentDictionary<Guid, SessionInfo> _sessionInfos = new();
         private readonly IConPtyService _conPtyService;
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
-        private string? _activeSessionId;
+        private Guid? _activeSessionId;
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
 
@@ -51,13 +52,16 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
         {
+            return await CreateSessionAsync(Guid.NewGuid(), folderPath, sessionName, terminalType, options);
+        }
+
+        public async Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
+        {
             // セッション数の上限チェック
             if (_sessions.Count >= _maxSessions)
             {
                 throw new InvalidOperationException($"最大セッション数（{_maxSessions}）に達しています。");
             }
-            
-            var sessionGuid = Guid.NewGuid().ToString();
             
             // フォルダパスが指定されていない場合はデフォルトを使用
             if (string.IsNullOrWhiteSpace(folderPath))
@@ -214,7 +218,7 @@ namespace TerminalHub.Services
             return null;
         }
 
-        public Task<bool> RemoveSessionAsync(string sessionId)
+        public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
             if (_sessions.TryRemove(sessionId, out var session))
             {
@@ -234,7 +238,7 @@ namespace TerminalHub.Services
             return Task.FromResult(false);
         }
 
-        public ConPtySession? GetSession(string sessionId)
+        public ConPtySession? GetSession(Guid sessionId)
         {
             if (_sessions.TryGetValue(sessionId, out var session))
             {
@@ -252,12 +256,12 @@ namespace TerminalHub.Services
             return _sessionInfos.Values.OrderBy(s => s.CreatedAt);
         }
 
-        public SessionInfo? GetSessionInfo(string sessionId)
+        public SessionInfo? GetSessionInfo(Guid sessionId)
         {
             return _sessionInfos.TryGetValue(sessionId, out var info) ? info : null;
         }
 
-        public Task<bool> SetActiveSessionAsync(string sessionId)
+        public Task<bool> SetActiveSessionAsync(Guid sessionId)
         {
             // Console.WriteLine($"[SessionManager] SetActiveSessionAsync開始: sessionId={sessionId}");
             lock (_lockObject)
@@ -266,7 +270,7 @@ namespace TerminalHub.Services
                 if (_sessionInfos.ContainsKey(sessionId))
                 {
                     // Console.WriteLine($"[SessionManager] セッション存在確認OK");
-                    if (_activeSessionId != null && _sessionInfos.TryGetValue(_activeSessionId, out var oldActive))
+                    if (_activeSessionId.HasValue && _sessionInfos.TryGetValue(_activeSessionId.Value, out var oldActive))
                     {
                         oldActive.IsActive = false;
                         // Console.WriteLine($"[SessionManager] 前のアクティブセッション({_activeSessionId})を非アクティブ化");
@@ -291,7 +295,7 @@ namespace TerminalHub.Services
             }
         }
 
-        public string? GetActiveSessionId()
+        public Guid? GetActiveSessionId()
         {
             return _activeSessionId;
         }

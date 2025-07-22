@@ -1,0 +1,133 @@
+@using TerminalHub.Models
+@using TerminalHub.Constants
+
+<style>
+    .active-session {
+        border: 2px solid #0d6efd !important;
+        background-color: #e7f1ff !important;
+    }
+    
+    .active-session:hover {
+        background-color: #d7e9ff !important;
+    }
+</style>
+
+<div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
+    
+    <div class="mb-3">
+        <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
+            <i class="bi bi-plus-circle"></i> 新しいセッションを作成
+        </button>
+    </div>
+
+    <div class="list-group flex-grow-1" style="overflow-y: auto;">
+        @foreach (var session in Sessions)
+        {
+            <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
+                 @onclick="() => OnSessionSelect.InvokeAsync(session.SessionId)"
+                 style="cursor: pointer;">
+                <div class="d-flex w-100 justify-content-between align-items-center">
+                    <div class="flex-fill">
+                        <h6 class="mb-1">
+                            @session.GetDisplayName()
+                            @if (session.TerminalType != TerminalType.Terminal)
+                            {
+                                <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
+                            }
+                        </h6>
+                        @if (!string.IsNullOrEmpty(session.ProcessingStatus))
+                        {
+                            <div>
+                                <small class="text-warning">
+                                    <i class="bi bi-clock-fill me-1"></i>@session.ProcessingStatus
+                                </small>
+                            </div>
+                        }
+                    </div>
+                    <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" 
+                            @onclick="() => OnSessionRemove.InvokeAsync(session.SessionId)"
+                            title="セッション削除">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="mt-2">
+                    @if (EditingMemoSessionId == session.SessionId)
+                    {
+                        <input type="text" class="form-control form-control-sm" 
+                               placeholder="メモを入力..."
+                               value="@TempMemoText"
+                               @onclick:stopPropagation="true"
+                               @oninput="@((e) => OnMemoInput.InvokeAsync(e.Value?.ToString() ?? ""))"
+                               @onblur="@(async () => await OnMemoSave(session.SessionId))"
+                               @onkeydown="@(async (e) => await OnMemoKeyDown(e, session.SessionId))"
+                               @onkeydown:stopPropagation="true"
+                               style="font-size: 0.875rem;" 
+                               autofocus />
+                    }
+                    else
+                    {
+                        <div class="text-muted small" 
+                             @onclick:stopPropagation="true"
+                             @onclick="() => OnMemoEdit(session.SessionId, session.Memo)"
+                             style="cursor: pointer; font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03);">
+                            @if (string.IsNullOrWhiteSpace(session.Memo))
+                            {
+                                <span style="font-style: italic; opacity: 0.6;">メモを追加...</span>
+                            }
+                            else
+                            {
+                                @session.Memo
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!Sessions.Any())
+    {
+        <div class="alert alert-info mt-3">
+            <i class="bi bi-info-circle"></i> ボタンをクリックしてセッションを作成してください
+        </div>
+    }
+
+    <!-- ショートカット説明を最下部に固定 -->
+    <div class="mt-auto p-2 border-top" style="font-size: 0.8rem; color: #6c757d; position: sticky; bottom: 0; background-color: #f8f9fa;">
+        <p class="mb-1"><strong>ショートカット:</strong></p>
+        <p class="mb-0"><kbd>Ctrl+Shift+N</kbd> - 新しいセッション</p>
+        <p class="mb-0"><kbd>Ctrl+Shift+D</kbd> - デバッグ情報 (コンソール)</p>
+        <p class="mb-0"><kbd>Ctrl+Shift+C</kbd> - ストレージクリア</p>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
+    [Parameter] public Guid? ActiveSessionId { get; set; }
+    [Parameter] public bool IsAddingSession { get; set; }
+    [Parameter] public Guid? EditingMemoSessionId { get; set; }
+    [Parameter] public string TempMemoText { get; set; } = "";
+    
+    [Parameter] public EventCallback OnAddSession { get; set; }
+    [Parameter] public EventCallback<Guid> OnSessionSelect { get; set; }
+    [Parameter] public EventCallback<Guid> OnSessionRemove { get; set; }
+    [Parameter] public EventCallback<string> OnMemoInput { get; set; }
+    [Parameter] public Func<Guid, Task> OnMemoSave { get; set; } = _ => Task.CompletedTask;
+    [Parameter] public Func<Microsoft.AspNetCore.Components.Web.KeyboardEventArgs, Guid, Task> OnMemoKeyDown { get; set; } = (_, _) => Task.CompletedTask;
+    [Parameter] public Action<Guid, string> OnMemoEdit { get; set; } = (_, _) => { };
+
+    protected override void OnParametersSet()
+    {
+        StateHasChanged();
+    }
+
+    private string GetTerminalTypeBadge(TerminalType terminalType)
+    {
+        return terminalType switch
+        {
+            TerminalType.ClaudeCode => "Claude",
+            TerminalType.GeminiCLI => "Gemini",
+            _ => "Terminal"
+        };
+    }
+}
