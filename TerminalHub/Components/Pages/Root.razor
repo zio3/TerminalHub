@@ -542,6 +542,29 @@
                     var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                     if (sessionInfo != null)
                     {
+                        // Claude Codeの場合、"No conversation found to continue"エラーをチェック
+                        if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
+                            data.Contains("No conversation found to continue") &&
+                            sessionInfo.Options.ContainsKey("continue"))
+                        {
+                            Console.WriteLine($"[Claude Continue Error] セッション {sessionId} で 'No conversation found to continue' エラーを検知しました");
+                            
+                            // 既存のセッションに--continueなしでclaudeを起動
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await StartClaudeWithoutContinue(sessionId);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[Claude Continue Error] Claude起動エラー: {ex.Message}");
+                                }
+                            });
+                            
+                            continue; // 通常の処理をスキップ
+                        }
+
                         // 出力解析（ターミナルタイプに応じた解析器を使用）
                         AnalyzeOutput(data, sessionId, sessionInfo.TerminalType);
 
@@ -1508,6 +1531,87 @@
         }
         
         toast?.ShowSuccess("セッション設定を保存しました");
+    }
+
+    private async Task StartClaudeWithoutContinue(Guid sessionId)
+    {
+        var session = SessionManager.GetSession(sessionId);
+        var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session == null || sessionInfo == null) return;
+
+        Console.WriteLine($"[Claude Continue Fix] セッション {sessionId} に--continueなしでClaude起動コマンドを送信します");
+
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                // 既存のオプションから--continueを除去してコマンドを構築
+                var optionsWithoutContinue = new Dictionary<string, string>(sessionInfo.Options);
+                optionsWithoutContinue.Remove("continue");
+                
+                // フルパスでclaude.cmdを指定し、ClaudeCodeArgs形式でコマンドを構築
+                var claudeCmdPath = Configuration.GetValue<string>("ExternalTools:ClaudeCmdPath");
+                if (string.IsNullOrEmpty(claudeCmdPath))
+                {
+                    var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    claudeCmdPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+                }
+                
+                var args = BuildClaudeCodeArgs(optionsWithoutContinue);
+                var command = string.IsNullOrWhiteSpace(args) 
+                    ? $"\"{claudeCmdPath}\"" 
+                    : $"\"{claudeCmdPath}\" {args}";
+                
+                Console.WriteLine($"[Claude Continue Fix] 送信予定のコマンド: '{command}'");
+                Console.WriteLine($"[Claude Continue Fix] コマンド長: {command.Length} バイト");
+                
+                // 現在のプロンプトをクリアし、確実にコマンドを送信
+                await session.WriteAsync("\u0003"); // Ctrl+Cで現在の入力をキャンセル
+                await Task.Delay(200);
+                
+                // バックスペースを複数回送信して見えない制御文字をクリア
+                for (int i = 0; i < 10; i++)
+                {
+                    await session.WriteAsync("\b \b"); // バックスペース、スペース、バックスペースで確実にクリア
+                }
+                await Task.Delay(100);
+                
+                await session.WriteAsync($"{command}\r\n");
+                
+                Console.WriteLine($"[Claude Continue Fix] Claude起動コマンドを送信しました");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Claude Continue Fix] コマンド送信エラー: {ex.Message}");
+            }
+        });
+    }
+    
+    private string BuildClaudeCodeArgs(Dictionary<string, string> options)
+    {
+        var args = new List<string>();
+        
+        foreach (var option in options)
+        {
+            switch (option.Key.ToLower())
+            {
+                case "model":
+                    if (!string.IsNullOrWhiteSpace(option.Value))
+                        args.Add($"--model {option.Value}");
+                    break;
+                case "max-tokens":
+                    if (!string.IsNullOrWhiteSpace(option.Value))
+                        args.Add($"--max-tokens {option.Value}");
+                    break;
+                case "bypass-mode":
+                    if (option.Value == "true")
+                        args.Add("--dangerously-skip-permissions");
+                    break;
+                // continueは除外（ここには来ない）
+            }
+        }
+        
+        return string.Join(" ", args);
     }
     
     public async ValueTask DisposeAsync()

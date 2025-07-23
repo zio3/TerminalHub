@@ -56,6 +56,38 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
+        private async Task<ConPtySession> CreateClaudeCodeSessionWithFallbackAsync(string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
+        {            
+            try
+            {
+                // 最初は設定されたオプションで試行
+                return await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Claude Codeセッション作成が失敗しました");
+                
+                // --continueオプションを除去して再試行
+                if (options.ContainsKey("continue"))
+                {
+                    _logger.LogInformation("--continueオプションなしで再試行します");
+                    var fallbackOptions = new Dictionary<string, string>(options);
+                    fallbackOptions.Remove("continue");
+                    var fallbackArgs = BuildClaudeCodeArgs(fallbackOptions);
+                    var claudeCmdPath = GetClaudeCmdPath();
+                    var fallbackArgsString = string.IsNullOrWhiteSpace(fallbackArgs)
+                        ? $"/k \"{claudeCmdPath}\""
+                        : $"/k \"{claudeCmdPath}\" {fallbackArgs}";
+                    
+                    _logger.LogInformation("--continueオプションなしで再試行: {Args}", fallbackArgsString);
+                    return await _conPtyService.CreateSessionAsync(command, fallbackArgsString, folderPath, cols, rows);
+                }
+                
+                // --continueオプションがない場合は元の例外を再スロー
+                throw;
+            }
+        }
+
         public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
         {
             // 既存のメソッドは互換性のために残す
@@ -151,12 +183,15 @@ namespace TerminalHub.Services
                         break;
                 }
                 
-                var session = await _conPtyService.CreateSessionAsync(
-                    command, 
-                    args, 
-                    folderPath, 
-                    cols, 
-                    rows);
+                ConPtySession session;
+                if (terminalType == TerminalType.ClaudeCode)
+                {
+                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, folderPath, cols, rows, options);
+                }
+                else
+                {
+                    session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+                }
 
                 _sessions[sessionInfo.SessionId] = session;
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
@@ -462,7 +497,15 @@ namespace TerminalHub.Services
                             break;
                     }
 
-                    var newSession = await _conPtyService.CreateSessionAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows);
+                    ConPtySession newSession;
+                    if (existingWorktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
+                    {
+                        newSession = await CreateClaudeCodeSessionWithFallbackAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows, existingWorktreeSessionInfo.Options);
+                    }
+                    else
+                    {
+                        newSession = await _conPtyService.CreateSessionAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows);
+                    }
                     _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, newSession);
                     _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
 
@@ -523,11 +566,7 @@ namespace TerminalHub.Services
                     case TerminalType.ClaudeCode:
                         // claude.cmdをcmd.exe経由で実行（親と同じオプションを使用）
                         command = "cmd.exe";
-                        // Worktree作成時の初回起動では--continueオプションを除外
-                        // （セッション作成後は設定変更で--continueを有効にできる）
-                        var worktreeOptions = new Dictionary<string, string>(worktreeSessionInfo.Options);
-                        worktreeOptions.Remove("continue");
-                        var claudeArgs = BuildClaudeCodeArgs(worktreeOptions);
+                        var claudeArgs = BuildClaudeCodeArgs(worktreeSessionInfo.Options);
                         var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs)
                             ? $"/k \"{claudeCmdPath}\""
@@ -559,7 +598,15 @@ namespace TerminalHub.Services
                         break;
                 }
 
-                var session = await _conPtyService.CreateSessionAsync(command, args, worktreePath, cols, rows);
+                ConPtySession session;
+                if (worktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
+                {
+                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, worktreePath, cols, rows, worktreeSessionInfo.Options);
+                }
+                else
+                {
+                    session = await _conPtyService.CreateSessionAsync(command, args, worktreePath, cols, rows);
+                }
                 _sessions.TryAdd(worktreeSessionInfo.SessionId, session);
                 _sessionInfos.TryAdd(worktreeSessionInfo.SessionId, worktreeSessionInfo);
 
@@ -630,10 +677,7 @@ namespace TerminalHub.Services
                 {
                     case TerminalType.ClaudeCode:
                         command = "cmd.exe";
-                        // 同じフォルダでの新規セッション作成時も初回起動では--continueオプションを除外
-                        var samePathOptions = new Dictionary<string, string>(sessionInfo.Options);
-                        samePathOptions.Remove("continue");
-                        var claudeArgs = BuildClaudeCodeArgs(samePathOptions);
+                        var claudeArgs = BuildClaudeCodeArgs(sessionInfo.Options);
                         var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs)
                             ? $"/k \"{claudeCmdPath}\""
@@ -664,7 +708,15 @@ namespace TerminalHub.Services
                         break;
                 }
 
-                var session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+                ConPtySession session;
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
+                {
+                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, folderPath, cols, rows, sessionInfo.Options);
+                }
+                else
+                {
+                    session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+                }
                 _sessions.TryAdd(sessionInfo.SessionId, session);
                 _sessionInfos.TryAdd(sessionInfo.SessionId, sessionInfo);
 
@@ -746,7 +798,15 @@ namespace TerminalHub.Services
                 }
 
                 // 新しいセッションを作成
-                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                ConPtySession newSession;
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
+                {
+                    newSession = await CreateClaudeCodeSessionWithFallbackAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.Options);
+                }
+                else
+                {
+                    newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                }
                 _sessions[sessionId] = newSession;
 
                 _logger.LogInformation("セッション再起動成功: {SessionId}, タイプ: {Type}", sessionId, sessionInfo.TerminalType);

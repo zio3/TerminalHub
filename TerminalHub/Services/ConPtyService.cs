@@ -210,6 +210,51 @@ namespace TerminalHub.Services
             return _reader?.BaseStream;
         }
 
+        public async Task<string> ReadAvailableOutputAsync(int timeoutMs = 2000)
+        {
+            if (_disposed || _reader == null)
+                return string.Empty;
+
+            var output = new StringBuilder();
+            var buffer = new char[1024];
+            var startTime = DateTime.Now;
+
+            await _readSemaphore.WaitAsync();
+            try
+            {
+                while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
+                {
+                    if (_disposed || _reader == null)
+                        break;
+
+                    // データが利用可能かチェック
+                    if (_reader.BaseStream.CanRead && _reader.BaseStream.Length > 0)
+                    {
+                        var bytesRead = await _reader.ReadAsync(buffer, 0, buffer.Length);
+                        if (bytesRead > 0)
+                        {
+                            output.Append(buffer, 0, bytesRead);
+                            continue;
+                        }
+                    }
+
+                    // 短い待機
+                    await Task.Delay(100);
+                }
+            }
+            catch
+            {
+                // エラーが発生した場合は空文字を返す
+            }
+            finally
+            {
+                if (!_disposed)
+                    _readSemaphore.Release();
+            }
+
+            return output.ToString();
+        }
+
         public void Resize(int cols, int rows)
         {
             if (_hPC != IntPtr.Zero)

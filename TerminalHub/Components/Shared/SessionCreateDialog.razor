@@ -2,8 +2,8 @@
 @using Microsoft.JSInterop
 @inject IJSRuntime JSRuntime
 
-<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onclick="OnBackdropClick">
-    <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true">
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
+    <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">新しいセッションを作成</h5>
@@ -90,9 +90,20 @@
         await OnCancel.InvokeAsync();
     }
 
-    private void OnBackdropClick()
+    private bool isMouseDownOnBackdrop = false;
+
+    private void OnBackdropMouseDown()
     {
-        _ = Cancel();
+        isMouseDownOnBackdrop = true;
+    }
+
+    private void OnBackdropMouseUp()
+    {
+        if (isMouseDownOnBackdrop)
+        {
+            _ = Cancel();
+        }
+        isMouseDownOnBackdrop = false;
     }
 
     private void ResetForm()
