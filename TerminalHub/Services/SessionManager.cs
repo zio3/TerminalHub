@@ -18,6 +18,7 @@ namespace TerminalHub.Services
         Task<bool> SetActiveSessionAsync(Guid sessionId);
         Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
+        Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
         // event EventHandler<string>? ActiveSessionChanged;
     }
 
@@ -28,17 +29,19 @@ namespace TerminalHub.Services
         private readonly IConPtyService _conPtyService;
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
+        private readonly IGitService _gitService;
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
 
         // public event EventHandler<string>? ActiveSessionChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService)
         {
             _conPtyService = conPtyService;
             _logger = logger;
             _configuration = configuration;
+            _gitService = gitService;
             _maxSessions = _configuration.GetValue<int>("SessionSettings:MaxSessions", TerminalConstants.DefaultMaxSessions);
         }
 
@@ -86,6 +89,9 @@ namespace TerminalHub.Services
                 Options = options,
                 MaxBufferSize = _configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000)
             };
+
+            // Git情報を非同期で取得してセッション情報に設定
+            await PopulateGitInfoAsync(sessionInfo);
 
             try
             {
@@ -308,6 +314,115 @@ namespace TerminalHub.Services
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
             }
             return Task.CompletedTask;
+        }
+
+        private async Task PopulateGitInfoAsync(SessionInfo sessionInfo)
+        {
+            try
+            {
+                var gitInfo = await _gitService.GetGitInfoAsync(sessionInfo.FolderPath);
+                if (gitInfo != null)
+                {
+                    sessionInfo.IsGitRepository = true;
+                    sessionInfo.GitBranch = gitInfo.CurrentBranch;
+                    sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
+                    sessionInfo.IsWorktree = gitInfo.IsWorktree;
+                    sessionInfo.WorktreeMainPath = gitInfo.WorktreeMainPath;
+
+                    _logger.LogDebug("Git情報を取得しました: {Path}, ブランチ: {Branch}, Worktree: {IsWorktree}", 
+                        sessionInfo.FolderPath, gitInfo.CurrentBranch, gitInfo.IsWorktree);
+                }
+                else
+                {
+                    sessionInfo.IsGitRepository = false;
+                    _logger.LogDebug("Gitリポジトリではありません: {Path}", sessionInfo.FolderPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Git情報の取得に失敗しました: {Path}", sessionInfo.FolderPath);
+                sessionInfo.IsGitRepository = false;
+            }
+        }
+
+        public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName)
+        {
+            try
+            {
+                // 親セッションを取得
+                var parentSession = GetSessionInfo(parentSessionId);
+                if (parentSession == null)
+                {
+                    _logger.LogWarning("親セッションが見つかりません: {ParentSessionId}", parentSessionId);
+                    return null;
+                }
+
+                if (!parentSession.IsGitRepository)
+                {
+                    _logger.LogWarning("親セッションはGitリポジトリではありません: {ParentSessionId}", parentSessionId);
+                    return null;
+                }
+
+                // Worktreeの作成先パスを決定
+                var parentPath = parentSession.FolderPath;
+                var worktreeName = $"{Path.GetFileName(parentPath)}-{branchName}";
+                var worktreePath = Path.Combine(Path.GetDirectoryName(parentPath) ?? parentPath, worktreeName);
+
+                // 既に存在する場合は別の名前を試す
+                int counter = 1;
+                var originalWorktreePath = worktreePath;
+                while (Directory.Exists(worktreePath))
+                {
+                    worktreePath = $"{originalWorktreePath}-{counter}";
+                    counter++;
+                }
+
+                // Worktreeを作成
+                var success = await _gitService.CreateWorktreeAsync(parentPath, branchName, worktreePath);
+                if (!success)
+                {
+                    _logger.LogWarning("Worktree作成に失敗しました: ブランチ={Branch}, パス={Path}", branchName, worktreePath);
+                    return null;
+                }
+
+                // 新しいセッションを作成
+                var worktreeSessionInfo = new SessionInfo
+                {
+                    SessionId = Guid.NewGuid(),
+                    FolderPath = worktreePath,
+                    FolderName = Path.GetFileName(worktreePath),
+                    DisplayName = $"{parentSession.DisplayName} ({branchName})",
+                    TerminalType = parentSession.TerminalType,
+                    Options = new Dictionary<string, string>(parentSession.Options),
+                    MaxBufferSize = parentSession.MaxBufferSize,
+                    ParentSessionId = parentSessionId
+                };
+
+                // Git情報を設定
+                await PopulateGitInfoAsync(worktreeSessionInfo);
+
+                // セッションを開始
+                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+                string command = "cmd.exe";
+                string args = "";
+
+                var session = await _conPtyService.CreateSessionAsync(command, args, worktreePath, cols, rows);
+                _sessions.TryAdd(worktreeSessionInfo.SessionId, session);
+                _sessionInfos.TryAdd(worktreeSessionInfo.SessionId, worktreeSessionInfo);
+
+                _logger.LogInformation("Worktreeセッション作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
+                    branchName, worktreePath, worktreeSessionInfo.SessionId);
+
+                return worktreeSessionInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Worktreeセッション作成でエラーが発生しました: 親セッション={ParentSessionId}, ブランチ={Branch}", 
+                    parentSessionId, branchName);
+                return null;
+            }
         }
 
         public void Dispose()

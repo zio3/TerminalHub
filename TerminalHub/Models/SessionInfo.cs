@@ -59,6 +59,25 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput { get; set; }
         
+        // Git関連プロパティ
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsGitRepository { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? GitBranch { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasUncommittedChanges { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsWorktree { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Guid? ParentSessionId { get; set; } // Worktreeの場合の親セッション
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? WorktreeMainPath { get; set; } // Worktreeの場合のメインリポジトリパス
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))

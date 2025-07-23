@@ -20,6 +20,9 @@ builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 // NotificationServiceを登録
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+// GitServiceを登録
+builder.Services.AddSingleton<IGitService, GitService>();
+
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
 

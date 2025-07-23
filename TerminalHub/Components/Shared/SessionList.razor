@@ -55,6 +55,16 @@
                             {
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                             }
+                            @if (session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
+                            {
+                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" title="@(session.IsWorktree ? "Worktree" : "Git ブランチ")">
+                                    <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
+                                    @if (session.HasUncommittedChanges)
+                                    {
+                                        <i class="bi bi-dot text-danger" title="未コミットの変更があります"></i>
+                                    }
+                                </span>
+                            }
                         </h6>
                         @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
                         {
