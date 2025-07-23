@@ -66,13 +66,7 @@
                         </small>
                     </div>
 
-                    @if (!string.IsNullOrEmpty(errorMessage))
-                    {
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
-                            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
-                        </div>
-                    }
+                    <ErrorAlert @bind-ErrorMessage="errorMessage" />
                 }
                 else
                 {

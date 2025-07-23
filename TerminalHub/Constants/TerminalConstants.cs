@@ -37,5 +37,45 @@ namespace TerminalHub.Constants
             var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             return Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
         }
+
+        // コマンドライン引数の構築ヘルパー
+        public static string BuildClaudeCodeArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+            
+            if (options.ContainsKey("model") && !string.IsNullOrWhiteSpace(options["model"]))
+            {
+                args.Add($"--model {options["model"]}");
+            }
+            
+            if (options.ContainsKey("max-tokens") && !string.IsNullOrWhiteSpace(options["max-tokens"]))
+            {
+                args.Add($"--max-tokens {options["max-tokens"]}");
+            }
+            
+            if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
+            {
+                args.Add("--dangerously-skip-permissions");
+            }
+            
+            if (options.ContainsKey("continue") && options["continue"] == "true")
+            {
+                args.Add("--continue");
+            }
+            
+            return string.Join(" ", args);
+        }
+
+        public static string BuildGeminiArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+            
+            if (options.ContainsKey("model") && !string.IsNullOrWhiteSpace(options["model"]))
+            {
+                args.Add($"--model {options["model"]}");
+            }
+            
+            return string.Join(" ", args);
+        }
     }
 }

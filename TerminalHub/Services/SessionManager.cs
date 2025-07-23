@@ -56,6 +56,37 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
+        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options)
+        {
+            switch (terminalType)
+            {
+                case TerminalType.ClaudeCode:
+                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options);
+                    var claudeCmdPath = GetClaudeCmdPath();
+                    var args = string.IsNullOrWhiteSpace(claudeArgs)
+                        ? $"/k \"{claudeCmdPath}\""
+                        : $"/k \"{claudeCmdPath}\" {claudeArgs}";
+                    return ("cmd.exe", args);
+
+                case TerminalType.GeminiCLI:
+                    var geminiArgs = TerminalConstants.BuildGeminiArgs(options);
+                    var geminiArgsString = string.IsNullOrWhiteSpace(geminiArgs)
+                        ? "/k gemini"
+                        : $"/k gemini {geminiArgs}";
+                    return ("cmd.exe", geminiArgsString);
+
+                default:
+                    if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
+                    {
+                        return (options["command"], "");
+                    }
+                    else
+                    {
+                        return (TerminalConstants.DefaultShell, "");
+                    }
+            }
+        }
+
         private async Task<ConPtySession> CreateClaudeCodeSessionWithFallbackAsync(string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
         {            
             try
@@ -73,7 +104,7 @@ namespace TerminalHub.Services
                     _logger.LogInformation("--continueオプションなしで再試行します");
                     var fallbackOptions = new Dictionary<string, string>(options);
                     fallbackOptions.Remove("continue");
-                    var fallbackArgs = BuildClaudeCodeArgs(fallbackOptions);
+                    var fallbackArgs = TerminalConstants.BuildClaudeCodeArgs(fallbackOptions);
                     var claudeCmdPath = GetClaudeCmdPath();
                     var fallbackArgsString = string.IsNullOrWhiteSpace(fallbackArgs)
                         ? $"/k \"{claudeCmdPath}\""
@@ -141,47 +172,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 
-                string command;
-                string args;
-                
-                switch (terminalType)
-                {
-                    case TerminalType.ClaudeCode:
-                        // claude.cmdをcmd.exe経由で実行
-                        command = "cmd.exe";
-                        var claudeArgs = BuildClaudeCodeArgs(options);
-                        // 引数がある場合はスペースを追加、ない場合は追加しない
-                        var claudeCmdPath = GetClaudeCmdPath();
-                        args = string.IsNullOrWhiteSpace(claudeArgs) 
-                            ? $"/k \"{claudeCmdPath}\"" 
-                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
-                        break;
-                        
-                    case TerminalType.GeminiCLI:
-                        // geminiをcmd.exe経由で実行
-                        command = "cmd.exe";
-                        var geminiArgs = BuildGeminiArgs(options);
-                        // 引数がある場合はスペースを追加、ない場合は追加しない
-                        args = string.IsNullOrWhiteSpace(geminiArgs)
-                            ? "/k gemini"
-                            : $"/k gemini {geminiArgs}";
-                        break;
-                        
-                    default:
-                        // スタートアップコマンドが指定されている場合はそれを使用
-                        if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
-                        {
-                            command = options["command"];
-                            args = "";
-                        }
-                        else
-                        {
-                            // デフォルトのシェルを使用
-                            command = TerminalConstants.DefaultShell;
-                            args = "";
-                        }
-                        break;
-                }
+                var (command, args) = BuildTerminalCommand(terminalType, options);
                 
                 ConPtySession session;
                 if (terminalType == TerminalType.ClaudeCode)
@@ -205,44 +196,6 @@ namespace TerminalHub.Services
             }
         }
 
-        private string BuildClaudeCodeArgs(Dictionary<string, string> options)
-        {
-            var args = new List<string>();
-            
-            if (options.ContainsKey("model"))
-            {
-                args.Add($"--model {options["model"]}");
-            }
-            
-            if (options.ContainsKey("max-tokens"))
-            {
-                args.Add($"--max-tokens {options["max-tokens"]}");
-            }
-            
-            if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
-            {
-                args.Add("--dangerously-skip-permissions");
-            }
-            
-            if (options.ContainsKey("continue") && options["continue"] == "true")
-            {
-                args.Add("--continue");
-            }
-            
-            return string.Join(" ", args);
-        }
-
-        private string BuildGeminiArgs(Dictionary<string, string> options)
-        {
-            var args = new List<string>();
-            
-            if (options.ContainsKey("model"))
-            {
-                args.Add($"--model {options["model"]}");
-            }
-            
-            return string.Join(" ", args);
-        }
 
         private string? FindExecutable(string exeName)
         {
@@ -460,42 +413,7 @@ namespace TerminalHub.Services
                     var terminalCols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                     var terminalRows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                    string terminalCommand;
-                    string? terminalArgs = null;
-
-                    switch (existingWorktreeSessionInfo.TerminalType)
-                    {
-                        case TerminalType.ClaudeCode:
-                            terminalCommand = "cmd.exe";
-                            var claudeArgs = BuildClaudeCodeArgs(existingWorktreeSessionInfo.Options);
-                            var claudeCmdPath = GetClaudeCmdPath();
-                            terminalArgs = string.IsNullOrWhiteSpace(claudeArgs)
-                                ? $"/k \"{claudeCmdPath}\""
-                                : $"/k \"{claudeCmdPath}\" {claudeArgs}";
-                            break;
-                            break;
-                            
-                        case TerminalType.GeminiCLI:
-                            terminalCommand = "cmd.exe";
-                            var geminiArgs = BuildGeminiArgs(existingWorktreeSessionInfo.Options);
-                            terminalArgs = string.IsNullOrWhiteSpace(geminiArgs)
-                                ? "/k gemini"
-                                : $"/k gemini {geminiArgs}";
-                            break;
-                            
-                        default:
-                            if (existingWorktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(existingWorktreeSessionInfo.Options["command"]))
-                            {
-                                terminalCommand = existingWorktreeSessionInfo.Options["command"];
-                                terminalArgs = "";
-                            }
-                            else
-                            {
-                                terminalCommand = TerminalConstants.DefaultShell;
-                                terminalArgs = "";
-                            }
-                            break;
-                    }
+                    var (terminalCommand, terminalArgs) = BuildTerminalCommand(existingWorktreeSessionInfo.TerminalType, existingWorktreeSessionInfo.Options);
 
                     ConPtySession newSession;
                     if (existingWorktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
@@ -558,45 +476,7 @@ namespace TerminalHub.Services
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
                 // 親セッションと同じターミナルタイプで起動
-                string command;
-                string args;
-                
-                switch (worktreeSessionInfo.TerminalType)
-                {
-                    case TerminalType.ClaudeCode:
-                        // claude.cmdをcmd.exe経由で実行（親と同じオプションを使用）
-                        command = "cmd.exe";
-                        var claudeArgs = BuildClaudeCodeArgs(worktreeSessionInfo.Options);
-                        var claudeCmdPath = GetClaudeCmdPath();
-                        args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? $"/k \"{claudeCmdPath}\""
-                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
-                        break;
-                        
-                    case TerminalType.GeminiCLI:
-                        // geminiをcmd.exe経由で実行（親と同じオプションを使用）
-                        command = "cmd.exe";
-                        var geminiArgs = BuildGeminiArgs(worktreeSessionInfo.Options);
-                        args = string.IsNullOrWhiteSpace(geminiArgs)
-                            ? "/k gemini"
-                            : $"/k gemini {geminiArgs}";
-                        break;
-                        
-                    default:
-                        // スタートアップコマンドが指定されている場合はそれを使用
-                        if (worktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(worktreeSessionInfo.Options["command"]))
-                        {
-                            command = worktreeSessionInfo.Options["command"];
-                            args = "";
-                        }
-                        else
-                        {
-                            // デフォルトのシェルを使用
-                            command = TerminalConstants.DefaultShell;
-                            args = "";
-                        }
-                        break;
-                }
+                var (command, args) = BuildTerminalCommand(worktreeSessionInfo.TerminalType, worktreeSessionInfo.Options);
 
                 ConPtySession session;
                 if (worktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
@@ -670,43 +550,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                string command;
-                string args;
-
-                switch (sessionInfo.TerminalType)
-                {
-                    case TerminalType.ClaudeCode:
-                        command = "cmd.exe";
-                        var claudeArgs = BuildClaudeCodeArgs(sessionInfo.Options);
-                        var claudeCmdPath = GetClaudeCmdPath();
-                        args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? $"/k \"{claudeCmdPath}\""
-                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
-                        break;
-
-                    case TerminalType.GeminiCLI:
-                        command = "cmd.exe";
-                        var geminiArgs = BuildGeminiArgs(sessionInfo.Options);
-                        args = string.IsNullOrWhiteSpace(geminiArgs)
-                            ? "/k gemini"
-                            : $"/k gemini {geminiArgs}";
-                        break;
-
-                    default:
-                        // スタートアップコマンドが指定されている場合はそれを使用
-                        if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
-                        {
-                            command = sessionInfo.Options["command"];
-                            args = "";
-                        }
-                        else
-                        {
-                            // デフォルトのシェルを使用
-                            command = TerminalConstants.DefaultShell;
-                            args = "";
-                        }
-                        break;
-                }
+                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
 
                 ConPtySession session;
                 if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
@@ -759,43 +603,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                string command;
-                string args;
-
-                switch (sessionInfo.TerminalType)
-                {
-                    case TerminalType.ClaudeCode:
-                        command = "cmd.exe";
-                        var claudeArgs = BuildClaudeCodeArgs(sessionInfo.Options);
-                        var claudeCmdPath = GetClaudeCmdPath();
-                        args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? $"/k \"{claudeCmdPath}\""
-                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
-                        break;
-
-                    case TerminalType.GeminiCLI:
-                        command = "cmd.exe";
-                        var geminiArgs = BuildGeminiArgs(sessionInfo.Options);
-                        args = string.IsNullOrWhiteSpace(geminiArgs)
-                            ? "/k gemini"
-                            : $"/k gemini {geminiArgs}";
-                        break;
-
-                    default:
-                        // スタートアップコマンドが指定されている場合はそれを使用
-                        if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
-                        {
-                            command = sessionInfo.Options["command"];
-                            args = "";
-                        }
-                        else
-                        {
-                            // デフォルトのシェルを使用
-                            command = TerminalConstants.DefaultShell;
-                            args = "";
-                        }
-                        break;
-                }
+                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
 
                 // 新しいセッションを作成
                 ConPtySession newSession;

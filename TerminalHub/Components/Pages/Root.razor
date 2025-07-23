@@ -24,13 +24,13 @@
                     OnCancel="OnDialogCancel" />
 <DevWindow @bind-IsVisible="showDevWindow" />
 <SettingsModal @bind-IsVisible="showSettingsModal" />
-<WorktreeOperationDialog IsVisible="showWorktreeDialog" 
-                         ParentSessionName="@worktreeParentSessionName"
-                         ParentSessionId="@worktreeParentSessionId"
-                         ParentSessionPath="@worktreeParentSessionPath"
-                         IsGitRepository="@worktreeParentSessionIsGitRepository"
-                         OnWorktreeOperation="OnWorktreeOperation" 
-                         OnCancel="() => showWorktreeDialog = false" />
+<SubSessionDialog IsVisible="showSubSessionDialog" 
+                         ParentSessionName="@subSessionParentSessionName"
+                         ParentSessionId="@subSessionParentSessionId"
+                         ParentSessionPath="@subSessionParentSessionPath"
+                         IsGitRepository="@subSessionParentSessionIsGitRepository"
+                         OnSubSessionOperation="OnSubSessionOperation" 
+                         OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
                        SessionId="@settingsSessionId"
                        OnSettingsSaved="OnSessionSettingsSaved"
@@ -174,11 +174,11 @@
     private bool showDevWindow = false;
     private bool showDevButton = false;
     private bool showSettingsModal = false;
-    private bool showWorktreeDialog = false;
-    private string? worktreeParentSessionName = null;
-    private Guid? worktreeParentSessionId = null;
-    private string? worktreeParentSessionPath = null;
-    private bool worktreeParentSessionIsGitRepository = true;
+    private bool showSubSessionDialog = false;
+    private string? subSessionParentSessionName = null;
+    private Guid? subSessionParentSessionId = null;
+    private string? subSessionParentSessionPath = null;
+    private bool subSessionParentSessionIsGitRepository = true;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
     
@@ -1249,19 +1249,19 @@
         {
             // Git管理されていない場合でも、サブセッションダイアログは表示する
             // （同じフォルダで開くオプションは利用可能）
-            worktreeParentSessionId = sessionId;
-            worktreeParentSessionName = session.GetDisplayName();
-            worktreeParentSessionPath = session.FolderPath;
-            worktreeParentSessionIsGitRepository = session.IsGitRepository;
-            showWorktreeDialog = true;
+            subSessionParentSessionId = sessionId;
+            subSessionParentSessionName = session.GetDisplayName();
+            subSessionParentSessionPath = session.FolderPath;
+            subSessionParentSessionIsGitRepository = session.IsGitRepository;
+            showSubSessionDialog = true;
         }
     }
 
-    private async Task OnWorktreeOperation(WorktreeOperationDialog.WorktreeOperationResult result)
+    private async Task OnSubSessionOperation(SubSessionDialog.SubSessionResult result)
     {
-        if (!worktreeParentSessionId.HasValue)
+        if (!subSessionParentSessionId.HasValue)
         {
-            showWorktreeDialog = false;
+            showSubSessionDialog = false;
             return;
         }
 
@@ -1271,36 +1271,36 @@
             
             switch (result.OperationType)
             {
-                case WorktreeOperationDialog.WorktreeOperationType.CreateNew:
+                case SubSessionDialog.SubSessionType.CreateNew:
                     // 新規Worktree作成
                     if (result.UseExistingBranch)
                     {
                         // 既存ブランチでWorktree作成
                         newSession = await SessionManager.CreateWorktreeSessionWithExistingBranchAsync(
-                            worktreeParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
+                            subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
                     }
                     else
                     {
                         // 新規ブランチでWorktree作成
                         newSession = await SessionManager.CreateWorktreeSessionAsync(
-                            worktreeParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
+                            subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
                     
-                case WorktreeOperationDialog.WorktreeOperationType.AddExisting:
+                case SubSessionDialog.SubSessionType.AddExisting:
                     // 既存Worktree追加
                     if (!string.IsNullOrEmpty(result.WorktreePath))
                     {
-                        newSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
+                        newSession = await AddExistingWorktreeSession(subSessionParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
                     
-                case WorktreeOperationDialog.WorktreeOperationType.SamePath:
+                case SubSessionDialog.SubSessionType.SamePath:
                     // 同じフォルダでセッション作成
-                    if (!string.IsNullOrEmpty(worktreeParentSessionPath))
+                    if (!string.IsNullOrEmpty(subSessionParentSessionPath))
                     {
                         newSession = await SessionManager.CreateSamePathSessionAsync(
-                            worktreeParentSessionId.Value, worktreeParentSessionPath, result.TerminalType, result.Options);
+                            subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options);
                     }
                     break;
             }
@@ -1318,11 +1318,11 @@
                 
                 string successMessage = result.OperationType switch
                 {
-                    WorktreeOperationDialog.WorktreeOperationType.CreateNew => 
+                    SubSessionDialog.SubSessionType.CreateNew => 
                         $"Worktree '{result.BranchName}' を作成しました",
-                    WorktreeOperationDialog.WorktreeOperationType.AddExisting => 
+                    SubSessionDialog.SubSessionType.AddExisting => 
                         $"既存のWorktree '{result.BranchName}' を追加しました",
-                    WorktreeOperationDialog.WorktreeOperationType.SamePath => 
+                    SubSessionDialog.SubSessionType.SamePath => 
                         $"新しい{GetSessionTypeName(result.TerminalType)}セッションを作成しました",
                     _ => "セッションを作成しました"
                 };
@@ -1340,11 +1340,11 @@
         }
         finally
         {
-            showWorktreeDialog = false;
-            worktreeParentSessionId = null;
-            worktreeParentSessionName = null;
-            worktreeParentSessionPath = null;
-            worktreeParentSessionIsGitRepository = true;
+            showSubSessionDialog = false;
+            subSessionParentSessionId = null;
+            subSessionParentSessionName = null;
+            subSessionParentSessionPath = null;
+            subSessionParentSessionIsGitRepository = true;
         }
     }
     
@@ -1557,7 +1557,7 @@
                     claudeCmdPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
                 }
                 
-                var args = BuildClaudeCodeArgs(optionsWithoutContinue);
+                var args = TerminalConstants.BuildClaudeCodeArgs(optionsWithoutContinue);
                 var command = string.IsNullOrWhiteSpace(args) 
                     ? $"\"{claudeCmdPath}\"" 
                     : $"\"{claudeCmdPath}\" {args}";
@@ -1585,33 +1585,6 @@
                 Console.WriteLine($"[Claude Continue Fix] コマンド送信エラー: {ex.Message}");
             }
         });
-    }
-    
-    private string BuildClaudeCodeArgs(Dictionary<string, string> options)
-    {
-        var args = new List<string>();
-        
-        foreach (var option in options)
-        {
-            switch (option.Key.ToLower())
-            {
-                case "model":
-                    if (!string.IsNullOrWhiteSpace(option.Value))
-                        args.Add($"--model {option.Value}");
-                    break;
-                case "max-tokens":
-                    if (!string.IsNullOrWhiteSpace(option.Value))
-                        args.Add($"--max-tokens {option.Value}");
-                    break;
-                case "bypass-mode":
-                    if (option.Value == "true")
-                        args.Add("--dangerously-skip-permissions");
-                    break;
-                // continueは除外（ここには来ない）
-            }
-        }
-        
-        return string.Join(" ", args);
     }
     
     public async ValueTask DisposeAsync()

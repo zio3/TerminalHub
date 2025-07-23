@@ -227,13 +227,7 @@
                     }
                 </div>
                 
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
-                        <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
-                    </div>
-                }
+                <ErrorAlert @bind-ErrorMessage="errorMessage" />
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@isProcessing">
@@ -261,7 +255,7 @@
     [Parameter] public string? ParentSessionName { get; set; }
     [Parameter] public Guid? ParentSessionId { get; set; }
     [Parameter] public bool IsGitRepository { get; set; }
-    [Parameter] public EventCallback<WorktreeOperationResult> OnWorktreeOperation { get; set; }
+    [Parameter] public EventCallback<SubSessionResult> OnSubSessionOperation { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private TabType activeTab = TabType.Create;
@@ -345,14 +339,14 @@
 
         try
         {
-            var result = new WorktreeOperationResult
+            var result = new SubSessionResult
             {
                 OperationType = activeTab switch
                 {
-                    TabType.Create => WorktreeOperationType.CreateNew,
-                    TabType.Existing => WorktreeOperationType.AddExisting,
-                    TabType.SamePath => WorktreeOperationType.SamePath,
-                    _ => WorktreeOperationType.CreateNew
+                    TabType.Create => SubSessionType.CreateNew,
+                    TabType.Existing => SubSessionType.AddExisting,
+                    TabType.SamePath => SubSessionType.SamePath,
+                    _ => SubSessionType.CreateNew
                 },
                 BranchName = activeTab == TabType.Create 
                     ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
@@ -369,7 +363,7 @@
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
             };
 
-            await OnWorktreeOperation.InvokeAsync(result);
+            await OnSubSessionOperation.InvokeAsync(result);
         }
         catch (Exception ex)
         {
@@ -512,9 +506,9 @@
         return Task.CompletedTask;
     }
 
-    public class WorktreeOperationResult
+    public class SubSessionResult
     {
-        public WorktreeOperationType OperationType { get; set; }
+        public SubSessionType OperationType { get; set; }
         public string BranchName { get; set; } = "";
         public string? WorktreePath { get; set; }
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
@@ -522,7 +516,7 @@
         public bool UseExistingBranch { get; set; }
     }
     
-    public enum WorktreeOperationType
+    public enum SubSessionType
     {
         CreateNew,
         AddExisting,

@@ -1,0 +1,17 @@
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@ErrorMessage
+        <button type="button" class="btn-close" @onclick="DismissError"></button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public EventCallback<string> ErrorMessageChanged { get; set; }
+
+    private async Task DismissError()
+    {
+        await ErrorMessageChanged.InvokeAsync(string.Empty);
+    }
+}
