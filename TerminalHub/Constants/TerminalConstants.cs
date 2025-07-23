@@ -70,9 +70,14 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
             
-            if (options.ContainsKey("model") && !string.IsNullOrWhiteSpace(options["model"]))
+            if (options.ContainsKey("yolo-mode") && options["yolo-mode"] == "true")
             {
-                args.Add($"--model {options["model"]}");
+                args.Add("-y");
+            }
+            
+            if (options.ContainsKey("sandbox-mode") && options["sandbox-mode"] == "true")
+            {
+                args.Add("-s");
             }
             
             return string.Join(" ", args);

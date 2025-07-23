@@ -81,15 +81,17 @@
         <div class="mb-3">
             <label class="form-label">Gemini CLI オプション</label>
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.UseModel" id="@($"geminiModel{UniqueId}")">
-                <label class="form-check-label" for="@($"geminiModel{UniqueId}")">
-                    特定のモデルを使用
+                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.YoloMode" id="@($"geminiYolo{UniqueId}")">
+                <label class="form-check-label" for="@($"geminiYolo{UniqueId}")">
+                    YOLOモード (-y/--yolo) - すべてのアクションを自動承認
                 </label>
             </div>
-            @if (GeminiOptions.UseModel)
-            {
-                <input type="text" class="form-control mt-2" @bind="GeminiOptions.Model" placeholder="例: gemini-pro" />
-            }
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.SandboxMode" id="@($"geminiSandbox{UniqueId}")">
+                <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
+                    サンドボックスモード (-s/--sandbox)
+                </label>
+            </div>
         </div>
     }
     else
@@ -151,9 +153,13 @@
                 break;
 
             case TerminalType.GeminiCLI:
-                if (GeminiOptions.UseModel && !string.IsNullOrWhiteSpace(GeminiOptions.Model))
+                if (GeminiOptions.YoloMode)
                 {
-                    options["model"] = GeminiOptions.Model;
+                    options["yolo-mode"] = "true";
+                }
+                if (GeminiOptions.SandboxMode)
+                {
+                    options["sandbox-mode"] = "true";
                 }
                 break;
         }
@@ -173,7 +179,7 @@
 
     public class GeminiOptionsData
     {
-        public bool UseModel { get; set; }
-        public string Model { get; set; } = "";
+        public bool YoloMode { get; set; }
+        public bool SandboxMode { get; set; }
     }
 }
