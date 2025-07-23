@@ -24,6 +24,11 @@
                     OnCancel="OnDialogCancel" />
 <DevWindow @bind-IsVisible="showDevWindow" />
 <SettingsModal @bind-IsVisible="showSettingsModal" />
+<WorktreeOperationDialog IsVisible="showWorktreeDialog" 
+                         ParentSessionName="@worktreeParentSessionName"
+                         ParentSessionId="@worktreeParentSessionId"
+                         OnWorktreeOperation="OnWorktreeOperation" 
+                         OnCancel="() => showWorktreeDialog = false" />
 
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -39,7 +44,8 @@
                      OnMemoSave="SaveMemo"
                      OnMemoKeyDown="HandleMemoKeyDown"
                      OnMemoEdit="StartEditingMemo"
-                     OnSettingsClick="ShowSettings" />
+                     OnSettingsClick="ShowSettings"
+                     OnCreateWorktree="ShowWorktreeDialog" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -161,6 +167,9 @@
     private bool showDevWindow = false;
     private bool showDevButton = false;
     private bool showSettingsModal = false;
+    private bool showWorktreeDialog = false;
+    private string? worktreeParentSessionName = null;
+    private Guid? worktreeParentSessionId = null;
     
     // 処理状態管理用（セッションごと）
     private Dictionary<Guid, System.Threading.Timer> sessionProcessingTimers = new();
@@ -205,15 +214,22 @@
                     sessionInfo.TerminalType,
                     sessionInfo.Options);
 
-                // メモ情報も復元
-                if (!string.IsNullOrEmpty(sessionInfo.Memo))
+                // メモ情報と親子関係を復元
+                var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
+                if (createdSession != null)
                 {
-                    var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
-                    if (createdSession != null)
+                    if (!string.IsNullOrEmpty(sessionInfo.Memo))
                     {
                         createdSession.Memo = sessionInfo.Memo;
-                        await SessionManager.SaveSessionInfoAsync(createdSession);
                     }
+                    
+                    // 親子関係を復元
+                    if (sessionInfo.ParentSessionId.HasValue)
+                    {
+                        createdSession.ParentSessionId = sessionInfo.ParentSessionId;
+                    }
+                    
+                    await SessionManager.SaveSessionInfoAsync(createdSession);
                 }
 
                 restoredSessionIds.Add(newSession.SessionId);
@@ -907,8 +923,8 @@
                         }
                         catch (Exception ex)
                         {
-                            //Console.WriteLine($"[Notification Debug] 通知エラー: {ex.Message}");
-                            //Console.WriteLine($"[Notification Debug] スタックトレース: {ex.StackTrace}");
+                            Console.WriteLine($"[Notification Debug] 通知エラー: {ex.Message}");
+                            Console.WriteLine($"[Notification Debug] スタックトレース: {ex.StackTrace}");
                         }
                     });
                 }
@@ -1180,6 +1196,98 @@
         // 押下状態を解除
         await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
         isModeSwitchPressed = false;
+    }
+
+
+    private void ShowWorktreeDialog(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null && session.IsGitRepository && !session.IsWorktree)
+        {
+            worktreeParentSessionId = sessionId;
+            worktreeParentSessionName = session.GetDisplayName();
+            showWorktreeDialog = true;
+        }
+    }
+
+    private async Task OnWorktreeOperation(WorktreeOperationDialog.WorktreeOperationResult result)
+    {
+        if (!worktreeParentSessionId.HasValue)
+        {
+            showWorktreeDialog = false;
+            return;
+        }
+
+        try
+        {
+            SessionInfo? worktreeSession = null;
+            
+            if (result.IsNewWorktree)
+            {
+                // 新規Worktree作成
+                worktreeSession = await SessionManager.CreateWorktreeSessionAsync(worktreeParentSessionId.Value, result.BranchName);
+            }
+            else if (!string.IsNullOrEmpty(result.WorktreePath))
+            {
+                // 既存Worktree追加
+                worktreeSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath);
+            }
+            
+            if (worktreeSession != null)
+            {
+                // セッション一覧を更新
+                sessions = SessionManager.GetAllSessions().ToList();
+                
+                // ローカルストレージに保存
+                await LocalStorageService.SaveSessionsAsync(sessions);
+                
+                // 新しいWorktreeセッションを選択
+                await SelectSession(worktreeSession.SessionId);
+                
+                toast?.ShowSuccess(result.IsNewWorktree 
+                    ? $"Worktree '{result.BranchName}' を作成しました"
+                    : $"既存のWorktree '{result.BranchName}' を追加しました");
+            }
+            else
+            {
+                toast?.ShowError("Worktree操作に失敗しました");
+            }
+        }
+        catch (Exception ex)
+        {
+            toast?.ShowError($"Worktree操作エラー: {ex.Message}");
+        }
+        finally
+        {
+            showWorktreeDialog = false;
+            worktreeParentSessionId = null;
+            worktreeParentSessionName = null;
+        }
+    }
+    
+    private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath)
+    {
+        // 親セッション情報を取得
+        var parentSession = SessionManager.GetSessionInfo(parentSessionId);
+        if (parentSession == null)
+            return null;
+            
+        // 既存のWorktreeをセッションとして追加
+        var sessionInfo = await SessionManager.CreateSessionAsync(
+            worktreePath,
+            Path.GetFileName(worktreePath),
+            parentSession.TerminalType,
+            new Dictionary<string, string>(parentSession.Options)
+        );
+        
+        // 親子関係を設定
+        if (sessionInfo != null)
+        {
+            sessionInfo.ParentSessionId = parentSessionId;
+            await SessionManager.SaveSessionInfoAsync(sessionInfo);
+        }
+        
+        return sessionInfo;
     }
 
 

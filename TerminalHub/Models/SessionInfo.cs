@@ -72,7 +72,7 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWorktree { get; set; }
         
-        [System.Text.Json.Serialization.JsonIgnore]
+        // ParentSessionIdは保存して復元時に親子関係を維持
         public Guid? ParentSessionId { get; set; } // Worktreeの場合の親セッション
         
         [System.Text.Json.Serialization.JsonIgnore]

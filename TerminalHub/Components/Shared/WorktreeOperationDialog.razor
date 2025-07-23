@@ -1,0 +1,274 @@
+@using TerminalHub.Models
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: rgba(0, 0, 0, 0.5);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-git me-2"></i>Worktreeの操作
+                </h5>
+                <button type="button" class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(ParentSessionName))
+                {
+                    <div class="mb-3">
+                        <small class="text-muted">親セッション: @ParentSessionName</small>
+                    </div>
+                }
+                
+                <!-- タブナビゲーション -->
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "create" ? "active" : "")" 
+                                @onclick="@(() => activeTab = "create")">
+                            <i class="bi bi-plus-circle me-1"></i>新規作成
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "existing" ? "active" : "")" 
+                                @onclick="@(() => activeTab = "existing")">
+                            <i class="bi bi-folder-plus me-1"></i>既存のWorktreeを追加
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- タブコンテンツ -->
+                <div class="tab-content">
+                    @if (activeTab == "create")
+                    {
+                        <!-- 新規Worktree作成 -->
+                        <div class="tab-pane active">
+                            <div class="mb-3">
+                                <label for="branchName" class="form-label">新しいブランチ名</label>
+                                <input type="text" class="form-control" id="branchName" 
+                                       @bind="branchName" 
+                                       @bind:event="oninput"
+                                       @onkeydown="OnKeyDown"
+                                       placeholder="feature/new-feature" 
+                                       autofocus>
+                                <small class="form-text text-muted">
+                                    このブランチ名で新しいWorktreeが作成されます
+                                </small>
+                            </div>
+                        </div>
+                    }
+                    else if (activeTab == "existing")
+                    {
+                        <!-- 既存Worktree追加 -->
+                        <div class="tab-pane active">
+                            <div class="mb-3">
+                                <label for="worktreePath" class="form-label">Worktreeのパス</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="worktreePath" 
+                                           @bind="existingWorktreePath" 
+                                           @bind:event="oninput"
+                                           placeholder="C:\\Projects\\my-project-feature" 
+                                           readonly>
+                                    <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFolder">
+                                        <i class="bi bi-folder2-open"></i> 参照...
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted">
+                                    既存のWorktreeフォルダを選択してください
+                                </small>
+                            </div>
+                            
+                            @if (isValidatingPath)
+                            {
+                                <div class="alert alert-info">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    パスを検証中...
+                                </div>
+                            }
+                            else if (pathValidationResult != null)
+                            {
+                                <div class="alert @(pathValidationResult.IsValid ? "alert-success" : "alert-warning")">
+                                    @if (pathValidationResult.IsValid)
+                                    {
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        <strong>有効なWorktreeです</strong><br/>
+                                        <span>ブランチ: @pathValidationResult.BranchName</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        @pathValidationResult.ErrorMessage
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+                        <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@isProcessing">
+                    キャンセル
+                </button>
+                <button type="button" class="btn btn-success" @onclick="ProcessOperation" 
+                        disabled="@(!CanProcess || isProcessing)">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-@(activeTab == "create" ? "plus-circle" : "folder-plus") me-2"></i>
+                    }
+                    @(activeTab == "create" ? "Worktree作成" : "Worktree追加")
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string? ParentSessionName { get; set; }
+    [Parameter] public Guid? ParentSessionId { get; set; }
+    [Parameter] public EventCallback<WorktreeOperationResult> OnWorktreeOperation { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string activeTab = "create";
+    private string branchName = "";
+    private string existingWorktreePath = "";
+    private string errorMessage = "";
+    private bool isProcessing = false;
+    private bool isValidatingPath = false;
+    private PathValidationResult? pathValidationResult = null;
+
+    private bool CanProcess => activeTab == "create" 
+        ? !string.IsNullOrWhiteSpace(branchName)
+        : pathValidationResult?.IsValid == true;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible)
+        {
+            // ダイアログが表示されたときにリセット
+            activeTab = "create";
+            branchName = "";
+            existingWorktreePath = "";
+            errorMessage = "";
+            isProcessing = false;
+            pathValidationResult = null;
+        }
+    }
+
+    private async Task ProcessOperation()
+    {
+        if (!CanProcess)
+            return;
+
+        isProcessing = true;
+        errorMessage = "";
+
+        try
+        {
+            var result = new WorktreeOperationResult
+            {
+                IsNewWorktree = activeTab == "create",
+                BranchName = activeTab == "create" ? branchName : pathValidationResult?.BranchName ?? "",
+                WorktreePath = activeTab == "create" ? null : existingWorktreePath
+            };
+
+            await OnWorktreeOperation.InvokeAsync(result);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"操作中にエラーが発生しました: {ex.Message}";
+            isProcessing = false;
+        }
+    }
+
+    private async Task BrowseFolder()
+    {
+        // 実際の実装では、フォルダ選択ダイアログを表示
+        // ここでは仮実装として、パスの直接入力を促す
+        errorMessage = "フォルダパスを直接入力してください（将来的にファイル選択ダイアログを実装予定）";
+        
+        // テスト用: 仮のパスを設定
+        existingWorktreePath = @"C:\Projects\example-worktree";
+        await ValidateWorktreePath();
+    }
+
+    private async Task ValidateWorktreePath()
+    {
+        if (string.IsNullOrWhiteSpace(existingWorktreePath))
+        {
+            pathValidationResult = null;
+            return;
+        }
+
+        isValidatingPath = true;
+        
+        // 実際の実装では、GitServiceを使用して検証
+        await Task.Delay(500); // 仮の遅延
+        
+        // 仮の検証結果
+        pathValidationResult = new PathValidationResult
+        {
+            IsValid = true,
+            BranchName = "feature-branch",
+            ErrorMessage = null
+        };
+        
+        isValidatingPath = false;
+    }
+
+    private bool IsValidBranchName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        var reserved = new[] { "HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD" };
+        if (reserved.Contains(name, StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        var invalidChars = new[] { ' ', '~', '^', ':', '?', '*', '[', '\\' };
+        if (invalidChars.Any(c => name.Contains(c)))
+            return false;
+            
+        if (name.Contains(".."))
+            return false;
+
+        if (name.StartsWith('.') || name.StartsWith('-') || name.EndsWith('.') || name.EndsWith('/'))
+            return false;
+
+        return true;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !isProcessing && CanProcess)
+        {
+            await ProcessOperation();
+        }
+        else if (e.Key == "Escape")
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+
+    public class WorktreeOperationResult
+    {
+        public bool IsNewWorktree { get; set; }
+        public string BranchName { get; set; } = "";
+        public string? WorktreePath { get; set; }
+    }
+
+    private class PathValidationResult
+    {
+        public bool IsValid { get; set; }
+        public string? BranchName { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+}

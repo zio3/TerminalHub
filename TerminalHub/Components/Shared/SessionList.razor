@@ -36,14 +36,23 @@
     </div>
 
     <div class="list-group flex-grow-1" style="overflow-y: auto;">
-        @foreach (var session in Sessions)
+        @{
+            var groupedSessions = GetGroupedSessions();
+        }
+        @foreach (var sessionGroup in groupedSessions)
         {
-            <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
-                 @onclick="() => OnSessionSelect.InvokeAsync(session.SessionId)"
-                 style="cursor: pointer;">
-                <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div class="flex-fill">
-                        <h6 class="mb-1">
+            @foreach (var session in sessionGroup)
+            {
+                <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
+                     @onclick="() => OnSessionSelect.InvokeAsync(session.SessionId)"
+                     style="cursor: pointer; @(session.IsWorktree && session.ParentSessionId.HasValue ? "padding-left: 2.5rem;" : "")">
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <div class="flex-fill">
+                            <h6 class="mb-1">
+                                @if (session.IsWorktree && session.ParentSessionId.HasValue)
+                                {
+                                    <span class="text-muted me-1">└─</span>
+                                }
                             @if (session.HasNotificationPending)
                             {
                                 <span class="text-danger me-1" title="処理が完了しました">
@@ -64,6 +73,16 @@
                                         <i class="bi bi-dot text-danger" title="未コミットの変更があります"></i>
                                     }
                                 </span>
+                                @if (!session.IsWorktree)
+                                {
+                                    <button class="btn btn-sm btn-outline-success border-0 ms-1" 
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => OnCreateWorktree.InvokeAsync(session.SessionId)"
+                                            title="新しいWorktreeを作成"
+                                            style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">
+                                        <i class="bi bi-plus-circle"></i>
+                                    </button>
+                                }
                             }
                         </h6>
                         @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
@@ -141,6 +160,7 @@
                     }
                 </div>
             </div>
+            }
         }
     </div>
 
@@ -182,6 +202,7 @@
     [Parameter] public Func<Microsoft.AspNetCore.Components.Web.KeyboardEventArgs, Guid, Task> OnMemoKeyDown { get; set; } = (_, _) => Task.CompletedTask;
     [Parameter] public Action<Guid, string> OnMemoEdit { get; set; } = (_, _) => { };
     [Parameter] public EventCallback OnSettingsClick { get; set; }
+    [Parameter] public EventCallback<Guid> OnCreateWorktree { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -207,5 +228,51 @@
             "⚒" => "処理中",
             _ => direction
         };
+    }
+    
+    private List<List<SessionInfo>> GetGroupedSessions()
+    {
+        var result = new List<List<SessionInfo>>();
+        var processed = new HashSet<Guid>();
+        
+        // まず親セッションとその子セッションをグループ化
+        foreach (var session in Sessions.OrderBy(s => s.CreatedAt))
+        {
+            if (processed.Contains(session.SessionId))
+                continue;
+                
+            var group = new List<SessionInfo>();
+            
+            // Worktreeでない場合は親セッション
+            if (!session.IsWorktree || !session.ParentSessionId.HasValue)
+            {
+                group.Add(session);
+                processed.Add(session.SessionId);
+                
+                // 子セッション（Worktree）を探す
+                var children = Sessions
+                    .Where(s => s.ParentSessionId == session.SessionId)
+                    .OrderBy(s => s.CreatedAt);
+                    
+                foreach (var child in children)
+                {
+                    group.Add(child);
+                    processed.Add(child.SessionId);
+                }
+            }
+            // 親のないWorktreeの場合（親が削除された場合など）
+            else if (!Sessions.Any(s => s.SessionId == session.ParentSessionId))
+            {
+                group.Add(session);
+                processed.Add(session.SessionId);
+            }
+            
+            if (group.Any())
+            {
+                result.Add(group);
+            }
+        }
+        
+        return result;
     }
 }

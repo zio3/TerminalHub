@@ -405,8 +405,36 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                string command = "cmd.exe";
-                string args = "";
+                // 親セッションと同じターミナルタイプで起動
+                string command;
+                string args;
+                
+                switch (worktreeSessionInfo.TerminalType)
+                {
+                    case TerminalType.ClaudeCode:
+                        // claude.cmdをcmd.exe経由で実行（親と同じオプションを使用）
+                        command = "cmd.exe";
+                        // Worktree作成時は--continueオプションを除外
+                        var worktreeOptions = new Dictionary<string, string>(worktreeSessionInfo.Options);
+                        worktreeOptions.Remove("continue");
+                        var claudeArgs = BuildClaudeCodeArgs(worktreeOptions);
+                        args = $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        break;
+                        
+                    case TerminalType.GeminiCLI:
+                        // geminiをcmd.exe経由で実行（親と同じオプションを使用）
+                        command = "cmd.exe";
+                        var geminiArgs = BuildGeminiArgs(worktreeSessionInfo.Options);
+                        args = $"/k gemini {geminiArgs}";
+                        break;
+                        
+                    default:
+                        command = worktreeSessionInfo.Options.ContainsKey("command") 
+                            ? worktreeSessionInfo.Options["command"] 
+                            : TerminalConstants.DefaultShell;
+                        args = "";
+                        break;
+                }
 
                 var session = await _conPtyService.CreateSessionAsync(command, args, worktreePath, cols, rows);
                 _sessions.TryAdd(worktreeSessionInfo.SessionId, session);

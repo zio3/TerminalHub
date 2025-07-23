@@ -84,14 +84,14 @@
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
-    
+
     private string notificationStatus = "確認中...";
     private int thresholdSeconds = 60;
     private bool webHookEnabled = false;
     private string webHookUrl = "";
     private string saveMessage = "";
     private bool saveSuccess = false;
-    
+
     protected override async Task OnParametersSetAsync()
     {
         if (IsVisible)
@@ -100,12 +100,13 @@
             await CheckNotificationPermission();
         }
     }
-    
+
     private async Task LoadSettings()
     {
         thresholdSeconds = Configuration.GetValue<int>("NotificationSettings:ProcessingTimeThresholdSeconds", 60);
         webHookEnabled = Configuration.GetValue<bool>("NotificationSettings:WebHookSettings:Enabled", false);
         webHookUrl = Configuration.GetValue<string>("NotificationSettings:WebHookSettings:Url") ?? "";
+        await Task.CompletedTask;
     }
     
     private async Task CheckNotificationPermission()
@@ -194,6 +195,7 @@
             saveMessage = $"保存エラー: {ex.Message}";
             saveSuccess = false;
         }
+        await Task.CompletedTask;
     }
     
     private string GetNotificationBadgeClass()
