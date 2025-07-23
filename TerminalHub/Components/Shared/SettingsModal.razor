@@ -4,6 +4,7 @@
 @inject INotificationService NotificationService
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
+@inject ILocalStorageService LocalStorageService
 
 @if (IsVisible)
 {
@@ -17,7 +18,51 @@
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <h6 class="mb-3">通知設定</h6>
+                    <!-- タブナビゲーション -->
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "general" ? "active" : "")" 
+                                    type="button" 
+                                    @onclick="@(() => activeTab = "general")">
+                                <i class="bi bi-gear me-1"></i>一般
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "notifications" ? "active" : "")" 
+                                    type="button" 
+                                    @onclick="@(() => activeTab = "notifications")">
+                                <i class="bi bi-bell me-1"></i>通知
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "sessions" ? "active" : "")" 
+                                    type="button" 
+                                    @onclick="@(() => activeTab = "sessions")">
+                                <i class="bi bi-terminal me-1"></i>セッション
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "export" ? "active" : "")" 
+                                    type="button" 
+                                    @onclick="@(() => activeTab = "export")">
+                                <i class="bi bi-download me-1"></i>エクスポート/インポート
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- タブコンテンツ -->
+                    <div class="tab-content">
+                        @if (activeTab == "general")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">一般設定</h6>
+                                <p class="text-muted">今後追加予定</p>
+                            </div>
+                        }
+                        else if (activeTab == "notifications")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">通知設定</h6>
                     
                     <div class="mb-4">
                         <div class="d-flex align-items-center justify-content-between mb-2">
@@ -61,6 +106,90 @@
                             <input type="url" class="form-control" @bind="webHookUrl" placeholder="https://example.com/webhook" />
                         </div>
                     }
+                            </div>
+                        }
+                        else if (activeTab == "sessions")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">セッション設定</h6>
+                                <p class="text-muted">セッション管理に関する設定（今後追加予定）</p>
+                            </div>
+                        }
+                        else if (activeTab == "export")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">データのエクスポート/インポート</h6>
+                                
+                                <!-- エクスポート -->
+                                <div class="mb-4">
+                                    <h6 class="mb-2">エクスポート</h6>
+                                    <p class="text-muted small">選択したカテゴリのデータをJSONファイルとしてダウンロードします。</p>
+                                    
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.notifications" id="exportNotifications">
+                                            <label class="form-check-label" for="exportNotifications">
+                                                <i class="bi bi-bell me-1"></i>通知設定
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.sessions" id="exportSessions">
+                                            <label class="form-check-label" for="exportSessions">
+                                                <i class="bi bi-terminal me-1"></i>セッション情報
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.ui" id="exportUI">
+                                            <label class="form-check-label" for="exportUI">
+                                                <i class="bi bi-window me-1"></i>UI設定
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.history" id="exportHistory">
+                                            <label class="form-check-label" for="exportHistory">
+                                                <i class="bi bi-clock-history me-1"></i>履歴
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(!HasExportSelection)">
+                                        <i class="bi bi-download me-1"></i>エクスポート
+                                    </button>
+                                </div>
+                                
+                                <hr />
+                                
+                                <!-- インポート -->
+                                <div>
+                                    <h6 class="mb-2">インポート</h6>
+                                    <p class="text-muted small">JSONファイルを選択して設定をインポートします。</p>
+                                    
+                                    <div class="mb-3">
+                                        <InputFile OnChange="@LoadImportFile" accept=".json" class="form-control" />
+                                    </div>
+                                    
+                                    @if (importPreview != null)
+                                    {
+                                        <div class="alert alert-info">
+                                            <h6 class="alert-heading">インポートプレビュー</h6>
+                                            <small>
+                                                @foreach (var category in importPreview)
+                                                {
+                                                    <div>
+                                                        <i class="bi bi-check-circle me-1"></i>@GetCategoryDisplayName(category)
+                                                    </div>
+                                                }
+                                            </small>
+                                        </div>
+                                        
+                                        <button class="btn btn-warning btn-sm" @onclick="ImportSettings">
+                                            <i class="bi bi-upload me-1"></i>インポート実行
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
                     
                     @if (!string.IsNullOrEmpty(saveMessage))
                     {
@@ -91,6 +220,23 @@
     private string webHookUrl = "";
     private string saveMessage = "";
     private bool saveSuccess = false;
+    private string activeTab = "notifications";
+    
+    // エクスポート/インポート用
+    private class ExportCategories
+    {
+        public bool notifications { get; set; } = false;
+        public bool sessions { get; set; } = false;
+        public bool ui { get; set; } = false;
+        public bool history { get; set; } = false;
+    }
+    
+    private ExportCategories exportCategories = new();
+    private List<string>? importPreview = null;
+    private Dictionary<string, object>? importData = null;
+    
+    private bool HasExportSelection => exportCategories.notifications || exportCategories.sessions || 
+                                       exportCategories.ui || exportCategories.history;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -113,7 +259,7 @@
     {
         try
         {
-            var permission = await JSRuntime.InvokeAsync<string>("terminalHubHelpers.requestNotificationPermission");
+            var permission = await JSRuntime.InvokeAsync<string>("terminalHubHelpers.checkNotificationPermission");
             notificationStatus = permission switch
             {
                 "granted" => "許可済み",
@@ -212,5 +358,163 @@
     private async Task Close()
     {
         await IsVisibleChanged.InvokeAsync(false);
+    }
+    
+    private async Task ExportSettings()
+    {
+        try
+        {
+            var exportData = new Dictionary<string, object>();
+            
+            if (exportCategories.notifications)
+            {
+                var settings = await JSRuntime.InvokeAsync<object>("terminalHubHelpers.getSettings");
+                if (settings != null)
+                {
+                    exportData["notifications"] = settings;
+                }
+            }
+            
+            if (exportCategories.sessions)
+            {
+                var sessions = await LocalStorageService.GetAsync<object>("terminalHub_sessions");
+                if (sessions != null)
+                {
+                    exportData["sessions"] = sessions;
+                }
+                
+                var activeSession = await LocalStorageService.GetAsync<object>("terminalHub_activeSession");
+                if (activeSession != null)
+                {
+                    exportData["activeSession"] = activeSession;
+                }
+            }
+            
+            if (exportCategories.ui)
+            {
+                var devWindowPos = await LocalStorageService.GetAsync<object>("devWindowPosition");
+                if (devWindowPos != null)
+                {
+                    exportData["devWindowPosition"] = devWindowPos;
+                }
+            }
+            
+            if (exportCategories.history)
+            {
+                var history = await LocalStorageService.GetAsync<object>("inputHistory");
+                if (history != null)
+                {
+                    exportData["inputHistory"] = history;
+                }
+            }
+            
+            // メタデータを追加
+            exportData["_metadata"] = new
+            {
+                exportedAt = DateTime.Now,
+                version = "1.0"
+            };
+            
+            // JSONに変換してダウンロード
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadJson", 
+                json, $"terminalhub_export_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+            
+            saveMessage = "エクスポートが完了しました";
+            saveSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"エクスポートエラー: {ex.Message}";
+            saveSuccess = false;
+        }
+    }
+    
+    private async Task LoadImportFile(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file.ContentType != "application/json")
+            {
+                saveMessage = "JSONファイルを選択してください";
+                saveSuccess = false;
+                return;
+            }
+            
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            
+            importData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+            if (importData != null)
+            {
+                importPreview = importData.Keys.Where(k => k != "_metadata").ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"ファイル読み込みエラー: {ex.Message}";
+            saveSuccess = false;
+            importPreview = null;
+            importData = null;
+        }
+    }
+    
+    private async Task ImportSettings()
+    {
+        if (importData == null) return;
+        
+        try
+        {
+            foreach (var kvp in importData.Where(k => k.Key != "_metadata"))
+            {
+                switch (kvp.Key)
+                {
+                    case "notifications":
+                        await JSRuntime.InvokeVoidAsync("terminalHubHelpers.saveSettings", kvp.Value);
+                        break;
+                    case "sessions":
+                        await LocalStorageService.SetAsync("terminalHub_sessions", kvp.Value);
+                        break;
+                    case "activeSession":
+                        await LocalStorageService.SetAsync("terminalHub_activeSession", kvp.Value);
+                        break;
+                    case "devWindowPosition":
+                        await LocalStorageService.SetAsync("devWindowPosition", kvp.Value);
+                        break;
+                    case "inputHistory":
+                        await LocalStorageService.SetAsync("inputHistory", kvp.Value);
+                        break;
+                }
+            }
+            
+            saveMessage = "インポートが完了しました。ページを再読み込みしてください。";
+            saveSuccess = true;
+            importPreview = null;
+            importData = null;
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"インポートエラー: {ex.Message}";
+            saveSuccess = false;
+        }
+    }
+    
+    private string GetCategoryDisplayName(string category)
+    {
+        return category switch
+        {
+            "notifications" => "通知設定",
+            "sessions" => "セッション情報",
+            "activeSession" => "アクティブセッション",
+            "devWindowPosition" => "開発ウィンドウ位置",
+            "inputHistory" => "入力履歴",
+            _ => category
+        };
     }
 }

@@ -76,6 +76,15 @@ window.terminalHubHelpers = {
     },
     
     // Notification handling
+    checkNotificationPermission: function() {
+        if (!("Notification" in window)) {
+            console.log("This browser does not support desktop notification");
+            return "unsupported";
+        }
+        
+        return Notification.permission;
+    },
+    
     requestNotificationPermission: async function() {
         if (!("Notification" in window)) {
             console.log("This browser does not support desktop notification");
@@ -152,6 +161,19 @@ window.terminalHubHelpers = {
     
     saveSettings: function(settings) {
         localStorage.setItem('terminalHub_settings', JSON.stringify(settings));
+    },
+    
+    // JSON download helper
+    downloadJson: function(jsonString, filename) {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     },
     
     updateNotificationSettings: function(enableBrowserNotifications, processingTimeThresholdSeconds) {
