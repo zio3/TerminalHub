@@ -25,6 +25,7 @@ namespace TerminalHub.Services
         Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
         Task<bool> RestartSessionAsync(Guid sessionId);
         // event EventHandler<string>? ActiveSessionChanged;
+        
     }
 
     public class SessionManager : ISessionManager, IDisposable
@@ -636,5 +637,6 @@ namespace TerminalHub.Services
             _sessions.Clear();
             _sessionInfos.Clear();
         }
+        
     }
 }
