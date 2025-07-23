@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Process management files
+.dotnet-process.json
+.portconfig.json
+
 # User-specific files
 *.rsuser
 *.suo
@@ -361,3 +365,4 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+stop.ps1
