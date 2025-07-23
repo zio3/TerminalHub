@@ -39,26 +39,6 @@
     {
         <div class="mb-3">
             <label class="form-label">Claude Code オプション</label>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.UseModel" id="@($"claudeModel{UniqueId}")">
-                <label class="form-check-label" for="@($"claudeModel{UniqueId}")">
-                    特定のモデルを使用
-                </label>
-            </div>
-            @if (ClaudeOptions.UseModel)
-            {
-                <input type="text" class="form-control mt-2" @bind="ClaudeOptions.Model" placeholder="例: claude-3-opus" />
-            }
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.MaxTokens" id="@($"claudeMaxTokens{UniqueId}")">
-                <label class="form-check-label" for="@($"claudeMaxTokens{UniqueId}")">
-                    最大トークン数を指定
-                </label>
-            </div>
-            @if (ClaudeOptions.MaxTokens)
-            {
-                <input type="number" class="form-control mt-2" @bind="ClaudeOptions.MaxTokensValue" placeholder="例: 4096" />
-            }
             <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.BypassMode" id="@($"claudeBypass{UniqueId}")">
                 <label class="form-check-label" for="@($"claudeBypass{UniqueId}")">
@@ -134,14 +114,6 @@
                 break;
 
             case TerminalType.ClaudeCode:
-                if (ClaudeOptions.UseModel && !string.IsNullOrWhiteSpace(ClaudeOptions.Model))
-                {
-                    options["model"] = ClaudeOptions.Model;
-                }
-                if (ClaudeOptions.MaxTokens)
-                {
-                    options["max-tokens"] = ClaudeOptions.MaxTokensValue.ToString();
-                }
                 if (ClaudeOptions.BypassMode)
                 {
                     options["bypass-mode"] = "true";
@@ -169,10 +141,6 @@
 
     public class ClaudeCodeOptions
     {
-        public bool UseModel { get; set; }
-        public string Model { get; set; } = "";
-        public bool MaxTokens { get; set; }
-        public int MaxTokensValue { get; set; } = 4096;
         public bool BypassMode { get; set; }
         public bool Continue { get; set; }
     }

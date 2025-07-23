@@ -45,11 +45,11 @@
             {
                 <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
                      @onclick="() => OnSessionSelect.InvokeAsync(session.SessionId)"
-                     style="cursor: pointer; @(session.IsWorktree && session.ParentSessionId.HasValue ? "padding-left: 2.5rem;" : "")">
+                     style="cursor: pointer; @(session.ParentSessionId.HasValue ? "padding-left: 2.5rem;" : "")">
                     <div class="d-flex w-100 justify-content-between align-items-center">
                         <div class="flex-fill">
                             <h6 class="mb-1">
-                                @if (session.IsWorktree && session.ParentSessionId.HasValue)
+                                @if (session.ParentSessionId.HasValue)
                                 {
                                     <span class="text-muted me-1">└─</span>
                                 }
@@ -252,13 +252,13 @@
                 
             var group = new List<SessionInfo>();
             
-            // Worktreeでない場合は親セッション
-            if (!session.IsWorktree || !session.ParentSessionId.HasValue)
+            // ParentSessionIdを持たない場合は親セッション
+            if (!session.ParentSessionId.HasValue)
             {
                 group.Add(session);
                 processed.Add(session.SessionId);
                 
-                // 子セッション（Worktree）を探す
+                // 子セッション（ParentSessionIdがこのセッションを指すもの）を探す
                 var children = Sessions
                     .Where(s => s.ParentSessionId == session.SessionId)
                     .OrderBy(s => s.CreatedAt);
@@ -269,7 +269,7 @@
                     processed.Add(child.SessionId);
                 }
             }
-            // 親のないWorktreeの場合（親が削除された場合など）
+            // 親が存在しない子セッションの場合（親が削除された場合など）
             else if (!Sessions.Any(s => s.SessionId == session.ParentSessionId))
             {
                 group.Add(session);

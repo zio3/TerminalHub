@@ -43,15 +43,6 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
             
-            if (options.ContainsKey("model") && !string.IsNullOrWhiteSpace(options["model"]))
-            {
-                args.Add($"--model {options["model"]}");
-            }
-            
-            if (options.ContainsKey("max-tokens") && !string.IsNullOrWhiteSpace(options["max-tokens"]))
-            {
-                args.Add($"--max-tokens {options["max-tokens"]}");
-            }
             
             if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
             {
