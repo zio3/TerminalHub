@@ -1,6 +1,6 @@
-using TerminalHub.Components;
 using TerminalHub.Services;
 using TerminalHub.Analyzers;
+using TerminalHub.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
