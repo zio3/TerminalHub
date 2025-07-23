@@ -31,6 +31,21 @@ Write-Host "起動設定:" -ForegroundColor Green
 Write-Host "  フォルダ: $currentFolder" -ForegroundColor Cyan
 Write-Host "  HTTPS: https://localhost:$httpsPort" -ForegroundColor Cyan
 
+# 既存のstop.ps1があれば実行
+if (Test-Path "./stop.ps1") {
+    Write-Host "既存のサーバーを停止しています..." -ForegroundColor Yellow
+    & ./stop.ps1
+    Start-Sleep -Seconds 1
+}
+
+# ビルドを実行（無言）
+$buildOutput = & dotnet build TerminalHub/TerminalHub.csproj --nologo --verbosity quiet 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`nビルドエラー:" -ForegroundColor Red
+    Write-Host $buildOutput -ForegroundColor Red
+    exit 1
+}
+
 # 環境変数を設定
 $env:ASPNETCORE_URLS = "https://localhost:$httpsPort;http://localhost:$httpPort"
 
