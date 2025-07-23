@@ -30,6 +30,12 @@ namespace TerminalHub.Constants
         
         // ファイルパス
         public const string DefaultShell = @"C:\Windows\System32\cmd.exe";
-        public const string ClaudeCmdPath = @"C:\Users\info\AppData\Roaming\npm\claude.cmd";
+        
+        // Claude Codeのデフォルトパス（ユーザー固有）
+        public static string GetDefaultClaudeCmdPath()
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+        }
     }
 }

@@ -1,6 +1,8 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
+@using Microsoft.JSInterop
 @inject ISessionManager SessionManager
+@inject IJSRuntime JSRuntime
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: rgba(0, 0, 0, 0.5);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -23,7 +25,14 @@
                             </div>
                             <div class="col-md-6">
                                 <small class="text-muted">フォルダ:</small><br/>
-                                <code>@sessionInfo.FolderPath</code>
+                                <div class="d-flex align-items-center">
+                                    <code class="flex-grow-1 me-2">@sessionInfo.FolderPath</code>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                            @onclick="() => CopyToClipboard(sessionInfo.FolderPath)" 
+                                            title="フォルダパスをコピー">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -207,6 +216,27 @@
     {
         selectedType = newType;
         return Task.CompletedTask;
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            // 成功時の視覚的フィードバックを追加する場合はここに
+        }
+        catch (Exception)
+        {
+            // フォールバック: 古いブラウザ用
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", $"document.execCommand('copy'); var textarea = document.createElement('textarea'); textarea.value = '{text}'; document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea);");
+            }
+            catch
+            {
+                // コピーに失敗した場合は何もしない
+            }
+        }
     }
 
 }

@@ -125,5 +125,55 @@ window.terminalHubHelpers = {
     // Store DotNetRef for notification callback
     setDotNetRef: function(dotNetRef) {
         window.terminalHubDotNetRef = dotNetRef;
+    },
+    
+    // LocalStorage settings management
+    getSettings: function() {
+        const settings = localStorage.getItem('terminalHub_settings');
+        if (settings) {
+            return JSON.parse(settings);
+        }
+        
+        // Default settings
+        return {
+            notifications: {
+                enableBrowserNotifications: true,
+                processingTimeThresholdSeconds: 5
+            },
+            webhook: {
+                enabled: false,
+                url: "",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            }
+        };
+    },
+    
+    saveSettings: function(settings) {
+        localStorage.setItem('terminalHub_settings', JSON.stringify(settings));
+    },
+    
+    updateNotificationSettings: function(enableBrowserNotifications, processingTimeThresholdSeconds) {
+        const settings = this.getSettings();
+        settings.notifications.enableBrowserNotifications = enableBrowserNotifications;
+        settings.notifications.processingTimeThresholdSeconds = processingTimeThresholdSeconds;
+        this.saveSettings(settings);
+    },
+    
+    updateWebhookSettings: function(enabled, url, headers) {
+        const settings = this.getSettings();
+        settings.webhook.enabled = enabled;
+        settings.webhook.url = url;
+        settings.webhook.headers = headers || { "Content-Type": "application/json" };
+        this.saveSettings(settings);
+    },
+    
+    getNotificationSettings: function() {
+        return this.getSettings().notifications;
+    },
+    
+    getWebhookSettings: function() {
+        return this.getSettings().webhook;
     }
 };

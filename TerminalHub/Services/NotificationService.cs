@@ -28,7 +28,11 @@ namespace TerminalHub.Services
 
         public async Task NotifyProcessingCompleteAsync(SessionInfo session, int elapsedSeconds)
         {
-            var thresholdSeconds = _configuration.GetValue<int>("NotificationSettings:ProcessingTimeThresholdSeconds", 60);
+            // LocalStorageから設定を取得
+            var notificationSettings = await GetNotificationSettingsAsync();
+            var webhookSettings = await GetWebhookSettingsAsync();
+            
+            var thresholdSeconds = notificationSettings?.ProcessingTimeThresholdSeconds ?? 60;
 
             // 閾値を超えていない場合は通知しない（0秒設定の場合は常に通知）
             if (thresholdSeconds > 0 && elapsedSeconds < thresholdSeconds)
@@ -38,16 +42,15 @@ namespace TerminalHub.Services
             }
 
             // ブラウザ通知
-            if (_configuration.GetValue<bool>("NotificationSettings:EnableBrowserNotifications", true))
+            if (notificationSettings?.EnableBrowserNotifications == true)
             {
                 await SendBrowserNotificationAsync(session, elapsedSeconds);
             }
 
             // WebHook通知
-            var webHookEnabled = _configuration.GetValue<bool>("NotificationSettings:WebHookSettings:Enabled", false);
-            if (webHookEnabled)
+            if (webhookSettings?.Enabled == true)
             {
-                await SendWebHookNotificationAsync(session, elapsedSeconds);
+                await SendWebHookNotificationAsync(session, elapsedSeconds, webhookSettings);
             }
         }
 
@@ -83,11 +86,11 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task SendWebHookNotificationAsync(SessionInfo session, int elapsedSeconds)
+        private async Task SendWebHookNotificationAsync(SessionInfo session, int elapsedSeconds, WebhookSettings webhookSettings)
         {
             try
             {
-                var url = _configuration.GetValue<string>("NotificationSettings:WebHookSettings:Url");
+                var url = webhookSettings.Url;
                 if (string.IsNullOrEmpty(url))
                 {
                     _logger.LogWarning("WebHook URLが設定されていません");
@@ -97,11 +100,9 @@ namespace TerminalHub.Services
                 var httpClient = _httpClientFactory.CreateClient();
 
                 // ヘッダーを設定（Content-Type以外）
-                var headers = _configuration.GetSection("NotificationSettings:WebHookSettings:Headers")
-                    .Get<Dictionary<string, string>>();
-                if (headers != null)
+                if (webhookSettings.Headers != null)
                 {
-                    foreach (var header in headers)
+                    foreach (var header in webhookSettings.Headers)
                     {
                         // Content-Typeは後でStringContentで設定されるためスキップ
                         if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
@@ -160,5 +161,55 @@ namespace TerminalHub.Services
                 return false;
             }
         }
+
+        private async Task<NotificationSettings?> GetNotificationSettingsAsync()
+        {
+            try
+            {
+                var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getNotificationSettings");
+                if (settingsObj == null) return null;
+                
+                var settingsJson = JsonSerializer.Serialize(settingsObj);
+                return JsonSerializer.Deserialize<NotificationSettings>(settingsJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "通知設定の取得に失敗しました");
+                return null;
+            }
+        }
+
+        private async Task<WebhookSettings?> GetWebhookSettingsAsync()
+        {
+            try
+            {
+                var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getWebhookSettings");
+                if (settingsObj == null) return null;
+                
+                var settingsJson = JsonSerializer.Serialize(settingsObj);
+                return JsonSerializer.Deserialize<WebhookSettings>(settingsJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Webhook設定の取得に失敗しました");
+                return null;
+            }
+        }
+    }
+
+    public class NotificationSettings
+    {
+        public bool EnableBrowserNotifications { get; set; } = true;
+        public int ProcessingTimeThresholdSeconds { get; set; } = 5;
+    }
+
+    public class WebhookSettings
+    {
+        public bool Enabled { get; set; } = false;
+        public string Url { get; set; } = "";
+        public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string> 
+        { 
+            { "Content-Type", "application/json" } 
+        };
     }
 }

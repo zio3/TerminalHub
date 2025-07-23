@@ -1,4 +1,6 @@
 @using TerminalHub.Models
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
 
 <div class="session-options">
     <div class="mb-3">
@@ -11,23 +13,29 @@
                 <i class="bi bi-terminal"></i> ターミナル
             </label>
 
-            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType2{UniqueId}")" 
-                   checked="@(SelectedType == TerminalType.ClaudeCode)" 
-                   @onchange="() => OnTerminalTypeChanged(TerminalType.ClaudeCode)" autocomplete="off">
-            <label class="btn btn-outline-primary" for="@($"terminalType2{UniqueId}")">
-                <i class="bi bi-robot"></i> Claude Code
-            </label>
+            @if (Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType2{UniqueId}")" 
+                       checked="@(SelectedType == TerminalType.ClaudeCode)" 
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.ClaudeCode)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType2{UniqueId}")">
+                    <i class="bi bi-robot"></i> Claude Code
+                </label>
+            }
 
-            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")" 
-                   checked="@(SelectedType == TerminalType.GeminiCLI)" 
-                   @onchange="() => OnTerminalTypeChanged(TerminalType.GeminiCLI)" autocomplete="off">
-            <label class="btn btn-outline-primary" for="@($"terminalType3{UniqueId}")">
-                <i class="bi bi-stars"></i> Gemini CLI
-            </label>
+            @if (Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")" 
+                       checked="@(SelectedType == TerminalType.GeminiCLI)" 
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.GeminiCLI)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType3{UniqueId}")">
+                    <i class="bi bi-stars"></i> Gemini CLI
+                </label>
+            }
         </div>
     </div>
 
-    @if (SelectedType == TerminalType.ClaudeCode)
+    @if (SelectedType == TerminalType.ClaudeCode && Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true))
     {
         <div class="mb-3">
             <label class="form-label">Claude Code オプション</label>
@@ -68,7 +76,7 @@
             }
         </div>
     }
-    else if (SelectedType == TerminalType.GeminiCLI)
+    else if (SelectedType == TerminalType.GeminiCLI && Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
     {
         <div class="mb-3">
             <label class="form-label">Gemini CLI オプション</label>

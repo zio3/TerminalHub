@@ -49,6 +49,12 @@ namespace TerminalHub.Services
             _gitService = gitService;
             _maxSessions = _configuration.GetValue<int>("SessionSettings:MaxSessions", TerminalConstants.DefaultMaxSessions);
         }
+        
+        private string GetClaudeCmdPath()
+        {
+            var configuredPath = _configuration.GetValue<string>("ExternalTools:ClaudeCmdPath");
+            return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
+        }
 
         public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
         {
@@ -113,9 +119,10 @@ namespace TerminalHub.Services
                         command = "cmd.exe";
                         var claudeArgs = BuildClaudeCodeArgs(options);
                         // 引数がある場合はスペースを追加、ない場合は追加しない
+                        var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs) 
-                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\"" 
-                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                            ? $"/k \"{claudeCmdPath}\"" 
+                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                         break;
                         
                     case TerminalType.GeminiCLI:
@@ -426,9 +433,10 @@ namespace TerminalHub.Services
                         case TerminalType.ClaudeCode:
                             command = "cmd.exe";
                             var claudeArgs = BuildClaudeArgs(existingWorktreeSessionInfo.Options);
+                            var claudeCmdPath = GetClaudeCmdPath();
                             args = string.IsNullOrWhiteSpace(claudeArgs)
-                                ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
-                                : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                                ? $"/k \"{claudeCmdPath}\""
+                                : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                             break;
                             
                         case TerminalType.GeminiCLI:
@@ -519,9 +527,10 @@ namespace TerminalHub.Services
                         var worktreeOptions = new Dictionary<string, string>(worktreeSessionInfo.Options);
                         worktreeOptions.Remove("continue");
                         var claudeArgs = BuildClaudeCodeArgs(worktreeOptions);
+                        var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
-                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                            ? $"/k \"{claudeCmdPath}\""
+                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                         break;
                         
                     case TerminalType.GeminiCLI:
@@ -624,9 +633,10 @@ namespace TerminalHub.Services
                         var samePathOptions = new Dictionary<string, string>(sessionInfo.Options);
                         samePathOptions.Remove("continue");
                         var claudeArgs = BuildClaudeCodeArgs(samePathOptions);
+                        var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
-                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                            ? $"/k \"{claudeCmdPath}\""
+                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                         break;
 
                     case TerminalType.GeminiCLI:
@@ -704,9 +714,10 @@ namespace TerminalHub.Services
                     case TerminalType.ClaudeCode:
                         command = "cmd.exe";
                         var claudeArgs = BuildClaudeCodeArgs(sessionInfo.Options);
+                        var claudeCmdPath = GetClaudeCmdPath();
                         args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
-                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                            ? $"/k \"{claudeCmdPath}\""
+                            : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                         break;
 
                     case TerminalType.GeminiCLI:
