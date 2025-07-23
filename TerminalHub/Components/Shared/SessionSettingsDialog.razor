@@ -25,9 +25,9 @@
                             </div>
                             <div class="col-md-6">
                                 <small class="text-muted">フォルダ:</small><br/>
-                                <div class="d-flex align-items-center">
-                                    <code class="flex-grow-1 me-2">@sessionInfo.FolderPath</code>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                <div class="d-flex align-items-start">
+                                    <code class="flex-grow-1 me-2 text-break" style="word-wrap: break-word; overflow-wrap: break-word;">@sessionInfo.FolderPath</code>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" 
                                             @onclick="() => CopyToClipboard(sessionInfo.FolderPath)" 
                                             title="フォルダパスをコピー">
                                         <i class="bi bi-clipboard"></i>
