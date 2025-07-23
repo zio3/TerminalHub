@@ -44,7 +44,7 @@
             @foreach (var session in sessionGroup)
             {
                 <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
-                     @onclick="() => OnSessionSelect.InvokeAsync(session.SessionId)"
+                     @onclick="async () => await HandleSessionClick(session.SessionId)"
                      style="cursor: pointer; @(session.ParentSessionId.HasValue ? "padding-left: 2.5rem;" : "")">
                     <div class="d-flex w-100 justify-content-between align-items-center">
                         <div class="flex-fill">
@@ -70,7 +70,7 @@
                                     <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
                                     @if (session.HasUncommittedChanges)
                                     {
-                                        <i class="bi bi-dot text-danger" title="未コミットの変更があります"></i>
+                                        <i class="bi bi-circle-fill text-danger git-status-indicator" title="未コミットの変更があります"></i>
                                     }
                                 </span>
                                 @if (!session.IsWorktree)
@@ -204,6 +204,7 @@
     
     [Parameter] public EventCallback OnAddSession { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSelect { get; set; }
+    [Parameter] public Func<Guid, Task> OnGitStatusRefresh { get; set; } = _ => Task.CompletedTask;
     [Parameter] public EventCallback<Guid> OnSessionRemove { get; set; }
     [Parameter] public EventCallback<string> OnMemoInput { get; set; }
     [Parameter] public Func<Guid, Task> OnMemoSave { get; set; } = _ => Task.CompletedTask;
@@ -283,5 +284,14 @@
         }
         
         return result;
+    }
+    
+    private async Task HandleSessionClick(Guid sessionId)
+    {
+        // セッションを選択
+        await OnSessionSelect.InvokeAsync(sessionId);
+        
+        // Gitステータスを再確認
+        await OnGitStatusRefresh(sessionId);
     }
 }
