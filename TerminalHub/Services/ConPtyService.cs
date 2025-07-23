@@ -28,7 +28,20 @@ namespace TerminalHub.Services
         {
             // Console.WriteLine($"[ConPtyService] CreateSessionAsync: {command}");
             
-            return await Task.Run(() => new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows));
+            try
+            {
+                return await Task.Run(() => new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows));
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogError(ex, "Failed to create ConPTY session: {Message}", ex.Message);
+                throw new InvalidOperationException($"ターミナルの初期化に失敗しました: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error creating ConPTY session");
+                throw new InvalidOperationException("ターミナルの初期化中に予期しないエラーが発生しました。", ex);
+            }
         }
     }
 
@@ -57,7 +70,7 @@ namespace TerminalHub.Services
             // Console.WriteLine($"[ConPtySession] コンストラクタ完了");
         }
 
-        private void InitializeConPty(string command, string arguments, string? workingDirectory)
+        private void InitializeConPty(string command, string? arguments, string? workingDirectory)
         {
             // Console.WriteLine($"[ConPtySession] InitializeConPty開始");
             
@@ -66,14 +79,21 @@ namespace TerminalHub.Services
             startupInfo.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
             // Console.WriteLine($"[ConPtySession] STARTUPINFOEX初期化完了");
 
-            // パイプの作成
-            // Console.WriteLine($"[ConPtySession] パイプ作成開始");
-            CreatePipe(out var hPipeIn, out var hWritePipe, IntPtr.Zero, 0);
-            CreatePipe(out var hReadPipe, out var hPipeOut, IntPtr.Zero, 0);
-            // Console.WriteLine($"[ConPtySession] パイプ作成完了");
+            IntPtr hWritePipe = IntPtr.Zero;
+            IntPtr hReadPipe = IntPtr.Zero;
+            IntPtr processInfoHandle = IntPtr.Zero;
+            IntPtr threadInfoHandle = IntPtr.Zero;
+            
+            try
+            {
+                // パイプの作成
+                // Console.WriteLine($"[ConPtySession] パイプ作成開始");
+                CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, 0);
+                CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, 0);
+                // Console.WriteLine($"[ConPtySession] パイプ作成完了");
 
-            _hPipeIn = hPipeIn;
-            _hPipeOut = hPipeOut;
+                _hPipeIn = hPipeIn;
+                _hPipeOut = hPipeOut;
 
             // ConPTYの作成
             // Console.WriteLine($"[ConPtySession] CreatePseudoConsole呼び出し開始");
@@ -87,13 +107,13 @@ namespace TerminalHub.Services
             }
             // Console.WriteLine($"[ConPtySession] CreatePseudoConsole成功");
 
-            // プロセス属性リストの初期化
-            // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化開始");
-            var lpSize = IntPtr.Zero;
-            InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
-            startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
-            InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
-            // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化完了");
+                // プロセス属性リストの初期化
+                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化開始");
+                var lpSize = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
+                startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
+                InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
+                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化完了");
 
             // 擬似コンソールの属性を設定
             // Console.WriteLine($"[ConPtySession] UpdateProcThreadAttribute呼び出し");
@@ -139,21 +159,49 @@ namespace TerminalHub.Services
             _process = Process.GetProcessById((int)processInfo.dwProcessId);
             // Console.WriteLine($"[ConPtySession] Process取得完了");
 
-            // ストリームの作成
-            // Console.WriteLine($"[ConPtySession] ストリーム作成開始");
-            var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
-            var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
+                processInfoHandle = processInfo.hProcess;
+                threadInfoHandle = processInfo.hThread;
+                
+                // ストリームの作成
+                // Console.WriteLine($"[ConPtySession] ストリーム作成開始");
+                var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
+                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
 
-            _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
-            _reader = new StreamReader(new FileStream(pipeOut, FileAccess.Read), Encoding.UTF8);
-            // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
+                _reader = new StreamReader(new FileStream(pipeOut, FileAccess.Read), Encoding.UTF8);
+                // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                
+                // SafeFileHandleに所有権を移したので、元のハンドルは無効化
+                hWritePipe = IntPtr.Zero;
+                hReadPipe = IntPtr.Zero;
 
-            // ハンドルのクリーンアップ
-            // Console.WriteLine($"[ConPtySession] ハンドルクリーンアップ開始");
-            CloseHandle(processInfo.hProcess);
-            CloseHandle(processInfo.hThread);
-            Marshal.FreeHGlobal(startupInfo.lpAttributeList);
-            // Console.WriteLine($"[ConPtySession] InitializeConPty完了");
+                // ハンドルのクリーンアップ
+                // Console.WriteLine($"[ConPtySession] ハンドルクリーンアップ開始");
+                CloseHandle(processInfoHandle);
+                CloseHandle(threadInfoHandle);
+                DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
+                Marshal.FreeHGlobal(startupInfo.lpAttributeList);
+                // Console.WriteLine($"[ConPtySession] InitializeConPty完了");
+            }
+            catch
+            {
+                // エラー時のクリーンアップ
+                if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
+                if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                if (processInfoHandle != IntPtr.Zero) CloseHandle(processInfoHandle);
+                if (threadInfoHandle != IntPtr.Zero) CloseHandle(threadInfoHandle);
+                if (startupInfo.lpAttributeList != IntPtr.Zero)
+                {
+                    DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
+                    Marshal.FreeHGlobal(startupInfo.lpAttributeList);
+                }
+                if (_hPC != IntPtr.Zero)
+                {
+                    ClosePseudoConsole(_hPC);
+                    _hPC = IntPtr.Zero;
+                }
+                throw;
+            }
         }
 
         public async Task WriteAsync(string input)
@@ -274,29 +322,46 @@ namespace TerminalHub.Services
             _disposed = true;
 
             // ストリームを破棄
-            _writer?.Dispose();
-            _reader?.Dispose();
+            try { _writer?.Dispose(); } catch { }
+            try { _reader?.Dispose(); } catch { }
+
+            // プロセスを終了
+            if (_process != null && !_process.HasExited)
+            {
+                try
+                {
+                    _process.Kill();
+                    _process.WaitForExit(1000); // 1秒待機
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to terminate process");
+                }
+            }
 
             // プロセスとハンドルを破棄
             if (_hPC != IntPtr.Zero)
             {
                 ClosePseudoConsole(_hPC);
+                _hPC = IntPtr.Zero;
             }
 
             if (_hPipeIn != IntPtr.Zero)
             {
                 CloseHandle(_hPipeIn);
+                _hPipeIn = IntPtr.Zero;
             }
 
             if (_hPipeOut != IntPtr.Zero)
             {
                 CloseHandle(_hPipeOut);
+                _hPipeOut = IntPtr.Zero;
             }
 
-            _process?.Dispose();
+            try { _process?.Dispose(); } catch { }
             
             // 最後にセマフォを破棄
-            _readSemaphore?.Dispose();
+            try { _readSemaphore?.Dispose(); } catch { }
         }
 
         // P/Invoke定義
@@ -320,6 +385,9 @@ namespace TerminalHub.Services
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr Attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool CreateProcess(
