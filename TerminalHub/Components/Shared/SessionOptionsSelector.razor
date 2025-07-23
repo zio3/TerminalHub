@@ -1,0 +1,171 @@
+@using TerminalHub.Models
+
+<div class="session-options">
+    <div class="mb-3">
+        <label class="form-label d-block">ターミナルタイプ</label>
+        <div class="btn-group d-flex" role="group">
+            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType1{UniqueId}")" 
+                   checked="@(SelectedType == TerminalType.Terminal)" 
+                   @onchange="() => OnTerminalTypeChanged(TerminalType.Terminal)" autocomplete="off">
+            <label class="btn btn-outline-primary" for="@($"terminalType1{UniqueId}")">
+                <i class="bi bi-terminal"></i> ターミナル
+            </label>
+
+            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType2{UniqueId}")" 
+                   checked="@(SelectedType == TerminalType.ClaudeCode)" 
+                   @onchange="() => OnTerminalTypeChanged(TerminalType.ClaudeCode)" autocomplete="off">
+            <label class="btn btn-outline-primary" for="@($"terminalType2{UniqueId}")">
+                <i class="bi bi-robot"></i> Claude Code
+            </label>
+
+            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")" 
+                   checked="@(SelectedType == TerminalType.GeminiCLI)" 
+                   @onchange="() => OnTerminalTypeChanged(TerminalType.GeminiCLI)" autocomplete="off">
+            <label class="btn btn-outline-primary" for="@($"terminalType3{UniqueId}")">
+                <i class="bi bi-stars"></i> Gemini CLI
+            </label>
+        </div>
+    </div>
+
+    @if (SelectedType == TerminalType.ClaudeCode)
+    {
+        <div class="mb-3">
+            <label class="form-label">Claude Code オプション</label>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.UseModel" id="@($"claudeModel{UniqueId}")">
+                <label class="form-check-label" for="@($"claudeModel{UniqueId}")">
+                    特定のモデルを使用
+                </label>
+            </div>
+            @if (ClaudeOptions.UseModel)
+            {
+                <input type="text" class="form-control mt-2" @bind="ClaudeOptions.Model" placeholder="例: claude-3-opus" />
+            }
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.MaxTokens" id="@($"claudeMaxTokens{UniqueId}")">
+                <label class="form-check-label" for="@($"claudeMaxTokens{UniqueId}")">
+                    最大トークン数を指定
+                </label>
+            </div>
+            @if (ClaudeOptions.MaxTokens)
+            {
+                <input type="number" class="form-control mt-2" @bind="ClaudeOptions.MaxTokensValue" placeholder="例: 4096" />
+            }
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.BypassMode" id="@($"claudeBypass{UniqueId}")">
+                <label class="form-check-label" for="@($"claudeBypass{UniqueId}")">
+                    バイパスモード (--dangerously-skip-permissions)
+                </label>
+            </div>
+            @if (!DisableContinueOption)
+            {
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.Continue" id="@($"claudeContinue{UniqueId}")">
+                    <label class="form-check-label" for="@($"claudeContinue{UniqueId}")">
+                        コンティニュー (--continue)
+                    </label>
+                </div>
+            }
+        </div>
+    }
+    else if (SelectedType == TerminalType.GeminiCLI)
+    {
+        <div class="mb-3">
+            <label class="form-label">Gemini CLI オプション</label>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.UseModel" id="@($"geminiModel{UniqueId}")">
+                <label class="form-check-label" for="@($"geminiModel{UniqueId}")">
+                    特定のモデルを使用
+                </label>
+            </div>
+            @if (GeminiOptions.UseModel)
+            {
+                <input type="text" class="form-control mt-2" @bind="GeminiOptions.Model" placeholder="例: gemini-pro" />
+            }
+        </div>
+    }
+    else
+    {
+        <div class="mb-3">
+            <label class="form-label">起動コマンド（任意）</label>
+            <input type="text" class="form-control" @bind="StartupCommand" placeholder="例: cmd.exe, powershell.exe" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public TerminalType SelectedType { get; set; } = TerminalType.Terminal;
+    [Parameter] public EventCallback<TerminalType> SelectedTypeChanged { get; set; }
+    [Parameter] public string StartupCommand { get; set; } = "";
+    [Parameter] public EventCallback<string> StartupCommandChanged { get; set; }
+    [Parameter] public ClaudeCodeOptions ClaudeOptions { get; set; } = new();
+    [Parameter] public GeminiOptionsData GeminiOptions { get; set; } = new();
+    [Parameter] public bool DisableContinueOption { get; set; } = false;
+
+    private string UniqueId = Guid.NewGuid().ToString("N");
+
+    private async Task OnTerminalTypeChanged(TerminalType newType)
+    {
+        SelectedType = newType;
+        await SelectedTypeChanged.InvokeAsync(newType);
+    }
+
+    public Dictionary<string, string> GetOptions()
+    {
+        var options = new Dictionary<string, string>();
+
+        switch (SelectedType)
+        {
+            case TerminalType.Terminal:
+                if (!string.IsNullOrWhiteSpace(StartupCommand))
+                {
+                    options["command"] = StartupCommand;
+                }
+                break;
+
+            case TerminalType.ClaudeCode:
+                if (ClaudeOptions.UseModel && !string.IsNullOrWhiteSpace(ClaudeOptions.Model))
+                {
+                    options["model"] = ClaudeOptions.Model;
+                }
+                if (ClaudeOptions.MaxTokens)
+                {
+                    options["max-tokens"] = ClaudeOptions.MaxTokensValue.ToString();
+                }
+                if (ClaudeOptions.BypassMode)
+                {
+                    options["bypass-mode"] = "true";
+                }
+                if (ClaudeOptions.Continue && !DisableContinueOption)
+                {
+                    options["continue"] = "true";
+                }
+                break;
+
+            case TerminalType.GeminiCLI:
+                if (GeminiOptions.UseModel && !string.IsNullOrWhiteSpace(GeminiOptions.Model))
+                {
+                    options["model"] = GeminiOptions.Model;
+                }
+                break;
+        }
+
+        return options;
+    }
+
+    public class ClaudeCodeOptions
+    {
+        public bool UseModel { get; set; }
+        public string Model { get; set; } = "";
+        public bool MaxTokens { get; set; }
+        public int MaxTokensValue { get; set; } = 4096;
+        public bool BypassMode { get; set; }
+        public bool Continue { get; set; }
+    }
+
+    public class GeminiOptionsData
+    {
+        public bool UseModel { get; set; }
+        public string Model { get; set; } = "";
+    }
+}

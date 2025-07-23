@@ -47,6 +47,20 @@ namespace TerminalHub.Services
         /// <param name="path">チェックするパス</param>
         /// <returns>Worktreeの場合true</returns>
         Task<bool> IsWorktreeAsync(string path);
+
+        /// <summary>
+        /// リポジトリのWorktree一覧を取得
+        /// </summary>
+        /// <param name="path">リポジトリのパス</param>
+        /// <returns>Worktree情報のリスト</returns>
+        Task<List<WorktreeInfo>> GetWorktreeListAsync(string path);
+
+        /// <summary>
+        /// 既存のWorktreeを検証
+        /// </summary>
+        /// <param name="worktreePath">検証するWorktreeのパス</param>
+        /// <returns>Worktree情報、無効な場合はnull</returns>
+        Task<WorktreeInfo?> ValidateWorktreeAsync(string worktreePath);
     }
 
     public class GitInfo
@@ -56,5 +70,15 @@ namespace TerminalHub.Services
         public bool IsWorktree { get; set; }
         public string? WorktreeMainPath { get; set; }
         public List<string> AvailableBranches { get; set; } = new();
+    }
+
+    public class WorktreeInfo
+    {
+        public string Path { get; set; } = string.Empty;
+        public string BranchName { get; set; } = string.Empty;
+        public string? CommitHash { get; set; }
+        public bool IsMain { get; set; }
+        public bool IsLocked { get; set; }
+        public bool IsPrunable { get; set; }
     }
 }

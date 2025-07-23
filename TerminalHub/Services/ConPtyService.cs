@@ -109,7 +109,8 @@ namespace TerminalHub.Services
 
             // プロセスの作成
             var processInfo = new PROCESS_INFORMATION();
-            var cmdline = $"{command} {arguments}";
+            // argumentsが空の場合は余分なスペースを追加しない
+            var cmdline = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
 
             // Console.WriteLine($"[ConPtySession] CreateProcess: {cmdline}");
             _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");

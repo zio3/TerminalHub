@@ -200,6 +200,147 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<List<WorktreeInfo>> GetWorktreeListAsync(string path)
+        {
+            var worktrees = new List<WorktreeInfo>();
+
+            try
+            {
+                if (!await IsGitRepositoryAsync(path))
+                    return worktrees;
+
+                var result = await ExecuteGitCommandAsync(path, "worktree list --porcelain");
+                if (!result.Success || string.IsNullOrEmpty(result.Output))
+                    return worktrees;
+
+                var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                WorktreeInfo? currentWorktree = null;
+
+                foreach (var line in lines)
+                {
+                    if (line.StartsWith("worktree "))
+                    {
+                        if (currentWorktree != null)
+                            worktrees.Add(currentWorktree);
+
+                        currentWorktree = new WorktreeInfo
+                        {
+                            Path = line.Substring("worktree ".Length).Trim()
+                        };
+                    }
+                    else if (currentWorktree != null)
+                    {
+                        if (line.StartsWith("HEAD "))
+                        {
+                            currentWorktree.CommitHash = line.Substring("HEAD ".Length).Trim();
+                        }
+                        else if (line.StartsWith("branch "))
+                        {
+                            currentWorktree.BranchName = line.Substring("branch ".Length).Trim();
+                        }
+                        else if (line == "bare")
+                        {
+                            // bareリポジトリの場合は無視
+                            currentWorktree = null;
+                        }
+                        else if (line == "detached")
+                        {
+                            currentWorktree.BranchName = "(detached HEAD)";
+                        }
+                        else if (line == "locked")
+                        {
+                            currentWorktree.IsLocked = true;
+                        }
+                        else if (line == "prunable")
+                        {
+                            currentWorktree.IsPrunable = true;
+                        }
+                    }
+                }
+
+                if (currentWorktree != null)
+                    worktrees.Add(currentWorktree);
+
+                // 最初のWorktreeがメインリポジトリ
+                if (worktrees.Count > 0)
+                    worktrees[0].IsMain = true;
+
+                return worktrees;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Worktree一覧取得でエラーが発生しました: {Path}", path);
+                return worktrees;
+            }
+        }
+
+        public async Task<WorktreeInfo?> ValidateWorktreeAsync(string worktreePath)
+        {
+            try
+            {
+                if (!Directory.Exists(worktreePath))
+                    return null;
+
+                // Worktreeかどうかチェック
+                if (!await IsWorktreeAsync(worktreePath))
+                    return null;
+
+                // git worktree listでこのWorktreeの情報を取得
+                var result = await ExecuteGitCommandAsync(worktreePath, "worktree list --porcelain");
+                if (!result.Success || string.IsNullOrEmpty(result.Output))
+                    return null;
+
+                var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                WorktreeInfo? targetWorktree = null;
+                WorktreeInfo? currentWorktree = null;
+
+                foreach (var line in lines)
+                {
+                    if (line.StartsWith("worktree "))
+                    {
+                        var path = line.Substring("worktree ".Length).Trim();
+                        currentWorktree = new WorktreeInfo { Path = path };
+
+                        // パスが一致する場合、これが対象のWorktree
+                        if (Path.GetFullPath(path).Equals(Path.GetFullPath(worktreePath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            targetWorktree = currentWorktree;
+                        }
+                    }
+                    else if (currentWorktree != null && currentWorktree == targetWorktree)
+                    {
+                        if (line.StartsWith("HEAD "))
+                        {
+                            currentWorktree.CommitHash = line.Substring("HEAD ".Length).Trim();
+                        }
+                        else if (line.StartsWith("branch "))
+                        {
+                            currentWorktree.BranchName = line.Substring("branch ".Length).Trim();
+                        }
+                        else if (line == "detached")
+                        {
+                            currentWorktree.BranchName = "(detached HEAD)";
+                        }
+                        else if (line == "locked")
+                        {
+                            currentWorktree.IsLocked = true;
+                        }
+                        else if (line == "prunable")
+                        {
+                            currentWorktree.IsPrunable = true;
+                        }
+                    }
+                }
+
+                return targetWorktree;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Worktree検証でエラーが発生しました: {Path}", worktreePath);
+                return null;
+            }
+        }
+
         private async Task<(bool Success, string? Output, string? Error)> ExecuteGitCommandAsync(string workingDirectory, string arguments)
         {
             try

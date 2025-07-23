@@ -121,12 +121,20 @@
                             </div>
                         }
                     </div>
-                    <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
-                            @onclick="() => OnSessionRemove.InvokeAsync(session.SessionId)"
-                            title="セッション削除"
-                            style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
+                                @onclick="() => OnSessionSettings.InvokeAsync(session.SessionId)"
+                                title="セッション設定"
+                                style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                            <i class="bi bi-gear"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
+                                @onclick="() => OnSessionRemove.InvokeAsync(session.SessionId)"
+                                title="セッション削除"
+                                style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="mt-2">
                     @if (EditingMemoSessionId == session.SessionId)
@@ -203,6 +211,7 @@
     [Parameter] public Action<Guid, string> OnMemoEdit { get; set; } = (_, _) => { };
     [Parameter] public EventCallback OnSettingsClick { get; set; }
     [Parameter] public EventCallback<Guid> OnCreateWorktree { get; set; }
+    [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
 
     protected override void OnParametersSet()
     {

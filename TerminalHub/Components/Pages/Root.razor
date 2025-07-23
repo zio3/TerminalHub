@@ -27,8 +27,14 @@
 <WorktreeOperationDialog IsVisible="showWorktreeDialog" 
                          ParentSessionName="@worktreeParentSessionName"
                          ParentSessionId="@worktreeParentSessionId"
+                         ParentSessionPath="@worktreeParentSessionPath"
+                         IsGitRepository="@worktreeParentSessionIsGitRepository"
                          OnWorktreeOperation="OnWorktreeOperation" 
                          OnCancel="() => showWorktreeDialog = false" />
+<SessionSettingsDialog IsVisible="showSessionSettingsDialog"
+                       SessionId="@settingsSessionId"
+                       OnSettingsSaved="OnSessionSettingsSaved"
+                       OnCancel="() => showSessionSettingsDialog = false" />
 
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -45,7 +51,8 @@
                      OnMemoKeyDown="HandleMemoKeyDown"
                      OnMemoEdit="StartEditingMemo"
                      OnSettingsClick="ShowSettings"
-                     OnCreateWorktree="ShowWorktreeDialog" />
+                     OnCreateWorktree="ShowWorktreeDialog"
+                     OnSessionSettings="ShowSessionSettingsDialog" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -170,6 +177,10 @@
     private bool showWorktreeDialog = false;
     private string? worktreeParentSessionName = null;
     private Guid? worktreeParentSessionId = null;
+    private string? worktreeParentSessionPath = null;
+    private bool worktreeParentSessionIsGitRepository = true;
+    private bool showSessionSettingsDialog = false;
+    private Guid? settingsSessionId = null;
     
     // 処理状態管理用（セッションごと）
     private Dictionary<Guid, System.Threading.Timer> sessionProcessingTimers = new();
@@ -361,7 +372,16 @@
         // セッションをアクティブに
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
+        // 再起動後の新しいセッションを確実に取得
         activeSession = SessionManager.GetSession(sessionId);
+        
+        // セッションが存在しない場合はエラー
+        if (activeSession == null)
+        {
+            Console.WriteLine($"[SelectSession] セッション {sessionId} が見つかりません");
+            activeSessionId = null;
+            return;
+        }
         
         // 通知フラグをクリア
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
@@ -1202,10 +1222,14 @@
     private void ShowWorktreeDialog(Guid sessionId)
     {
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null && session.IsGitRepository && !session.IsWorktree)
+        if (session != null)
         {
+            // Git管理されていない場合でも、サブセッションダイアログは表示する
+            // （同じフォルダで開くオプションは利用可能）
             worktreeParentSessionId = sessionId;
             worktreeParentSessionName = session.GetDisplayName();
+            worktreeParentSessionPath = session.FolderPath;
+            worktreeParentSessionIsGitRepository = session.IsGitRepository;
             showWorktreeDialog = true;
         }
     }
@@ -1220,20 +1244,45 @@
 
         try
         {
-            SessionInfo? worktreeSession = null;
+            SessionInfo? newSession = null;
             
-            if (result.IsNewWorktree)
+            switch (result.OperationType)
             {
-                // 新規Worktree作成
-                worktreeSession = await SessionManager.CreateWorktreeSessionAsync(worktreeParentSessionId.Value, result.BranchName);
-            }
-            else if (!string.IsNullOrEmpty(result.WorktreePath))
-            {
-                // 既存Worktree追加
-                worktreeSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath);
+                case WorktreeOperationDialog.WorktreeOperationType.CreateNew:
+                    // 新規Worktree作成
+                    if (result.UseExistingBranch)
+                    {
+                        // 既存ブランチでWorktree作成
+                        newSession = await SessionManager.CreateWorktreeSessionWithExistingBranchAsync(
+                            worktreeParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
+                    }
+                    else
+                    {
+                        // 新規ブランチでWorktree作成
+                        newSession = await SessionManager.CreateWorktreeSessionAsync(
+                            worktreeParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
+                    }
+                    break;
+                    
+                case WorktreeOperationDialog.WorktreeOperationType.AddExisting:
+                    // 既存Worktree追加
+                    if (!string.IsNullOrEmpty(result.WorktreePath))
+                    {
+                        newSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath);
+                    }
+                    break;
+                    
+                case WorktreeOperationDialog.WorktreeOperationType.SamePath:
+                    // 同じフォルダでセッション作成
+                    if (!string.IsNullOrEmpty(worktreeParentSessionPath))
+                    {
+                        newSession = await SessionManager.CreateSamePathSessionAsync(
+                            worktreeParentSessionId.Value, worktreeParentSessionPath, result.TerminalType, result.Options);
+                    }
+                    break;
             }
             
-            if (worktreeSession != null)
+            if (newSession != null)
             {
                 // セッション一覧を更新
                 sessions = SessionManager.GetAllSessions().ToList();
@@ -1241,28 +1290,50 @@
                 // ローカルストレージに保存
                 await LocalStorageService.SaveSessionsAsync(sessions);
                 
-                // 新しいWorktreeセッションを選択
-                await SelectSession(worktreeSession.SessionId);
+                // 新しいセッションを選択
+                await SelectSession(newSession.SessionId);
                 
-                toast?.ShowSuccess(result.IsNewWorktree 
-                    ? $"Worktree '{result.BranchName}' を作成しました"
-                    : $"既存のWorktree '{result.BranchName}' を追加しました");
+                string successMessage = result.OperationType switch
+                {
+                    WorktreeOperationDialog.WorktreeOperationType.CreateNew => 
+                        $"Worktree '{result.BranchName}' を作成しました",
+                    WorktreeOperationDialog.WorktreeOperationType.AddExisting => 
+                        $"既存のWorktree '{result.BranchName}' を追加しました",
+                    WorktreeOperationDialog.WorktreeOperationType.SamePath => 
+                        $"新しい{GetSessionTypeName(result.TerminalType)}セッションを作成しました",
+                    _ => "セッションを作成しました"
+                };
+                
+                toast?.ShowSuccess(successMessage);
             }
             else
             {
-                toast?.ShowError("Worktree操作に失敗しました");
+                toast?.ShowError("セッション作成に失敗しました");
             }
         }
         catch (Exception ex)
         {
-            toast?.ShowError($"Worktree操作エラー: {ex.Message}");
+            toast?.ShowError($"セッション作成エラー: {ex.Message}");
         }
         finally
         {
             showWorktreeDialog = false;
             worktreeParentSessionId = null;
             worktreeParentSessionName = null;
+            worktreeParentSessionPath = null;
+            worktreeParentSessionIsGitRepository = true;
         }
+    }
+    
+    private string GetSessionTypeName(TerminalType terminalType)
+    {
+        return terminalType switch
+        {
+            TerminalType.Terminal => "ターミナル",
+            TerminalType.ClaudeCode => "Claude Code",
+            TerminalType.GeminiCLI => "Gemini CLI",
+            _ => "セッション"
+        };
     }
     
     private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath)
@@ -1390,6 +1461,53 @@
         {
             Console.WriteLine($"[History] 履歴読み込みエラー: {ex.Message}");
         }
+    }
+
+    private void ShowSessionSettingsDialog(Guid sessionId)
+    {
+        settingsSessionId = sessionId;
+        showSessionSettingsDialog = true;
+    }
+
+    private async Task OnSessionSettingsSaved()
+    {
+        showSessionSettingsDialog = false;
+        // セッション一覧を更新
+        sessions = SessionManager.GetAllSessions().ToList();
+        await LocalStorageService.SaveSessionsAsync(sessions);
+        
+        // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
+        if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)
+        {
+            var sessionId = settingsSessionId.Value;
+            
+            // 既存の読み取りタスクを停止
+            if (sessionReadCts.TryGetValue(sessionId, out var cts))
+            {
+                try
+                {
+                    cts.Cancel();
+                    cts.Dispose();
+                }
+                finally
+                {
+                    sessionReadCts.Remove(sessionId);
+                }
+            }
+            
+            // 一旦nullにして再選択することで、ターミナルコンポーネントを再作成
+            activeSessionId = null;
+            activeSession = null;
+            StateHasChanged();
+            await Task.Delay(100); // UIの更新を待つ
+            await SelectSession(sessionId);
+        }
+        else
+        {
+            StateHasChanged();
+        }
+        
+        toast?.ShowSuccess("セッション設定を保存しました");
     }
     
     public async ValueTask DisposeAsync()

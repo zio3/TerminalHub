@@ -21,93 +21,13 @@
                 </div>
 
 
-                <div class="mb-3">
-                    <label class="form-label d-block">ターミナルタイプ</label>
-                    <div class="btn-group" role="group">
-                        <input type="radio" class="btn-check" name="terminalType" id="terminalType1" 
-                               checked="@(selectedType == TerminalType.Terminal)" 
-                               @onchange="() => selectedType = TerminalType.Terminal" autocomplete="off">
-                        <label class="btn btn-outline-primary" for="terminalType1">
-                            <i class="bi bi-terminal"></i> ターミナル
-                        </label>
-
-                        <input type="radio" class="btn-check" name="terminalType" id="terminalType2" 
-                               checked="@(selectedType == TerminalType.ClaudeCode)" 
-                               @onchange="() => selectedType = TerminalType.ClaudeCode" autocomplete="off">
-                        <label class="btn btn-outline-primary" for="terminalType2">
-                            <i class="bi bi-robot"></i> Claude Code
-                        </label>
-
-                        <input type="radio" class="btn-check" name="terminalType" id="terminalType3" 
-                               checked="@(selectedType == TerminalType.GeminiCLI)" 
-                               @onchange="() => selectedType = TerminalType.GeminiCLI" autocomplete="off">
-                        <label class="btn btn-outline-primary" for="terminalType3">
-                            <i class="bi bi-stars"></i> Gemini CLI
-                        </label>
-                    </div>
-                </div>
-
-                @if (selectedType == TerminalType.ClaudeCode)
-                {
-                    <div class="mb-3">
-                        <label class="form-label">Claude Code オプション</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.UseModel" id="claudeModel">
-                            <label class="form-check-label" for="claudeModel">
-                                特定のモデルを使用
-                            </label>
-                        </div>
-                        @if (claudeCodeOptions.UseModel)
-                        {
-                            <input type="text" class="form-control mt-2" @bind="claudeCodeOptions.Model" placeholder="例: claude-3-opus" />
-                        }
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.MaxTokens" id="claudeMaxTokens">
-                            <label class="form-check-label" for="claudeMaxTokens">
-                                最大トークン数を指定
-                            </label>
-                        </div>
-                        @if (claudeCodeOptions.MaxTokens)
-                        {
-                            <input type="number" class="form-control mt-2" @bind="claudeCodeOptions.MaxTokensValue" placeholder="例: 4096" />
-                        }
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.BypassMode" id="claudeBypass">
-                            <label class="form-check-label" for="claudeBypass">
-                                バイパスモード (--dangerously-skip-permissions)
-                            </label>
-                        </div>
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" @bind="claudeCodeOptions.Continue" id="claudeContinue">
-                            <label class="form-check-label" for="claudeContinue">
-                                コンティニュー (--continue)
-                            </label>
-                        </div>
-                    </div>
-                }
-                else if (selectedType == TerminalType.GeminiCLI)
-                {
-                    <div class="mb-3">
-                        <label class="form-label">Gemini CLI オプション</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" @bind="geminiOptions.UseModel" id="geminiModel">
-                            <label class="form-check-label" for="geminiModel">
-                                特定のモデルを使用
-                            </label>
-                        </div>
-                        @if (geminiOptions.UseModel)
-                        {
-                            <input type="text" class="form-control mt-2" @bind="geminiOptions.Model" placeholder="例: gemini-pro" />
-                        }
-                    </div>
-                }
-                else
-                {
-                    <div class="mb-3">
-                        <label class="form-label">起動コマンド（任意）</label>
-                        <input type="text" class="form-control" @bind="startupCommand" placeholder="例: cmd.exe, powershell.exe" />
-                    </div>
-                }
+                <!-- 共通オプションセレクター -->
+                <SessionOptionsSelector @ref="optionsSelector"
+                                      SelectedType="selectedType"
+                                      SelectedTypeChanged="OnTerminalTypeChanged"
+                                      @bind-StartupCommand="startupCommand"
+                                      ClaudeOptions="claudeCodeOptions"
+                                      GeminiOptions="geminiOptions" />
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="Cancel">キャンセル</button>
@@ -129,28 +49,13 @@
     [Parameter] public EventCallback<SessionCreateResult> OnSessionCreate { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
+    private SessionOptionsSelector? optionsSelector;
     private string folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     private TerminalType selectedType = TerminalType.Terminal;
     private string startupCommand = "";
 
-    private ClaudeCodeOptions claudeCodeOptions = new();
-    private GeminiOptions geminiOptions = new();
-
-    private class ClaudeCodeOptions
-    {
-        public bool UseModel { get; set; }
-        public string Model { get; set; } = "";
-        public bool MaxTokens { get; set; }
-        public int MaxTokensValue { get; set; } = 4096;
-        public bool BypassMode { get; set; }
-        public bool Continue { get; set; }
-    }
-
-    private class GeminiOptions
-    {
-        public bool UseModel { get; set; }
-        public string Model { get; set; } = "";
-    }
+    private SessionOptionsSelector.ClaudeCodeOptions claudeCodeOptions = new();
+    private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
 
     public class SessionCreateResult
     {
@@ -172,45 +77,8 @@
         {
             FolderPath = folderPath,
             TerminalType = selectedType,
-            Options = new Dictionary<string, string>()
+            Options = optionsSelector?.GetOptions() ?? new Dictionary<string, string>()
         };
-
-        // ターミナルタイプに応じてオプションを設定
-        switch (selectedType)
-        {
-            case TerminalType.Terminal:
-                if (!string.IsNullOrWhiteSpace(startupCommand))
-                {
-                    result.Options["command"] = startupCommand;
-                }
-                break;
-
-            case TerminalType.ClaudeCode:
-                if (claudeCodeOptions.UseModel && !string.IsNullOrWhiteSpace(claudeCodeOptions.Model))
-                {
-                    result.Options["model"] = claudeCodeOptions.Model;
-                }
-                if (claudeCodeOptions.MaxTokens)
-                {
-                    result.Options["max-tokens"] = claudeCodeOptions.MaxTokensValue.ToString();
-                }
-                if (claudeCodeOptions.BypassMode)
-                {
-                    result.Options["bypass-mode"] = "true";
-                }
-                if (claudeCodeOptions.Continue)
-                {
-                    result.Options["continue"] = "true";
-                }
-                break;
-
-            case TerminalType.GeminiCLI:
-                if (geminiOptions.UseModel && !string.IsNullOrWhiteSpace(geminiOptions.Model))
-                {
-                    result.Options["model"] = geminiOptions.Model;
-                }
-                break;
-        }
 
         await OnSessionCreate.InvokeAsync(result);
         ResetForm();
@@ -235,4 +103,11 @@
         claudeCodeOptions = new();
         geminiOptions = new();
     }
+
+    private Task OnTerminalTypeChanged(TerminalType newType)
+    {
+        selectedType = newType;
+        return Task.CompletedTask;
+    }
+
 }

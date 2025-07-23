@@ -1,0 +1,212 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@inject ISessionManager SessionManager
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: rgba(0, 0, 0, 0.5);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-gear me-2"></i>セッション設定
+                </h5>
+                <button type="button" class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <div class="modal-body">
+                @if (sessionInfo != null)
+                {
+                    <div class="mb-3">
+                        <h6 class="text-muted">セッション情報</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <small class="text-muted">セッション名:</small><br/>
+                                <strong>@sessionInfo.GetDisplayName()</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">フォルダ:</small><br/>
+                                <code>@sessionInfo.FolderPath</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <!-- セッション名の変更 -->
+                    <div class="mb-3">
+                        <label class="form-label">表示名</label>
+                        <input type="text" class="form-control" @bind="displayName" placeholder="セッションの表示名" />
+                        <small class="form-text text-muted">
+                            空白の場合はフォルダ名が使用されます
+                        </small>
+                    </div>
+
+                    <!-- ターミナルタイプとオプション -->
+                    <SessionOptionsSelector @ref="optionsSelector"
+                                          SelectedType="selectedType"
+                                          SelectedTypeChanged="OnTerminalTypeChanged"
+                                          @bind-StartupCommand="startupCommand"
+                                          ClaudeOptions="claudeOptions"
+                                          GeminiOptions="geminiOptions"
+                                          DisableContinueOption="false" />
+
+                    <!-- バッファサイズ設定 -->
+                    <div class="mb-3">
+                        <label class="form-label">最大バッファサイズ</label>
+                        <input type="number" class="form-control" @bind="maxBufferSize" min="1000" max="1000000" />
+                        <small class="form-text text-muted">
+                            出力の最大保持行数（デフォルト: 10000）
+                        </small>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>@errorMessage
+                            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        セッション情報を読み込み中...
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <div class="form-check me-auto">
+                    <input class="form-check-input" type="checkbox" @bind="restartSession" id="restartSessionCheck">
+                    <label class="form-check-label" for="restartSessionCheck">
+                        変更を即座に適用（セッションを再起動）
+                    </label>
+                </div>
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel">
+                    キャンセル
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="SaveSettings" disabled="@(sessionInfo == null)">
+                    <i class="bi bi-check-circle me-2"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public Guid? SessionId { get; set; }
+    [Parameter] public EventCallback OnSettingsSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private SessionOptionsSelector? optionsSelector;
+    private SessionInfo? sessionInfo;
+    private string displayName = "";
+    private TerminalType selectedType = TerminalType.Terminal;
+    private string startupCommand = "";
+    private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
+    private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
+    private int maxBufferSize = 10000;
+    private string errorMessage = "";
+    private bool restartSession = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && SessionId.HasValue)
+        {
+            await LoadSessionInfo();
+        }
+    }
+
+    private async Task LoadSessionInfo()
+    {
+        if (!SessionId.HasValue)
+            return;
+
+        sessionInfo = SessionManager.GetSessionInfo(SessionId.Value);
+        if (sessionInfo != null)
+        {
+            // 現在の設定を読み込む
+            displayName = sessionInfo.DisplayName ?? "";
+            selectedType = sessionInfo.TerminalType;
+            maxBufferSize = sessionInfo.MaxBufferSize;
+
+            // オプションを解析
+            var options = sessionInfo.Options;
+            
+            if (selectedType == TerminalType.Terminal && options.ContainsKey("command"))
+            {
+                startupCommand = options["command"];
+            }
+            else if (selectedType == TerminalType.ClaudeCode)
+            {
+                claudeOptions = new SessionOptionsSelector.ClaudeCodeOptions
+                {
+                    UseModel = options.ContainsKey("model"),
+                    Model = options.ContainsKey("model") ? options["model"] : "",
+                    MaxTokens = options.ContainsKey("max-tokens"),
+                    MaxTokensValue = options.ContainsKey("max-tokens") ? int.Parse(options["max-tokens"]) : 4096,
+                    BypassMode = options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true",
+                    Continue = options.ContainsKey("continue") && options["continue"] == "true"
+                };
+            }
+            else if (selectedType == TerminalType.GeminiCLI)
+            {
+                geminiOptions = new SessionOptionsSelector.GeminiOptionsData
+                {
+                    UseModel = options.ContainsKey("model"),
+                    Model = options.ContainsKey("model") ? options["model"] : ""
+                };
+            }
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (sessionInfo == null || optionsSelector == null)
+            return;
+
+        try
+        {
+            // 表示名を更新
+            sessionInfo.DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
+            
+            // ターミナルタイプを更新
+            sessionInfo.TerminalType = selectedType;
+            
+            // オプションを更新
+            sessionInfo.Options = optionsSelector.GetOptions();
+            
+            // バッファサイズを更新
+            sessionInfo.MaxBufferSize = maxBufferSize;
+
+            // 保存
+            await SessionManager.SaveSessionInfoAsync(sessionInfo);
+            
+            // セッションを再起動する場合
+            if (restartSession && SessionId.HasValue)
+            {
+                var success = await SessionManager.RestartSessionAsync(SessionId.Value);
+                if (!success)
+                {
+                    errorMessage = "設定は保存されましたが、セッションの再起動に失敗しました。";
+                }
+            }
+            
+            await OnSettingsSaved.InvokeAsync();
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                errorMessage = "";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"設定の保存に失敗しました: {ex.Message}";
+        }
+    }
+
+    private Task OnTerminalTypeChanged(TerminalType newType)
+    {
+        selectedType = newType;
+        return Task.CompletedTask;
+    }
+
+}

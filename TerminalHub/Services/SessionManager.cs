@@ -3,6 +3,7 @@ using TerminalHub.Constants;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using TerminalHub.Components.Shared;
 
 namespace TerminalHub.Services
 {
@@ -19,6 +20,10 @@ namespace TerminalHub.Services
         Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
+        Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<SessionInfo?> CreateWorktreeSessionWithExistingBranchAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<bool> RestartSessionAsync(Guid sessionId);
         // event EventHandler<string>? ActiveSessionChanged;
     }
 
@@ -107,19 +112,35 @@ namespace TerminalHub.Services
                         // claude.cmdをcmd.exe経由で実行
                         command = "cmd.exe";
                         var claudeArgs = BuildClaudeCodeArgs(options);
-                        args = $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        // 引数がある場合はスペースを追加、ない場合は追加しない
+                        args = string.IsNullOrWhiteSpace(claudeArgs) 
+                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\"" 
+                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
                         break;
                         
                     case TerminalType.GeminiCLI:
                         // geminiをcmd.exe経由で実行
                         command = "cmd.exe";
                         var geminiArgs = BuildGeminiArgs(options);
-                        args = $"/k gemini {geminiArgs}";
+                        // 引数がある場合はスペースを追加、ない場合は追加しない
+                        args = string.IsNullOrWhiteSpace(geminiArgs)
+                            ? "/k gemini"
+                            : $"/k gemini {geminiArgs}";
                         break;
                         
                     default:
-                        command = options.ContainsKey("command") ? options["command"] : TerminalConstants.DefaultShell;
-                        args = "";
+                        // スタートアップコマンドが指定されている場合はそれを使用
+                        if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
+                        {
+                            command = options["command"];
+                            args = null;
+                        }
+                        else
+                        {
+                            // デフォルトのシェルを使用
+                            command = TerminalConstants.DefaultShell;
+                            args = null;
+                        }
                         break;
                 }
                 
@@ -347,6 +368,11 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName)
         {
+            return await CreateWorktreeSessionAsync(parentSessionId, branchName, TerminalType.Terminal, null);
+        }
+
+        public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType = TerminalType.Terminal, Dictionary<string, string>? options = null)
+        {
             try
             {
                 // 親セッションを取得
@@ -392,8 +418,8 @@ namespace TerminalHub.Services
                     FolderPath = worktreePath,
                     FolderName = Path.GetFileName(worktreePath),
                     DisplayName = $"{parentSession.DisplayName} ({branchName})",
-                    TerminalType = parentSession.TerminalType,
-                    Options = new Dictionary<string, string>(parentSession.Options),
+                    TerminalType = terminalType,
+                    Options = options ?? new Dictionary<string, string>(),
                     MaxBufferSize = parentSession.MaxBufferSize,
                     ParentSessionId = parentSessionId
                 };
@@ -414,25 +440,38 @@ namespace TerminalHub.Services
                     case TerminalType.ClaudeCode:
                         // claude.cmdをcmd.exe経由で実行（親と同じオプションを使用）
                         command = "cmd.exe";
-                        // Worktree作成時は--continueオプションを除外
+                        // Worktree作成時の初回起動では--continueオプションを除外
+                        // （セッション作成後は設定変更で--continueを有効にできる）
                         var worktreeOptions = new Dictionary<string, string>(worktreeSessionInfo.Options);
                         worktreeOptions.Remove("continue");
                         var claudeArgs = BuildClaudeCodeArgs(worktreeOptions);
-                        args = $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        args = string.IsNullOrWhiteSpace(claudeArgs)
+                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
+                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
                         break;
                         
                     case TerminalType.GeminiCLI:
                         // geminiをcmd.exe経由で実行（親と同じオプションを使用）
                         command = "cmd.exe";
                         var geminiArgs = BuildGeminiArgs(worktreeSessionInfo.Options);
-                        args = $"/k gemini {geminiArgs}";
+                        args = string.IsNullOrWhiteSpace(geminiArgs)
+                            ? "/k gemini"
+                            : $"/k gemini {geminiArgs}";
                         break;
                         
                     default:
-                        command = worktreeSessionInfo.Options.ContainsKey("command") 
-                            ? worktreeSessionInfo.Options["command"] 
-                            : TerminalConstants.DefaultShell;
-                        args = "";
+                        // スタートアップコマンドが指定されている場合はそれを使用
+                        if (worktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(worktreeSessionInfo.Options["command"]))
+                        {
+                            command = worktreeSessionInfo.Options["command"];
+                            args = null;
+                        }
+                        else
+                        {
+                            // デフォルトのシェルを使用
+                            command = TerminalConstants.DefaultShell;
+                            args = null;
+                        }
                         break;
                 }
 
@@ -450,6 +489,187 @@ namespace TerminalHub.Services
                 _logger.LogError(ex, "Worktreeセッション作成でエラーが発生しました: 親セッション={ParentSessionId}, ブランチ={Branch}", 
                     parentSessionId, branchName);
                 return null;
+            }
+        }
+
+        public async Task<SessionInfo?> CreateWorktreeSessionWithExistingBranchAsync(Guid parentSessionId, string branchName, TerminalType terminalType = TerminalType.Terminal, Dictionary<string, string>? options = null)
+        {
+            // 既存ブランチでWorktreeを作成する場合も、基本的に同じ処理
+            // git worktree add コマンドは既存ブランチでも動作する
+            return await CreateWorktreeSessionAsync(parentSessionId, branchName, terminalType, options);
+        }
+
+        public async Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options = null)
+        {
+            try
+            {
+                // 親セッションを取得
+                var parentSession = GetSessionInfo(parentSessionId);
+                if (parentSession == null)
+                {
+                    _logger.LogWarning("親セッションが見つかりません: {ParentSessionId}", parentSessionId);
+                    return null;
+                }
+
+                // 新しいセッション情報を作成
+                var sessionInfo = new SessionInfo
+                {
+                    SessionId = Guid.NewGuid(),
+                    FolderPath = folderPath,
+                    FolderName = Path.GetFileName(folderPath),
+                    DisplayName = Path.GetFileName(folderPath),
+                    TerminalType = terminalType,
+                    Options = options ?? new Dictionary<string, string>(),
+                    MaxBufferSize = parentSession.MaxBufferSize,
+                    ParentSessionId = parentSessionId
+                };
+
+                // セッション種類に応じた表示名を設定
+                sessionInfo.DisplayName = terminalType switch
+                {
+                    TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
+                    TerminalType.GeminiCLI => $"{sessionInfo.FolderName} (Gemini)",
+                    _ => sessionInfo.FolderName
+                };
+
+                // Git情報を設定
+                await PopulateGitInfoAsync(sessionInfo);
+
+                // セッションを開始
+                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+                string command;
+                string args;
+
+                switch (sessionInfo.TerminalType)
+                {
+                    case TerminalType.ClaudeCode:
+                        command = "cmd.exe";
+                        // 同じフォルダでの新規セッション作成時も初回起動では--continueオプションを除外
+                        var samePathOptions = new Dictionary<string, string>(sessionInfo.Options);
+                        samePathOptions.Remove("continue");
+                        var claudeArgs = BuildClaudeCodeArgs(samePathOptions);
+                        args = string.IsNullOrWhiteSpace(claudeArgs)
+                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
+                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        break;
+
+                    case TerminalType.GeminiCLI:
+                        command = "cmd.exe";
+                        var geminiArgs = BuildGeminiArgs(sessionInfo.Options);
+                        args = string.IsNullOrWhiteSpace(geminiArgs)
+                            ? "/k gemini"
+                            : $"/k gemini {geminiArgs}";
+                        break;
+
+                    default:
+                        // スタートアップコマンドが指定されている場合はそれを使用
+                        if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
+                        {
+                            command = sessionInfo.Options["command"];
+                            args = null;
+                        }
+                        else
+                        {
+                            // デフォルトのシェルを使用
+                            command = TerminalConstants.DefaultShell;
+                            args = null;
+                        }
+                        break;
+                }
+
+                var session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+                _sessions.TryAdd(sessionInfo.SessionId, session);
+                _sessionInfos.TryAdd(sessionInfo.SessionId, sessionInfo);
+
+                _logger.LogInformation("同じパスでセッション作成成功: パス={Path}, タイプ={Type}, セッションID={SessionId}",
+                    folderPath, terminalType, sessionInfo.SessionId);
+
+                return sessionInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "同じパスでのセッション作成でエラーが発生しました: 親セッション={ParentSessionId}, パス={Path}",
+                    parentSessionId, folderPath);
+                return null;
+            }
+        }
+
+        public async Task<bool> RestartSessionAsync(Guid sessionId)
+        {
+            try
+            {
+                // セッション情報を取得
+                var sessionInfo = GetSessionInfo(sessionId);
+                if (sessionInfo == null)
+                {
+                    _logger.LogWarning("再起動するセッションが見つかりません: {SessionId}", sessionId);
+                    return false;
+                }
+
+                // 現在のセッションを取得して終了
+                if (_sessions.TryGetValue(sessionId, out var currentSession))
+                {
+                    currentSession.Dispose();
+                    _sessions.TryRemove(sessionId, out _);
+                    
+                    // リソースのクリーンアップを待つ
+                    await Task.Delay(100);
+                }
+
+                // セッションの起動設定を準備
+                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+                string command;
+                string args;
+
+                switch (sessionInfo.TerminalType)
+                {
+                    case TerminalType.ClaudeCode:
+                        command = "cmd.exe";
+                        var claudeArgs = BuildClaudeCodeArgs(sessionInfo.Options);
+                        args = string.IsNullOrWhiteSpace(claudeArgs)
+                            ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
+                            : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                        break;
+
+                    case TerminalType.GeminiCLI:
+                        command = "cmd.exe";
+                        var geminiArgs = BuildGeminiArgs(sessionInfo.Options);
+                        args = string.IsNullOrWhiteSpace(geminiArgs)
+                            ? "/k gemini"
+                            : $"/k gemini {geminiArgs}";
+                        break;
+
+                    default:
+                        // スタートアップコマンドが指定されている場合はそれを使用
+                        if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
+                        {
+                            command = sessionInfo.Options["command"];
+                            args = null;
+                        }
+                        else
+                        {
+                            // デフォルトのシェルを使用
+                            command = TerminalConstants.DefaultShell;
+                            args = null;
+                        }
+                        break;
+                }
+
+                // 新しいセッションを作成
+                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                _sessions[sessionId] = newSession;
+
+                _logger.LogInformation("セッション再起動成功: {SessionId}, タイプ: {Type}", sessionId, sessionInfo.TerminalType);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "セッション再起動でエラーが発生しました: {SessionId}", sessionId);
+                return false;
             }
         }
 

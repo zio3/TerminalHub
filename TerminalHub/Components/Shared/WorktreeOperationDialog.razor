@@ -1,11 +1,13 @@
 @using TerminalHub.Models
+@using TerminalHub.Services
+@inject IGitService GitService
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: rgba(0, 0, 0, 0.5);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="bi bi-git me-2"></i>Worktreeの操作
+                    <i class="bi bi-diagram-3 me-2"></i>サブセッション作成
                 </h5>
                 <button type="button" class="btn-close" @onclick="OnCancel"></button>
             </div>
@@ -20,43 +22,127 @@
                 <!-- タブナビゲーション -->
                 <ul class="nav nav-tabs mb-3">
                     <li class="nav-item">
-                        <button class="nav-link @(activeTab == "create" ? "active" : "")" 
-                                @onclick="@(() => activeTab = "create")">
-                            <i class="bi bi-plus-circle me-1"></i>新規作成
+                        <button class="nav-link @(activeTab == TabType.Create ? "active" : "")" 
+                                @onclick="@(() => activeTab = TabType.Create)">
+                            <i class="bi bi-plus-circle me-1"></i>Worktree新規作成
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link @(activeTab == "existing" ? "active" : "")" 
-                                @onclick="@(() => activeTab = "existing")">
-                            <i class="bi bi-folder-plus me-1"></i>既存のWorktreeを追加
+                        <button class="nav-link @(activeTab == TabType.Existing ? "active" : "")" 
+                                @onclick="@(() => activeTab = TabType.Existing)">
+                            <i class="bi bi-folder-plus me-1"></i>既存Worktree追加
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabType.SamePath ? "active" : "")" 
+                                @onclick="@(() => activeTab = TabType.SamePath)">
+                            <i class="bi bi-folder me-1"></i>同じフォルダで開く
                         </button>
                     </li>
                 </ul>
                 
                 <!-- タブコンテンツ -->
                 <div class="tab-content">
-                    @if (activeTab == "create")
+                    @if (activeTab == TabType.Create)
                     {
                         <!-- 新規Worktree作成 -->
                         <div class="tab-pane active">
+                            @if (!IsGitRepository)
+                            {
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                    <strong>Git管理が必要です</strong><br/>
+                                    Worktreeの作成にはGitリポジトリが必要です。
+                                </div>
+                            }
+                            else
+                            {
                             <div class="mb-3">
-                                <label for="branchName" class="form-label">新しいブランチ名</label>
-                                <input type="text" class="form-control" id="branchName" 
-                                       @bind="branchName" 
-                                       @bind:event="oninput"
-                                       @onkeydown="OnKeyDown"
-                                       placeholder="feature/new-feature" 
-                                       autofocus>
-                                <small class="form-text text-muted">
-                                    このブランチ名で新しいWorktreeが作成されます
-                                </small>
+                                <label class="form-label">ブランチ選択方法</label>
+                                <div class="btn-group d-flex mb-2" role="group">
+                                    <input type="radio" class="btn-check" name="branchOption" id="newBranch" 
+                                           checked="@(branchSelectionMode == BranchSelectionMode.NewBranch)"
+                                           @onclick="@(() => branchSelectionMode = BranchSelectionMode.NewBranch)">
+                                    <label class="btn btn-outline-secondary" for="newBranch">新規ブランチ</label>
+                                    
+                                    <input type="radio" class="btn-check" name="branchOption" id="existingBranch" 
+                                           checked="@(branchSelectionMode == BranchSelectionMode.ExistingBranch)"
+                                           @onclick="@(() => branchSelectionMode = BranchSelectionMode.ExistingBranch)">
+                                    <label class="btn btn-outline-secondary" for="existingBranch">既存ブランチ</label>
+                                </div>
                             </div>
+                            
+                            @if (branchSelectionMode == BranchSelectionMode.NewBranch)
+                            {
+                                <div class="mb-3">
+                                    <label for="branchName" class="form-label">新しいブランチ名</label>
+                                    <input type="text" class="form-control" id="branchName" 
+                                           @bind="branchName" 
+                                           @bind:event="oninput"
+                                           @onkeydown="OnKeyDown"
+                                           placeholder="feature/new-feature" 
+                                           autofocus>
+                                    <small class="form-text text-muted">
+                                        このブランチ名で新しいWorktreeが作成されます
+                                    </small>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mb-3">
+                                    <label for="existingBranchSelect" class="form-label">既存のブランチを選択</label>
+                                    @if (availableBranches == null)
+                                    {
+                                        <div class="text-center">
+                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                            ブランチ一覧を読み込み中...
+                                        </div>
+                                    }
+                                    else if (availableBranches.Count == 0)
+                                    {
+                                        <div class="alert alert-warning">
+                                            利用可能なブランチがありません
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <select class="form-select" id="existingBranchSelect" 
+                                                @bind="selectedExistingBranch">
+                                            <option value="">ブランチを選択してください</option>
+                                            @foreach (var branch in availableBranches)
+                                            {
+                                                <option value="@branch">@branch</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+                            }
+                            
+                            <!-- 共通オプションセレクター -->
+                            <SessionOptionsSelector @ref="optionsSelector"
+                                                  SelectedType="selectedTerminalType"
+                                                  SelectedTypeChanged="OnTerminalTypeChanged"
+                                                  @bind-StartupCommand="startupCommand"
+                                                  ClaudeOptions="claudeOptions"
+                                                  GeminiOptions="geminiOptions"
+                                                  DisableContinueOption="false" />
+                            }
                         </div>
                     }
-                    else if (activeTab == "existing")
+                    else if (activeTab == TabType.Existing)
                     {
                         <!-- 既存Worktree追加 -->
                         <div class="tab-pane active">
+                            @if (!IsGitRepository)
+                            {
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                    <strong>Git管理が必要です</strong><br/>
+                                    既存のWorktreeを追加するにはGitリポジトリが必要です。
+                                </div>
+                            }
+                            else
+                            {
                             <div class="mb-3">
                                 <label for="worktreePath" class="form-label">Worktreeのパス</label>
                                 <div class="input-group">
@@ -97,6 +183,28 @@
                                     }
                                 </div>
                             }
+                            }
+                        </div>
+                    }
+                    else if (activeTab == TabType.SamePath)
+                    {
+                        <!-- 同じフォルダで開く -->
+                        <div class="tab-pane active">
+                            <!-- 共通オプションセレクター -->
+                            <SessionOptionsSelector @ref="optionsSelectorSamePath"
+                                                  SelectedType="selectedTerminalType"
+                                                  SelectedTypeChanged="OnTerminalTypeChanged"
+                                                  @bind-StartupCommand="startupCommand"
+                                                  ClaudeOptions="claudeOptions"
+                                                  GeminiOptions="geminiOptions" />
+                            
+                            @if (ParentSessionName != null)
+                            {
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    親セッション "@ParentSessionName" と同じフォルダで開きます
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -121,9 +229,9 @@
                     }
                     else
                     {
-                        <i class="bi bi-@(activeTab == "create" ? "plus-circle" : "folder-plus") me-2"></i>
+                        <i class="bi bi-@GetButtonIcon() me-2"></i>
                     }
-                    @(activeTab == "create" ? "Worktree作成" : "Worktree追加")
+                    @GetButtonText()
                 </button>
             </div>
         </div>
@@ -134,32 +242,73 @@
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public string? ParentSessionName { get; set; }
     [Parameter] public Guid? ParentSessionId { get; set; }
+    [Parameter] public bool IsGitRepository { get; set; }
     [Parameter] public EventCallback<WorktreeOperationResult> OnWorktreeOperation { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
-    private string activeTab = "create";
+    private TabType activeTab = TabType.Create;
     private string branchName = "";
     private string existingWorktreePath = "";
     private string errorMessage = "";
     private bool isProcessing = false;
     private bool isValidatingPath = false;
     private PathValidationResult? pathValidationResult = null;
+    
+    // 新規プロパティ
+    private BranchSelectionMode branchSelectionMode = BranchSelectionMode.NewBranch;
+    private string selectedExistingBranch = "";
+    private List<string>? availableBranches = null;
+    
+    // オプションセレクター関連
+    private SessionOptionsSelector? optionsSelector;
+    private SessionOptionsSelector? optionsSelectorSamePath;
+    private TerminalType selectedTerminalType = TerminalType.Terminal;
+    private string startupCommand = "";
+    private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
+    private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
 
-    private bool CanProcess => activeTab == "create" 
-        ? !string.IsNullOrWhiteSpace(branchName)
-        : pathValidationResult?.IsValid == true;
+    private bool CanProcess
+    {
+        get
+        {
+            return activeTab switch
+            {
+                TabType.Create => IsGitRepository && (branchSelectionMode == BranchSelectionMode.NewBranch 
+                    ? !string.IsNullOrWhiteSpace(branchName)
+                    : !string.IsNullOrWhiteSpace(selectedExistingBranch)),
+                TabType.Existing => IsGitRepository && pathValidationResult?.IsValid == true,
+                TabType.SamePath => true, // 同じフォルダの場合は常に有効
+                _ => false
+            };
+        }
+    }
 
-    protected override void OnParametersSet()
+    [Parameter] public string? ParentSessionPath { get; set; }
+    
+    protected override async Task OnParametersSetAsync()
     {
         if (IsVisible)
         {
             // ダイアログが表示されたときにリセット
-            activeTab = "create";
+            activeTab = TabType.Create;
             branchName = "";
             existingWorktreePath = "";
             errorMessage = "";
             isProcessing = false;
             pathValidationResult = null;
+            branchSelectionMode = BranchSelectionMode.NewBranch;
+            selectedExistingBranch = "";
+            selectedTerminalType = TerminalType.Terminal;
+            availableBranches = null;
+            startupCommand = "";
+            claudeOptions = new();
+            geminiOptions = new();
+            
+            // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧を取得
+            if (!string.IsNullOrEmpty(ParentSessionPath))
+            {
+                await LoadAvailableBranches();
+            }
         }
     }
 
@@ -175,9 +324,20 @@
         {
             var result = new WorktreeOperationResult
             {
-                IsNewWorktree = activeTab == "create",
-                BranchName = activeTab == "create" ? branchName : pathValidationResult?.BranchName ?? "",
-                WorktreePath = activeTab == "create" ? null : existingWorktreePath
+                OperationType = activeTab switch
+                {
+                    TabType.Create => WorktreeOperationType.CreateNew,
+                    TabType.Existing => WorktreeOperationType.AddExisting,
+                    TabType.SamePath => WorktreeOperationType.SamePath,
+                    _ => WorktreeOperationType.CreateNew
+                },
+                BranchName = activeTab == TabType.Create 
+                    ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
+                    : pathValidationResult?.BranchName ?? "",
+                WorktreePath = activeTab == TabType.Existing ? existingWorktreePath : null,
+                TerminalType = selectedTerminalType,
+                Options = (activeTab == TabType.Create ? optionsSelector : optionsSelectorSamePath)?.GetOptions() ?? new Dictionary<string, string>(),
+                UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
             };
 
             await OnWorktreeOperation.InvokeAsync(result);
@@ -210,18 +370,42 @@
 
         isValidatingPath = true;
         
-        // 実際の実装では、GitServiceを使用して検証
-        await Task.Delay(500); // 仮の遅延
-        
-        // 仮の検証結果
-        pathValidationResult = new PathValidationResult
+        try
         {
-            IsValid = true,
-            BranchName = "feature-branch",
-            ErrorMessage = null
-        };
-        
-        isValidatingPath = false;
+            var worktreeInfo = await GitService.ValidateWorktreeAsync(existingWorktreePath);
+            
+            if (worktreeInfo != null)
+            {
+                pathValidationResult = new PathValidationResult
+                {
+                    IsValid = true,
+                    BranchName = worktreeInfo.BranchName,
+                    ErrorMessage = null
+                };
+            }
+            else
+            {
+                pathValidationResult = new PathValidationResult
+                {
+                    IsValid = false,
+                    BranchName = null,
+                    ErrorMessage = "指定されたパスは有効なGit Worktreeではありません"
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            pathValidationResult = new PathValidationResult
+            {
+                IsValid = false,
+                BranchName = null,
+                ErrorMessage = $"検証中にエラーが発生しました: {ex.Message}"
+            };
+        }
+        finally
+        {
+            isValidatingPath = false;
+        }
     }
 
     private bool IsValidBranchName(string name)
@@ -258,11 +442,87 @@
         }
     }
 
+    private async Task LoadAvailableBranches()
+    {
+        if (string.IsNullOrEmpty(ParentSessionPath))
+            return;
+            
+        try
+        {
+            var gitInfo = await GitService.GetGitInfoAsync(ParentSessionPath);
+            if (gitInfo != null && gitInfo.AvailableBranches.Count > 0)
+            {
+                // 現在のブランチを除外
+                availableBranches = gitInfo.AvailableBranches
+                    .Where(b => b != gitInfo.CurrentBranch)
+                    .ToList();
+            }
+            else
+            {
+                availableBranches = new List<string>();
+            }
+        }
+        catch
+        {
+            availableBranches = new List<string>();
+        }
+    }
+    
+    private string GetButtonIcon()
+    {
+        return activeTab switch
+        {
+            TabType.Create => "plus-circle",
+            TabType.Existing => "folder-plus",
+            TabType.SamePath => "folder",
+            _ => "plus-circle"
+        };
+    }
+    
+    private string GetButtonText()
+    {
+        return activeTab switch
+        {
+            TabType.Create => "Worktree作成",
+            TabType.Existing => "Worktree追加",
+            TabType.SamePath => "セッション作成",
+            _ => "作成"
+        };
+    }
+    
+    private Task OnTerminalTypeChanged(TerminalType newType)
+    {
+        selectedTerminalType = newType;
+        return Task.CompletedTask;
+    }
+
+    private Task OnStartupCommandChanged(string newCommand)
+    {
+        startupCommand = newCommand;
+        return Task.CompletedTask;
+    }
+
     public class WorktreeOperationResult
     {
-        public bool IsNewWorktree { get; set; }
+        public WorktreeOperationType OperationType { get; set; }
         public string BranchName { get; set; } = "";
         public string? WorktreePath { get; set; }
+        public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
+        public Dictionary<string, string> Options { get; set; } = new();
+        public bool UseExistingBranch { get; set; }
+    }
+    
+    public enum WorktreeOperationType
+    {
+        CreateNew,
+        AddExisting,
+        SamePath
+    }
+    
+    private enum BranchSelectionMode
+    {
+        NewBranch,
+        ExistingBranch
     }
 
     private class PathValidationResult
@@ -270,5 +530,12 @@
         public bool IsValid { get; set; }
         public string? BranchName { get; set; }
         public string? ErrorMessage { get; set; }
+    }
+
+    private enum TabType
+    {
+        Create,
+        Existing,
+        SamePath
     }
 }
