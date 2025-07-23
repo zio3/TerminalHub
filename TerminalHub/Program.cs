@@ -1,5 +1,6 @@
 using TerminalHub.Components;
 using TerminalHub.Services;
+using TerminalHub.Analyzers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,9 @@ builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
 // NotificationServiceを登録
 builder.Services.AddScoped<INotificationService, NotificationService>();
+
+// OutputAnalyzerFactoryを登録
+builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
 
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();

@@ -88,7 +88,18 @@ namespace TerminalHub.Services
         {
             try
             {
-                return await _jsRuntime.InvokeAsync<Guid?>("localStorage.getItem", ActiveSessionKey);
+                var sessionIdString = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", ActiveSessionKey);
+                if (string.IsNullOrEmpty(sessionIdString))
+                {
+                    return null;
+                }
+                
+                if (Guid.TryParse(sessionIdString, out var sessionId))
+                {
+                    return sessionId;
+                }
+                
+                return null;
             }
             catch (Exception ex)
             {

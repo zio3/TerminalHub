@@ -83,7 +83,8 @@ namespace TerminalHub.Services
                 FolderName = Path.GetFileName(folderPath),
                 DisplayName = sessionName,
                 TerminalType = terminalType,
-                Options = options
+                Options = options,
+                MaxBufferSize = _configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000)
             };
 
             try

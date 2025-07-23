@@ -38,6 +38,27 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasNotificationPending { get; set; }
         
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Queue<string> OutputBuffer { get; set; } = new Queue<string>();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int MaxBufferSize { get; set; } = 10000; // 10,000行まで保持
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public readonly object BufferLock = new object();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int LastKnownScrollPosition { get; set; } = 0;
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastProcessingUpdateTime { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? LastProcessingSeconds { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsWaitingForUserInput { get; set; }
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))

@@ -4,6 +4,7 @@
 @using TerminalHub.Constants
 @using TerminalHub.Models
 @using TerminalHub.Services
+@using TerminalHub.Analyzers
 @using Microsoft.JSInterop
 @using Microsoft.Extensions.Configuration
 @inject ISessionManager SessionManager
@@ -11,6 +12,7 @@
 @inject ILocalStorageService LocalStorageService
 @inject IConfiguration Configuration
 @inject INotificationService NotificationService
+@inject IOutputAnalyzerFactory AnalyzerFactory
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -63,7 +65,9 @@
                         <div class="p-3 h-100 d-flex flex-column">
                             
                             <div class="flex-grow-1 d-flex flex-column">
-                                <textarea class="form-control flex-grow-1" 
+                                <textarea id="inputText" 
+                                          class="form-control flex-grow-1" 
+                                          data-input-area
                                           @bind="inputText"
                                           @bind:event="oninput"
                                           @onkeydown="OnTextAreaKeyDown"
@@ -74,14 +78,20 @@
                                 
                                 <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <div>
-                                        <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行
+                                        <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
                                     </div>
                                     <div class="btn-group">
+                                        <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
+                                                @onclick="SendCtrlC" 
+                                                title="強制中断 (Ctrl+C)"
+                                                style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
+                                            <i class="bi bi-x-octagon"></i> Ctrl+C
+                                        </button>
                                         <button class="btn btn-secondary @(isEscapePressed ? "active" : "")" 
                                                 @onclick="SendEscape" 
                                                 title="中断 (Esc)"
                                                 style="@(isEscapePressed ? "transform: scale(0.95);" : "")">
-                                            <i class="bi bi-stop-circle"></i> 中断
+                                            <i class="bi bi-stop-circle"></i> Esc
                                         </button>
                                         @if (currentSession.TerminalType == TerminalType.ClaudeCode)
                                         {
@@ -100,7 +110,7 @@
                                                 <i class="bi bi-code-square"></i> Dev
                                             </button>
                                         }
-                                        <button class="btn btn-primary" @onclick="SendInput" disabled="@(string.IsNullOrWhiteSpace(inputText))">
+                                        <button class="btn btn-primary" @onclick="SendInput">
                                             <i class="bi bi-send"></i> 送信
                                         </button>
                                     </div>
@@ -137,6 +147,10 @@
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
+    
+    // テキスト履歴機能
+    private List<string> inputHistory = new();
+    private int historyIndex = -1;
     private Dictionary<Guid, CancellationTokenSource> sessionReadCts = new();
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
@@ -148,10 +162,8 @@
     private bool showDevButton = false;
     private bool showSettingsModal = false;
     
-    // 処理状態管理用
-    private DateTime? lastProcessingUpdateTime = null;
-    private System.Threading.Timer? processingStatusTimer = null;
-    private string? lastProcessingSeconds = null;
+    // 処理状態管理用（セッションごと）
+    private Dictionary<Guid, System.Threading.Timer> sessionProcessingTimers = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,6 +176,9 @@
         // 通知権限をリクエスト（削除 - 設定モーダルに移動）
         // await NotificationService.RequestBrowserNotificationPermissionAsync();
 
+        // テキスト履歴を読み込み
+        await LoadInputHistoryAsync();
+        
         // ローカルストレージからセッション情報を復元
         var savedSessions = await LocalStorageService.LoadSessionsAsync();
         var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
@@ -379,6 +394,26 @@
             // エラーは無視
         }
 
+        // バッファに蓄積された出力をターミナルに再生
+        var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (selectedSessionInfo != null && selectedSessionInfo.OutputBuffer.Count > 0)
+        {
+            await Task.Delay(100); // ターミナル初期化完了を待つ
+            
+            lock (selectedSessionInfo.BufferLock)
+            {
+                if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
+                {
+                    // バッファの内容を一度に書き込み
+                    var bufferedData = string.Join("", selectedSessionInfo.OutputBuffer);
+                    _ = activeTerminal.InvokeVoidAsync("write", bufferedData);
+                    
+                    // バッファをクリア
+                    selectedSessionInfo.OutputBuffer.Clear();
+                }
+            }
+        }
+
         // 出力読み取りを開始（既存のものがなければ）
         if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
         {
@@ -391,6 +426,16 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
+        }
+        catch (Exception)
+        {
+            // エラーは無視
+        }
+
+        // テキストエリアにフォーカス
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.focusTextArea");
         }
         catch (Exception)
         {
@@ -458,21 +503,31 @@
                     var data = new string(buffer, 0, charsRead);
                     // Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} に {charsRead} 文字書き込み");
 
-                    // Claude Codeセッションの場合、処理状態を解析
-                    if (activeSessionId == sessionId)
+                    var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                    if (sessionInfo != null)
                     {
-                        var currentSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                        if (currentSession?.TerminalType == TerminalType.ClaudeCode)
-                        {
-                            // Claude Codeの処理状態パターンを検出
-                            AnalyzeClaudeCodeOutput(data);
-                        }
-                    }
+                        // 出力解析（ターミナルタイプに応じた解析器を使用）
+                        AnalyzeOutput(data, sessionId, sessionInfo.TerminalType);
 
-                    // アクティブセッションの場合のみターミナルに書き込み
-                    if (activeSessionId == sessionId && activeTerminal != null)
-                    {
-                        await activeTerminal.InvokeVoidAsync("write", data);
+                        // アクティブセッションはターミナルに直接書き込み
+                        if (activeSessionId == sessionId && activeTerminal != null)
+                        {
+                            await activeTerminal.InvokeVoidAsync("write", data);
+                        }
+                        else
+                        {
+                            // 非アクティブセッションはバッファに保存
+                            lock (sessionInfo.BufferLock)
+                            {
+                                sessionInfo.OutputBuffer.Enqueue(data);
+                                
+                                // バッファサイズ制限（古いデータから削除）
+                                while (sessionInfo.OutputBuffer.Count > sessionInfo.MaxBufferSize)
+                                {
+                                    sessionInfo.OutputBuffer.Dequeue();
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -534,6 +589,19 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
+        // バッファのクリーンアップ
+        var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (sessionToRemove != null)
+        {
+            lock (sessionToRemove.BufferLock)
+            {
+                sessionToRemove.OutputBuffer.Clear();
+            }
+        }
+        
+        // セッションのタイマーを停止
+        StopSessionTimer(sessionId);
+
         // セッションの読み取りタスクを停止
         if (sessionReadCts.TryGetValue(sessionId, out var cts))
         {
@@ -705,119 +773,83 @@
 
 
 
-    private void AnalyzeClaudeCodeOutput(string data)
+    private void AnalyzeOutput(string data, Guid sessionId, TerminalType terminalType)
     {
         try
         {
-            // 現在のセッションIDを取得
-            var currentSessionId = activeSessionId;
-            if (!currentSessionId.HasValue) return;
-            
-            // デバッグ用：受信データの一部を表示（最初の100文字）
-            // var preview = data.Length > 100 ? data.Substring(0, 100) + "..." : data;
-            // Console.WriteLine($"[Notification Debug] AnalyzeClaudeCodeOutput - データ受信: {preview}");
-
-            // ANSIエスケープシーケンスと制御文字を除去（今回受信したデータのみ処理）
-            var cleanedData = data;
-
-            // CSI (Control Sequence Introducer) シーケンス - 最も一般的なANSIエスケープシーケンス
-            // ESC [ で始まり、パラメータ（数字やセミコロン）の後に終端文字が続く
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"\x1B\[[0-9;?]*[A-Za-z]", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            // OSC (Operating System Command) シーケンス
-            // ESC ] で始まり、BEL または ESC \ で終わる
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            // その他のESCシーケンス（2文字のシーケンス）
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"\x1B[^[\]()#;]", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            // Private Mode シーケンス
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"\x1B\[\?[0-9;]*[A-Za-z]", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            // SGR (Select Graphic Rendition) パラメータを含む複雑なシーケンス
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"\x1B\[[0-9;]*m", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            // 制御文字（改行とタブ以外）
-            cleanedData = System.Text.RegularExpressions.Regex.Replace(cleanedData, 
-                @"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", " ", System.Text.RegularExpressions.RegexOptions.None);
-
-            // 処理状態パターンの検出
-            var patterns = new[]
+            // ターミナルタイプに応じた解析器を取得
+            var analyzer = AnalyzerFactory.GetAnalyzer(terminalType);
+            if (analyzer == null)
             {
-                @"[·✽]\s*(?:.*?ing[^(]*)\s*\((\d+)s\s*·\s*([↑↓⚒])\s*([\d.]+[kK]?)\s*tokens?\s*·\s*esc to interrupt\)",
-                @"\[Request interrupted by user\]"
-            };
+                // 解析器がない場合は何もしない
+                return;
+            }
 
-            foreach (var pattern in patterns)
+            // 解析を実行
+            if (analyzer.TryAnalyze(data, out var result))
             {
-                var regex = new System.Text.RegularExpressions.Regex(pattern, 
-                    System.Text.RegularExpressions.RegexOptions.Singleline);
-                var matches = regex.Matches(cleanedData);
-                
-                foreach (System.Text.RegularExpressions.Match match in matches)
+                var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                if (session == null) return;
+
+                if (result.IsInterrupted)
                 {
-                    if (pattern.Contains("Request interrupted"))
+                    // 処理が中断された
+                    UpdateSessionProcessingStatus(sessionId, null);
+                }
+                else if (result.IsProcessing)
+                {
+                    // ユーザー入力待ち状態をセッションに設定
+                    session.IsWaitingForUserInput = result.IsWaitingForUser;
+                    
+                    // 処理中
+                    if (result.ElapsedSeconds.HasValue)
                     {
-                        // Console.WriteLine("[Claude Code Status] 処理が中断されました");
-                        //Console.WriteLine("[Notification Debug] 中断パターンを検出 - UpdateSessionProcessingStatus(null)を呼び出し");
-                        UpdateSessionProcessingStatus(null);
-                    }
-                    else if (match.Groups.Count >= 4)
-                    {
-                        var seconds = match.Groups[1].Value;
-                        var direction = match.Groups[2].Value;
-                        var tokens = match.Groups[3].Value;
-                        
-                        //Console.WriteLine($"[Notification Debug] 処理状態パターンマッチ: {seconds}秒, {direction}, {tokens}トークン");
-                        
-                        // 秒数が変わらない場合はUIを更新しない
-                        if (lastProcessingSeconds == seconds)
+                        // 秒数の変化をチェック
+                        var secondsStr = result.ElapsedSeconds.Value.ToString();
+                        if (session.LastProcessingSeconds == secondsStr)
                         {
-                            // Console.WriteLine($"[Claude Code Status] 秒数変化なし ({seconds}秒) - UI更新をスキップ");
-                            // タイマーのリセットのみ行う
-                            lastProcessingUpdateTime = DateTime.Now;
-                            processingStatusTimer?.Dispose();
-                            processingStatusTimer = new System.Threading.Timer(
-                                CheckProcessingTimeout,
-                                null,
-                                TimeSpan.FromSeconds(5),
-                                Timeout.InfiniteTimeSpan
-                            );
-                            continue;
+                            // 秒数が変わらない場合はタイマーのリセットのみ
+                            session.LastProcessingUpdateTime = DateTime.Now;
+                            ResetSessionTimer(sessionId);
+                            return;
                         }
                         
-                        lastProcessingSeconds = seconds;
+                        session.LastProcessingSeconds = secondsStr;
                         
-                        // 数値に変換
-                        if (int.TryParse(seconds, out var elapsedSeconds))
+                        // GeminiCLIの場合はステータステキストも含める
+                        if (!string.IsNullOrEmpty(result.StatusText))
                         {
-                            //Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus({elapsedSeconds}, {tokens}, {direction})を呼び出し");
-                            UpdateSessionProcessingStatus(elapsedSeconds, tokens, direction);
-                            // Console.WriteLine($"[Claude Code Status] {elapsedSeconds}秒 · {direction} {tokens}トークン");
+                            UpdateSessionProcessingStatus(sessionId, result.StatusText, result.ElapsedSeconds.Value, 
+                                result.Tokens ?? "", result.Direction ?? "");
                         }
                         else
                         {
-                            //Console.WriteLine($"[Notification Debug] 秒数の変換に失敗: {seconds}");
+                            UpdateSessionProcessingStatus(sessionId, result.ElapsedSeconds.Value, 
+                                result.Tokens ?? "", result.Direction ?? "");
                         }
                     }
+                    else if (!string.IsNullOrEmpty(result.StatusText))
+                    {
+                        // ステータステキストのみの更新
+                        UpdateSessionProcessingStatus(sessionId, result.StatusText);
+                    }
+                }
+                else
+                {
+                    // 処理完了
+                    UpdateSessionProcessingStatus(sessionId, null);
                 }
             }
-
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Claude Code Analysis Error] {ex.Message}");
+            Console.WriteLine($"[Output Analysis Error] {terminalType}: {ex.Message}");
         }
     }
 
-    private void UpdateSessionProcessingStatus(string? statusText)
+    private void UpdateSessionProcessingStatus(Guid sessionId, string? statusText)
     {
-        var session = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session != null)
         {
             // Console.WriteLine($"[UI Update] セッション {activeSessionId} の処理状態を更新: {statusText ?? "null"}");
@@ -826,16 +858,10 @@
             if (statusText != null)
             {
                 session.ProcessingStartTime = DateTime.Now;
-                lastProcessingUpdateTime = DateTime.Now;
+                session.LastProcessingUpdateTime = DateTime.Now;
                 
-                // タイマーをリセット
-                processingStatusTimer?.Dispose();
-                processingStatusTimer = new System.Threading.Timer(
-                    CheckProcessingTimeout,
-                    null,
-                    TimeSpan.FromSeconds(5),
-                    Timeout.InfiniteTimeSpan
-                );
+                // セッションごとのタイマーをリセット
+                ResetSessionTimer(sessionId);
             }
             else
             {
@@ -895,10 +921,12 @@
                 session.ProcessingElapsedSeconds = null;
                 session.ProcessingTokens = null;
                 session.ProcessingDirection = null;
-                lastProcessingUpdateTime = null;
-                lastProcessingSeconds = null;
-                processingStatusTimer?.Dispose();
-                processingStatusTimer = null;
+                session.LastProcessingUpdateTime = null;
+                session.LastProcessingSeconds = null;
+                session.IsWaitingForUserInput = false;
+                
+                // セッションのタイマーを停止
+                StopSessionTimer(sessionId);
             }
             
             // UIスレッドで強制的に更新
@@ -918,9 +946,9 @@
         }
     }
     
-    private void UpdateSessionProcessingStatus(int elapsedSeconds, string tokens, string direction)
+    private void UpdateSessionProcessingStatus(Guid sessionId, int elapsedSeconds, string tokens, string direction)
     {
-        var session = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session != null)
         {
             // Console.WriteLine($"[UI Update] セッション {activeSessionId} の処理状態を更新: {elapsedSeconds}秒, {tokens}トークン, {direction}");
@@ -934,16 +962,10 @@
                 session.ProcessingStartTime = DateTime.Now;
             }
             
-            lastProcessingUpdateTime = DateTime.Now;
+            session.LastProcessingUpdateTime = DateTime.Now;
             
-            // タイマーをリセット
-            processingStatusTimer?.Dispose();
-            processingStatusTimer = new System.Threading.Timer(
-                CheckProcessingTimeout,
-                null,
-                TimeSpan.FromSeconds(5),
-                Timeout.InfiniteTimeSpan
-            );
+            // セッションごとのタイマーをリセット
+            ResetSessionTimer(sessionId);
             
             // UIスレッドで強制的に更新
             try
@@ -961,43 +983,113 @@
             Console.WriteLine($"[UI Update] アクティブセッション {activeSessionId} が見つかりません");
         }
     }
-
-    private void CheckProcessingTimeout(object? state)
+    
+    private void UpdateSessionProcessingStatus(Guid sessionId, string statusText, int elapsedSeconds, string tokens, string direction)
     {
-        //Console.WriteLine($"[Notification Debug] CheckProcessingTimeout呼び出し");
-        //Console.WriteLine($"[Notification Debug] lastProcessingUpdateTime: {lastProcessingUpdateTime}");
-        
-        if (lastProcessingUpdateTime.HasValue)
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null)
         {
-            var elapsedTime = (DateTime.Now - lastProcessingUpdateTime.Value).TotalSeconds;
-            //Console.WriteLine($"[Notification Debug] 最後の更新からの経過時間: {elapsedTime}秒");
+            session.ProcessingStatus = statusText;
+            session.ProcessingElapsedSeconds = elapsedSeconds;
+            session.ProcessingTokens = tokens;
+            session.ProcessingDirection = direction;
             
-            if (elapsedTime >= 5)
+            if (session.ProcessingStartTime == null)
             {
-                // Console.WriteLine("[Claude Code Status] 5秒間更新がないため処理終了と判定");
-                //Console.WriteLine("[Notification Debug] UpdateSessionProcessingStatus(null)を呼び出し（タイムアウト）");
-                InvokeAsync(() => UpdateSessionProcessingStatus(null));
+                session.ProcessingStartTime = DateTime.Now;
+            }
+            
+            session.LastProcessingUpdateTime = DateTime.Now;
+            
+            // セッションごとのタイマーをリセット
+            ResetSessionTimer(sessionId);
+            
+            // UIスレッドで強制的に更新
+            try
+            {
+                InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StateHasChanged Error] {ex.Message}");
             }
         }
         else
         {
-            Console.WriteLine("[Notification Debug] lastProcessingUpdateTimeがnull");
+            Console.WriteLine($"[UI Update] セッション {sessionId} が見つかりません");
+        }
+    }
+
+    private void ResetSessionTimer(Guid sessionId)
+    {
+        // 既存のタイマーを停止
+        StopSessionTimer(sessionId);
+        
+        // 新しいタイマーを作成
+        var timer = new System.Threading.Timer(
+            (state) => CheckSessionTimeout(sessionId),
+            null,
+            TimeSpan.FromSeconds(5),
+            Timeout.InfiniteTimeSpan
+        );
+        
+        sessionProcessingTimers[sessionId] = timer;
+    }
+    
+    private void StopSessionTimer(Guid sessionId)
+    {
+        if (sessionProcessingTimers.TryGetValue(sessionId, out var timer))
+        {
+            timer?.Dispose();
+            sessionProcessingTimers.Remove(sessionId);
+        }
+    }
+    
+    private void CheckSessionTimeout(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null && session.LastProcessingUpdateTime.HasValue)
+        {
+            // ユーザー入力待ち状態の場合はタイムアウトしない
+            if (session.IsWaitingForUserInput)
+            {
+                // タイマーを再設定して後でまた確認
+                ResetSessionTimer(sessionId);
+                return;
+            }
+            
+            var elapsedTime = (DateTime.Now - session.LastProcessingUpdateTime.Value).TotalSeconds;
+            
+            if (elapsedTime >= 5)
+            {
+                // Console.WriteLine($"[Claude Code Status] セッション {sessionId} で5秒間更新がないため処理終了と判定");
+                InvokeAsync(() => UpdateSessionProcessingStatus(sessionId, null));
+            }
         }
     }
 
     private async Task SendInput()
     {
-        if (string.IsNullOrWhiteSpace(inputText) || activeSession == null)
+        if (activeSession == null)
             return;
 
         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
         if (currentSession == null)
             return;
 
-        // テキストを送信
-        await activeSession.WriteAsync(inputText);
+        // テキストがある場合は送信
+        if (!string.IsNullOrWhiteSpace(inputText))
+        {
+            // テキスト履歴に追加
+            AddToInputHistory(inputText);
+            
+            await activeSession.WriteAsync(inputText);
+            
+            // テキスト送信後、Enter送信前に0.2秒待機
+            await Task.Delay(200);
+        }
         
-        // 送信後にEnterキーを送信
+        // Enterキーを送信（空の場合でも送信）
         await SendEnterKeyDirect();
         
         // 入力フィールドをクリア
@@ -1012,6 +1104,17 @@
             shouldPreventDefault = true;
             await SendInput();
             shouldPreventDefault = false;
+        }
+        // 履歴機能: 上矢印で前の履歴、下矢印で次の履歴
+        else if (e.Key == "ArrowUp" && e.CtrlKey)
+        {
+            shouldPreventDefault = true;
+            NavigateHistory(-1);
+        }
+        else if (e.Key == "ArrowDown" && e.CtrlKey)
+        {
+            shouldPreventDefault = true;
+            NavigateHistory(1);
         }
         else
         {
@@ -1029,6 +1132,23 @@
 
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
+    private bool isCtrlCPressed = false;
+
+    private async Task SendCtrlC()
+    {
+        if (activeSession == null)
+            return;
+
+        // ボタンの押下状態を表示
+        isCtrlCPressed = true;
+
+        // Ctrl+Cを送信（\x03 はCtrl+Cの制御文字）
+        await activeSession.WriteAsync("\x03");
+
+        // 押下状態を解除
+        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
+        isCtrlCPressed = false;
+    }
 
     private async Task SendEscape()
     {
@@ -1073,9 +1193,110 @@
         await activeSession.WriteAsync("\r");
     }
 
-
+    
+    // テキスト履歴関連メソッド
+    private void AddToInputHistory(string text)
+    {
+        // 空白やnullは履歴に追加しない
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+            
+        // 同じテキストが連続する場合は追加しない
+        if (inputHistory.Count > 0 && inputHistory[inputHistory.Count - 1] == text)
+            return;
+            
+        inputHistory.Add(text);
+        
+        // 履歴の最大数を制限（100件）
+        if (inputHistory.Count > 100)
+        {
+            inputHistory.RemoveAt(0);
+        }
+        
+        // 履歴インデックスをリセット
+        historyIndex = -1;
+    }
+    
+    private void NavigateHistory(int direction)
+    {
+        if (inputHistory.Count == 0)
+            return;
+            
+        // 初回の履歴操作時
+        if (historyIndex == -1)
+        {
+            if (direction < 0) // 上矢印（古い履歴へ）
+            {
+                historyIndex = inputHistory.Count - 1;
+                inputText = inputHistory[historyIndex];
+            }
+            return;
+        }
+        
+        // 履歴を移動
+        var newIndex = historyIndex + direction;
+        
+        if (newIndex >= 0 && newIndex < inputHistory.Count)
+        {
+            historyIndex = newIndex;
+            inputText = inputHistory[historyIndex];
+        }
+        else if (newIndex < 0)
+        {
+            // 最古の履歴より前に行こうとした場合
+            historyIndex = 0;
+            inputText = inputHistory[historyIndex];
+        }
+        else if (newIndex >= inputHistory.Count)
+        {
+            // 最新の履歴より後に行こうとした場合は空にする
+            historyIndex = -1;
+            inputText = "";
+        }
+    }
+    
+    private async Task SaveInputHistoryAsync()
+    {
+        try
+        {
+            await LocalStorageService.SetAsync("inputHistory", inputHistory);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[History] 履歴保存エラー: {ex.Message}");
+        }
+    }
+    
+    private async Task LoadInputHistoryAsync()
+    {
+        try
+        {
+            var savedHistory = await LocalStorageService.GetAsync<List<string>>("inputHistory");
+            if (savedHistory != null)
+            {
+                inputHistory = savedHistory;
+                historyIndex = -1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[History] 履歴読み込みエラー: {ex.Message}");
+        }
+    }
+    
     public async ValueTask DisposeAsync()
     {
+        // すべてのセッションのタイマーを停止
+        foreach (var kvp in sessionProcessingTimers)
+        {
+            try
+            {
+                kvp.Value?.Dispose();
+            }
+            catch { }
+        }
+        sessionProcessingTimers.Clear();
+        
         // すべてのセッションの読み取りタスクを停止
         foreach (var kvp in sessionReadCts)
         {
@@ -1088,15 +1309,15 @@
         }
         sessionReadCts.Clear();
         
+        // 履歴を保存
+        await SaveInputHistoryAsync();
+        
         if (activeTerminal != null)
         {
             await activeTerminal.DisposeAsync();
         }
         
         dotNetRef?.Dispose();
-        
-        // タイマーをクリーンアップ
-        processingStatusTimer?.Dispose();
         
         // JavaScriptのイベントリスナーをクリーンアップ
         try

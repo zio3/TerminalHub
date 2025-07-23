@@ -56,12 +56,30 @@
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                             }
                         </h6>
-                        @if (session.ProcessingElapsedSeconds.HasValue)
+                        @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
                         {
                             <div>
-                                <small class="text-primary">
-                                    <i class="bi bi-clock-fill me-1"></i>
-                                    @(session.ProcessingElapsedSeconds)秒
+                                <small class="@(session.IsWaitingForUserInput ? "text-warning" : "text-primary")">
+                                    @if (session.IsWaitingForUserInput)
+                                    {
+                                        <i class="bi bi-person-fill-exclamation me-1"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-clock-fill me-1"></i>
+                                    }
+                                    @if (!string.IsNullOrEmpty(session.ProcessingStatus))
+                                    {
+                                        <span>@session.ProcessingStatus</span>
+                                        @if (session.ProcessingElapsedSeconds.HasValue)
+                                        {
+                                            <span> · </span>
+                                        }
+                                    }
+                                    @if (session.ProcessingElapsedSeconds.HasValue)
+                                    {
+                                        <span>@(session.ProcessingElapsedSeconds)秒</span>
+                                    }
                                     @if (!string.IsNullOrEmpty(session.ProcessingDirection))
                                     {
                                         <span> · @GetDirectionText(session.ProcessingDirection)</span>
@@ -74,10 +92,11 @@
                             </div>
                         }
                     </div>
-                    <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" 
+                    <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
                             @onclick="() => OnSessionRemove.InvokeAsync(session.SessionId)"
-                            title="セッション削除">
-                        <i class="bi bi-x"></i>
+                            title="セッション削除"
+                            style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                        <i class="bi bi-x-lg"></i>
                     </button>
                 </div>
                 <div class="mt-2">
