@@ -78,6 +78,9 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public string? WorktreeMainPath { get; set; } // Worktreeの場合のメインリポジトリパス
         
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))

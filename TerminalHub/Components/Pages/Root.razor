@@ -545,9 +545,13 @@
                         // Claude Codeの場合、"No conversation found to continue"エラーをチェック
                         if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
                             data.Contains("No conversation found to continue") &&
-                            sessionInfo.Options.ContainsKey("continue"))
+                            sessionInfo.Options.ContainsKey("continue") &&
+                            !sessionInfo.HasContinueErrorOccurred)
                         {
                             Console.WriteLine($"[Claude Continue Error] セッション {sessionId} で 'No conversation found to continue' エラーを検知しました");
+                            
+                            // フラグを設定して重複送信を防ぐ
+                            sessionInfo.HasContinueErrorOccurred = true;
                             
                             // 既存のセッションに--continueなしでclaudeを起動
                             _ = Task.Run(async () =>
