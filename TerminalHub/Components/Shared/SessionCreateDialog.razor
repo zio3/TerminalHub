@@ -1,6 +1,10 @@
 @using TerminalHub.Models
+@using TerminalHub.Services
 @using Microsoft.JSInterop
+@using System.IO
 @inject IJSRuntime JSRuntime
+@inject ILocalStorageService LocalStorage
+@inject ISessionManager SessionManager
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
@@ -14,9 +18,37 @@
                     <label class="form-label">フォルダを選択</label>
                     <div class="input-group">
                         <input type="text" class="form-control" @bind="folderPath" placeholder="フォルダパスを入力または選択" />
-                        <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFolder">
-                            <i class="bi bi-folder-open"></i> 参照
-                        </button>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" @onclick="LoadRecentFolders">
+                                <i class="bi bi-folder-open"></i> 参照
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" style="max-height: 300px; overflow-y: auto;">
+                                @if (recentFolders.Any())
+                                {
+                                    <li><h6 class="dropdown-header">最近使用したフォルダ</h6></li>
+                                    @foreach (var folder in recentFolders.Take(10))
+                                    {
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="#" @onclick="() => SelectFolder(folder)" @onclick:preventDefault="true">
+                                                <i class="bi bi-folder-fill text-warning me-2"></i>
+                                                <div class="flex-grow-1 overflow-hidden">
+                                                    <span class="text-truncate d-block" title="@folder">
+                                                        <strong>@Path.GetFileName(folder)</strong>
+                                                        <small class="text-muted ms-2">@folder</small>
+                                                    </span>
+                                                </div>
+                                            </a>
+                                        </li>
+                                    }
+                                    <li><hr class="dropdown-divider"></li>
+                                }
+                                <li>
+                                    <a class="dropdown-item" href="#" @onclick="SelectDefaultFolder" @onclick:preventDefault="true">
+                                        <i class="bi bi-house-fill text-primary me-2"></i>ユーザーホーム
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
@@ -56,6 +88,9 @@
 
     private SessionOptionsSelector.ClaudeCodeOptions claudeCodeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
+    private List<string> recentFolders = new();
+    private const string RECENT_FOLDERS_KEY = "recentFolders";
+    private const int MAX_RECENT_FOLDERS = 20;
 
     public class SessionCreateResult
     {
@@ -64,11 +99,70 @@
         public Dictionary<string, string> Options { get; set; } = new();
     }
 
-    private async Task BrowseFolder()
+    protected override async Task OnInitializedAsync()
     {
-        // フォルダ選択ダイアログはブラウザのセキュリティ制限により直接は開けないため、
-        // ユーザーに手動で入力してもらうか、別の方法を検討する必要があります
-        await JSRuntime.InvokeVoidAsync("alert", "フォルダパスを直接入力してください。");
+        await LoadRecentFolders();
+    }
+
+    private async Task LoadRecentFolders()
+    {
+        try
+        {
+            // LocalStorageから最近のフォルダを読み込む
+            var folders = await LocalStorage.GetAsync<List<string>>(RECENT_FOLDERS_KEY) ?? new List<string>();
+            
+            // 現在のセッションのフォルダも追加
+            var currentSessionFolders = SessionManager.GetAllSessions()
+                .Select(s => s.FolderPath)
+                .Where(f => !string.IsNullOrEmpty(f))
+                .Distinct();
+            
+            // 重複を排除して結合
+            recentFolders = folders.Union(currentSessionFolders)
+                .Where(f => Directory.Exists(f))
+                .Take(MAX_RECENT_FOLDERS)
+                .ToList();
+        }
+        catch
+        {
+            recentFolders = new List<string>();
+        }
+    }
+
+    private async Task SaveRecentFolder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath)) return;
+        
+        try
+        {
+            var folders = await LocalStorage.GetAsync<List<string>>(RECENT_FOLDERS_KEY) ?? new List<string>();
+            
+            // 既存の同じパスを削除して先頭に追加
+            folders.Remove(folderPath);
+            folders.Insert(0, folderPath);
+            
+            // 最大数を超えたら古いものを削除
+            if (folders.Count > MAX_RECENT_FOLDERS)
+            {
+                folders = folders.Take(MAX_RECENT_FOLDERS).ToList();
+            }
+            
+            await LocalStorage.SetAsync(RECENT_FOLDERS_KEY, folders);
+        }
+        catch
+        {
+            // エラーが発生しても継続
+        }
+    }
+
+    private void SelectFolder(string folder)
+    {
+        folderPath = folder;
+    }
+
+    private void SelectDefaultFolder()
+    {
+        folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
     private async Task CreateSession()
@@ -79,6 +173,9 @@
             TerminalType = selectedType,
             Options = optionsSelector?.GetOptions() ?? new Dictionary<string, string>()
         };
+
+        // フォルダを最近使用したフォルダリストに保存
+        await SaveRecentFolder(folderPath);
 
         await OnSessionCreate.InvokeAsync(result);
         ResetForm();
