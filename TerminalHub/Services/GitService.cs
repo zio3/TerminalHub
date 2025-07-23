@@ -122,8 +122,21 @@ namespace TerminalHub.Services
                     return false;
                 }
 
-                // 新しいブランチでWorktreeを作成
-                var command = $"worktree add -b \"{branchName}\" \"{worktreePath}\"";
+                // ブランチが既に存在するかチェック
+                var branchCheckResult = await ExecuteGitCommandAsync(sourcePath, $"rev-parse --verify refs/heads/{branchName}");
+                
+                string command;
+                if (branchCheckResult.Success)
+                {
+                    // 既存のブランチを使用してWorktreeを作成
+                    command = $"worktree add \"{worktreePath}\" \"{branchName}\"";
+                }
+                else
+                {
+                    // 新しいブランチでWorktreeを作成
+                    command = $"worktree add -b \"{branchName}\" \"{worktreePath}\"";
+                }
+                
                 var result = await ExecuteGitCommandAsync(sourcePath, command);
 
                 if (result.Success)

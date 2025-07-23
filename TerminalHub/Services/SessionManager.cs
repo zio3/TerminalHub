@@ -389,6 +389,80 @@ namespace TerminalHub.Services
                     return null;
                 }
 
+                // 既存のworktreeリストを取得
+                var existingWorktrees = await _gitService.GetWorktreeListAsync(parentSession.FolderPath);
+                
+                // 指定したブランチのworktreeが既に存在するかチェック
+                var existingWorktree = existingWorktrees.FirstOrDefault(w => w.BranchName == branchName);
+                if (existingWorktree != null)
+                {
+                    _logger.LogInformation("既存のWorktreeを使用します: ブランチ={Branch}, パス={Path}", branchName, existingWorktree.Path);
+                    
+                    // 既存のworktreeパスでセッションを作成
+                    var existingWorktreeSessionInfo = new SessionInfo
+                    {
+                        SessionId = Guid.NewGuid(),
+                        FolderPath = existingWorktree.Path,
+                        FolderName = Path.GetFileName(existingWorktree.Path),
+                        DisplayName = $"{parentSession.DisplayName} ({branchName})",
+                        TerminalType = terminalType,
+                        Options = options ?? new Dictionary<string, string>(),
+                        MaxBufferSize = parentSession.MaxBufferSize,
+                        ParentSessionId = parentSessionId
+                    };
+
+                    // Git情報を設定
+                    await PopulateGitInfoAsync(existingWorktreeSessionInfo);
+
+                    // セッションを開始
+                    var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                    var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+                    string command;
+                    string args = null;
+
+                    switch (existingWorktreeSessionInfo.TerminalType)
+                    {
+                        case TerminalType.ClaudeCode:
+                            command = "cmd.exe";
+                            var claudeArgs = BuildClaudeArgs(existingWorktreeSessionInfo.Options);
+                            args = string.IsNullOrWhiteSpace(claudeArgs)
+                                ? "/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\""
+                                : $"/k \"C:\\Users\\info\\AppData\\Roaming\\npm\\claude.cmd\" {claudeArgs}";
+                            break;
+                            
+                        case TerminalType.GeminiCLI:
+                            command = "cmd.exe";
+                            var geminiArgs = BuildGeminiArgs(existingWorktreeSessionInfo.Options);
+                            args = string.IsNullOrWhiteSpace(geminiArgs)
+                                ? "/k gemini"
+                                : $"/k gemini {geminiArgs}";
+                            break;
+                            
+                        default:
+                            if (existingWorktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(existingWorktreeSessionInfo.Options["command"]))
+                            {
+                                command = existingWorktreeSessionInfo.Options["command"];
+                                args = null;
+                            }
+                            else
+                            {
+                                command = TerminalConstants.DefaultShell;
+                                args = null;
+                            }
+                            break;
+                    }
+
+                    var session = await _conPtyService.CreateSessionAsync(command, args, existingWorktree.Path, cols, rows);
+                    _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, session);
+                    _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
+
+                    _logger.LogInformation("既存Worktreeセッション作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
+                        branchName, existingWorktree.Path, existingWorktreeSessionInfo.SessionId);
+
+                    return existingWorktreeSessionInfo;
+                }
+
                 // Worktreeの作成先パスを決定
                 var parentPath = parentSession.FolderPath;
                 var worktreeName = $"{Path.GetFileName(parentPath)}-{branchName}";
