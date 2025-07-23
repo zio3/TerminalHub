@@ -140,13 +140,13 @@ namespace TerminalHub.Services
                         if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
                         {
                             command = options["command"];
-                            args = null;
+                            args = "";
                         }
                         else
                         {
                             // デフォルトのシェルを使用
                             command = TerminalConstants.DefaultShell;
-                            args = null;
+                            args = "";
                         }
                         break;
                 }
@@ -422,27 +422,28 @@ namespace TerminalHub.Services
                     await PopulateGitInfoAsync(existingWorktreeSessionInfo);
 
                     // セッションを開始
-                    var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                    var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                    var terminalCols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                    var terminalRows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                    string command;
-                    string args = null;
+                    string terminalCommand;
+                    string? terminalArgs = null;
 
                     switch (existingWorktreeSessionInfo.TerminalType)
                     {
                         case TerminalType.ClaudeCode:
-                            command = "cmd.exe";
-                            var claudeArgs = BuildClaudeArgs(existingWorktreeSessionInfo.Options);
+                            terminalCommand = "cmd.exe";
+                            var claudeArgs = BuildClaudeCodeArgs(existingWorktreeSessionInfo.Options);
                             var claudeCmdPath = GetClaudeCmdPath();
-                            args = string.IsNullOrWhiteSpace(claudeArgs)
+                            terminalArgs = string.IsNullOrWhiteSpace(claudeArgs)
                                 ? $"/k \"{claudeCmdPath}\""
                                 : $"/k \"{claudeCmdPath}\" {claudeArgs}";
                             break;
+                            break;
                             
                         case TerminalType.GeminiCLI:
-                            command = "cmd.exe";
+                            terminalCommand = "cmd.exe";
                             var geminiArgs = BuildGeminiArgs(existingWorktreeSessionInfo.Options);
-                            args = string.IsNullOrWhiteSpace(geminiArgs)
+                            terminalArgs = string.IsNullOrWhiteSpace(geminiArgs)
                                 ? "/k gemini"
                                 : $"/k gemini {geminiArgs}";
                             break;
@@ -450,19 +451,19 @@ namespace TerminalHub.Services
                         default:
                             if (existingWorktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(existingWorktreeSessionInfo.Options["command"]))
                             {
-                                command = existingWorktreeSessionInfo.Options["command"];
-                                args = null;
+                                terminalCommand = existingWorktreeSessionInfo.Options["command"];
+                                terminalArgs = "";
                             }
                             else
                             {
-                                command = TerminalConstants.DefaultShell;
-                                args = null;
+                                terminalCommand = TerminalConstants.DefaultShell;
+                                terminalArgs = "";
                             }
                             break;
                     }
 
-                    var session = await _conPtyService.CreateSessionAsync(command, args, existingWorktree.Path, cols, rows);
-                    _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, session);
+                    var newSession = await _conPtyService.CreateSessionAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows);
+                    _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, newSession);
                     _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
 
                     _logger.LogInformation("既存Worktreeセッション作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
@@ -547,13 +548,13 @@ namespace TerminalHub.Services
                         if (worktreeSessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(worktreeSessionInfo.Options["command"]))
                         {
                             command = worktreeSessionInfo.Options["command"];
-                            args = null;
+                            args = "";
                         }
                         else
                         {
                             // デフォルトのシェルを使用
                             command = TerminalConstants.DefaultShell;
-                            args = null;
+                            args = "";
                         }
                         break;
                 }
@@ -652,13 +653,13 @@ namespace TerminalHub.Services
                         if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
                         {
                             command = sessionInfo.Options["command"];
-                            args = null;
+                            args = "";
                         }
                         else
                         {
                             // デフォルトのシェルを使用
                             command = TerminalConstants.DefaultShell;
-                            args = null;
+                            args = "";
                         }
                         break;
                 }
@@ -733,13 +734,13 @@ namespace TerminalHub.Services
                         if (sessionInfo.Options.ContainsKey("command") && !string.IsNullOrWhiteSpace(sessionInfo.Options["command"]))
                         {
                             command = sessionInfo.Options["command"];
-                            args = null;
+                            args = "";
                         }
                         else
                         {
                             // デフォルトのシェルを使用
                             command = TerminalConstants.DefaultShell;
-                            args = null;
+                            args = "";
                         }
                         break;
                 }

@@ -12,7 +12,7 @@ namespace TerminalHub.Services
 {
     public interface IConPtyService
     {
-        Task<ConPtySession> CreateSessionAsync(string command, string arguments, string? workingDirectory = null, int cols = 80, int rows = 24);
+        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24);
     }
 
     public class ConPtyService : IConPtyService
@@ -24,7 +24,7 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task<ConPtySession> CreateSessionAsync(string command, string arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
+        public async Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
         {
             // Console.WriteLine($"[ConPtyService] CreateSessionAsync: {command}");
             
@@ -47,7 +47,7 @@ namespace TerminalHub.Services
         private int _rows;
         private readonly SemaphoreSlim _readSemaphore = new(1, 1);
 
-        public ConPtySession(string command, string arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
         {
             // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
             _logger = logger;
