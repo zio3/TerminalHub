@@ -30,7 +30,7 @@ h1:focus {
 
 /* Git status indicator */
 .git-status-indicator {
-    font-size: 1.5rem;
+    font-size: 0.3rem;
     vertical-align: middle;
     margin-left: 0.25rem;
 }
