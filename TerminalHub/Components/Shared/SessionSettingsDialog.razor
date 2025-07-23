@@ -151,8 +151,8 @@
             {
                 geminiOptions = new SessionOptionsSelector.GeminiOptionsData
                 {
-                    UseModel = options.ContainsKey("model"),
-                    Model = options.ContainsKey("model") ? options["model"] : ""
+                    YoloMode = options.ContainsKey("yolo-mode") && options["yolo-mode"] == "true",
+                    SandboxMode = options.ContainsKey("sandbox-mode") && options["sandbox-mode"] == "true"
                 };
             }
         }
