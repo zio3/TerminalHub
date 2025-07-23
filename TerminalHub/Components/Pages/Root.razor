@@ -14,6 +14,7 @@
 @inject IConfiguration Configuration
 @inject INotificationService NotificationService
 @inject IOutputAnalyzerFactory AnalyzerFactory
+@inject IGitService GitService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -53,7 +54,8 @@
                      OnMemoEdit="StartEditingMemo"
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
-                     OnSessionSettings="ShowSessionSettingsDialog" />
+                     OnSessionSettings="ShowSessionSettingsDialog"
+                     OnGitStatusRefresh="RefreshGitStatus" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -1536,6 +1538,25 @@
         }
         
         toast?.ShowSuccess("セッション設定を保存しました");
+    }
+    
+    private async Task RefreshGitStatus(Guid sessionId)
+    {
+        var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (sessionInfo != null && sessionInfo.IsGitRepository)
+        {
+            // Gitステータスを更新
+            var gitInfo = await GitService.GetGitInfoAsync(sessionInfo.FolderPath);
+            if (gitInfo != null)
+            {
+                sessionInfo.GitBranch = gitInfo.CurrentBranch;
+                sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
+                sessionInfo.IsWorktree = gitInfo.IsWorktree;
+                
+                await LocalStorageService.SaveSessionsAsync(sessions);
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task StartClaudeWithoutContinue(Guid sessionId)
