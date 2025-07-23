@@ -1268,7 +1268,7 @@
                     // 既存Worktree追加
                     if (!string.IsNullOrEmpty(result.WorktreePath))
                     {
-                        newSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath);
+                        newSession = await AddExistingWorktreeSession(worktreeParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
                     
@@ -1336,19 +1336,19 @@
         };
     }
     
-    private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath)
+    private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath, string branchName, TerminalType terminalType, Dictionary<string, string> options)
     {
         // 親セッション情報を取得
         var parentSession = SessionManager.GetSessionInfo(parentSessionId);
         if (parentSession == null)
             return null;
             
-        // 既存のWorktreeをセッションとして追加
+        // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
-            Path.GetFileName(worktreePath),
-            parentSession.TerminalType,
-            new Dictionary<string, string>(parentSession.Options)
+            $"{parentSession.DisplayName} ({branchName})",
+            terminalType,
+            options
         );
         
         // 親子関係を設定

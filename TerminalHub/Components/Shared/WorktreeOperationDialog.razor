@@ -107,7 +107,7 @@
                                     else
                                     {
                                         <select class="form-select" id="existingBranchSelect" 
-                                                @bind="selectedExistingBranch">
+                                                @onchange="OnExistingBranchSelected">
                                             <option value="">ブランチを選択してください</option>
                                             @foreach (var branch in availableBranches)
                                             {
@@ -116,6 +116,16 @@
                                         </select>
                                     }
                                 </div>
+                                
+                                @if (!string.IsNullOrEmpty(selectedExistingBranch) && branchWorktreeInfo != null)
+                                {
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        <strong>このブランチには既にWorktreeが存在します</strong><br/>
+                                        <span>パス: @branchWorktreeInfo.Path</span><br/>
+                                        <small>「既存Worktree追加」タブから追加してください</small>
+                                    </div>
+                                }
                             }
                             
                             <!-- 共通オプションセレクター -->
@@ -144,43 +154,51 @@
                             else
                             {
                             <div class="mb-3">
-                                <label for="worktreePath" class="form-label">Worktreeのパス</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="worktreePath" 
-                                           @bind="existingWorktreePath" 
-                                           @bind:event="oninput"
-                                           placeholder="C:\\Projects\\my-project-feature" 
-                                           readonly>
-                                    <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFolder">
-                                        <i class="bi bi-folder2-open"></i> 参照...
-                                    </button>
-                                </div>
-                                <small class="form-text text-muted">
-                                    既存のWorktreeフォルダを選択してください
-                                </small>
+                                <label for="worktreePath" class="form-label">既存のWorktreeを選択</label>
+                                @if (availableWorktrees == null)
+                                {
+                                    <div class="text-center">
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                        Worktree一覧を読み込み中...
+                                    </div>
+                                }
+                                else if (availableWorktrees.Count == 0)
+                                {
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        利用可能なWorktreeがありません
+                                    </div>
+                                }
+                                else
+                                {
+                                    <select class="form-select" id="worktreeSelect" 
+                                            value="@selectedWorktreePath"
+                                            @onchange="OnWorktreeSelected">
+                                        <option value="">Worktreeを選択してください</option>
+                                        @foreach (var worktree in availableWorktrees)
+                                        {
+                                            <option value="@worktree.Path">
+                                                (@worktree.BranchName)
+                                                @if (worktree.IsMain)
+                                                {
+                                                    <text> - メイン</text>
+                                                }
+                                            </option>
+                                        }
+                                    </select>
+                                }
                             </div>
                             
-                            @if (isValidatingPath)
+                            @if (!string.IsNullOrEmpty(selectedWorktreePath))
                             {
-                                <div class="alert alert-info">
-                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                    パスを検証中...
-                                </div>
-                            }
-                            else if (pathValidationResult != null)
-                            {
-                                <div class="alert @(pathValidationResult.IsValid ? "alert-success" : "alert-warning")">
-                                    @if (pathValidationResult.IsValid)
-                                    {
-                                        <i class="bi bi-check-circle-fill me-2"></i>
-                                        <strong>有効なWorktreeです</strong><br/>
-                                        <span>ブランチ: @pathValidationResult.BranchName</span>
-                                    }
-                                    else
-                                    {
-                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                        @pathValidationResult.ErrorMessage
-                                    }
+                                <!-- セッションオプション選択 -->
+                                <div class="mt-3">
+                                    <SessionOptionsSelector @ref="optionsSelectorExistingWorktree"
+                                                          SelectedType="selectedTerminalType"
+                                                          SelectedTypeChanged="OnTerminalTypeChanged"
+                                                          @bind-StartupCommand="startupCommand"
+                                                          ClaudeOptions="claudeOptions"
+                                                          GeminiOptions="geminiOptions" />
                                 </div>
                             }
                             }
@@ -248,20 +266,23 @@
 
     private TabType activeTab = TabType.Create;
     private string branchName = "";
-    private string existingWorktreePath = "";
     private string errorMessage = "";
     private bool isProcessing = false;
-    private bool isValidatingPath = false;
-    private PathValidationResult? pathValidationResult = null;
     
     // 新規プロパティ
     private BranchSelectionMode branchSelectionMode = BranchSelectionMode.NewBranch;
     private string selectedExistingBranch = "";
     private List<string>? availableBranches = null;
     
+    // Worktree関連
+    private List<WorktreeInfo>? availableWorktrees = null;
+    private string selectedWorktreePath = "";
+    private WorktreeInfo? branchWorktreeInfo = null;
+    
     // オプションセレクター関連
     private SessionOptionsSelector? optionsSelector;
     private SessionOptionsSelector? optionsSelectorSamePath;
+    private SessionOptionsSelector? optionsSelectorExistingWorktree;
     private TerminalType selectedTerminalType = TerminalType.Terminal;
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
@@ -275,8 +296,8 @@
             {
                 TabType.Create => IsGitRepository && (branchSelectionMode == BranchSelectionMode.NewBranch 
                     ? !string.IsNullOrWhiteSpace(branchName)
-                    : !string.IsNullOrWhiteSpace(selectedExistingBranch)),
-                TabType.Existing => IsGitRepository && pathValidationResult?.IsValid == true,
+                    : (!string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null)),
+                TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
                 TabType.SamePath => true, // 同じフォルダの場合は常に有効
                 _ => false
             };
@@ -292,22 +313,24 @@
             // ダイアログが表示されたときにリセット
             activeTab = TabType.Create;
             branchName = "";
-            existingWorktreePath = "";
             errorMessage = "";
             isProcessing = false;
-            pathValidationResult = null;
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
             selectedTerminalType = TerminalType.Terminal;
             availableBranches = null;
+            availableWorktrees = null;
+            selectedWorktreePath = "";
+            branchWorktreeInfo = null;
             startupCommand = "";
             claudeOptions = new();
             geminiOptions = new();
             
-            // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧を取得
-            if (!string.IsNullOrEmpty(ParentSessionPath))
+            // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
+            if (!string.IsNullOrEmpty(ParentSessionPath) && IsGitRepository)
             {
                 await LoadAvailableBranches();
+                await LoadAvailableWorktrees();
             }
         }
     }
@@ -333,10 +356,16 @@
                 },
                 BranchName = activeTab == TabType.Create 
                     ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
-                    : pathValidationResult?.BranchName ?? "",
-                WorktreePath = activeTab == TabType.Existing ? existingWorktreePath : null,
+                    : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
+                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath : null,
                 TerminalType = selectedTerminalType,
-                Options = (activeTab == TabType.Create ? optionsSelector : optionsSelectorSamePath)?.GetOptions() ?? new Dictionary<string, string>(),
+                Options = activeTab switch
+                {
+                    TabType.Create => optionsSelector?.GetOptions() ?? new Dictionary<string, string>(),
+                    TabType.Existing => optionsSelectorExistingWorktree?.GetOptions() ?? new Dictionary<string, string>(),
+                    TabType.SamePath => optionsSelectorSamePath?.GetOptions() ?? new Dictionary<string, string>(),
+                    _ => new Dictionary<string, string>()
+                },
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
             };
 
@@ -349,64 +378,6 @@
         }
     }
 
-    private async Task BrowseFolder()
-    {
-        // 実際の実装では、フォルダ選択ダイアログを表示
-        // ここでは仮実装として、パスの直接入力を促す
-        errorMessage = "フォルダパスを直接入力してください（将来的にファイル選択ダイアログを実装予定）";
-        
-        // テスト用: 仮のパスを設定
-        existingWorktreePath = @"C:\Projects\example-worktree";
-        await ValidateWorktreePath();
-    }
-
-    private async Task ValidateWorktreePath()
-    {
-        if (string.IsNullOrWhiteSpace(existingWorktreePath))
-        {
-            pathValidationResult = null;
-            return;
-        }
-
-        isValidatingPath = true;
-        
-        try
-        {
-            var worktreeInfo = await GitService.ValidateWorktreeAsync(existingWorktreePath);
-            
-            if (worktreeInfo != null)
-            {
-                pathValidationResult = new PathValidationResult
-                {
-                    IsValid = true,
-                    BranchName = worktreeInfo.BranchName,
-                    ErrorMessage = null
-                };
-            }
-            else
-            {
-                pathValidationResult = new PathValidationResult
-                {
-                    IsValid = false,
-                    BranchName = null,
-                    ErrorMessage = "指定されたパスは有効なGit Worktreeではありません"
-                };
-            }
-        }
-        catch (Exception ex)
-        {
-            pathValidationResult = new PathValidationResult
-            {
-                IsValid = false,
-                BranchName = null,
-                ErrorMessage = $"検証中にエラーが発生しました: {ex.Message}"
-            };
-        }
-        finally
-        {
-            isValidatingPath = false;
-        }
-    }
 
     private bool IsValidBranchName(string name)
     {
@@ -468,6 +439,45 @@
         }
     }
     
+    private async Task LoadAvailableWorktrees()
+    {
+        if (string.IsNullOrEmpty(ParentSessionPath))
+            return;
+            
+        try
+        {
+            var worktrees = await GitService.GetWorktreeListAsync(ParentSessionPath);
+            // 現在のフォルダ（メインworktree）を除外
+            availableWorktrees = worktrees.Where(w => !w.IsMain).ToList();
+        }
+        catch
+        {
+            availableWorktrees = new List<WorktreeInfo>();
+        }
+    }
+    
+    private async Task OnExistingBranchSelected(ChangeEventArgs e)
+    {
+        var branchName = e.Value?.ToString() ?? "";
+        selectedExistingBranch = branchName;
+        
+        // 選択されたブランチのworktreeが存在するかチェック
+        if (!string.IsNullOrEmpty(branchName) && availableWorktrees != null)
+        {
+            branchWorktreeInfo = availableWorktrees.FirstOrDefault(w => w.BranchName == branchName);
+        }
+        else
+        {
+            branchWorktreeInfo = null;
+        }
+    }
+    
+    private async Task OnWorktreeSelected(ChangeEventArgs e)
+    {
+        selectedWorktreePath = e.Value?.ToString() ?? "";
+        StateHasChanged();
+    }
+    
     private string GetButtonIcon()
     {
         return activeTab switch
@@ -525,12 +535,6 @@
         ExistingBranch
     }
 
-    private class PathValidationResult
-    {
-        public bool IsValid { get; set; }
-        public string? BranchName { get; set; }
-        public string? ErrorMessage { get; set; }
-    }
 
     private enum TabType
     {
