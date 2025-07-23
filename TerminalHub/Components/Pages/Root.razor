@@ -137,7 +137,7 @@
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
-    private CancellationTokenSource? readCts;
+    private Dictionary<Guid, CancellationTokenSource> sessionReadCts = new();
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
@@ -301,22 +301,7 @@
             return;
         }
 
-        // 前のセッションをクリーンアップ
-        var previousCts = readCts;
-        readCts = null;
-
-        if (previousCts != null)
-        {
-            try
-            {
-                previousCts.Cancel();
-                // キャンセル要求だけ送信して即座に次へ進む
-            }
-            finally
-            {
-                previousCts.Dispose();
-            }
-        }
+        // 前のセッションの処理は継続させるため、キャンセルしない
 
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
@@ -352,7 +337,7 @@
         if (selectedSession != null && selectedSession.HasNotificationPending)
         {
             selectedSession.HasNotificationPending = false;
-            Console.WriteLine($"[Notification Debug] セッション {sessionId} の通知フラグをクリア");
+            //Console.WriteLine($"[Notification Debug] セッション {sessionId} の通知フラグをクリア");
         }
 
         // アクティブセッション変更を即座にUIに反映
@@ -394,11 +379,12 @@
             // エラーは無視
         }
 
-        // 出力読み取りを開始
-        if (activeSession != null)
+        // 出力読み取りを開始（既存のものがなければ）
+        if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
         {
-            readCts = new CancellationTokenSource();
-            _ = Task.Run(() => ReadOutput(readCts.Token));
+            var cts = new CancellationTokenSource();
+            sessionReadCts[sessionId] = cts;
+            _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
         }
 
         // ターミナルを最下段にスクロール
@@ -441,14 +427,14 @@
         }
     }
 
-    private async Task ReadOutput(CancellationToken cancellationToken)
+    private async Task ReadSessionOutput(Guid sessionId, CancellationToken cancellationToken)
     {
-        var localSessionId = activeSessionId; // ローカル変数にコピー
-        // Console.WriteLine($"[ReadOutput] 開始: sessionId={localSessionId}");
+        // Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
 
-        if (activeSession == null || activeTerminal == null)
+        var session = SessionManager.GetSession(sessionId);
+        if (session == null)
         {
-            // Console.WriteLine($"[ReadOutput] 条件不足で終了");
+            // Console.WriteLine($"[ReadSessionOutput] セッションが見つからない: {sessionId}");
             return;
         }
 
@@ -462,7 +448,7 @@
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
-                var charsRead = await activeSession.ReadAsync(buffer, 0, buffer.Length);
+                var charsRead = await session.ReadAsync(buffer, 0, buffer.Length);
                 if (charsRead > 0)
                 {
                     // データ書き込み前に再度キャンセルを確認
@@ -470,12 +456,12 @@
                         break;
 
                     var data = new string(buffer, 0, charsRead);
-                    // Console.WriteLine($"[ReadOutput] セッション {localSessionId} に {charsRead} 文字書き込み");
+                    // Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} に {charsRead} 文字書き込み");
 
                     // Claude Codeセッションの場合、処理状態を解析
-                    if (activeSessionId == localSessionId)
+                    if (activeSessionId == sessionId)
                     {
-                        var currentSession = sessions.FirstOrDefault(s => s.SessionId == localSessionId);
+                        var currentSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                         if (currentSession?.TerminalType == TerminalType.ClaudeCode)
                         {
                             // Claude Codeの処理状態パターンを検出
@@ -483,7 +469,11 @@
                         }
                     }
 
-                    await activeTerminal.InvokeVoidAsync("write", data);
+                    // アクティブセッションの場合のみターミナルに書き込み
+                    if (activeSessionId == sessionId && activeTerminal != null)
+                    {
+                        await activeTerminal.InvokeVoidAsync("write", data);
+                    }
                 }
             }
             catch (Exception)
@@ -544,24 +534,23 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
-        // アクティブセッションの場合、読み取りタスクを停止
+        // セッションの読み取りタスクを停止
+        if (sessionReadCts.TryGetValue(sessionId, out var cts))
+        {
+            try
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            finally
+            {
+                sessionReadCts.Remove(sessionId);
+            }
+        }
+
+        // アクティブセッションの場合の追加処理
         if (sessionId == activeSessionId)
         {
-            var ctsToCancel = readCts;
-            readCts = null;
-
-            if (ctsToCancel != null)
-            {
-                try
-                {
-                    ctsToCancel.Cancel();
-                    // キャンセル要求だけ送信して即座に次へ進む
-                }
-                finally
-                {
-                    ctsToCancel.Dispose();
-                }
-            }
 
             if (activeTerminal != null)
             {
@@ -638,12 +627,12 @@
                 // Console.WriteLine($"[DestroyTerminal] C#側のターミナル参照を削除");
             }
 
-            // アクティブセッションの場合は読み取り処理を停止
-            if (activeSessionId == sessionId && readCts != null)
+            // セッションの読み取り処理を停止（非アクティブでも）
+            if (sessionReadCts.TryGetValue(sessionId, out var cts))
             {
-                readCts.Cancel();
-                readCts.Dispose();
-                readCts = null;
+                cts.Cancel();
+                cts.Dispose();
+                sessionReadCts.Remove(sessionId);
                 // Console.WriteLine($"[DestroyTerminal] 読み取り処理を停止");
             }
 
@@ -683,11 +672,12 @@
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
 
-                // 読み取り処理を再開
-                if (activeSession != null)
+                // 読み取り処理を再開（既存のものがなければ）
+                if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
                 {
-                    readCts = new CancellationTokenSource();
-                    _ = Task.Run(() => ReadOutput(readCts.Token));
+                    var cts = new CancellationTokenSource();
+                    sessionReadCts[sessionId] = cts;
+                    _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
                     // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
 
                     // ターミナルに初期プロンプトを送信して接続を確認
@@ -759,7 +749,7 @@
             // 処理状態パターンの検出
             var patterns = new[]
             {
-                @"[·✽]\s*(?:.*?ing[^(]*)\s*\((\d+)s\s*·\s*([↑↓⚒])\s*(\d+)\s*tokens?\s*·\s*esc to interrupt\)",
+                @"[·✽]\s*(?:.*?ing[^(]*)\s*\((\d+)s\s*·\s*([↑↓⚒])\s*([\d.]+[kK]?)\s*tokens?\s*·\s*esc to interrupt\)",
                 @"\[Request interrupted by user\]"
             };
 
@@ -774,7 +764,7 @@
                     if (pattern.Contains("Request interrupted"))
                     {
                         // Console.WriteLine("[Claude Code Status] 処理が中断されました");
-                        Console.WriteLine("[Notification Debug] 中断パターンを検出 - UpdateSessionProcessingStatus(null)を呼び出し");
+                        //Console.WriteLine("[Notification Debug] 中断パターンを検出 - UpdateSessionProcessingStatus(null)を呼び出し");
                         UpdateSessionProcessingStatus(null);
                     }
                     else if (match.Groups.Count >= 4)
@@ -783,7 +773,7 @@
                         var direction = match.Groups[2].Value;
                         var tokens = match.Groups[3].Value;
                         
-                        Console.WriteLine($"[Notification Debug] 処理状態パターンマッチ: {seconds}秒, {direction}, {tokens}トークン");
+                        //Console.WriteLine($"[Notification Debug] 処理状態パターンマッチ: {seconds}秒, {direction}, {tokens}トークン");
                         
                         // 秒数が変わらない場合はUIを更新しない
                         if (lastProcessingSeconds == seconds)
@@ -806,13 +796,13 @@
                         // 数値に変換
                         if (int.TryParse(seconds, out var elapsedSeconds))
                         {
-                            Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus({elapsedSeconds}, {tokens}, {direction})を呼び出し");
+                            //Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus({elapsedSeconds}, {tokens}, {direction})を呼び出し");
                             UpdateSessionProcessingStatus(elapsedSeconds, tokens, direction);
                             // Console.WriteLine($"[Claude Code Status] {elapsedSeconds}秒 · {direction} {tokens}トークン");
                         }
                         else
                         {
-                            Console.WriteLine($"[Notification Debug] 秒数の変換に失敗: {seconds}");
+                            //Console.WriteLine($"[Notification Debug] 秒数の変換に失敗: {seconds}");
                         }
                     }
                 }
@@ -849,19 +839,19 @@
             }
             else
             {
-                Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus - 処理完了を検出");
-                Console.WriteLine($"[Notification Debug] ProcessingElapsedSeconds: {session.ProcessingElapsedSeconds}");
+                //Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus - 処理完了を検出");
+                //Console.WriteLine($"[Notification Debug] ProcessingElapsedSeconds: {session.ProcessingElapsedSeconds}");
                 
                 // 処理完了時の通知
                 if (session.ProcessingElapsedSeconds.HasValue)
                 {
-                    Console.WriteLine($"[Notification Debug] 通知サービスを呼び出し中 - {session.ProcessingElapsedSeconds.Value}秒");
+                    //Console.WriteLine($"[Notification Debug] 通知サービスを呼び出し中 - {session.ProcessingElapsedSeconds.Value}秒");
                     
                     // 通知フラグを設定（アクティブでない場合のみ）
                     if (activeSessionId != session.SessionId)
                     {
                         session.HasNotificationPending = true;
-                        Console.WriteLine($"[Notification Debug] セッション {session.SessionId} に通知フラグを設定");
+                        //Console.WriteLine($"[Notification Debug] セッション {session.SessionId} に通知フラグを設定");
                     }
                     
                     // セッション情報をコピー（非同期処理で使用するため）
@@ -884,21 +874,21 @@
                     {
                         try
                         {
-                            Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し開始");
-                            Console.WriteLine($"[Notification Debug] SessionCopy - Id: {sessionCopy.SessionId}, FolderPath: {sessionCopy.FolderPath}");
+                            //Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し開始");
+                            //Console.WriteLine($"[Notification Debug] SessionCopy - Id: {sessionCopy.SessionId}, FolderPath: {sessionCopy.FolderPath}");
                             await NotificationService.NotifyProcessingCompleteAsync(sessionCopy, elapsedSecondsCopy);
-                            Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し完了");
+                            //Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し完了");
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[Notification Debug] 通知エラー: {ex.Message}");
-                            Console.WriteLine($"[Notification Debug] スタックトレース: {ex.StackTrace}");
+                            //Console.WriteLine($"[Notification Debug] 通知エラー: {ex.Message}");
+                            //Console.WriteLine($"[Notification Debug] スタックトレース: {ex.StackTrace}");
                         }
                     });
                 }
                 else
                 {
-                    Console.WriteLine($"[Notification Debug] ProcessingElapsedSecondsがnullのため通知をスキップ");
+                    //Console.WriteLine($"[Notification Debug] ProcessingElapsedSecondsがnullのため通知をスキップ");
                 }
                 
                 session.ProcessingStartTime = null;
@@ -915,7 +905,7 @@
             try
             {
                 InvokeAsync(StateHasChanged);
-                Console.WriteLine("[UI Update] StateHasChanged実行完了");
+                //Console.WriteLine("[UI Update] StateHasChanged実行完了");
             }
             catch (Exception ex)
             {
@@ -959,7 +949,7 @@
             try
             {
                 InvokeAsync(StateHasChanged);
-                Console.WriteLine("[UI Update] StateHasChanged実行完了");
+                //Console.WriteLine("[UI Update] StateHasChanged実行完了");
             }
             catch (Exception ex)
             {
@@ -974,18 +964,18 @@
 
     private void CheckProcessingTimeout(object? state)
     {
-        Console.WriteLine($"[Notification Debug] CheckProcessingTimeout呼び出し");
-        Console.WriteLine($"[Notification Debug] lastProcessingUpdateTime: {lastProcessingUpdateTime}");
+        //Console.WriteLine($"[Notification Debug] CheckProcessingTimeout呼び出し");
+        //Console.WriteLine($"[Notification Debug] lastProcessingUpdateTime: {lastProcessingUpdateTime}");
         
         if (lastProcessingUpdateTime.HasValue)
         {
             var elapsedTime = (DateTime.Now - lastProcessingUpdateTime.Value).TotalSeconds;
-            Console.WriteLine($"[Notification Debug] 最後の更新からの経過時間: {elapsedTime}秒");
+            //Console.WriteLine($"[Notification Debug] 最後の更新からの経過時間: {elapsedTime}秒");
             
             if (elapsedTime >= 5)
             {
                 // Console.WriteLine("[Claude Code Status] 5秒間更新がないため処理終了と判定");
-                Console.WriteLine("[Notification Debug] UpdateSessionProcessingStatus(null)を呼び出し（タイムアウト）");
+                //Console.WriteLine("[Notification Debug] UpdateSessionProcessingStatus(null)を呼び出し（タイムアウト）");
                 InvokeAsync(() => UpdateSessionProcessingStatus(null));
             }
         }
@@ -1086,20 +1076,17 @@
 
     public async ValueTask DisposeAsync()
     {
-        var ctsToDispose = readCts;
-        readCts = null;
-        
-        if (ctsToDispose != null)
+        // すべてのセッションの読み取りタスクを停止
+        foreach (var kvp in sessionReadCts)
         {
             try
             {
-                ctsToDispose.Cancel();
+                kvp.Value.Cancel();
+                kvp.Value.Dispose();
             }
-            finally
-            {
-                ctsToDispose.Dispose();
-            }
+            catch { }
         }
+        sessionReadCts.Clear();
         
         if (activeTerminal != null)
         {

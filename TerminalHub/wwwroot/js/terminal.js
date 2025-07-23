@@ -39,6 +39,63 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
+// 右クリック検出とIMEスタイル制御
+function setupContextMenuAndIME(element, sessionId) {
+    let imeStyleSheet = null;
+    
+    // IME用のスタイルシートを作成
+    function createIMEStyle() {
+        if (!imeStyleSheet) {
+            imeStyleSheet = document.createElement('style');
+            imeStyleSheet.textContent = `
+                .xterm-helper-textarea {
+                    left: 0 !important;
+                }
+                .xterm .composition-view {
+                    left: 0 !important;
+                }
+            `;
+            imeStyleSheet.id = 'ime-positioning-style';
+        }
+    }
+    
+    // スタイルを適用
+    function enableIMEStyle() {
+        createIMEStyle();
+        if (!document.getElementById('ime-positioning-style')) {
+            document.head.appendChild(imeStyleSheet);
+        }
+    }
+    
+    // スタイルを削除
+    function disableIMEStyle() {
+        const style = document.getElementById('ime-positioning-style');
+        if (style) {
+            style.remove();
+        }
+    }
+    
+    // 初期状態でIMEスタイルを有効化
+    enableIMEStyle();
+    
+    // 右クリックイベントを検出
+    element.addEventListener('contextmenu', (e) => {
+        console.log(`[IME] 右クリック検出 - IMEスタイル無効化`);
+        disableIMEStyle();
+        
+        // 一定時間後に再度有効化
+        setTimeout(() => {
+            console.log(`[IME] IMEスタイル再有効化`);
+            enableIMEStyle();
+        }, 1000);
+    });
+    
+    // クリックでIMEスタイルを再有効化
+    element.addEventListener('click', () => {
+        enableIMEStyle();
+    });
+}
+
 window.terminalFunctions = {
     // マルチセッション用のターミナル作成関数
     createMultiSessionTerminal: function(terminalId, sessionId, dotNetRef) {
@@ -113,6 +170,9 @@ window.terminalFunctions = {
                     dotNetRef.invokeMethodAsync('SendInput', sessionId, data);
                 }
             });
+            
+            // 右クリック検出とIMEスタイル制御
+            setupContextMenuAndIME(element, sessionId);
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {

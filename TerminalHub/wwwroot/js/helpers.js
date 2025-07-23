@@ -3,10 +3,10 @@ window.terminalHubHelpers = {
     // DevWindow drag handling
     setupDevWindowDrag: function(dotNetRef) {
         window.devWindowMouseMove = function(e) {
-            dotNetRef.invokeMethodAsync('OnDevWindowMouseMove', e.clientX, e.clientY);
+            DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseMove', e.clientX, e.clientY);
         };
         window.devWindowMouseUp = function() {
-            dotNetRef.invokeMethodAsync('OnDevWindowMouseUp');
+            DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseUp');
         };
         
         document.addEventListener('mousemove', window.devWindowMouseMove);

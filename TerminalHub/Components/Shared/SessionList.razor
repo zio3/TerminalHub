@@ -59,7 +59,7 @@
                         @if (session.ProcessingElapsedSeconds.HasValue)
                         {
                             <div>
-                                <small class="text-warning">
+                                <small class="text-primary">
                                     <i class="bi bi-clock-fill me-1"></i>
                                     @(session.ProcessingElapsedSeconds)秒
                                     @if (!string.IsNullOrEmpty(session.ProcessingDirection))
@@ -68,7 +68,7 @@
                                     }
                                     @if (!string.IsNullOrEmpty(session.ProcessingTokens))
                                     {
-                                        <span> @session.ProcessingTokens</span>
+                                        <span> @session.ProcessingTokens トークン</span>
                                     }
                                 </small>
                             </div>

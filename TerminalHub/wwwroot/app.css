@@ -42,7 +42,6 @@ h1:focus {
     flex: 1;
     overflow: auto;
     background-color: #000;
-    padding: 10px;
 }
 
 .terminal-container {
@@ -55,6 +54,9 @@ h1:focus {
     transition: transform 0.1s ease-in-out;
 }
 
-.btn:active {
-    transform: scale(0.95);
-}
+    .btn:active {
+        transform: scale(0.95);
+    }
+
+/* xterm.js IME positioning fix - 一旦削除してデフォルトの挙動に戻す */
+/* IMEは右端からの入力になるが、コンテキストメニューは正常に動作する */
