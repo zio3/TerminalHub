@@ -300,9 +300,12 @@
 
     [Parameter] public string? ParentSessionPath { get; set; }
     
+    private bool _wasVisible = false;
+    
     protected override async Task OnParametersSetAsync()
     {
-        if (IsVisible)
+        // IsVisibleがfalseからtrueに変わった時のみ初期化
+        if (IsVisible && !_wasVisible)
         {
             // ダイアログが表示されたときにリセット
             activeTab = TabType.Create;
@@ -327,6 +330,8 @@
                 await LoadAvailableWorktrees();
             }
         }
+        
+        _wasVisible = IsVisible;
     }
 
     private async Task ProcessOperation()
