@@ -143,10 +143,6 @@
             {
                 claudeOptions = new SessionOptionsSelector.ClaudeCodeOptions
                 {
-                    UseModel = options.ContainsKey("model"),
-                    Model = options.ContainsKey("model") ? options["model"] : "",
-                    MaxTokens = options.ContainsKey("max-tokens"),
-                    MaxTokensValue = options.ContainsKey("max-tokens") ? int.Parse(options["max-tokens"]) : 4096,
                     BypassMode = options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true",
                     Continue = options.ContainsKey("continue") && options["continue"] == "true"
                 };
