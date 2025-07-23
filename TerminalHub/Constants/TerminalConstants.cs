@@ -61,12 +61,12 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
             
-            if (options.ContainsKey("yolo-mode") && options["yolo-mode"] == "true")
+            if (options.ContainsKey("yolo") && options["yolo"] == "true")
             {
                 args.Add("-y");
             }
             
-            if (options.ContainsKey("sandbox-mode") && options["sandbox-mode"] == "true")
+            if (options.ContainsKey("sandbox") && options["sandbox"] == "true")
             {
                 args.Add("-s");
             }

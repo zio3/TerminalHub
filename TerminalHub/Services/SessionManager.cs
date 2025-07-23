@@ -135,11 +135,14 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
         {
-            // セッション数の上限チェック
-            if (_sessions.Count >= _maxSessions)
+            try
             {
-                throw new InvalidOperationException($"最大セッション数（{_maxSessions}）に達しています。");
-            }
+                // セッション数の上限チェック
+                if (_sessions.Count >= _maxSessions)
+                {
+                    _logger.LogWarning($"Maximum session count reached: {_maxSessions}");
+                    throw new InvalidOperationException($"最大セッション数（{_maxSessions}）に達しています。");
+                }
             
             // フォルダパスが指定されていない場合はデフォルトを使用
             if (string.IsNullOrWhiteSpace(folderPath))
@@ -148,11 +151,12 @@ namespace TerminalHub.Services
                     ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
             
-            // フォルダが存在することを確認
-            if (!Directory.Exists(folderPath))
-            {
-                throw new DirectoryNotFoundException($"指定されたフォルダが見つかりません: {folderPath}");
-            }
+                // フォルダが存在することを確認
+                if (!Directory.Exists(folderPath))
+                {
+                    _logger.LogError($"Directory not found: {folderPath}");
+                    throw new DirectoryNotFoundException($"指定されたフォルダが見つかりません: {folderPath}");
+                }
             
             var sessionInfo = new SessionInfo
             {
@@ -168,8 +172,6 @@ namespace TerminalHub.Services
             // Git情報を非同期で取得してセッション情報に設定
             await PopulateGitInfoAsync(sessionInfo);
 
-            try
-            {
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 
@@ -188,12 +190,37 @@ namespace TerminalHub.Services
                 _sessions[sessionInfo.SessionId] = session;
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
 
+                _logger.LogInformation($"Session created successfully: {sessionInfo.SessionId} ({terminalType})");
                 return sessionInfo;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // フォルダが存在しないエラーはそのまま再スロー
+                throw;
+            }
+            catch (InvalidOperationException)
+            {
+                // セッション数上限エラーはそのまま再スロー
+                throw;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create session for {FolderPath} with type {TerminalType}", folderPath, terminalType);
-                throw new InvalidOperationException($"Failed to start {terminalType} session for {folderPath}", ex);
+                
+                // エラーメッセージをより具体的に
+                string errorMessage = terminalType switch
+                {
+                    TerminalType.ClaudeCode => $"Claude Codeの起動に失敗しました。Claude Codeがインストールされているか確認してください。",
+                    TerminalType.GeminiCLI => $"Gemini CLIの起動に失敗しました。Gemini CLIがインストールされているか確認してください。",
+                    _ => $"ターミナルの起動に失敗しました。"
+                };
+                
+                if (ex.Message.Contains("Access is denied", StringComparison.OrdinalIgnoreCase))
+                {
+                    errorMessage += " アクセスが拒否されました。管理者権限が必要かもしれません。";
+                }
+                
+                throw new InvalidOperationException(errorMessage, ex);
             }
         }
 
