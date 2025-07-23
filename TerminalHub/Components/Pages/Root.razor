@@ -1,6 +1,7 @@
 @page "/multisession"
 @page "/"
 @using TerminalHub.Components.Shared
+@using TerminalHub.Components.Shared.Dialogs
 @using TerminalHub.Constants
 @using TerminalHub.Models
 @using TerminalHub.Services
@@ -23,7 +24,7 @@
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
 <DevWindow @bind-IsVisible="showDevWindow" />
-<SettingsModal @bind-IsVisible="showSettingsModal" />
+<SettingsDialog @bind-IsVisible="showSettingsDialog" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -173,7 +174,7 @@
     private string tempMemoText = "";
     private bool showDevWindow = false;
     private bool showDevButton = false;
-    private bool showSettingsModal = false;
+    private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
     private Guid? subSessionParentSessionId = null;
@@ -294,7 +295,7 @@
     
     private void ShowSettings()
     {
-        showSettingsModal = true;
+        showSettingsDialog = true;
     }
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
