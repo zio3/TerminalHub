@@ -318,8 +318,8 @@ window.terminalFunctions = {
                 const performScroll = () => {
                     // 書き込み中でない場合は即座にスクロール
                     if (!terminalInfo.isWriting) {
-                        // 確実なスクロールメソッドを使用
-                        multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                        // 確実なスクロールメソッドを使用（統一された呼び出し方法）
+                        window.terminalFunctions.scrollToBottomReliably(sessionId);
                         console.log(`[JS] リサイズ後即座に確実なスクロール: sessionId=${sessionId}`);
                     } else {
                         // 書き込み中の場合はフラグを設定
@@ -328,7 +328,7 @@ window.terminalFunctions = {
                         
                         // 500ms後に強制スクロール（フェイルセーフ）
                         terminalInfo.resizeScrollTimer = setTimeout(() => {
-                            multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                            window.terminalFunctions.scrollToBottomReliably(sessionId);
                             console.log(`[JS] リサイズ後の強制確実なスクロール: sessionId=${sessionId}`);
                             terminalInfo.pendingScrollAfterWrite = false;
                         }, 500);
@@ -481,7 +481,7 @@ window.terminalFunctions = {
             
             // ターミナル表示時に確実なスクロールを実行
             setTimeout(() => {
-                multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                window.terminalFunctions.scrollToBottomReliably(sessionId);
                 console.log(`[JS] ターミナル表示時の確実なスクロール: sessionId=${sessionId}`);
             }, 100);
         }
@@ -570,7 +570,7 @@ window.terminalFunctions = {
                 } else {
                     // 初回バッファ内容の場合は確実なスクロール
                     setTimeout(() => {
-                        multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                        window.terminalFunctions.scrollToBottomReliably(sessionId);
                         console.log(`[JS] バッファ内容書き込み後の確実なスクロール: sessionId=${sessionId}`);
                     }, 100);
                 }
@@ -583,7 +583,7 @@ window.terminalFunctions = {
     },
     
     // 確実にスクロールを最下部まで行う（リトライ機能付き）
-    scrollToBottomReliably: function(sessionId, maxRetries = 5) {
+    scrollToBottomReliably: function(sessionId, maxRetries = 2) {
         if (!window.multiSessionTerminals || !window.multiSessionTerminals[sessionId]) {
             return;
         }
@@ -677,8 +677,13 @@ window.terminalFunctions = {
     }
 };
 
-// terminalHubHelpers オブジェクト
-window.terminalHubHelpers = {
+// terminalHubHelpers への追加機能（既存のhelpersオブジェクトを拡張）
+if (!window.terminalHubHelpers) {
+    window.terminalHubHelpers = {};
+}
+
+// ターミナル関連のヘルパー機能を追加
+Object.assign(window.terminalHubHelpers, {
     // テキストエリアにフォーカス
     focusTextArea: function() {
         const textArea = document.querySelector('textarea[data-input-area]');
@@ -691,5 +696,5 @@ window.terminalHubHelpers = {
     checkElementExists: function(elementId) {
         return document.getElementById(elementId) !== null;
     }
-};
+});
 
