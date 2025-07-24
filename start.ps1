@@ -97,13 +97,18 @@ if ($Foreground) {
     dotnet run --project TerminalHub/TerminalHub.csproj --urls "https://localhost:$httpsPort;http://localhost:$httpPort" 2>&1 | Tee-Object -FilePath $logFile
 } else {
     # バックグラウンド実行（デフォルト）
-    # コマンドを構築
-    $command = "& dotnet run --project TerminalHub/TerminalHub.csproj --urls `"https://localhost:$httpsPort;http://localhost:$httpPort`" 2>&1 | Out-File -FilePath `"$logFile`" -Encoding UTF8 -Append"
+    # 一時的なスクリプトファイルを作成
+    $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
+    $scriptContent = @"
+Set-Location '$PWD'
+dotnet run --project TerminalHub/TerminalHub.csproj --urls "https://localhost:$httpsPort;http://localhost:$httpPort" 2>&1 | Tee-Object -FilePath '$logFile' -Append
+"@
+    
+    $scriptContent | Set-Content -Path $tempScript -Encoding UTF8
     
     $process = Start-Process -FilePath "powershell" `
-        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $command `
-        -PassThru -WindowStyle Hidden `
-        -WorkingDirectory (Get-Location)
+        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $tempScript `
+        -PassThru -WindowStyle Hidden
     
     # テンプレートファイルを読み込んで置換
     if (Test-Path "./stop.ps1.template") {
@@ -115,7 +120,8 @@ if ($Foreground) {
             -replace '{{PROCESS_ID}}', $process.Id `
             -replace '{{FOLDER}}', $currentFolder `
             -replace '{{HTTP_PORT}}', $httpPort `
-            -replace '{{HTTPS_PORT}}', $httpsPort
+            -replace '{{HTTPS_PORT}}', $httpsPort `
+            -replace '{{TEMP_SCRIPT}}', $tempScript
         
         # stop.ps1を生成
         $stopScript | Set-Content -Path "./stop.ps1" -Encoding UTF8
@@ -141,6 +147,12 @@ Get-Content "$logFile" -Wait
         @"
 # Auto-generated stop script
 Stop-Process -Id $($process.Id) -Force
+if (Test-Path "$tempScript") {
+    Remove-Item -Path "$tempScript" -Force
+}
+if (Test-Path "./LogView.ps1") {
+    Remove-Item -Path "./LogView.ps1" -Force
+}
 Remove-Item -Path `$MyInvocation.MyCommand.Path -Force
 "@ | Set-Content -Path "./stop.ps1" -Encoding UTF8
         

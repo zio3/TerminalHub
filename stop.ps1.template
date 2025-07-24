@@ -28,6 +28,11 @@ try {
     Stop-Process -Id $processId -Force
     Write-Host "プロセス(ID: $processId)を停止しました。" -ForegroundColor Green
     
+    # 一時スクリプトファイルを削除
+    if (Test-Path "{{TEMP_SCRIPT}}") {
+        Remove-Item -Path "{{TEMP_SCRIPT}}" -Force
+    }
+    
     # 自身を削除
     Write-Host "停止スクリプトを削除しています..." -ForegroundColor Yellow
     Remove-Item -Path $MyInvocation.MyCommand.Path -Force
@@ -41,6 +46,11 @@ try {
     if ($_.Exception.GetType().Name -eq "ProcessCommandException") {
         Write-Host "`nエラー: プロセス(ID: $processId)が見つかりません。" -ForegroundColor Red
         Write-Host "既に停止している可能性があります。" -ForegroundColor Yellow
+        
+        # 一時スクリプトファイルを削除
+        if (Test-Path "{{TEMP_SCRIPT}}") {
+            Remove-Item -Path "{{TEMP_SCRIPT}}" -Force
+        }
         
         # 自身を削除
         Write-Host "`n停止スクリプトを削除しています..." -ForegroundColor Yellow
