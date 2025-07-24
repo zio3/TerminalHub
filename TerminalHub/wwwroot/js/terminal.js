@@ -242,19 +242,41 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
-                // リサイズ完了時に最下部にスクロール（複数回実行して確実に）
-                const scrollToBottomReliable = () => {
-                    term.scrollToBottom();
-                    // 少し待ってもう一度
-                    setTimeout(() => {
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                if (!terminalInfo) return;
+                
+                // 既存のタイマーをクリア
+                if (terminalInfo.resizeScrollTimer) {
+                    clearTimeout(terminalInfo.resizeScrollTimer);
+                }
+                
+                // スクロール処理の定義
+                const performScroll = () => {
+                    // 書き込み中でない場合は即座にスクロール
+                    if (!terminalInfo.isWriting) {
                         term.scrollToBottom();
-                        console.log(`[JS] xterm.onResize後スクロール実行: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
-                    }, 50);
+                        console.log(`[JS] リサイズ後即座にスクロール: sessionId=${sessionId}`);
+                        
+                        // 念のため少し後にもう一度
+                        setTimeout(() => {
+                            term.scrollToBottom();
+                        }, 100);
+                    } else {
+                        // 書き込み中の場合はフラグを設定
+                        terminalInfo.pendingScrollAfterWrite = true;
+                        console.log(`[JS] 書き込み中のためスクロール遅延: sessionId=${sessionId}`);
+                        
+                        // 500ms後に強制スクロール（フェイルセーフ）
+                        terminalInfo.resizeScrollTimer = setTimeout(() => {
+                            term.scrollToBottom();
+                            console.log(`[JS] リサイズ後の強制スクロール: sessionId=${sessionId}`);
+                            terminalInfo.pendingScrollAfterWrite = false;
+                        }, 500);
+                    }
                 };
                 
-                requestAnimationFrame(() => {
-                    scrollToBottomReliable();
-                });
+                // 次のフレームで実行
+                requestAnimationFrame(performScroll);
             });
             
             // ResizeObserverを設定
@@ -267,30 +289,46 @@ window.terminalFunctions = {
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
                     }
                     
-                    // 複数のタイミングでスクロールを試行（より確実に）
-                    const multipleScrollAttempts = () => {
-                        // 即座に1回目
-                        term.scrollToBottom();
-                        
-                        // 次のフレームで2回目
-                        requestAnimationFrame(() => {
+                    // リサイズ完了後のスクロール処理
+                    const terminalInfo = window.multiSessionTerminals[sessionId];
+                    if (!terminalInfo) {
+                        // 初回作成時のため、シンプルなスクロール処理
+                        setTimeout(() => {
                             term.scrollToBottom();
-                            
-                            // さらに少し待って3回目
+                            console.log(`[JS] ResizeObserver初回スクロール: sessionId=${sessionId}`);
+                        }, 100);
+                        return;
+                    }
+                    
+                    // 既存のタイマーをクリア
+                    if (terminalInfo.resizeScrollTimer) {
+                        clearTimeout(terminalInfo.resizeScrollTimer);
+                    }
+                    
+                    const performScrollAfterObserver = () => {
+                        // 書き込み中でない場合は即座にスクロール
+                        if (!terminalInfo.isWriting) {
+                            term.scrollToBottom();
+                            // 確実性のため少し後にもう一度
                             setTimeout(() => {
                                 term.scrollToBottom();
-                                console.log(`[JS] ResizeObserver後スクロール実行(複数回): sessionId=${sessionId}`);
+                                console.log(`[JS] ResizeObserver後スクロール実行: sessionId=${sessionId}`);
                             }, 100);
+                        } else {
+                            // 書き込み中の場合はフラグを設定
+                            terminalInfo.pendingScrollAfterWrite = true;
+                            console.log(`[JS] ResizeObserver: 書き込み中のためスクロール遅延`);
                             
-                            // 最後にもう一度（200ms後）
-                            setTimeout(() => {
+                            // 500ms後に強制スクロール
+                            terminalInfo.resizeScrollTimer = setTimeout(() => {
                                 term.scrollToBottom();
-                                console.log(`[JS] ResizeObserver後最終スクロール: sessionId=${sessionId}`);
-                            }, 200);
-                        });
+                                console.log(`[JS] ResizeObserver後の強制スクロール`);
+                                terminalInfo.pendingScrollAfterWrite = false;
+                            }, 500);
+                        }
                     };
                     
-                    multipleScrollAttempts();
+                    requestAnimationFrame(performScrollAfterObserver);
                 }
             });
             
@@ -298,7 +336,11 @@ window.terminalFunctions = {
                 terminal: term,
                 fitAddon: fitAddon,
                 scrollPosition: 0,
-                hasBufferedContent: false
+                hasBufferedContent: false,
+                lastWriteTime: 0,
+                isWriting: false,
+                pendingScrollAfterWrite: false,
+                resizeScrollTimer: null
             };
             
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
@@ -306,7 +348,31 @@ window.terminalFunctions = {
         }
         
         return {
-            write: (data) => term.write(data),
+            write: (data) => {
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                if (terminalInfo) {
+                    // 書き込み開始を記録
+                    terminalInfo.lastWriteTime = Date.now();
+                    terminalInfo.isWriting = true;
+                    
+                    term.write(data, () => {
+                        // 書き込み完了を記録
+                        terminalInfo.isWriting = false;
+                        terminalInfo.lastWriteTime = Date.now();
+                        
+                        // リサイズ中のスクロール待機があれば実行
+                        if (terminalInfo.pendingScrollAfterWrite) {
+                            setTimeout(() => {
+                                term.scrollToBottom();
+                                console.log(`[JS] 書き込み完了後の遅延スクロール実行: sessionId=${sessionId}`);
+                                terminalInfo.pendingScrollAfterWrite = false;
+                            }, 50);
+                        }
+                    });
+                } else {
+                    term.write(data);
+                }
+            },
             clear: () => term.clear(),
             focus: () => term.focus(),
             resize: () => {
@@ -363,8 +429,15 @@ window.terminalFunctions = {
         
         // ターミナルインスタンスのクリーンアップ
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            if (window.multiSessionTerminals[sessionId].terminal) {
-                window.multiSessionTerminals[sessionId].terminal.dispose();
+            const terminalInfo = window.multiSessionTerminals[sessionId];
+            
+            // タイマーのクリーンアップ
+            if (terminalInfo.resizeScrollTimer) {
+                clearTimeout(terminalInfo.resizeScrollTimer);
+            }
+            
+            if (terminalInfo.terminal) {
+                terminalInfo.terminal.dispose();
                 // console.log(`[JS] ターミナル ${sessionId} を破棄`);
             }
             delete window.multiSessionTerminals[sessionId];
