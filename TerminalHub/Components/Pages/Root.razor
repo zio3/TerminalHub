@@ -504,35 +504,9 @@
         // 出力読み取りを開始（マスターの場合のみ、既存のものがなければ）
         if (activeSession != null && !sessionReadCts.ContainsKey(sessionId) && isMasterConnection)
         {
-            Console.WriteLine($"[SelectSession] 読み取りタスクを開始: sessionId={sessionId}");
             var cts = new CancellationTokenSource();
             sessionReadCts[sessionId] = cts;
-            // Fire-and-forget の代わりに Task を保持して適切に管理
-            var readTask = Task.Run(async () => 
-            {
-                try
-                {
-                    await ReadSessionOutput(sessionId, cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // キャンセルは正常な動作
-                    Console.WriteLine($"[ReadSessionOutput] キャンセルされました: sessionId={sessionId}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
-                }
-            }, cts.Token);
-            Console.WriteLine($"[Connection] マスターとして出力読み取りを開始: セッション {sessionId}");
-        }
-        else if (!isMasterConnection)
-        {
-            Console.WriteLine($"[Connection] スレーブモードのため出力読み取りをスキップ: セッション {sessionId}");
-        }
-        else
-        {
-            Console.WriteLine($"[SelectSession] 読み取りタスクは既に存在: sessionId={sessionId}");
+            _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
         }
 
         // ターミナルを最下段にスクロール
@@ -890,22 +864,8 @@
                 {
                     var cts = new CancellationTokenSource();
                     sessionReadCts[sessionId] = cts;
-                    var readTask = Task.Run(async () => 
-                    {
-                        try
-                        {
-                            await ReadSessionOutput(sessionId, cts.Token);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            // キャンセルは正常な動作
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
-                        }
-                    }, cts.Token);
-                    Console.WriteLine($"[RecreateTerminal] マスターとして読み取り処理を再開: セッション {sessionId}");
+                    _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
+                }
 
                     // ターミナルに初期プロンプトを送信して接続を確認
                     if (activeTerminal != null)
@@ -1861,7 +1821,6 @@
                     var cts = new CancellationTokenSource();
                     sessionReadCts[activeSessionId.Value] = cts;
                     _ = Task.Run(() => ReadSessionOutput(activeSessionId.Value, cts.Token));
-                    Console.WriteLine($"[TakeMasterControl] 出力読み取りを開始: セッション {activeSessionId.Value}");
                 }
                 
                 // ターミナルのリサイズを強制
