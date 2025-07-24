@@ -124,7 +124,7 @@ namespace TerminalHub.Services
         {
             // 既存のメソッドは互換性のために残す
             var basePath = _configuration.GetValue<string>("SessionSettings:BasePath") 
-                ?? @"C:\Users\info\source\repos\Experimental2025\ClaoudeCodeWebUi\bin\Debug\net9.0";
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "TerminalHub");
             return await CreateSessionAsync(basePath, "", TerminalType.Terminal, new Dictionary<string, string>());
         }
 
