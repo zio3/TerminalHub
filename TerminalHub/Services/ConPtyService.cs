@@ -261,9 +261,18 @@ namespace TerminalHub.Services
                 // より安全な読み取り処理
                 var bytesRead = await _reader.ReadAsync(buffer, offset, count);
                 
-                // データが読み取れた場合は、追加データがないか短時間待機
+                // デバッグ: 読み取ったデータをログ
                 if (bytesRead > 0)
                 {
+                    var data = new string(buffer, offset, bytesRead);
+                    _logger.LogDebug($"[ConPty ReadAsync] Read {bytesRead} bytes, first 50 chars: {data.Substring(0, Math.Min(50, data.Length))}");
+                    
+                    // ANSIエスケープシーケンスの検出
+                    if (data.Contains("\x1b["))
+                    {
+                        _logger.LogDebug($"[ConPty ReadAsync] ANSI sequences detected in data");
+                    }
+                    
                     await Task.Delay(1);
                 }
                 

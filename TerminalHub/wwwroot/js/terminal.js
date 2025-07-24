@@ -39,6 +39,7 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
+<<<<<<< HEAD
 // URL検出の設定
 function setupUrlDetection(term) {
     // HTTP/HTTPSのURLパターン
@@ -101,6 +102,122 @@ function setupUrlDetection(term) {
         console.error('[URL Detection] registerLinkProvider APIが利用できません');
     }
 }
+=======
+// デバッグ用データ記録
+window.terminalDebug = {
+    enabled: true,  // デバッグモードの有効/無効
+    dataLog: [],    // 受信データのログ
+    ansiLog: [],    // ANSIシーケンスのログ
+    maxLogSize: 1000,  // 最大ログサイズ
+    
+    // データをログに記録
+    logData: function(sessionId, data, context) {
+        if (!this.enabled) return;
+        
+        const entry = {
+            timestamp: new Date().toISOString(),
+            sessionId: sessionId,
+            context: context,
+            dataLength: data.length,
+            data: data.substring(0, 200),  // 最初の200文字のみ保存
+            fullData: data  // 完全なデータ（必要に応じて）
+        };
+        
+        this.dataLog.push(entry);
+        if (this.dataLog.length > this.maxLogSize) {
+            this.dataLog.shift();  // 古いエントリを削除
+        }
+        
+        // ANSIシーケンスを検出
+        this.detectAnsiSequences(sessionId, data);
+    },
+    
+    // ANSIエスケープシーケンスを検出して記録
+    detectAnsiSequences: function(sessionId, data) {
+        const sequences = [];
+        const regex = /\x1b\[([0-9;]*)([A-Za-z])/g;
+        let match;
+        
+        while ((match = regex.exec(data)) !== null) {
+            const seq = {
+                timestamp: new Date().toISOString(),
+                sessionId: sessionId,
+                sequence: match[0],
+                params: match[1],
+                command: match[2],
+                index: match.index,
+                context: this.getSequenceDescription(match[2], match[1])
+            };
+            
+            sequences.push(seq);
+            this.ansiLog.push(seq);
+        }
+        
+        if (this.ansiLog.length > this.maxLogSize) {
+            this.ansiLog = this.ansiLog.slice(-this.maxLogSize);
+        }
+        
+        // 重要なシーケンスを検出したら警告
+        if (sequences.length > 0) {
+            console.log(`[TerminalDebug] ANSIシーケンス検出: sessionId=${sessionId}`, sequences);
+        }
+    },
+    
+    // ANSIシーケンスの説明を取得
+    getSequenceDescription: function(command, params) {
+        const descriptions = {
+            'A': `カーソル上移動(${params || 1}行)`,
+            'B': `カーソル下移動(${params || 1}行)`,
+            'C': `カーソル右移動(${params || 1}列)`,
+            'D': `カーソル左移動(${params || 1}列)`,
+            'H': `カーソル位置設定(${params || '1,1'})`,
+            'J': params === '2' ? '画面全体クリア' : '画面部分クリア',
+            'K': params === '2' ? '行全体クリア' : '行部分クリア',
+            'm': 'テキスト属性設定',
+            's': 'カーソル位置保存',
+            'u': 'カーソル位置復元'
+        };
+        
+        return descriptions[command] || `不明なコマンド(${command})`;
+    },
+    
+    // デバッグ情報を表示
+    showReport: function() {
+        console.group('[TerminalDebug] デバッグレポート');
+        console.log('データログ数:', this.dataLog.length);
+        console.log('ANSIログ数:', this.ansiLog.length);
+        
+        // 最近のデータログ
+        console.group('最近のデータ受信:');
+        this.dataLog.slice(-10).forEach(entry => {
+            console.log(`${entry.timestamp} [${entry.context}] ${entry.dataLength}バイト`);
+        });
+        console.groupEnd();
+        
+        // ANSIシーケンスの統計
+        const ansiStats = {};
+        this.ansiLog.forEach(seq => {
+            const key = seq.command;
+            ansiStats[key] = (ansiStats[key] || 0) + 1;
+        });
+        
+        console.group('ANSIシーケンス統計:');
+        Object.entries(ansiStats).forEach(([cmd, count]) => {
+            console.log(`${cmd}: ${count}回`);
+        });
+        console.groupEnd();
+        
+        console.groupEnd();
+    },
+    
+    // ログをクリア
+    clear: function() {
+        this.dataLog = [];
+        this.ansiLog = [];
+        console.log('[TerminalDebug] ログをクリアしました');
+    }
+};
+>>>>>>> work2
 
 //// IME検出とフォーカス制御
 //function setupIMEDetection(term, element, sessionId) {
@@ -557,6 +674,9 @@ window.terminalFunctions = {
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
+            
+            // デバッグログ
+            window.terminalDebug.logData(sessionId, data, 'writeBuffered');
             
             // 大きなデータをチャンクに分割して書き込み
             this.writeDataInChunks(term, data).then(() => {
