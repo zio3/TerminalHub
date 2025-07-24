@@ -242,18 +242,10 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
-                // リサイズ完了時に最下部にスクロール（複数回実行して確実に）
-                const scrollToBottomReliable = () => {
-                    term.scrollToBottom();
-                    // 少し待ってもう一度
-                    setTimeout(() => {
-                        term.scrollToBottom();
-                        console.log(`[JS] xterm.onResize後スクロール実行: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
-                    }, 50);
-                };
-                
+                console.log(`[JS] xterm.onResize: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                // リサイズ完了時に確実なスクロールを実行
                 requestAnimationFrame(() => {
-                    scrollToBottomReliable();
+                    multiSessionTerminalManager.scrollToBottomReliably(sessionId);
                 });
             });
             
@@ -349,6 +341,12 @@ window.terminalFunctions = {
         const terminal = document.getElementById(`terminal-${sessionId}`);
         if (terminal) {
             terminal.style.display = 'block';
+            
+            // ターミナル表示時に確実なスクロールを実行
+            setTimeout(() => {
+                multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                console.log(`[JS] ターミナル表示時の確実なスクロール: sessionId=${sessionId}`);
+            }, 100);
         }
     },
 
@@ -419,14 +417,71 @@ window.terminalFunctions = {
             // バッファ内容を書き込み
             term.write(data);
             
-            // バッファ内容の場合は即座に最下部へスクロール
-            setTimeout(() => {
-                term.scrollToBottom();
-                console.log(`[JS] バッファ内容書き込み後スクロール: sessionId=${sessionId}`);
-            }, 50);
+            // バッファ内容の場合は確実なスクロールを実行
+            if (terminalInfo.hasBufferedContent) {
+                // 既にバッファ内容がある場合は通常のスクロール
+                setTimeout(() => {
+                    term.scrollToBottom();
+                }, 50);
+            } else {
+                // 初回バッファ内容の場合は確実なスクロール
+                setTimeout(() => {
+                    multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                    console.log(`[JS] バッファ内容書き込み後の確実なスクロール: sessionId=${sessionId}`);
+                }, 100);
+            }
             
             terminalInfo.hasBufferedContent = true;
         }
+    },
+    
+    // 確実にスクロールを最下部まで行う（リトライ機能付き）
+    scrollToBottomReliably: function(sessionId, maxRetries = 5) {
+        if (!window.multiSessionTerminals || !window.multiSessionTerminals[sessionId]) {
+            return;
+        }
+        
+        const terminalInfo = window.multiSessionTerminals[sessionId];
+        const term = terminalInfo.terminal;
+        
+        let retryCount = 0;
+        let lastScrollY = -1;
+        
+        const attemptScroll = () => {
+            // 現在のスクロール位置を取得
+            const currentScrollY = term.buffer.active.viewportY;
+            const maxScrollY = term.buffer.active.baseY + term.rows - 1;
+            
+            // 最下部までスクロール
+            term.scrollToBottom();
+            
+            // スクロール後の位置を確認
+            setTimeout(() => {
+                const newScrollY = term.buffer.active.viewportY;
+                
+                // スクロールが動いていない、かつ最下部に到達していない場合
+                if (newScrollY === lastScrollY && newScrollY < maxScrollY && retryCount < maxRetries) {
+                    retryCount++;
+                    lastScrollY = newScrollY;
+                    console.log(`[JS] スクロール再試行 ${retryCount}/${maxRetries}: sessionId=${sessionId}, current=${newScrollY}, max=${maxScrollY}`);
+                    
+                    // 少し待ってから再試行
+                    setTimeout(attemptScroll, 100 * retryCount); // 段階的に待機時間を増やす
+                } else if (newScrollY >= maxScrollY) {
+                    console.log(`[JS] スクロール完了: sessionId=${sessionId}, position=${newScrollY}/${maxScrollY}`);
+                } else {
+                    lastScrollY = newScrollY;
+                    // スクロールが動いた場合は継続
+                    if (retryCount < maxRetries && newScrollY < maxScrollY) {
+                        retryCount++;
+                        setTimeout(attemptScroll, 50);
+                    }
+                }
+            }, 50);
+        };
+        
+        // 初回実行
+        attemptScroll();
     },
 
     // スクロール位置を保存
