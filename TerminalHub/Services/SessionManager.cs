@@ -120,6 +120,18 @@ namespace TerminalHub.Services
             }
         }
 
+        private async Task<ConPtySession> CreateSessionWithTerminalTypeAsync(TerminalType terminalType, string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
+        {
+            if (terminalType == TerminalType.ClaudeCode)
+            {
+                return await CreateClaudeCodeSessionWithFallbackAsync(command, args, folderPath, cols, rows, options);
+            }
+            else
+            {
+                return await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+            }
+        }
+
         public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
         {
             // 既存のメソッドは互換性のために残す
@@ -177,15 +189,7 @@ namespace TerminalHub.Services
                 
                 var (command, args) = BuildTerminalCommand(terminalType, options);
                 
-                ConPtySession session;
-                if (terminalType == TerminalType.ClaudeCode)
-                {
-                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, folderPath, cols, rows, options);
-                }
-                else
-                {
-                    session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
-                }
+                ConPtySession session = await CreateSessionWithTerminalTypeAsync(terminalType, command, args, folderPath, cols, rows, options);
 
                 _sessions[sessionInfo.SessionId] = session;
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
@@ -444,14 +448,7 @@ namespace TerminalHub.Services
                     var (terminalCommand, terminalArgs) = BuildTerminalCommand(existingWorktreeSessionInfo.TerminalType, existingWorktreeSessionInfo.Options);
 
                     ConPtySession newSession;
-                    if (existingWorktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
-                    {
-                        newSession = await CreateClaudeCodeSessionWithFallbackAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows, existingWorktreeSessionInfo.Options);
-                    }
-                    else
-                    {
-                        newSession = await _conPtyService.CreateSessionAsync(terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows);
-                    }
+                    newSession = await CreateSessionWithTerminalTypeAsync(existingWorktreeSessionInfo.TerminalType, terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows, existingWorktreeSessionInfo.Options);
                     _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, newSession);
                     _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
 
@@ -507,14 +504,7 @@ namespace TerminalHub.Services
                 var (command, args) = BuildTerminalCommand(worktreeSessionInfo.TerminalType, worktreeSessionInfo.Options);
 
                 ConPtySession session;
-                if (worktreeSessionInfo.TerminalType == TerminalType.ClaudeCode)
-                {
-                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, worktreePath, cols, rows, worktreeSessionInfo.Options);
-                }
-                else
-                {
-                    session = await _conPtyService.CreateSessionAsync(command, args, worktreePath, cols, rows);
-                }
+                session = await CreateSessionWithTerminalTypeAsync(worktreeSessionInfo.TerminalType, command, args, worktreePath, cols, rows, worktreeSessionInfo.Options);
                 _sessions.TryAdd(worktreeSessionInfo.SessionId, session);
                 _sessionInfos.TryAdd(worktreeSessionInfo.SessionId, worktreeSessionInfo);
 
@@ -581,14 +571,7 @@ namespace TerminalHub.Services
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
 
                 ConPtySession session;
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
-                {
-                    session = await CreateClaudeCodeSessionWithFallbackAsync(command, args, folderPath, cols, rows, sessionInfo.Options);
-                }
-                else
-                {
-                    session = await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
-                }
+                session = await CreateSessionWithTerminalTypeAsync(sessionInfo.TerminalType, command, args, folderPath, cols, rows, sessionInfo.Options);
                 _sessions.TryAdd(sessionInfo.SessionId, session);
                 _sessionInfos.TryAdd(sessionInfo.SessionId, sessionInfo);
 
@@ -635,14 +618,7 @@ namespace TerminalHub.Services
 
                 // 新しいセッションを作成
                 ConPtySession newSession;
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
-                {
-                    newSession = await CreateClaudeCodeSessionWithFallbackAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.Options);
-                }
-                else
-                {
-                    newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
-                }
+                newSession = await CreateSessionWithTerminalTypeAsync(sessionInfo.TerminalType, command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.Options);
                 _sessions[sessionId] = newSession;
 
                 _logger.LogInformation("セッション再起動成功: {SessionId}, タイプ: {Type}", sessionId, sessionInfo.TerminalType);

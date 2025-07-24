@@ -245,7 +245,7 @@ window.terminalFunctions = {
                 console.log(`[JS] xterm.onResize: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
                 // リサイズ完了時に確実なスクロールを実行
                 requestAnimationFrame(() => {
-                    multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                    window.terminalFunctions.scrollToBottomReliably(sessionId);
                 });
             });
             
@@ -344,7 +344,7 @@ window.terminalFunctions = {
             
             // ターミナル表示時に確実なスクロールを実行
             setTimeout(() => {
-                multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                window.terminalFunctions.scrollToBottomReliably(sessionId);
                 console.log(`[JS] ターミナル表示時の確実なスクロール: sessionId=${sessionId}`);
             }, 100);
         }
@@ -426,7 +426,7 @@ window.terminalFunctions = {
             } else {
                 // 初回バッファ内容の場合は確実なスクロール
                 setTimeout(() => {
-                    multiSessionTerminalManager.scrollToBottomReliably(sessionId);
+                    window.terminalFunctions.scrollToBottomReliably(sessionId);
                     console.log(`[JS] バッファ内容書き込み後の確実なスクロール: sessionId=${sessionId}`);
                 }, 100);
             }
@@ -436,7 +436,7 @@ window.terminalFunctions = {
     },
     
     // 確実にスクロールを最下部まで行う（リトライ機能付き）
-    scrollToBottomReliably: function(sessionId, maxRetries = 5) {
+    scrollToBottomReliably: function(sessionId, maxRetries = 2) {
         if (!window.multiSessionTerminals || !window.multiSessionTerminals[sessionId]) {
             return;
         }
@@ -505,8 +505,13 @@ window.terminalFunctions = {
     }
 };
 
-// terminalHubHelpers オブジェクト
-window.terminalHubHelpers = {
+// terminalHubHelpers への追加機能（既存のhelpersオブジェクトを拡張）
+if (!window.terminalHubHelpers) {
+    window.terminalHubHelpers = {};
+}
+
+// ターミナル関連のヘルパー機能を追加
+Object.assign(window.terminalHubHelpers, {
     // テキストエリアにフォーカス
     focusTextArea: function() {
         const textArea = document.querySelector('textarea[data-input-area]');
@@ -519,5 +524,5 @@ window.terminalHubHelpers = {
     checkElementExists: function(elementId) {
         return document.getElementById(elementId) !== null;
     }
-};
+});
 
