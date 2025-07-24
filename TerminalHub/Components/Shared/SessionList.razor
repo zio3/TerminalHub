@@ -73,16 +73,16 @@
                                         <i class="bi bi-circle-fill text-danger git-status-indicator" title="未コミットの変更があります"></i>
                                     }
                                 </span>
-                                @if (!session.IsWorktree)
-                                {
-                                    <button class="btn btn-sm btn-outline-success border-0 ms-1" 
-                                            @onclick:stopPropagation="true"
-                                            @onclick="() => OnCreateWorktree.InvokeAsync(session.SessionId)"
-                                            title="新しいWorktreeを作成"
-                                            style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">
-                                        <i class="bi bi-plus-circle"></i>
-                                    </button>
-                                }
+                            }
+                            @if (!session.IsWorktree)
+                            {
+                                <button class="btn btn-sm btn-outline-success border-0 ms-1" 
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OnCreateWorktree.InvokeAsync(session.SessionId)"
+                                        title="@(session.IsGitRepository ? "新しいWorktreeを作成" : "サブセッションを作成")"
+                                        style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">
+                                    <i class="bi bi-plus-circle"></i>
+                                </button>
                             }
                         </h6>
                         @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
