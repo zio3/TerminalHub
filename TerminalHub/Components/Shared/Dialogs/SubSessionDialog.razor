@@ -21,22 +21,31 @@
                 
                 <!-- タブナビゲーション -->
                 <ul class="nav nav-tabs mb-3">
-                    <li class="nav-item">
-                        <button class="nav-link @(activeTab == TabType.Create ? "active" : "")" 
-                                @onclick="@(() => activeTab = TabType.Create)">
-                            <i class="bi bi-plus-circle me-1"></i>Worktree新規作成
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="nav-link @(activeTab == TabType.Existing ? "active" : "")" 
-                                @onclick="@(() => activeTab = TabType.Existing)">
-                            <i class="bi bi-folder-plus me-1"></i>既存Worktree追加
-                        </button>
-                    </li>
+                    @if (IsGitRepository)
+                    {
+                        <li class="nav-item">
+                            <button class="nav-link @(activeTab == TabType.Create ? "active" : "")" 
+                                    @onclick="@(() => activeTab = TabType.Create)">
+                                <i class="bi bi-plus-circle me-1"></i>Worktree新規作成
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(activeTab == TabType.Existing ? "active" : "")" 
+                                    @onclick="@(() => activeTab = TabType.Existing)">
+                                <i class="bi bi-folder-plus me-1"></i>既存Worktree追加
+                            </button>
+                        </li>
+                    }
                     <li class="nav-item">
                         <button class="nav-link @(activeTab == TabType.SamePath ? "active" : "")" 
                                 @onclick="@(() => activeTab = TabType.SamePath)">
                             <i class="bi bi-folder me-1"></i>同じフォルダで開く
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabType.NewFolder ? "active" : "")" 
+                                @onclick="@(() => activeTab = TabType.NewFolder)">
+                            <i class="bi bi-folder-plus me-1"></i>新しいフォルダで開く
                         </button>
                     </li>
                 </ul>
@@ -225,6 +234,47 @@
                             }
                         </div>
                     }
+                    else if (activeTab == TabType.NewFolder)
+                    {
+                        <!-- 新しいフォルダで開く -->
+                        <div class="tab-pane active">
+                            <div class="mb-3">
+                                <label for="newFolderPath" class="form-label">新しいフォルダのパス</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="newFolderPath" 
+                                           @bind="newFolderPath" 
+                                           @bind:event="oninput"
+                                           @onkeydown="OnKeyDown"
+                                           placeholder="C:\path\to\new\folder または相対パス" 
+                                           autofocus>
+                                    <button class="btn btn-outline-secondary" type="button" @onclick="SelectFolderDialog">
+                                        <i class="bi bi-folder2-open"></i>
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted">
+                                    フォルダが存在しない場合は自動的に作成されます
+                                </small>
+                            </div>
+                            
+                            @if (!string.IsNullOrWhiteSpace(newFolderPath))
+                            {
+                                <!-- セッションオプション選択 -->
+                                <div class="mt-3">
+                                    <SessionOptionsSelector @ref="optionsSelectorNewFolder"
+                                                          SelectedType="selectedTerminalType"
+                                                          SelectedTypeChanged="OnTerminalTypeChanged"
+                                                          @bind-StartupCommand="startupCommand"
+                                                          ClaudeOptions="claudeOptions"
+                                                          GeminiOptions="geminiOptions" />
+                                </div>
+                                
+                                <div class="alert alert-info mt-3">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    新しいフォルダ "@newFolderPath" でセッションを開始します
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
                 
                 <ErrorAlert @bind-ErrorMessage="errorMessage" />
@@ -277,6 +327,7 @@
     private SessionOptionsSelector? optionsSelector;
     private SessionOptionsSelector? optionsSelectorSamePath;
     private SessionOptionsSelector? optionsSelectorExistingWorktree;
+    private SessionOptionsSelector? optionsSelectorNewFolder;
     private TerminalType selectedTerminalType = TerminalType.Terminal;
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
@@ -293,10 +344,14 @@
                     : (!string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null)),
                 TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
                 TabType.SamePath => true, // 同じフォルダの場合は常に有効
+                TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath), // 新しいフォルダパスが入力されている
                 _ => false
             };
         }
     }
+    
+    // 新しいフォルダ用の変数
+    private string newFolderPath = "";
 
     [Parameter] public string? ParentSessionPath { get; set; }
     
@@ -308,7 +363,7 @@
         if (IsVisible && !_wasVisible)
         {
             // ダイアログが表示されたときにリセット
-            activeTab = TabType.Create;
+            activeTab = IsGitRepository ? TabType.Create : TabType.NewFolder;
             branchName = "";
             errorMessage = "";
             isProcessing = false;
@@ -322,6 +377,7 @@
             startupCommand = "";
             claudeOptions = new();
             geminiOptions = new();
+            newFolderPath = "";
             
             // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
             if (!string.IsNullOrEmpty(ParentSessionPath) && IsGitRepository)
@@ -351,18 +407,21 @@
                     TabType.Create => SubSessionType.CreateNew,
                     TabType.Existing => SubSessionType.AddExisting,
                     TabType.SamePath => SubSessionType.SamePath,
+                    TabType.NewFolder => SubSessionType.NewFolder,
                     _ => SubSessionType.CreateNew
                 },
                 BranchName = activeTab == TabType.Create 
                     ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
                     : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
-                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath : null,
+                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath : 
+                               activeTab == TabType.NewFolder ? newFolderPath : null,
                 TerminalType = selectedTerminalType,
                 Options = activeTab switch
                 {
                     TabType.Create => optionsSelector?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.Existing => optionsSelectorExistingWorktree?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.SamePath => optionsSelectorSamePath?.GetOptions() ?? new Dictionary<string, string>(),
+                    TabType.NewFolder => optionsSelectorNewFolder?.GetOptions() ?? new Dictionary<string, string>(),
                     _ => new Dictionary<string, string>()
                 },
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
@@ -410,6 +469,14 @@
         {
             await OnCancel.InvokeAsync();
         }
+    }
+    
+    private async Task SelectFolderDialog()
+    {
+        // ブラウザではファイルシステムへの直接アクセスが制限されているため、
+        // 手動入力でのパス指定を推奨
+        // 必要に応じて将来的にFile System Access APIを使用可能
+        await Task.CompletedTask;
     }
 
     private async Task LoadAvailableBranches()
@@ -484,6 +551,7 @@
             TabType.Create => "plus-circle",
             TabType.Existing => "folder-plus",
             TabType.SamePath => "folder",
+            TabType.NewFolder => "folder-plus",
             _ => "plus-circle"
         };
     }
@@ -495,6 +563,7 @@
             TabType.Create => "Worktree作成",
             TabType.Existing => "Worktree追加",
             TabType.SamePath => "セッション作成",
+            TabType.NewFolder => "フォルダ作成",
             _ => "作成"
         };
     }
@@ -525,7 +594,8 @@
     {
         CreateNew,
         AddExisting,
-        SamePath
+        SamePath,
+        NewFolder
     }
     
     private enum BranchSelectionMode
@@ -539,6 +609,7 @@
     {
         Create,
         Existing,
-        SamePath
+        SamePath,
+        NewFolder
     }
 }
