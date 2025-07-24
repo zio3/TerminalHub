@@ -379,7 +379,7 @@
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
         // 再起動後の新しいセッションを確実に取得
-        activeSession = SessionManager.GetSession(sessionId);
+        activeSession = await SessionManager.GetSessionAsync(sessionId);
         Console.WriteLine($"[SelectSession] SessionManager.GetSession結果: {(activeSession != null ? "成功" : "null")}");
         
         // セッションが存在しない場合はエラー
@@ -537,7 +537,7 @@
     {
         Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
 
-        var session = SessionManager.GetSession(sessionId);
+        var session = await SessionManager.GetSessionAsync(sessionId);
         if (session == null)
         {
             Console.WriteLine($"[ReadSessionOutput] セッションが見つからない: {sessionId}");
