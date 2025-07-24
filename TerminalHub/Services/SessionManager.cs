@@ -13,7 +13,7 @@ namespace TerminalHub.Services
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<bool> RemoveSessionAsync(Guid sessionId);
-        ConPtySession? GetSession(Guid sessionId);
+        Task<ConPtySession?> GetSessionAsync(Guid sessionId);
         IEnumerable<SessionInfo> GetAllSessions();
         SessionInfo? GetSessionInfo(Guid sessionId);
         Task<bool> SetActiveSessionAsync(Guid sessionId);
@@ -45,6 +45,7 @@ namespace TerminalHub.Services
         private readonly ConcurrentDictionary<Guid, SessionInfo> _sessionInfos = new();
         private readonly ConcurrentDictionary<string, TerminalHub.Models.ConnectionInfo> _connections = new();
         private readonly ConcurrentDictionary<Guid, string> _sessionMasters = new();
+        private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _initializationLocks = new();
         private readonly IConPtyService _conPtyService;
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
@@ -102,37 +103,6 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task<ConPtySession> CreateClaudeCodeSessionWithFallbackAsync(string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
-        {            
-            try
-            {
-                // 最初は設定されたオプションで試行
-                return await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Claude Codeセッション作成が失敗しました");
-                
-                // --continueオプションを除去して再試行
-                if (options.ContainsKey("continue"))
-                {
-                    _logger.LogInformation("--continueオプションなしで再試行します");
-                    var fallbackOptions = new Dictionary<string, string>(options);
-                    fallbackOptions.Remove("continue");
-                    var fallbackArgs = TerminalConstants.BuildClaudeCodeArgs(fallbackOptions);
-                    var claudeCmdPath = GetClaudeCmdPath();
-                    var fallbackArgsString = string.IsNullOrWhiteSpace(fallbackArgs)
-                        ? $"/k \"{claudeCmdPath}\""
-                        : $"/k \"{claudeCmdPath}\" {fallbackArgs}";
-                    
-                    _logger.LogInformation("--continueオプションなしで再試行: {Args}", fallbackArgsString);
-                    return await _conPtyService.CreateSessionAsync(command, fallbackArgsString, folderPath, cols, rows);
-                }
-                
-                // --continueオプションがない場合は元の例外を再スロー
-                throw;
-            }
-        }
 
         private async Task<ConPtySession> CreateSessionWithTerminalTypeAsync(TerminalType terminalType, string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
         {
@@ -198,17 +168,11 @@ namespace TerminalHub.Services
             // Git情報を非同期で取得してセッション情報に設定
             await PopulateGitInfoAsync(sessionInfo);
 
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-                
-                var (command, args) = BuildTerminalCommand(terminalType, options);
-                
-                ConPtySession session = await CreateSessionWithTerminalTypeAsync(terminalType, command, args, folderPath, cols, rows, options);
-
-                _sessions[sessionInfo.SessionId] = session;
+                // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
+                _initializationLocks[sessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                _logger.LogInformation($"Session created successfully: {sessionInfo.SessionId} ({terminalType})");
+                _logger.LogInformation($"Session info created successfully: {sessionInfo.SessionId} ({terminalType})");
                 return sessionInfo;
             }
             catch (DirectoryNotFoundException)
@@ -289,35 +253,87 @@ namespace TerminalHub.Services
 
         public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
+            bool removed = false;
+            
+            // ConPtyセッションが存在する場合は削除
             if (_sessions.TryRemove(sessionId, out var session))
             {
                 session.Dispose();
-                _sessionInfos.TryRemove(sessionId, out _);
-
-                if (_activeSessionId == sessionId)
-                {
-                    _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
-                    // イベントを削除
-                    // ActiveSessionChanged?.Invoke(this, _activeSessionId ?? string.Empty);
-                }
-
-                return Task.FromResult(true);
+                removed = true;
+            }
+            
+            // SessionInfoを削除
+            if (_sessionInfos.TryRemove(sessionId, out _))
+            {
+                removed = true;
+            }
+            
+            // 初期化ロックを削除
+            if (_initializationLocks.TryRemove(sessionId, out var initLock))
+            {
+                initLock.Dispose();
             }
 
-            return Task.FromResult(false);
+            if (removed && _activeSessionId == sessionId)
+            {
+                _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
+            }
+
+            return Task.FromResult(removed);
         }
 
-        public ConPtySession? GetSession(Guid sessionId)
+        public async Task<ConPtySession?> GetSessionAsync(Guid sessionId)
         {
-            if (_sessions.TryGetValue(sessionId, out var session))
+            // まずSessionInfoの存在を確認
+            if (!_sessionInfos.TryGetValue(sessionId, out var sessionInfo))
             {
-                if (_sessionInfos.TryGetValue(sessionId, out var info))
-                {
-                    info.LastAccessedAt = DateTime.Now;
-                }
-                return session;
+                return null;
             }
-            return null;
+
+            // 既にConPtyセッションが存在する場合はそれを返す
+            if (_sessions.TryGetValue(sessionId, out var existingSession))
+            {
+                sessionInfo.LastAccessedAt = DateTime.Now;
+                return existingSession;
+            }
+
+            // ConPtyセッションがまだ初期化されていない場合は遅延初期化を実行
+            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            
+            try
+            {
+                await initLock.WaitAsync();
+                
+                // ダブルチェックロッキング
+                if (_sessions.TryGetValue(sessionId, out existingSession))
+                {
+                    sessionInfo.LastAccessedAt = DateTime.Now;
+                    return existingSession;
+                }
+
+                // ConPtyセッションを初期化
+                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                
+                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
+                
+                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                _sessions[sessionId] = newSession;
+                
+                sessionInfo.LastAccessedAt = DateTime.Now;
+                _logger.LogInformation($"ConPty session initialized on-demand: {sessionId}");
+                
+                return newSession;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize ConPty session on-demand for {SessionId}", sessionId);
+                throw;
+            }
+            finally
+            {
+                initLock.Release();
+            }
         }
 
         public IEnumerable<SessionInfo> GetAllSessions()
@@ -455,18 +471,11 @@ namespace TerminalHub.Services
                     // Git情報を設定
                     await PopulateGitInfoAsync(existingWorktreeSessionInfo);
 
-                    // セッションを開始
-                    var terminalCols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                    var terminalRows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-
-                    var (terminalCommand, terminalArgs) = BuildTerminalCommand(existingWorktreeSessionInfo.TerminalType, existingWorktreeSessionInfo.Options);
-
-                    ConPtySession newSession;
-                    newSession = await CreateSessionWithTerminalTypeAsync(existingWorktreeSessionInfo.TerminalType, terminalCommand, terminalArgs, existingWorktree.Path, terminalCols, terminalRows, existingWorktreeSessionInfo.Options);
-                    _sessions.TryAdd(existingWorktreeSessionInfo.SessionId, newSession);
+                    // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                     _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
+                    _initializationLocks[existingWorktreeSessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                    _logger.LogInformation("既存Worktreeセッション作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
+                    _logger.LogInformation("既存Worktreeセッション情報作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
                         branchName, existingWorktree.Path, existingWorktreeSessionInfo.SessionId);
 
                     return existingWorktreeSessionInfo;
@@ -510,19 +519,11 @@ namespace TerminalHub.Services
                 // Git情報を設定
                 await PopulateGitInfoAsync(worktreeSessionInfo);
 
-                // セッションを開始
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-
-                // 親セッションと同じターミナルタイプで起動
-                var (command, args) = BuildTerminalCommand(worktreeSessionInfo.TerminalType, worktreeSessionInfo.Options);
-
-                ConPtySession session;
-                session = await CreateSessionWithTerminalTypeAsync(worktreeSessionInfo.TerminalType, command, args, worktreePath, cols, rows, worktreeSessionInfo.Options);
-                _sessions.TryAdd(worktreeSessionInfo.SessionId, session);
+                // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos.TryAdd(worktreeSessionInfo.SessionId, worktreeSessionInfo);
+                _initializationLocks[worktreeSessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                _logger.LogInformation("Worktreeセッション作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
+                _logger.LogInformation("Worktreeセッション情報作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
                     branchName, worktreePath, worktreeSessionInfo.SessionId);
 
                 return worktreeSessionInfo;
@@ -578,18 +579,11 @@ namespace TerminalHub.Services
                 // Git情報を設定
                 await PopulateGitInfoAsync(sessionInfo);
 
-                // セッションを開始
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
-
-                ConPtySession session;
-                session = await CreateSessionWithTerminalTypeAsync(sessionInfo.TerminalType, command, args, folderPath, cols, rows, sessionInfo.Options);
-                _sessions.TryAdd(sessionInfo.SessionId, session);
+                // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos.TryAdd(sessionInfo.SessionId, sessionInfo);
+                _initializationLocks[sessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                _logger.LogInformation("同じパスでセッション作成成功: パス={Path}, タイプ={Type}, セッションID={SessionId}",
+                _logger.LogInformation("同じパスでセッション情報作成成功: パス={Path}, タイプ={Type}, セッションID={SessionId}",
                     folderPath, terminalType, sessionInfo.SessionId);
 
                 return sessionInfo;
@@ -790,6 +784,12 @@ namespace TerminalHub.Services
             _sessionInfos.Clear();
             _connections.Clear();
             _sessionMasters.Clear();
+            
+            foreach (var initLock in _initializationLocks.Values)
+            {
+                initLock.Dispose();
+            }
+            _initializationLocks.Clear();
         }
         
     }
