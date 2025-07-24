@@ -455,7 +455,22 @@
         {
             var cts = new CancellationTokenSource();
             sessionReadCts[sessionId] = cts;
-            _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
+            // Fire-and-forget の代わりに Task を保持して適切に管理
+            var readTask = Task.Run(async () => 
+            {
+                try
+                {
+                    await ReadSessionOutput(sessionId, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // キャンセルは正常な動作
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
+                }
+            }, cts.Token);
         }
 
         // ターミナルを最下段にスクロール
@@ -554,7 +569,7 @@
                             sessionInfo.HasContinueErrorOccurred = true;
                             
                             // 既存のセッションに--continueなしでclaudeを起動
-                            _ = Task.Run(async () =>
+                            var claudeTask = Task.Run(async () =>
                             {
                                 try
                                 {
@@ -796,7 +811,21 @@
                 {
                     var cts = new CancellationTokenSource();
                     sessionReadCts[sessionId] = cts;
-                    _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
+                    var readTask = Task.Run(async () => 
+                    {
+                        try
+                        {
+                            await ReadSessionOutput(sessionId, cts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // キャンセルは正常な動作
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
+                        }
+                    }, cts.Token);
                     // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
 
                     // ターミナルに初期プロンプトを送信して接続を確認
@@ -947,7 +976,7 @@
                     };
                     var elapsedSecondsCopy = session.ProcessingElapsedSeconds.Value;
                     
-                    _ = Task.Run(async () => 
+                    var notificationTask = Task.Run(async () => 
                     {
                         try
                         {
@@ -1384,7 +1413,10 @@
         // 親セッション情報を取得
         var parentSession = SessionManager.GetSessionInfo(parentSessionId);
         if (parentSession == null)
+        {
+            Console.WriteLine($"[AddExistingWorktreeSession] 親セッションが見つかりません: {parentSessionId}");
             return null;
+        }
             
         // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
         var sessionInfo = await SessionManager.CreateSessionAsync(
@@ -1411,7 +1443,10 @@
             // 親セッション情報を取得
             var parentSession = SessionManager.GetSessionInfo(parentSessionId);
             if (parentSession == null)
+            {
+                Console.WriteLine($"[CreateNewFolderSession] 親セッションが見つかりません: {parentSessionId}");
                 return null;
+            }
                 
             // フォルダが存在しない場合は作成
             if (!Directory.Exists(folderPath))
