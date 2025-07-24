@@ -993,6 +993,23 @@
                 
                 // セッションのタイマーを停止
                 StopSessionTimer(sessionId);
+                
+                // AIツール完了時にGitステータスを自動更新
+                if (session.IsGitRepository)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await RefreshGitStatus(sessionId);
+                            Console.WriteLine($"[Git Auto Refresh] セッション {sessionId} のGitステータスを更新しました");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Git Auto Refresh] Gitステータス更新エラー: {ex.Message}");
+                        }
+                    });
+                }
             }
             
             // UIスレッドで強制的に更新
