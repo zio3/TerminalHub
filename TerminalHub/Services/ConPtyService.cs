@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -59,6 +60,10 @@ namespace TerminalHub.Services
         private int _cols;
         private int _rows;
         private readonly SemaphoreSlim _readSemaphore = new(1, 1);
+        
+        // デバッグ用データログ
+        private readonly ConcurrentQueue<ConPtyDebugEntry> _debugLog = new();
+        private const int MaxDebugLogSize = 1000;
 
         public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
         {
@@ -213,6 +218,9 @@ namespace TerminalHub.Services
                     await _writer.WriteAsync(input);
                     await _writer.FlushAsync();
                     
+                    // デバッグログに追加
+                    AddToDebugLog("WriteAsync", input, input.Length);
+                    
                     // 確実な書き込みのため追加フラッシュ
                     if (_writer.BaseStream != null)
                     {
@@ -266,6 +274,9 @@ namespace TerminalHub.Services
                 {
                     var data = new string(buffer, offset, bytesRead);
                     _logger.LogDebug($"[ConPty ReadAsync] Read {bytesRead} bytes, first 50 chars: {data.Substring(0, Math.Min(50, data.Length))}");
+                    
+                    // デバッグログに追加
+                    AddToDebugLog("ReadAsync", data, bytesRead);
                     
                     // ANSIエスケープシーケンスの検出
                     if (data.Contains("\x1b["))
@@ -399,6 +410,52 @@ namespace TerminalHub.Services
             try { _readSemaphore?.Dispose(); } catch { }
         }
 
+        // デバッグ用メソッド
+        private void AddToDebugLog(string operation, string data, int length)
+        {
+            var entry = new ConPtyDebugEntry
+            {
+                Timestamp = DateTime.Now,
+                Operation = operation,
+                Data = data.Length > 200 ? data.Substring(0, 200) + "..." : data,
+                Length = length,
+                HasAnsiSequences = data.Contains("\x1b[")
+            };
+
+            _debugLog.Enqueue(entry);
+
+            // ログサイズを制限
+            while (_debugLog.Count > MaxDebugLogSize)
+            {
+                _debugLog.TryDequeue(out _);
+            }
+        }
+
+        public ConPtyDebugEntry[] GetDebugLog()
+        {
+            return _debugLog.ToArray();
+        }
+
+        public void ClearDebugLog()
+        {
+            while (_debugLog.TryDequeue(out _)) { }
+        }
+
+        public ConPtyDebugStats GetDebugStats()
+        {
+            var entries = _debugLog.ToArray();
+            return new ConPtyDebugStats
+            {
+                TotalEntries = entries.Length,
+                ReadOperations = entries.Count(e => e.Operation == "ReadAsync"),
+                WriteOperations = entries.Count(e => e.Operation == "WriteAsync"),
+                TotalBytesRead = entries.Where(e => e.Operation == "ReadAsync").Sum(e => e.Length),
+                TotalBytesWritten = entries.Where(e => e.Operation == "WriteAsync").Sum(e => e.Length),
+                EntriesWithAnsi = entries.Count(e => e.HasAnsiSequences),
+                LastActivity = entries.LastOrDefault()?.Timestamp
+            };
+        }
+
         // P/Invoke定義
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, IntPtr lpPipeAttributes, uint nSize);
@@ -482,5 +539,26 @@ namespace TerminalHub.Services
             public uint dwProcessId;
             public uint dwThreadId;
         }
+    }
+
+    // デバッグ用クラス
+    public class ConPtyDebugEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Operation { get; set; } = "";
+        public string Data { get; set; } = "";
+        public int Length { get; set; }
+        public bool HasAnsiSequences { get; set; }
+    }
+
+    public class ConPtyDebugStats
+    {
+        public int TotalEntries { get; set; }
+        public int ReadOperations { get; set; }
+        public int WriteOperations { get; set; }
+        public int TotalBytesRead { get; set; }
+        public int TotalBytesWritten { get; set; }
+        public int EntriesWithAnsi { get; set; }
+        public DateTime? LastActivity { get; set; }
     }
 }
