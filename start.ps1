@@ -3,32 +3,44 @@ param(
     [switch]$NoBrowser = $false
 )
 
-# ポートマッピング設定
-$portMappings = @{
-    "TerminalHub-work1" = @{ http = 9011; https = 9431 }
-    "TerminalHub-work2" = @{ http = 9012; https = 9432 }
-    "TerminalHub-work3" = @{ http = 9013; https = 9433 }
+# デフォルトポート設定（環境変数で上書き可能）
+$httpPort = if ($env:TERMINALHUB_HTTP_PORT) { [int]$env:TERMINALHUB_HTTP_PORT } else { 5000 }
+$httpsPort = if ($env:TERMINALHUB_HTTPS_PORT) { [int]$env:TERMINALHUB_HTTPS_PORT } else { 5001 }
+
+# 利用可能なポートを検索する関数
+function Find-AvailablePort {
+    param([int]$StartPort)
+    
+    $port = $StartPort
+    while ($port -lt 65535) {
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        try {
+            $tcpClient.Connect("localhost", $port)
+            $tcpClient.Close()
+            $port++
+        }
+        catch {
+            return $port
+        }
+    }
+    throw "利用可能なポートが見つかりません"
 }
 
-# 現在のフォルダ名を取得
-$currentFolder = Split-Path -Leaf (Get-Location)
-
-# デフォルトポート
-$defaultHttpPort = 5080
-$defaultHttpsPort = 7198
-
-# ポート設定を取得
-if ($portMappings.ContainsKey($currentFolder)) {
-    $httpPort = $portMappings[$currentFolder].http
-    $httpsPort = $portMappings[$currentFolder].https
-} else {
-    Write-Host "ポートマッピングが見つかりません。デフォルトポートを使用します。" -ForegroundColor Yellow
-    $httpPort = $defaultHttpPort
-    $httpsPort = $defaultHttpsPort
+# ポートが使用中の場合は別のポートを探す
+try {
+    $tcpClient = New-Object System.Net.Sockets.TcpClient
+    $tcpClient.Connect("localhost", $httpPort)
+    $tcpClient.Close()
+    Write-Host "ポート $httpPort は既に使用中です。利用可能なポートを検索中..." -ForegroundColor Yellow
+    $httpPort = Find-AvailablePort ($httpPort + 1)
+    $httpsPort = Find-AvailablePort ($httpsPort + 1)
+}
+catch {
+    # ポートが利用可能
 }
 
 Write-Host "起動設定:" -ForegroundColor Green
-Write-Host "  フォルダ: $currentFolder" -ForegroundColor Cyan
+Write-Host "  HTTP:  http://localhost:$httpPort" -ForegroundColor Cyan
 Write-Host "  HTTPS: https://localhost:$httpsPort" -ForegroundColor Cyan
 
 # 既存のstop.ps1があれば実行
