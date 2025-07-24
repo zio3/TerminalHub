@@ -561,7 +561,7 @@
 
     private async Task ReadSessionOutput(Guid sessionId, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
+        //Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
 
         var session = await SessionManager.GetSessionAsync(sessionId);
         if (session == null)
@@ -588,11 +588,11 @@
                         break;
 
                     var data = new string(buffer, 0, charsRead);
-                    Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} から {charsRead} 文字読み取り");
+                    //Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} から {charsRead} 文字読み取り");
                     
                     // 最初の100文字を表示（デバッグ用）
                     var preview = data.Length > 100 ? data.Substring(0, 100) + "..." : data;
-                    Console.WriteLine($"[ReadSessionOutput] データプレビュー: {preview.Replace("\r", "\\r").Replace("\n", "\\n")}");
+                    //Console.WriteLine($"[ReadSessionOutput] データプレビュー: {preview.Replace("\r", "\\r").Replace("\n", "\\n")}");
 
                     var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                     if (sessionInfo != null)
