@@ -26,12 +26,20 @@ namespace TerminalHub.Services
         Task<bool> RestartSessionAsync(Guid sessionId);
         // event EventHandler<string>? ActiveSessionChanged;
         
+        // 接続管理
+        bool RegisterConnection(string connectionId, Guid sessionId, string? userAgent = null, string? ipAddress = null);
+        bool UnregisterConnection(string connectionId);
+        bool IsMasterConnection(string connectionId);
+        bool TrySetMasterConnection(string connectionId);
+        IEnumerable<TerminalHub.Models.ConnectionInfo> GetSessionConnections(Guid sessionId);
     }
 
     public class SessionManager : ISessionManager, IDisposable
     {
         private readonly ConcurrentDictionary<Guid, ConPtySession> _sessions = new();
         private readonly ConcurrentDictionary<Guid, SessionInfo> _sessionInfos = new();
+        private readonly ConcurrentDictionary<string, TerminalHub.Models.ConnectionInfo> _connections = new();
+        private readonly ConcurrentDictionary<Guid, string> _sessionMasters = new();
         private readonly IConPtyService _conPtyService;
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
@@ -631,6 +639,98 @@ namespace TerminalHub.Services
             }
         }
 
+        // 接続管理メソッド
+        public bool RegisterConnection(string connectionId, Guid sessionId, string? userAgent = null, string? ipAddress = null)
+        {
+            var connection = new TerminalHub.Models.ConnectionInfo
+            {
+                ConnectionId = connectionId,
+                SessionId = sessionId,
+                UserAgent = userAgent,
+                IpAddress = ipAddress,
+                IsMaster = false
+            };
+
+            if (_connections.TryAdd(connectionId, connection))
+            {
+                // この接続がセッションの最初の接続の場合、マスターにする
+                if (!_sessionMasters.ContainsKey(sessionId))
+                {
+                    _sessionMasters[sessionId] = connectionId;
+                    connection.IsMaster = true;
+                    _logger.LogInformation($"接続 {connectionId} がセッション {sessionId} のマスターになりました");
+                }
+                else
+                {
+                    _logger.LogInformation($"接続 {connectionId} がセッション {sessionId} のスレーブとして登録されました");
+                }
+                return true;
+            }
+            return false;
+        }
+
+        public bool UnregisterConnection(string connectionId)
+        {
+            if (_connections.TryRemove(connectionId, out var connection))
+            {
+                // マスターが切断された場合、別の接続をマスターにする
+                if (connection.IsMaster && _sessionMasters.TryGetValue(connection.SessionId, out var masterConnectionId) && masterConnectionId == connectionId)
+                {
+                    _sessionMasters.TryRemove(connection.SessionId, out _);
+                    
+                    // 同じセッションの他の接続を探す
+                    var nextConnection = _connections.Values
+                        .Where(c => c.SessionId == connection.SessionId && c.ConnectionId != connectionId)
+                        .OrderBy(c => c.ConnectedAt)
+                        .FirstOrDefault();
+                    
+                    if (nextConnection != null)
+                    {
+                        nextConnection.IsMaster = true;
+                        _sessionMasters[connection.SessionId] = nextConnection.ConnectionId;
+                        _logger.LogInformation($"接続 {nextConnection.ConnectionId} が新しいマスターになりました");
+                    }
+                }
+                
+                _logger.LogInformation($"接続 {connectionId} が切断されました");
+                return true;
+            }
+            return false;
+        }
+
+        public bool IsMasterConnection(string connectionId)
+        {
+            return _connections.TryGetValue(connectionId, out var connection) && connection.IsMaster;
+        }
+
+        public bool TrySetMasterConnection(string connectionId)
+        {
+            if (!_connections.TryGetValue(connectionId, out var connection))
+                return false;
+
+            var sessionId = connection.SessionId;
+            
+            // 現在のマスターをスレーブにする
+            if (_sessionMasters.TryGetValue(sessionId, out var currentMasterId) && currentMasterId != connectionId)
+            {
+                if (_connections.TryGetValue(currentMasterId, out var currentMaster))
+                {
+                    currentMaster.IsMaster = false;
+                }
+            }
+
+            // 新しいマスターを設定
+            connection.IsMaster = true;
+            _sessionMasters[sessionId] = connectionId;
+            _logger.LogInformation($"接続 {connectionId} がマスターに切り替わりました");
+            return true;
+        }
+
+        public IEnumerable<TerminalHub.Models.ConnectionInfo> GetSessionConnections(Guid sessionId)
+        {
+            return _connections.Values.Where(c => c.SessionId == sessionId);
+        }
+
         public void Dispose()
         {
             foreach (var session in _sessions.Values)
@@ -639,6 +739,8 @@ namespace TerminalHub.Services
             }
             _sessions.Clear();
             _sessionInfos.Clear();
+            _connections.Clear();
+            _sessionMasters.Clear();
         }
         
     }
