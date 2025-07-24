@@ -39,6 +39,69 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
+// URL検出の設定
+function setupUrlDetection(term) {
+    // HTTP/HTTPSのURLパターン
+    const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+    
+    // デバッグ: APIの存在確認
+    console.log('[URL Detection] Available APIs:', {
+        registerLinkProvider: typeof term.registerLinkProvider,
+        registerLinkMatcher: typeof term.registerLinkMatcher,
+        registerDecoration: typeof term.registerDecoration
+    });
+    
+    // xterm.js v5用のregisterLinkProvider実装
+    if (typeof term.registerLinkProvider === 'function') {
+        const linkProvider = {
+            provideLinks: (bufferLineNumber, callback) => {
+                const line = term.buffer.active.getLine(bufferLineNumber);
+                if (!line) {
+                    callback(undefined);
+                    return;
+                }
+                
+                // 行のテキストを取得
+                let lineText = '';
+                for (let i = 0; i < line.length; i++) {
+                    const cell = line.getCell(i);
+                    if (cell) {
+                        lineText += cell.getChars() || ' ';
+                    }
+                }
+                
+                // URLを検出
+                const links = [];
+                let match;
+                urlRegex.lastIndex = 0; // 正規表現をリセット
+                
+                while ((match = urlRegex.exec(lineText)) !== null) {
+                    const link = {
+                        range: {
+                            start: { x: match.index + 1, y: bufferLineNumber + 1 },
+                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber + 1 }
+                        },
+                        text: match[0],
+                        activate: (e, uri) => {
+                            console.log('[URL Detection] Link activated:', uri);
+                            window.open(uri, '_blank');
+                        }
+                    };
+                    links.push(link);
+                    console.log('[URL Detection] Found link:', match[0], 'at line', bufferLineNumber + 1);
+                }
+                
+                callback(links);
+            }
+        };
+        
+        term.registerLinkProvider(linkProvider);
+        console.log('[URL Detection] URL検出機能を有効化しました（registerLinkProvider使用）');
+    } else {
+        console.error('[URL Detection] registerLinkProvider APIが利用できません');
+    }
+}
+
 //// IME検出とフォーカス制御
 //function setupIMEDetection(term, element, sessionId) {
 //    console.log(`[IME Detection] セットアップ開始: sessionId=${sessionId}`);
@@ -293,6 +356,9 @@ window.terminalFunctions = {
                     multipleScrollAttempts();
                 }
             });
+            
+            // URL検出機能を追加
+            setupUrlDetection(term);
             
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
