@@ -522,7 +522,7 @@
         }
     }
     
-    private async Task OnExistingBranchSelected(ChangeEventArgs e)
+    private void OnExistingBranchSelected(ChangeEventArgs e)
     {
         var branchName = e.Value?.ToString() ?? "";
         selectedExistingBranch = branchName;
@@ -538,7 +538,7 @@
         }
     }
     
-    private async Task OnWorktreeSelected(ChangeEventArgs e)
+    private void OnWorktreeSelected(ChangeEventArgs e)
     {
         selectedWorktreePath = e.Value?.ToString() ?? "";
         StateHasChanged();
