@@ -1310,6 +1310,15 @@
                             subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options);
                     }
                     break;
+                    
+                case SubSessionDialog.SubSessionType.NewFolder:
+                    // 新しいフォルダでセッション作成
+                    if (!string.IsNullOrEmpty(result.WorktreePath))
+                    {
+                        newSession = await CreateNewFolderSession(
+                            subSessionParentSessionId.Value, result.WorktreePath, result.TerminalType, result.Options);
+                    }
+                    break;
             }
             
             if (newSession != null)
@@ -1331,6 +1340,8 @@
                         $"既存のWorktree '{result.BranchName}' を追加しました",
                     SubSessionDialog.SubSessionType.SamePath => 
                         $"新しい{GetSessionTypeName(result.TerminalType)}セッションを作成しました",
+                    SubSessionDialog.SubSessionType.NewFolder => 
+                        $"新しいフォルダ '{result.WorktreePath}' でセッションを作成しました",
                     _ => "セッションを作成しました"
                 };
                 
@@ -1389,6 +1400,45 @@
         }
         
         return sessionInfo;
+    }
+    
+    private async Task<SessionInfo?> CreateNewFolderSession(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string> options)
+    {
+        try
+        {
+            // 親セッション情報を取得
+            var parentSession = SessionManager.GetSessionInfo(parentSessionId);
+            if (parentSession == null)
+                return null;
+                
+            // フォルダが存在しない場合は作成
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+            
+            // 新しいフォルダでセッション作成（統一された表示名を使用）
+            var sessionInfo = await SessionManager.CreateSessionAsync(
+                folderPath,
+                $"{parentSession.DisplayName} ({Path.GetFileName(folderPath)})",
+                terminalType,
+                options
+            );
+            
+            // 親子関係を設定
+            if (sessionInfo != null)
+            {
+                sessionInfo.ParentSessionId = parentSessionId;
+                await SessionManager.SaveSessionInfoAsync(sessionInfo);
+            }
+            
+            return sessionInfo;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CreateNewFolderSession] エラー: {ex.Message}");
+            return null;
+        }
     }
 
 
