@@ -224,7 +224,7 @@
                 var newSession = await SessionManager.CreateSessionAsync(
                     sessionInfo.SessionId,
                     sessionInfo.FolderPath,
-                    sessionInfo.DisplayName,
+                    sessionInfo.DisplayName ?? "",
                     sessionInfo.TerminalType,
                     sessionInfo.Options);
 
@@ -439,17 +439,14 @@
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
-            lock (selectedSessionInfo.BufferLock)
+            if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
             {
-                if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
-                {
-                    // バッファの内容を一度に書き込み
-                    var bufferedData = string.Join("", selectedSessionInfo.OutputBuffer);
-                    _ = activeTerminal.InvokeVoidAsync("write", bufferedData);
-                    
-                    // バッファをクリア
-                    selectedSessionInfo.OutputBuffer.Clear();
-                }
+                // バッファの内容を一度に書き込み
+                var bufferedData = selectedSessionInfo.OutputBuffer.GetAllText("");
+                _ = activeTerminal.InvokeVoidAsync("write", bufferedData);
+                
+                // バッファをクリア
+                selectedSessionInfo.OutputBuffer.Clear();
             }
         }
 
@@ -583,16 +580,7 @@
                         else
                         {
                             // 非アクティブセッションはバッファに保存
-                            lock (sessionInfo.BufferLock)
-                            {
-                                sessionInfo.OutputBuffer.Enqueue(data);
-                                
-                                // バッファサイズ制限（古いデータから削除）
-                                while (sessionInfo.OutputBuffer.Count > sessionInfo.MaxBufferSize)
-                                {
-                                    sessionInfo.OutputBuffer.Dequeue();
-                                }
-                            }
+                            sessionInfo.OutputBuffer.AddLine(data);
                         }
                     }
                 }
@@ -659,10 +647,7 @@
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove != null)
         {
-            lock (sessionToRemove.BufferLock)
-            {
-                sessionToRemove.OutputBuffer.Clear();
-            }
+            sessionToRemove.OutputBuffer.Clear();
         }
         
         // セッションのタイマーを停止

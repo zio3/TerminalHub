@@ -111,15 +111,15 @@
     private string errorMessage = "";
     private bool restartSession = true;
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         if (IsVisible && SessionId.HasValue)
         {
-            await LoadSessionInfo();
+            LoadSessionInfo();
         }
     }
 
-    private async Task LoadSessionInfo()
+    private void LoadSessionInfo()
     {
         if (!SessionId.HasValue)
             return;
@@ -130,7 +130,7 @@
             // 現在の設定を読み込む
             displayName = sessionInfo.DisplayName ?? "";
             selectedType = sessionInfo.TerminalType;
-            maxBufferSize = sessionInfo.MaxBufferSize;
+            maxBufferSize = sessionInfo.OutputBuffer.Capacity;
 
             // オプションを解析
             var options = sessionInfo.Options;
@@ -174,8 +174,13 @@
             // オプションを更新
             sessionInfo.Options = optionsSelector.GetOptions();
             
-            // バッファサイズを更新
-            sessionInfo.MaxBufferSize = maxBufferSize;
+            // バッファサイズを更新（新しいバッファを作成）
+            if (sessionInfo.OutputBuffer.Capacity != maxBufferSize)
+            {
+                var oldLines = sessionInfo.OutputBuffer.GetLines().ToList();
+                sessionInfo.OutputBuffer = new CircularLineBuffer(maxBufferSize);
+                sessionInfo.OutputBuffer.AddLines(oldLines);
+            }
 
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
