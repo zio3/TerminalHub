@@ -865,14 +865,12 @@
                     var cts = new CancellationTokenSource();
                     sessionReadCts[sessionId] = cts;
                     _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
-                }
 
                     // ターミナルに初期プロンプトを送信して接続を確認
                     if (activeTerminal != null)
                     {
                         // Enterキーを送信してプロンプトを表示
                         await activeSession.WriteAsync("\r\n");
-                        // Console.WriteLine($"[RecreateTerminal] プロンプト送信完了");
                     }
                 }
 
