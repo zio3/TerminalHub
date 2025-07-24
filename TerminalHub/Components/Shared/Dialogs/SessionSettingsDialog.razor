@@ -35,6 +35,19 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <small class="text-muted">セッションID:</small>
+                                <div class="d-flex align-items-center">
+                                    <code class="text-muted small">@sessionInfo.SessionId</code>
+                                    <button type="button" class="btn btn-link btn-sm text-muted ms-2" 
+                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString())" 
+                                            title="セッションIDをコピー">
+                                        <i class="bi bi-clipboard small"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <hr />
