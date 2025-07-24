@@ -154,54 +154,6 @@ window.terminalDebug = {
     }
 };
 
-//// IME検出とフォーカス制御
-//function setupIMEDetection(term, element, sessionId) {
-//    console.log(`[IME Detection] セットアップ開始: sessionId=${sessionId}`);
-    
-//    // xterm.jsのテキストエリアを取得
-//    const textareas = element.querySelectorAll('.xterm-helper-textarea');
-//    if (textareas.length === 0) {
-//        console.log('[IME Detection] helper-textareaが見つかりません');
-//        return;
-//    }
-    
-//    const helperTextarea = textareas[0];
-    
-//    // composition開始イベントをリッスン
-//    helperTextarea.addEventListener('compositionstart', (e) => {
-//        console.log(`[IME Detection] IME開始検出: sessionId=${sessionId}`);
-        
-//        // 下部のテキストエリアを探してフォーカス
-//        const inputTextarea = document.querySelector('textarea#inputText');
-//        if (inputTextarea) {
-//            console.log('[IME Detection] テキストエリアにフォーカスを移動');
-//            inputTextarea.focus();
-            
-//            // 既存の入力があれば、それを保持
-//            const existingText = inputTextarea.value;
-//            if (existingText) {
-//                // カーソルを最後に移動
-//                inputTextarea.setSelectionRange(existingText.length, existingText.length);
-//            }
-//        } else {
-//            console.log('[IME Detection] 入力用テキストエリアが見つかりません');
-//        }
-//    });
-    
-//    // キーダウンイベントでもIMEを検出（keyCode 229）
-//    helperTextarea.addEventListener('keydown', (e) => {
-//        if (e.keyCode === 229) {
-//            console.log(`[IME Detection] IME keyCode 229検出: sessionId=${sessionId}`);
-            
-//            const inputTextarea = document.querySelector('textarea#inputText');
-//            if (inputTextarea && document.activeElement !== inputTextarea) {
-//                console.log('[IME Detection] テキストエリアにフォーカスを移動 (keyCode 229)');
-//                inputTextarea.focus();
-//            }
-//        }
-//    });
-//}
-
 // 右クリック検出とIMEスタイル制御
 function setupContextMenuAndIME(element, sessionId) {
     let imeStyleSheet = null;
