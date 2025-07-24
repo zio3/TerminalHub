@@ -64,9 +64,10 @@ namespace TerminalHub.Services
                 case TerminalType.ClaudeCode:
                     var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options);
                     var claudeCmdPath = GetClaudeCmdPath();
+                    // /c オプションを使用（コマンド実行後にプロセスを終了）
                     var args = string.IsNullOrWhiteSpace(claudeArgs)
-                        ? $"/k \"{claudeCmdPath}\""
-                        : $"/k \"{claudeCmdPath}\" {claudeArgs}";
+                        ? $"/c \"{claudeCmdPath}\""
+                        : $"/c \"{claudeCmdPath}\" {claudeArgs}";
                     return ("cmd.exe", args);
 
                 case TerminalType.GeminiCLI:
@@ -631,13 +632,22 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
+                // HasContinueErrorOccurredフラグがtrueの場合、--continueオプションを除外
+                var options = sessionInfo.Options;
+                if (sessionInfo.HasContinueErrorOccurred && options.ContainsKey("continue"))
+                {
+                    options = new Dictionary<string, string>(options);
+                    options.Remove("continue");
+                    _logger.LogInformation("HasContinueErrorOccurredフラグにより--continueオプションを除外しました: {SessionId}", sessionId);
+                }
+
+                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
 
                 // 新しいセッションを作成
                 ConPtySession newSession;
                 if (sessionInfo.TerminalType == TerminalType.ClaudeCode)
                 {
-                    newSession = await CreateClaudeCodeSessionWithFallbackAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.Options);
+                    newSession = await CreateClaudeCodeSessionWithFallbackAsync(command, args, sessionInfo.FolderPath, cols, rows, options);
                 }
                 else
                 {
