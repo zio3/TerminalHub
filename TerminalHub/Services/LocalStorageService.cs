@@ -1,6 +1,7 @@
 using Microsoft.JSInterop;
 using System.Text.Json;
 using TerminalHub.Models;
+using Microsoft.Extensions.Logging;
 
 namespace TerminalHub.Services
 {
@@ -18,13 +19,15 @@ namespace TerminalHub.Services
     public class LocalStorageService : ILocalStorageService
     {
         private readonly IJSRuntime _jsRuntime;
+        private readonly ILogger<LocalStorageService> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
         private const string SessionsKey = "terminalHub_sessions";
         private const string ActiveSessionKey = "terminalHub_activeSession";
 
-        public LocalStorageService(IJSRuntime jsRuntime)
+        public LocalStorageService(IJSRuntime jsRuntime, ILogger<LocalStorageService> logger)
         {
             _jsRuntime = jsRuntime;
+            _logger = logger;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -39,9 +42,13 @@ namespace TerminalHub.Services
                 var json = JsonSerializer.Serialize(sessions, _jsonOptions);
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", SessionsKey, json);
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: セッション情報の保存に失敗しました");
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving sessions to localStorage: {ex.Message}");
+                _logger.LogError(ex, "セッション情報の保存に失敗しました");
             }
         }
 
@@ -58,9 +65,19 @@ namespace TerminalHub.Services
                 var sessions = JsonSerializer.Deserialize<List<SessionInfo>>(json, _jsonOptions);
                 return sessions ?? new List<SessionInfo>();
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: localStorageからセッション情報の読み込みに失敗しました");
+                return new List<SessionInfo>();
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "JSONパースエラー: セッション情報のデシリアライズに失敗しました");
+                return new List<SessionInfo>();
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading sessions from localStorage: {ex.Message}");
+                _logger.LogError(ex, "localStorageからセッション情報の読み込みに失敗しました");
                 return new List<SessionInfo>();
             }
         }
@@ -78,9 +95,13 @@ namespace TerminalHub.Services
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, sessionId.ToString());
                 }
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: アクティブセッションIDの保存に失敗しました");
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving active session ID to localStorage: {ex.Message}");
+                _logger.LogError(ex, "アクティブセッションIDの保存に失敗しました");
             }
         }
 
@@ -101,9 +122,14 @@ namespace TerminalHub.Services
                 
                 return null;
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: アクティブセッションIDの読み込みに失敗しました");
+                return null;
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading active session ID from localStorage: {ex.Message}");
+                _logger.LogError(ex, "アクティブセッションIDの読み込みに失敗しました");
                 return null;
             }
         }
@@ -115,9 +141,13 @@ namespace TerminalHub.Services
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionsKey);
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", ActiveSessionKey);
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: localStorageのクリアに失敗しました");
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error clearing localStorage: {ex.Message}");
+                _logger.LogError(ex, "localStorageのクリアに失敗しました");
             }
         }
         
@@ -131,9 +161,19 @@ namespace TerminalHub.Services
                 
                 return JsonSerializer.Deserialize<T>(json, _jsonOptions);
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: {Key}のlocalStorageからの読み込みに失敗しました", key);
+                return default;
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "JSONパースエラー: {Key}のデシリアライズに失敗しました", key);
+                return default;
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading {key} from localStorage: {ex.Message}");
+                _logger.LogError(ex, "{Key}のlocalStorageからの読み込みに失敗しました", key);
                 return default;
             }
         }
@@ -145,9 +185,13 @@ namespace TerminalHub.Services
                 var json = JsonSerializer.Serialize(value, _jsonOptions);
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", key, json);
             }
+            catch (JSException jsEx)
+            {
+                _logger.LogError(jsEx, "JavaScriptエラー: {Key}のlocalStorageへの保存に失敗しました", key);
+            }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving {key} to localStorage: {ex.Message}");
+                _logger.LogError(ex, "{Key}のlocalStorageへの保存に失敗しました", key);
             }
         }
     }
