@@ -39,7 +39,6 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
-<<<<<<< HEAD
 // URL検出の設定
 function setupUrlDetection(term) {
     // HTTP/HTTPSのURLパターン
@@ -102,7 +101,7 @@ function setupUrlDetection(term) {
         console.error('[URL Detection] registerLinkProvider APIが利用できません');
     }
 }
-=======
+
 // デバッグ用データ記録
 window.terminalDebug = {
     enabled: true,  // デバッグモードの有効/無効
@@ -217,7 +216,6 @@ window.terminalDebug = {
         console.log('[TerminalDebug] ログをクリアしました');
     }
 };
->>>>>>> work2
 
 //// IME検出とフォーカス制御
 //function setupIMEDetection(term, element, sessionId) {
