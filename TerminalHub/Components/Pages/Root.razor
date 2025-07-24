@@ -506,11 +506,6 @@
             var cts = new CancellationTokenSource();
             sessionReadCts[sessionId] = cts;
             _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
-            Console.WriteLine($"[Connection] マスターとして出力読み取りを開始: セッション {sessionId}");
-        }
-        else if (!isMasterConnection)
-        {
-            Console.WriteLine($"[Connection] スレーブモードのため出力読み取りをスキップ: セッション {sessionId}");
         }
 
         // ターミナルを最下段にスクロール
@@ -878,7 +873,6 @@
                     var cts = new CancellationTokenSource();
                     sessionReadCts[sessionId] = cts;
                     _ = Task.Run(() => ReadSessionOutput(sessionId, cts.Token));
-                    Console.WriteLine($"[RecreateTerminal] マスターとして読み取り処理を再開: セッション {sessionId}");
 
                     // ターミナルに初期プロンプトを送信して接続を確認
                     if (activeTerminal != null)
@@ -1814,7 +1808,6 @@
                     var cts = new CancellationTokenSource();
                     sessionReadCts[activeSessionId.Value] = cts;
                     _ = Task.Run(() => ReadSessionOutput(activeSessionId.Value, cts.Token));
-                    Console.WriteLine($"[TakeMasterControl] 出力読み取りを開始: セッション {activeSessionId.Value}");
                 }
                 
                 // ターミナルのリサイズを強制
