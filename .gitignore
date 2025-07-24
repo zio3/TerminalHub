@@ -6,6 +6,8 @@
 # Process management files
 .dotnet-process.json
 .portconfig.json
+stop.ps1
+LogView.ps1
 
 # User-specific files
 *.rsuser
