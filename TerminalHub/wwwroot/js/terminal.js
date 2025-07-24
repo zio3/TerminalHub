@@ -217,6 +217,19 @@ window.terminalDebug = {
     }
 };
 
+// ページアンロード時のクリーンアップ
+window.addEventListener('unload', () => {
+    console.log('[ResizeObserverManager] ページアンロード時のクリーンアップ実行');
+    window.resizeObserverManager.removeAll();
+    
+    // すべてのターミナルインスタンスもクリーンアップ
+    if (window.multiSessionTerminals) {
+        Object.keys(window.multiSessionTerminals).forEach(sessionId => {
+            window.terminalFunctions.cleanupTerminal(sessionId);
+        });
+    }
+});
+
 //// IME検出とフォーカス制御
 //function setupIMEDetection(term, element, sessionId) {
 //    console.log(`[IME Detection] セットアップ開始: sessionId=${sessionId}`);

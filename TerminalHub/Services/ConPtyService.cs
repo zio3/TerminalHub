@@ -169,16 +169,29 @@ namespace TerminalHub.Services
                 
                 // ストリームの作成
                 // Console.WriteLine($"[ConPtySession] ストリーム作成開始");
-                var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
-                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
-
-                _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
-                _reader = new StreamReader(new FileStream(pipeOut, FileAccess.Read), Encoding.UTF8);
-                // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                Microsoft.Win32.SafeHandles.SafeFileHandle? pipeIn = null;
+                Microsoft.Win32.SafeHandles.SafeFileHandle? pipeOut = null;
                 
-                // SafeFileHandleに所有権を移したので、元のハンドルは無効化
-                hWritePipe = IntPtr.Zero;
-                hReadPipe = IntPtr.Zero;
+                try
+                {
+                    pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
+                    pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
+
+                    _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
+                    _reader = new StreamReader(new FileStream(pipeOut, FileAccess.Read), Encoding.UTF8);
+                    // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                    
+                    // SafeFileHandleに所有権を移したので、元のハンドルは無効化
+                    hWritePipe = IntPtr.Zero;
+                    hReadPipe = IntPtr.Zero;
+                }
+                catch
+                {
+                    // エラー時はSafeFileHandleを適切に破棄
+                    pipeIn?.Dispose();
+                    pipeOut?.Dispose();
+                    throw;
+                }
 
                 // ハンドルのクリーンアップ
                 // Console.WriteLine($"[ConPtySession] ハンドルクリーンアップ開始");
@@ -306,6 +319,7 @@ namespace TerminalHub.Services
             if (_disposed || _reader == null)
                 return string.Empty;
 
+            const int maxOutputSize = 1024 * 1024; // 1MB制限
             var output = new StringBuilder();
             var buffer = new char[4096]; // バッファサイズを4倍に増加
             var startTime = DateTime.Now;
@@ -324,6 +338,15 @@ namespace TerminalHub.Services
                         var bytesRead = await _reader.ReadAsync(buffer, 0, buffer.Length);
                         if (bytesRead > 0)
                         {
+                            // メモリ使用量の制限
+                            if (output.Length + bytesRead > maxOutputSize)
+                            {
+                                // 古いデータを削除して新しいデータを追加
+                                var removeLength = Math.Min(output.Length, (output.Length + bytesRead) - maxOutputSize);
+                                output.Remove(0, removeLength);
+                                _logger.LogWarning($"出力バッファサイズが上限({maxOutputSize}バイト)に達したため、古いデータを削除しました");
+                            }
+                            
                             output.Append(buffer, 0, bytesRead);
                             
                             // 追加の小さな待機でデータの取りこぼしを防ぐ
@@ -336,9 +359,10 @@ namespace TerminalHub.Services
                     await Task.Delay(100);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // エラーが発生した場合は空文字を返す
+                _logger.LogError(ex, "ReadAvailableOutputAsync でエラーが発生しました");
             }
             finally
             {
@@ -372,12 +396,21 @@ namespace TerminalHub.Services
             try { _reader?.Dispose(); } catch { }
 
             // プロセスを終了
-            if (_process != null && !_process.HasExited)
+            if (_process != null)
             {
                 try
                 {
-                    _process.Kill();
-                    _process.WaitForExit(1000); // 1秒待機
+                    // HasExitedプロパティへのアクセス自体が例外を投げる可能性があるため、try内で処理
+                    if (!_process.HasExited)
+                    {
+                        _process.Kill();
+                        _process.WaitForExit(1000); // 1秒待機
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // プロセスが既に終了している場合
+                    _logger.LogDebug("Process has already exited");
                 }
                 catch (Exception ex)
                 {
