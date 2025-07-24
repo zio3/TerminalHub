@@ -61,7 +61,15 @@
             @if (activeSessionId != null)
             {
                 <!-- ターミナル部分 (70%) -->
-                <div style="height: 70%; overflow: hidden;">
+                <div style="height: 70%; overflow: hidden; position: relative;">
+                    @if (!isMasterConnection)
+                    {
+                        <div class="alert alert-warning position-absolute top-0 start-50 translate-middle-x mt-2" 
+                             style="z-index: 100; cursor: pointer;" 
+                             @onclick="TakeMasterControl">
+                            <i class="bi bi-eye"></i> スレーブモード - クリックして制御を取得
+                        </div>
+                    }
                     <div class="terminal-wrapper h-100">
                         @foreach (var session in sessions)
                         {
@@ -192,6 +200,8 @@
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
     private Guid? subSessionParentSessionId = null;
+    private string? connectionId = null;
+    private bool isMasterConnection = false;
     private string? subSessionParentSessionPath = null;
     private bool subSessionParentSessionIsGitRepository = true;
     private bool showSessionSettingsDialog = false;
@@ -203,6 +213,9 @@
     protected override async Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
+
+        // 接続IDを生成
+        connectionId = Guid.NewGuid().ToString();
 
         // 開発モード設定を読み込み
         showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
@@ -401,6 +414,20 @@
             activeSessionId = null;
             return;
         }
+
+        // 既存の接続を解除（別のセッションから切り替えた場合）
+        if (connectionId != null)
+        {
+            SessionManager.UnregisterConnection(connectionId);
+        }
+
+        // 新しいセッションに接続を登録
+        if (connectionId != null && activeSessionId.HasValue)
+        {
+            SessionManager.RegisterConnection(connectionId, activeSessionId.Value);
+            isMasterConnection = SessionManager.IsMasterConnection(connectionId);
+            Console.WriteLine($"[Connection] 接続 {connectionId} をセッション {activeSessionId.Value} に登録 (マスター: {isMasterConnection})");
+        }
         
         // 通知フラグをクリア
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
@@ -457,17 +484,25 @@
             
             if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
             {
-                // バッファの内容を一度に書き込み（画面高さの2倍制限付き）
-                var bufferedData = selectedSessionInfo.OutputBuffer.GetAllText("");
-                _ = activeTerminal.InvokeVoidAsync("terminalFunctions.writeBuffered", activeSessionId, bufferedData);
-                
-                // バッファをクリア
-                selectedSessionInfo.OutputBuffer.Clear();
+                if (isMasterConnection)
+                {
+                    // マスターの場合のみバッファの内容を書き込み（画面高さの2倍制限付き）
+                    var bufferedData = selectedSessionInfo.OutputBuffer.GetAllText("");
+                    _ = activeTerminal.InvokeVoidAsync("terminalFunctions.writeBuffered", activeSessionId, bufferedData);
+                    
+                    // バッファをクリア
+                    selectedSessionInfo.OutputBuffer.Clear();
+                }
+                else
+                {
+                    // スレーブの場合はバッファをクリアせず、後でマスターになった時に使用
+                    Console.WriteLine($"[Connection] スレーブモードのためバッファ書き込みをスキップ: {selectedSessionInfo.OutputBuffer.Count}件");
+                }
             }
         }
 
-        // 出力読み取りを開始（既存のものがなければ）
-        if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
+        // 出力読み取りを開始（マスターの場合のみ、既存のものがなければ）
+        if (activeSession != null && !sessionReadCts.ContainsKey(sessionId) && isMasterConnection)
         {
             Console.WriteLine($"[SelectSession] 読み取りタスクを開始: sessionId={sessionId}");
             var cts = new CancellationTokenSource();
@@ -489,6 +524,11 @@
                     Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
                 }
             }, cts.Token);
+            Console.WriteLine($"[Connection] マスターとして出力読み取りを開始: セッション {sessionId}");
+        }
+        else if (!isMasterConnection)
+        {
+            Console.WriteLine($"[Connection] スレーブモードのため出力読み取りをスキップ: セッション {sessionId}");
         }
         else
         {
@@ -752,6 +792,13 @@
     [JSInvokable]
     public async Task SendInput(string sessionId, string data)
     {
+        // スレーブモードの場合は入力を無視
+        if (!isMasterConnection)
+        {
+            Console.WriteLine($"[Connection] スレーブモードのため入力を無視: {data.Length}文字");
+            return;
+        }
+
         var guid = Guid.Parse(sessionId);
         if (activeSession != null && guid == activeSessionId)
         {
@@ -762,6 +809,13 @@
     [JSInvokable]
     public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
     {
+        // スレーブモードの場合はリサイズを無視
+        if (!isMasterConnection)
+        {
+            Console.WriteLine($"[Connection] スレーブモードのためリサイズを無視: {cols}x{rows}");
+            return;
+        }
+
         var guid = Guid.Parse(sessionId);
         if (guid == activeSessionId && activeSession != null)
         {
@@ -831,8 +885,8 @@
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
 
-                // 読み取り処理を再開（既存のものがなければ）
-                if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
+                // 読み取り処理を再開（マスターの場合のみ、既存のものがなければ）
+                if (activeSession != null && !sessionReadCts.ContainsKey(sessionId) && isMasterConnection)
                 {
                     var cts = new CancellationTokenSource();
                     sessionReadCts[sessionId] = cts;
@@ -851,7 +905,7 @@
                             Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
                         }
                     }, cts.Token);
-                    // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
+                    Console.WriteLine($"[RecreateTerminal] マスターとして読み取り処理を再開: セッション {sessionId}");
 
                     // ターミナルに初期プロンプトを送信して接続を確認
                     if (activeTerminal != null)
@@ -1199,7 +1253,7 @@
 
     private async Task SendInput()
     {
-        if (activeSession == null)
+        if (activeSession == null || !isMasterConnection)
             return;
 
         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
@@ -1265,7 +1319,7 @@
 
     private async Task SendCtrlC()
     {
-        if (activeSession == null)
+        if (activeSession == null || !isMasterConnection)
             return;
 
         // ボタンの押下状態を表示
@@ -1281,7 +1335,7 @@
 
     private async Task SendEscape()
     {
-        if (activeSession == null)
+        if (activeSession == null || !isMasterConnection)
             return;
 
         // ボタンの押下状態を表示
@@ -1297,7 +1351,7 @@
 
     private async Task SendModeSwitch()
     {
-        if (activeSession == null)
+        if (activeSession == null || !isMasterConnection)
             return;
 
         // ボタンの押下状態を表示
@@ -1773,6 +1827,12 @@
         }
         
         dotNetRef?.Dispose();
+
+        // 接続を解除
+        if (connectionId != null)
+        {
+            SessionManager.UnregisterConnection(connectionId);
+        }
         
         // JavaScriptのイベントリスナーをクリーンアップ
         try
@@ -1783,6 +1843,33 @@
         catch (Exception)
         {
             // Dispose時のエラーは無視
+        }
+    }
+
+    private async Task TakeMasterControl()
+    {
+        if (connectionId != null)
+        {
+            if (SessionManager.TrySetMasterConnection(connectionId))
+            {
+                isMasterConnection = true;
+                Console.WriteLine($"[Connection] 接続 {connectionId} がマスターになりました");
+                
+                // 読み取り処理を開始（まだ開始していない場合）
+                if (activeSessionId.HasValue && activeSession != null && !sessionReadCts.ContainsKey(activeSessionId.Value))
+                {
+                    var cts = new CancellationTokenSource();
+                    sessionReadCts[activeSessionId.Value] = cts;
+                    _ = Task.Run(() => ReadSessionOutput(activeSessionId.Value, cts.Token));
+                    Console.WriteLine($"[TakeMasterControl] 出力読み取りを開始: セッション {activeSessionId.Value}");
+                }
+                
+                // ターミナルのリサイズを強制
+                if (activeSessionId.HasValue)
+                {
+                    await RecreateTerminal(activeSessionId.Value);
+                }
+            }
         }
     }
 }
