@@ -416,16 +416,41 @@ window.terminalFunctions = {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
             
-            // バッファ内容を書き込み
-            term.write(data);
-            
-            // バッファ内容の場合は即座に最下部へスクロール
-            setTimeout(() => {
+            // 大きなデータをチャンクに分割して書き込み
+            this.writeDataInChunks(term, data).then(() => {
+                // 書き込み完了後にスクロール
                 term.scrollToBottom();
-                console.log(`[JS] バッファ内容書き込み後スクロール: sessionId=${sessionId}`);
-            }, 50);
+                console.log(`[JS] バッファ内容書き込み完了後スクロール: sessionId=${sessionId}`);
+            }).catch(error => {
+                console.error(`[JS] バッファ書き込みエラー: sessionId=${sessionId}`, error);
+            });
             
             terminalInfo.hasBufferedContent = true;
+        }
+    },
+
+    // データをチャンクに分割して順次書き込み
+    writeDataInChunks: async function(terminal, data, chunkSize = 1024) {
+        if (!data || data.length === 0) return;
+        
+        // データが小さい場合は直接書き込み
+        if (data.length <= chunkSize) {
+            return new Promise((resolve) => {
+                terminal.write(data, resolve);
+            });
+        }
+        
+        // 大きなデータをチャンクに分割
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            await new Promise((resolve) => {
+                terminal.write(chunk, resolve);
+            });
+            
+            // 次のチャンクの前に少し待機（UIのブロックを防ぐ）
+            if (i + chunkSize < data.length) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+            }
         }
     },
 

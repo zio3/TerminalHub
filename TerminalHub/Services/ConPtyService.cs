@@ -206,10 +206,24 @@ namespace TerminalHub.Services
 
         public async Task WriteAsync(string input)
         {
-            if (_writer != null)
+            if (_writer != null && !_disposed)
             {
-                await _writer.WriteAsync(input);
-                await _writer.FlushAsync();
+                try
+                {
+                    await _writer.WriteAsync(input);
+                    await _writer.FlushAsync();
+                    
+                    // 確実な書き込みのため追加フラッシュ
+                    if (_writer.BaseStream != null)
+                    {
+                        await _writer.BaseStream.FlushAsync();
+                    }
+                }
+                catch (Exception ex) when (!_disposed)
+                {
+                    _logger.LogWarning(ex, "Failed to write to terminal input stream");
+                    throw;
+                }
             }
         }
 
@@ -243,8 +257,17 @@ namespace TerminalHub.Services
             {
                 if (_disposed || _reader == null)
                     return 0;
-                    
-                return await _reader.ReadAsync(buffer, offset, count);
+                
+                // より安全な読み取り処理
+                var bytesRead = await _reader.ReadAsync(buffer, offset, count);
+                
+                // データが読み取れた場合は、追加データがないか短時間待機
+                if (bytesRead > 0)
+                {
+                    await Task.Delay(1);
+                }
+                
+                return bytesRead;
             }
             finally
             {
@@ -264,7 +287,7 @@ namespace TerminalHub.Services
                 return string.Empty;
 
             var output = new StringBuilder();
-            var buffer = new char[1024];
+            var buffer = new char[4096]; // バッファサイズを4倍に増加
             var startTime = DateTime.Now;
 
             await _readSemaphore.WaitAsync();
@@ -282,6 +305,9 @@ namespace TerminalHub.Services
                         if (bytesRead > 0)
                         {
                             output.Append(buffer, 0, bytesRead);
+                            
+                            // 追加の小さな待機でデータの取りこぼしを防ぐ
+                            await Task.Delay(1);
                             continue;
                         }
                     }
