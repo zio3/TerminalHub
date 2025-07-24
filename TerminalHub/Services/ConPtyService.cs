@@ -27,8 +27,6 @@ namespace TerminalHub.Services
 
         public async Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
         {
-            // Console.WriteLine($"[ConPtyService] CreateSessionAsync: {command}");
-            
             try
             {
                 return await Task.Run(() => new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows));
@@ -67,12 +65,10 @@ namespace TerminalHub.Services
 
         public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
         {
-            // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
             _logger = logger;
             _cols = cols;
             _rows = rows;
             InitializeConPty(command, arguments, workingDirectory);
-            // Console.WriteLine($"[ConPtySession] コンストラクタ完了");
         }
 
         private void InitializeConPty(string command, string? arguments, string? workingDirectory)
@@ -106,7 +102,6 @@ namespace TerminalHub.Services
             var hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, 0, out _hPC);
             if (hr != 0)
             {
-                Console.WriteLine($"[ConPtySession] CreatePseudoConsole失敗: HRESULT={hr:X}");
                 _logger.LogError($"CreatePseudoConsole failed with HRESULT: {hr:X}");
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
@@ -155,14 +150,11 @@ namespace TerminalHub.Services
             if (!result)
             {
                 var error = Marshal.GetLastWin32Error();
-                Console.WriteLine($"[ConPtySession] CreateProcess失敗: Win32Error={error}");
                 _logger.LogError($"CreateProcess failed with error: {error}");
                 throw new InvalidOperationException($"Failed to create process: {error}");
             }
 
-            // Console.WriteLine($"[ConPtySession] CreateProcess成功: PID={processInfo.dwProcessId}");
             _process = Process.GetProcessById((int)processInfo.dwProcessId);
-            // Console.WriteLine($"[ConPtySession] Process取得完了");
 
                 processInfoHandle = processInfo.hProcess;
                 threadInfoHandle = processInfo.hThread;

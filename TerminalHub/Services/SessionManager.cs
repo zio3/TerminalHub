@@ -24,7 +24,6 @@ namespace TerminalHub.Services
         Task<SessionInfo?> CreateWorktreeSessionWithExistingBranchAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
         Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
         Task<bool> RestartSessionAsync(Guid sessionId);
-        // event EventHandler<string>? ActiveSessionChanged;
         
         // Debug data access methods
         ConPtyDebugStats? GetSessionDebugStats(Guid sessionId);
@@ -53,8 +52,6 @@ namespace TerminalHub.Services
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
-
-        // public event EventHandler<string>? ActiveSessionChanged;
 
         public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService)
         {
@@ -237,51 +234,6 @@ namespace TerminalHub.Services
             }
         }
 
-
-        private string? FindExecutable(string exeName)
-        {
-            // 1. 環境変数PATHから検索
-            var pathEnv = Environment.GetEnvironmentVariable("PATH");
-            if (!string.IsNullOrEmpty(pathEnv))
-            {
-                var paths = pathEnv.Split(Path.PathSeparator);
-                foreach (var path in paths)
-                {
-                    var fullPath = Path.Combine(path, exeName);
-                    if (File.Exists(fullPath))
-                    {
-                        _logger.LogInformation($"Found {exeName} at: {fullPath}");
-                        return fullPath;
-                    }
-                }
-            }
-
-            // 2. よくあるインストール場所を確認
-            var commonPaths = new[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Claude"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Gemini"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Claude"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Gemini"),
-                @"C:\claude",
-                @"C:\gemini"
-            };
-
-            foreach (var basePath in commonPaths)
-            {
-                var fullPath = Path.Combine(basePath, exeName);
-                if (File.Exists(fullPath))
-                {
-                    _logger.LogInformation($"Found {exeName} at: {fullPath}");
-                    return fullPath;
-                }
-            }
-
-            _logger.LogWarning($"Could not find {exeName} in PATH or common locations");
-            return null;
-        }
-
         public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
             bool removed = false;
@@ -303,6 +255,7 @@ namespace TerminalHub.Services
             if (_initializationLocks.TryRemove(sessionId, out var initLock))
             {
                 initLock.Dispose();
+                removed = true;
             }
 
             if (removed && _activeSessionId == sessionId)
@@ -400,10 +353,6 @@ namespace TerminalHub.Services
                         // Console.WriteLine($"[SessionManager] 新しいセッション({sessionId})をアクティブ化");
                     }
 
-                    // イベントを削除してシンプルにする
-                    // Console.WriteLine($"[SessionManager] ActiveSessionChangedイベント発火");
-                    // ActiveSessionChanged?.Invoke(this, sessionId);
-                    // Console.WriteLine($"[SessionManager] SetActiveSessionAsync完了: true");
                     return Task.FromResult(true);
                 }
                 // Console.WriteLine($"[SessionManager] セッションが見つかりません: {sessionId}");
