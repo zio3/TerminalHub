@@ -103,6 +103,37 @@ namespace TerminalHub.Services
             }
         }
 
+        private async Task<ConPtySession> CreateClaudeCodeSessionWithFallbackAsync(string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
+        {            
+            try
+            {
+                // 最初は設定されたオプションで試行
+                return await _conPtyService.CreateSessionAsync(command, args, folderPath, cols, rows);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Claude Codeセッション作成が失敗しました");
+                
+                // --continueオプションを除去して再試行
+                if (options.ContainsKey("continue"))
+                {
+                    _logger.LogInformation("--continueオプションなしで再試行します");
+                    var fallbackOptions = new Dictionary<string, string>(options);
+                    fallbackOptions.Remove("continue");
+                    var fallbackArgs = TerminalConstants.BuildClaudeCodeArgs(fallbackOptions);
+                    var claudeCmdPath = GetClaudeCmdPath();
+                    var fallbackArgsString = string.IsNullOrWhiteSpace(fallbackArgs)
+                        ? $"/k \"{claudeCmdPath}\""
+                        : $"/k \"{claudeCmdPath}\" {fallbackArgs}";
+                    
+                    _logger.LogInformation("--continueオプションなしで再試行: {Args}", fallbackArgsString);
+                    return await _conPtyService.CreateSessionAsync(command, fallbackArgsString, folderPath, cols, rows);
+                }
+                
+                // --continueオプションがない場合は元の例外を再スロー
+                throw;
+            }
+        }
 
         private async Task<ConPtySession> CreateSessionWithTerminalTypeAsync(TerminalType terminalType, string command, string args, string folderPath, int cols, int rows, Dictionary<string, string> options)
         {
