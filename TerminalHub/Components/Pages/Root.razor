@@ -443,9 +443,9 @@
             {
                 if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
                 {
-                    // バッファの内容を一度に書き込み
+                    // バッファの内容を一度に書き込み（画面高さの2倍制限付き）
                     var bufferedData = string.Join("", selectedSessionInfo.OutputBuffer);
-                    _ = activeTerminal.InvokeVoidAsync("write", bufferedData);
+                    _ = activeTerminal.InvokeVoidAsync("terminalFunctions.writeBuffered", activeSessionId, bufferedData);
                     
                     // バッファをクリア
                     selectedSessionInfo.OutputBuffer.Clear();
