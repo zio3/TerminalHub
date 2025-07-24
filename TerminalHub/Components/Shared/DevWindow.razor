@@ -1,9 +1,11 @@
 @namespace TerminalHub.Components.Shared
 @using TerminalHub.Services
 @using TerminalHub.Models
+@using System.Text
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject INotificationService NotificationService
+@inject ISessionManager SessionManager
 @implements IAsyncDisposable
 
 @if (IsVisible)
@@ -49,6 +51,31 @@
             <div class="mb-3">
                 <h6>通知テスト結果</h6>
                 <small class="text-muted">@notificationTestResult</small>
+            </div>
+            <hr />
+            <h5>ターミナルデバッグ</h5>
+            <div class="mb-3">
+                <button class="btn btn-info me-2" @onclick="ShowDebugReport">
+                    <i class="bi bi-bug"></i> デバッグレポート表示
+                </button>
+                <button class="btn btn-warning me-2" @onclick="ClearDebugLog">
+                    <i class="bi bi-trash"></i> ログクリア
+                </button>
+                <button class="btn btn-success me-2" @onclick="DownloadTerminalBuffer">
+                    <i class="bi bi-download"></i> バッファダウンロード
+                </button>
+                <button class="btn btn-secondary me-2" @onclick="CompareBuffers">
+                    <i class="bi bi-check2-square"></i> バッファ比較
+                </button>
+                <button class="btn btn-primary" @onclick="ShowConPtyDebug">
+                    <i class="bi bi-cpu"></i> ConPtyデバッグ
+                </button>
+            </div>
+            <div class="mb-3">
+                <h6>デバッグ情報</h6>
+                <div style="max-height: 200px; overflow-y: auto; background-color: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.875rem;">
+                    @((MarkupString)debugInfo.Replace("\n", "<br />"))
+                </div>
             </div>
             <hr />
             <p class="text-muted">その他の開発ツールは後で追加します</p>
@@ -119,6 +146,7 @@
     private string scrollInfo = "スクロール位置情報が表示されます";
     private int testElapsedSeconds = 10;
     private string notificationTestResult = "テスト結果がここに表示されます";
+    private string debugInfo = "デバッグ情報がここに表示されます";
     
     private string GetWindowStyle()
     {
@@ -213,19 +241,21 @@
         try
         {
             var result = await JSRuntime.InvokeAsync<object>("eval", @"
-                const activeTerminals = window.multiSessionTerminals;
-                const positions = {};
-                Object.keys(activeTerminals).forEach(sessionId => {
-                    const term = activeTerminals[sessionId].terminal;
-                    if (term && term.buffer && term.buffer.active) {
-                        positions[sessionId] = {
-                            viewportY: term.buffer.active.viewportY,
-                            baseY: term.buffer.active.baseY,
-                            length: term.buffer.active.length
-                        };
-                    }
-                });
-                return positions;
+                (function() {
+                    const activeTerminals = window.multiSessionTerminals;
+                    const positions = {};
+                    Object.keys(activeTerminals).forEach(sessionId => {
+                        const term = activeTerminals[sessionId].terminal;
+                        if (term && term.buffer && term.buffer.active) {
+                            positions[sessionId] = {
+                                viewportY: term.buffer.active.viewportY,
+                                baseY: term.buffer.active.baseY,
+                                length: term.buffer.active.length
+                            };
+                        }
+                    });
+                    return positions;
+                })()
             ");
             scrollInfo = $"スクロール位置: {System.Text.Json.JsonSerializer.Serialize(result)} - {DateTime.Now:HH:mm:ss}";
         }
@@ -287,6 +317,216 @@
         catch (Exception ex)
         {
             notificationTestResult = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task ShowDebugReport()
+    {
+        try
+        {
+            var result = await JSRuntime.InvokeAsync<string>("eval", @"
+                (function() {
+                    if (window.terminalDebug) {
+                        window.terminalDebug.showReport();
+                        
+                        // デバッグ情報を取得
+                        const dataLogCount = window.terminalDebug.dataLog.length;
+                        const ansiLogCount = window.terminalDebug.ansiLog.length;
+                        
+                        // 最近のデータログ
+                        const recentData = window.terminalDebug.dataLog.slice(-5).map(entry => 
+                            `${entry.timestamp} [${entry.context}] ${entry.dataLength}バイト`
+                        ).join('\n');
+                        
+                        // ANSIシーケンス統計
+                        const ansiStats = {};
+                        window.terminalDebug.ansiLog.forEach(seq => {
+                            const key = seq.command;
+                            ansiStats[key] = (ansiStats[key] || 0) + 1;
+                        });
+                        
+                        const ansiStatsText = Object.entries(ansiStats).map(([cmd, count]) => 
+                            `${cmd}: ${count}回`
+                        ).join(', ');
+                        
+                        return `データログ: ${dataLogCount}件\nANSIログ: ${ansiLogCount}件\n\n最近の受信:\n${recentData}\n\nANSIシーケンス:\n${ansiStatsText}`;
+                    } else {
+                        return 'デバッグ機能が無効です';
+                    }
+                })()
+            ");
+            
+            debugInfo = result;
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task ClearDebugLog()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                if (window.terminalDebug) {
+                    window.terminalDebug.clear();
+                }
+            ");
+            debugInfo = "デバッグログをクリアしました";
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task DownloadTerminalBuffer()
+    {
+        try
+        {
+            var bufferData = await JSRuntime.InvokeAsync<object>("eval", @"
+                (function() {
+                    const activeTerminals = window.multiSessionTerminals;
+                    const result = {};
+                    
+                    Object.keys(activeTerminals).forEach(sessionId => {
+                        const term = activeTerminals[sessionId].terminal;
+                        if (term && term.buffer && term.buffer.active) {
+                            // バッファの全行を取得
+                            const lines = [];
+                            for (let i = 0; i < term.buffer.active.length; i++) {
+                                const line = term.buffer.active.getLine(i);
+                                if (line) {
+                                    lines.push(line.translateToString(true));
+                                }
+                            }
+                            
+                            result[sessionId] = {
+                                bufferLines: lines,
+                                viewportY: term.buffer.active.viewportY,
+                                baseY: term.buffer.active.baseY,
+                                length: term.buffer.active.length,
+                                cols: term.cols,
+                                rows: term.rows
+                            };
+                        }
+                    });
+                    
+                    return result;
+                })()
+            ");
+
+            // JSON形式でダウンロード
+            var json = System.Text.Json.JsonSerializer.Serialize(bufferData, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+            
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadTextFile", 
+                $"terminal_buffer_{timestamp}.json", json);
+            
+            debugInfo = $"バッファデータをダウンロードしました: terminal_buffer_{timestamp}.json";
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task CompareBuffers()
+    {
+        try
+        {
+            var comparison = await JSRuntime.InvokeAsync<string>("eval", @"
+                (function() {
+                    const activeTerminals = window.multiSessionTerminals;
+                    let comparisonResult = '';
+                    
+                    Object.keys(activeTerminals).forEach(sessionId => {
+                        const term = activeTerminals[sessionId].terminal;
+                        if (term && term.buffer && term.buffer.active) {
+                            // デバッグログからの受信データ
+                            const debugData = window.terminalDebug ? window.terminalDebug.dataLog : [];
+                            const recentDebugData = debugData.slice(-10);
+                            
+                            // バッファの実際の内容
+                            const bufferContent = [];
+                            for (let i = Math.max(0, term.buffer.active.length - 10); i < term.buffer.active.length; i++) {
+                                const line = term.buffer.active.getLine(i);
+                                if (line) {
+                                    bufferContent.push(line.translateToString(true));
+                                }
+                            }
+                            
+                            comparisonResult += `セッション: ${sessionId}\n`;
+                            comparisonResult += `バッファ行数: ${term.buffer.active.length}\n`;
+                            comparisonResult += `ビューポート: ${term.buffer.active.viewportY}\n`;
+                            comparisonResult += `最近のデバッグログ: ${recentDebugData.length}件\n`;
+                            comparisonResult += `最近のバッファ内容(最後10行):\n${bufferContent.join('\n')}\n\n`;
+                        }
+                    });
+                    
+                    return comparisonResult;
+                })()
+            ");
+            
+            debugInfo = comparison;
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task ShowConPtyDebug()
+    {
+        try
+        {
+            var activeSessionId = SessionManager.GetActiveSessionId();
+            if (activeSessionId == null)
+            {
+                debugInfo = "アクティブなセッションがありません";
+                return;
+            }
+
+            var stats = SessionManager.GetSessionDebugStats(activeSessionId.Value);
+            if (stats == null)
+            {
+                debugInfo = "ConPtyデバッグ情報が取得できませんでした";
+                return;
+            }
+
+            var debugLog = SessionManager.GetSessionDebugLog(activeSessionId.Value);
+            var recentEntries = debugLog?.TakeLast(5).ToArray() ?? new ConPtyDebugEntry[0];
+
+            var result = new StringBuilder();
+            result.AppendLine($"=== ConPty デバッグ情報 (セッション: {activeSessionId.Value}) ===");
+            result.AppendLine($"総エントリ数: {stats.TotalEntries}");
+            result.AppendLine($"読み取り操作: {stats.ReadOperations}");
+            result.AppendLine($"書き込み操作: {stats.WriteOperations}");
+            result.AppendLine($"読み取りバイト数: {stats.TotalBytesRead}");
+            result.AppendLine($"書き込みバイト数: {stats.TotalBytesWritten}");
+            result.AppendLine($"ANSIシーケンス含有エントリ: {stats.EntriesWithAnsi}");
+            result.AppendLine($"最後のアクティビティ: {stats.LastActivity?.ToString("HH:mm:ss.fff") ?? "なし"}");
+            result.AppendLine();
+            result.AppendLine("=== 最近のエントリ（最新5件） ===");
+            
+            foreach (var entry in recentEntries)
+            {
+                result.AppendLine($"[{entry.Timestamp:HH:mm:ss.fff}] {entry.Operation}: {entry.Length}バイト");
+                if (entry.HasAnsiSequences)
+                    result.AppendLine($"  ANSI: あり");
+                result.AppendLine($"  データ: {entry.Data.Substring(0, Math.Min(100, entry.Data.Length))}{(entry.Data.Length > 100 ? "..." : "")}");
+                result.AppendLine();
+            }
+
+            debugInfo = result.ToString();
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"エラー: {ex.Message}";
         }
     }
 

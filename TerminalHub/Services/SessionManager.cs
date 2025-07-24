@@ -26,6 +26,11 @@ namespace TerminalHub.Services
         Task<bool> RestartSessionAsync(Guid sessionId);
         // event EventHandler<string>? ActiveSessionChanged;
         
+        // Debug data access methods
+        ConPtyDebugStats? GetSessionDebugStats(Guid sessionId);
+        ConPtyDebugEntry[]? GetSessionDebugLog(Guid sessionId);
+        void ClearSessionDebugLog(Guid sessionId);
+        
     }
 
     public class SessionManager : ISessionManager, IDisposable
@@ -628,6 +633,39 @@ namespace TerminalHub.Services
             {
                 _logger.LogError(ex, "セッション再起動でエラーが発生しました: {SessionId}", sessionId);
                 return false;
+            }
+        }
+
+        public ConPtyDebugStats? GetSessionDebugStats(Guid sessionId)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session))
+            {
+                return session.GetDebugStats();
+            }
+            _logger.LogWarning("Session not found for debug stats: {SessionId}", sessionId);
+            return null;
+        }
+
+        public ConPtyDebugEntry[]? GetSessionDebugLog(Guid sessionId)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session))
+            {
+                return session.GetDebugLog();
+            }
+            _logger.LogWarning("Session not found for debug log: {SessionId}", sessionId);
+            return null;
+        }
+
+        public void ClearSessionDebugLog(Guid sessionId)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session))
+            {
+                session.ClearDebugLog();
+                _logger.LogInformation("Debug log cleared for session: {SessionId}", sessionId);
+            }
+            else
+            {
+                _logger.LogWarning("Session not found for clearing debug log: {SessionId}", sessionId);
             }
         }
 
