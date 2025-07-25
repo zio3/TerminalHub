@@ -1,5 +1,7 @@
 @using TerminalHub.Models
 @using TerminalHub.Constants
+@using TerminalHub.Services
+@inject ILocalStorageService LocalStorageService
 
 <style>
     .active-session {
@@ -25,6 +27,26 @@
     .bi-bell-fill {
         animation: bell-ring 2s ease-in-out infinite;
     }
+    
+    .collapse-icon {
+        transition: transform 0.2s ease;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+    
+    .collapse-icon.collapsed {
+        transform: rotate(-90deg);
+    }
+    
+    .sub-sessions {
+        transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+        overflow: hidden;
+    }
+    
+    .sub-sessions.collapsed {
+        max-height: 0 !important;
+        opacity: 0;
+    }
 </style>
 
 <div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
@@ -41,18 +63,30 @@
         }
         @foreach (var sessionGroup in groupedSessions)
         {
+            var parentSession = sessionGroup.FirstOrDefault(s => !s.ParentSessionId.HasValue);
+            var childSessions = sessionGroup.Where(s => s.ParentSessionId.HasValue).ToList();
+            var isCollapsed = parentSession != null && IsCollapsed(parentSession.SessionId);
+            var hasChildren = childSessions.Any();
+            
             @foreach (var session in sessionGroup)
             {
-                <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
-                     @onclick="async () => await HandleSessionClick(session.SessionId)"
-                     style="cursor: pointer; @(session.ParentSessionId.HasValue ? "padding-left: 2.5rem;" : "")">
-                    <div class="d-flex w-100 justify-content-between align-items-center">
-                        <div class="flex-fill">
-                            <h6 class="mb-1">
-                                @if (session.ParentSessionId.HasValue)
-                                {
-                                    <span class="text-muted me-1">└─</span>
-                                }
+                var isParent = !session.ParentSessionId.HasValue;
+                var isChild = session.ParentSessionId.HasValue;
+                
+                @if (isParent || (!isCollapsed && isChild))
+                {
+                    <div class="list-group-item list-group-item-action @(session.SessionId == ActiveSessionId ? "active-session" : "")" 
+                         @onclick="async () => await HandleSessionClick(session.SessionId)"
+                         style="cursor: pointer; @(isChild ? "padding-left: 2.5rem;" : "")">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div class="flex-fill">
+                                <h6 class="mb-1">
+                                    @if (isParent && hasChildren)
+                                    {
+                                        <i class="bi bi-chevron-down collapse-icon @(isCollapsed ? "collapsed" : "")"
+                                           @onclick:stopPropagation="true"
+                                           @onclick="async () => await ToggleCollapse(session.SessionId)"></i>
+                                    }
                             @if (session.HasNotificationPending)
                             {
                                 <span class="text-danger me-1" title="処理が完了しました">
@@ -168,6 +202,7 @@
                     }
                 </div>
             </div>
+                }
             }
         }
     </div>
@@ -213,7 +248,19 @@
     [Parameter] public EventCallback OnSettingsClick { get; set; }
     [Parameter] public EventCallback<Guid> OnCreateWorktree { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
+    
+    private Dictionary<Guid, bool> collapsedStates = new();
 
+    protected override async Task OnInitializedAsync()
+    {
+        // 保存された折りたたみ状態を読み込む
+        var savedStates = await LocalStorageService.GetAsync<Dictionary<Guid, bool>>("sessionCollapsedStates");
+        if (savedStates != null)
+        {
+            collapsedStates = savedStates;
+        }
+    }
+    
     protected override void OnParametersSet()
     {
         StateHasChanged();
@@ -293,5 +340,30 @@
         
         // Gitステータスを再確認
         await OnGitStatusRefresh(sessionId);
+    }
+    
+    private async Task ToggleCollapse(Guid sessionId)
+    {
+        if (collapsedStates.ContainsKey(sessionId))
+        {
+            collapsedStates[sessionId] = !collapsedStates[sessionId];
+        }
+        else
+        {
+            collapsedStates[sessionId] = true;
+        }
+        
+        // 状態を保存
+        await LocalStorageService.SetAsync("sessionCollapsedStates", collapsedStates);
+    }
+    
+    private bool IsCollapsed(Guid sessionId)
+    {
+        return collapsedStates.ContainsKey(sessionId) && collapsedStates[sessionId];
+    }
+    
+    private bool HasChildren(Guid sessionId)
+    {
+        return Sessions.Any(s => s.ParentSessionId == sessionId);
     }
 }
