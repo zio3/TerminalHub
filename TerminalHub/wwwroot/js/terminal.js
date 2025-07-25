@@ -291,7 +291,7 @@ window.terminalFunctions = {
             // requestAnimationFrameを使用してDOMの準備を確実に待つ
             requestAnimationFrame(() => {
                 fitAddon.fit();
-                console.log(`[JS] ターミナルフィット実行: cols=${term.cols}, rows=${term.rows}`);
+                // ターミナルフィット実行
                 
                 // フィット後のサイズを通知
                 if (dotNetRef) {
@@ -338,7 +338,7 @@ window.terminalFunctions = {
                     // 少し待ってもう一度
                     setTimeout(() => {
                         term.scrollToBottom();
-                        console.log(`[JS] xterm.onResize後スクロール実行: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                        // xterm.onResize後スクロール実行
                     }, 50);
                 };
                 
@@ -351,11 +351,11 @@ window.terminalFunctions = {
                 // リサイズイベントをトラック
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 if (terminalInfo) {
-                    console.log(`[JS] ターミナルリサイズ検出: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                    // ターミナルリサイズ検出
                     // リサイズトリックが適用された場合のフラグ設定
                     if (terminalInfo.isFirstWrite) {
                         terminalInfo.resizeCount = 1;
-                        console.log('[JS] リサイズトリック検出 - resizeCount=1');
+                        // リサイズトリック検出
                     }
                 }
                 // 元のデバウンス処理も実行
@@ -366,7 +366,7 @@ window.terminalFunctions = {
             window.resizeObserverManager.add(sessionId, element, () => {
                 if (fitAddon) {
                     fitAddon.fit();
-                    console.log(`[JS] リサイズ: sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
+                    // リサイズ処理
                     
                     if (dotNetRef) {
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
@@ -384,13 +384,13 @@ window.terminalFunctions = {
                             // さらに少し待って3回目
                             setTimeout(() => {
                                 term.scrollToBottom();
-                                console.log(`[JS] ResizeObserver後スクロール実行(複数回): sessionId=${sessionId}`);
+                                // ResizeObserver後スクロール実行
                             }, 100);
                             
                             // 最後にもう一度（200ms後）
                             setTimeout(() => {
                                 term.scrollToBottom();
-                                console.log(`[JS] ResizeObserver後最終スクロール: sessionId=${sessionId}`);
+                                // ResizeObserver後最終スクロール
                             }, 200);
                         });
                     };
@@ -424,13 +424,13 @@ window.terminalFunctions = {
                 // リサイズ直後の書き込みはカウント
                 if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
                     terminalInfo.resizeCount++;
-                    console.log(`[JS] リサイズ後の書き込み #${terminalInfo.resizeCount}`);
+                    // リサイズ後の書き込み
                     // リサイズデータは通常通り処理
                     term.write(data);
                     
                     if (terminalInfo.resizeCount >= 2) {
                         // リサイズ完了 - スクロールバック復元完了
-                        console.log('[JS] リサイズ完了 - スクロールバック復元');
+                        // リサイズ完了 - スクロールバック復元
                         terminalInfo.resizeCount = 0;
                         
                     }
@@ -449,7 +449,7 @@ window.terminalFunctions = {
                     term.write('\r\n--- セッション再開 ---\r\n');
                     term.write(processedData);
                     
-                    console.log('[JS] セッション切り替え検出 - スクロールバック保持');
+                    // セッション切り替え検出 - スクロールバック保持
                     terminalInfo.isFirstWrite = false;
                     
                     // リサイズトリックを待つ
@@ -508,7 +508,7 @@ window.terminalFunctions = {
             // セッション表示時に初回書き込みフラグをリセット
             if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
                 window.multiSessionTerminals[sessionId].isFirstWrite = true;
-                console.log(`[JS] セッション ${sessionId} の初回書き込みフラグをリセット`);
+                // 初回書き込みフラグをリセット
             }
         }
     },
@@ -527,13 +527,13 @@ window.terminalFunctions = {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 terminalInfo.isFirstWrite = true;
                 terminalInfo.pendingShow = true;
-                console.log(`[JS] セッション ${sessionId} を一時非表示に設定`);
+                // セッションを一時非表示に設定
                 
                 // 指定時間後にフェードイン
                 setTimeout(() => {
                     terminal.style.opacity = '1';
                     terminalInfo.pendingShow = false;
-                    console.log(`[JS] セッション ${sessionId} をフェードイン表示`);
+                    // セッションをフェードイン表示
                 }, delayMs);
             }
         }
@@ -592,7 +592,7 @@ window.terminalFunctions = {
                 setTimeout(() => {
                     terminal.scrollToBottom();
                 }, 100);
-                console.log(`[JS] ターミナル ${sessionId} を最下段にスクロール`);
+                // ターミナルを最下段にスクロール
             }
         }
     },
@@ -609,7 +609,7 @@ window.terminalFunctions = {
             // バッファ内容の場合は即座に最下部へスクロール
             setTimeout(() => {
                 term.scrollToBottom();
-                console.log(`[JS] バッファ内容書き込み後スクロール: sessionId=${sessionId}`);
+                // バッファ内容書き込み後スクロール
             }, 50);
             
             terminalInfo.hasBufferedContent = true;

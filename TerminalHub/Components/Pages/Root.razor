@@ -257,7 +257,7 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to restore session {sessionInfo.SessionId}: {ex.Message}");
+                // Failed to restore session
             }
         }
 
@@ -348,11 +348,11 @@
 
     private async Task SelectSession(Guid sessionId)
     {
-        Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}");
+        // [SelectSession] 開始
         
         if (activeSessionId == sessionId)
         {
-            Console.WriteLine($"[SelectSession] 既にアクティブなセッション: {sessionId}");
+            // 既にアクティブなセッション
             return;
         }
 
@@ -387,12 +387,12 @@
         activeSessionId = sessionId;
         // 再起動後の新しいセッションを確実に取得
         activeSession = await SessionManager.GetSessionAsync(sessionId);
-        Console.WriteLine($"[SelectSession] SessionManager.GetSession結果: {(activeSession != null ? "成功" : "null")}");
+        // SessionManager.GetSession結果確認
         
         // セッションが存在しない場合はエラー
         if (activeSession == null)
         {
-            Console.WriteLine($"[SelectSession] セッション {sessionId} が見つかりません");
+            // セッションが見つからない
             activeSessionId = null;
             return;
         }
@@ -454,7 +454,7 @@
             
             // 全バッファを取得するためのトリック
             // 方法4: リサイズ + クリア + リサイズ
-            Console.WriteLine($"[SelectSession] リサイズ+クリアトリック開始 - 現在: {currentCols}x{currentRows}");
+            // リサイズ+クリアトリック開始
             
             // 1. 1行増やす（全バッファ取得トリガー）
             selectedSession.ConPtyBuffer.Resize(currentCols, currentRows + 1);
@@ -469,13 +469,13 @@
             // 4. 元のサイズに戻す
             selectedSession.ConPtyBuffer.Resize(currentCols, currentRows);
             
-            Console.WriteLine($"[SelectSession] リサイズ+クリアトリック完了");
+            // リサイズ+クリアトリック完了
         }
 
         // ConPtyWithBufferのイベントハンドラーを設定
         if (selectedSession?.ConPtyBuffer != null)
         {
-            Console.WriteLine($"[SelectSession] ConPtyWithBufferイベントハンドラーを設定: sessionId={sessionId}");
+            // ConPtyWithBufferイベントハンドラーを設定
             
             // 既存のイベントハンドラーをクリア
             selectedSession.ConPtyBuffer.ClearEventHandlers();
@@ -493,7 +493,7 @@
                         try
                         {
                             await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
-                            Console.WriteLine($"[SelectSession] 再描画完了後のスクロール実行");
+                            // 再描画完了後のスクロール実行
                         }
                         catch { }
                     });
@@ -509,20 +509,20 @@
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[DataReceived] エラー: {ex.Message}");
+                    // [DataReceived] エラー処理
                 }
             };
             
             // 切断イベントハンドラー
             selectedSession.ConPtyBuffer.Disconnected += () =>
             {
-                Console.WriteLine($"[ConPtyBuffer] セッション {sessionId} が切断されました");
+                // セッション切断検出
                 initialDataTimer?.Dispose();
             };
         }
         else
         {
-            Console.WriteLine($"[SelectSession] ConPtyBufferが利用不可: sessionId={sessionId}");
+            // ConPtyBufferが利用不可
         }
 
         // ターミナルを最下段にスクロール
@@ -588,7 +588,7 @@
                     sessionInfo.Options.ContainsKey("continue") &&
                     !sessionInfo.HasContinueErrorOccurred)
                 {
-                    Console.WriteLine($"[Claude Continue Error] セッション {sessionId} で 'No conversation found to continue' エラーを検知しました");
+                    // Claude Continue Error detected
                     
                     // フラグを設定して重複送信を防ぐ
                     sessionInfo.HasContinueErrorOccurred = true;
@@ -615,7 +615,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ProcessReceivedData] エラー: {ex.Message}");
+            // ProcessReceivedData error
         }
     }
 
@@ -811,7 +811,7 @@
                     await Task.Delay(100); // ターミナル初期化完了を待つ
                     
                     // スナップショット送信を無効化（ConPTYが画面状態を自動送信）
-                    Console.WriteLine($"[RecreateSession] ConPTYによる画面状態の自動復元に依存");
+                    // ConPTYによる画面状態の自動復元に依存
                     
                     // データ受信イベントハンドラー
                     selectedSessionInfo.ConPtyBuffer.DataReceived += async (data) =>
@@ -822,14 +822,14 @@
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[DataReceived] エラー: {ex.Message}");
+                            // [DataReceived] エラー処理
                         }
                     };
                     
                     // 切断イベントハンドラー
                     selectedSessionInfo.ConPtyBuffer.Disconnected += () =>
                     {
-                        Console.WriteLine($"[ConPtyBuffer] セッション {sessionId} が切断されました");
+                        // セッション切断検出
                     };
 
                     // ターミナルに初期プロンプトを送信して接続を確認
@@ -927,7 +927,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Output Analysis Error] {terminalType}: {ex.Message}");
+            // Output Analysis Error
         }
     }
 
@@ -992,8 +992,8 @@
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[Notification Debug] 通知エラー: {ex.Message}");
-                            Console.WriteLine($"[Notification Debug] スタックトレース: {ex.StackTrace}");
+                            // Notification error
+                            // Stack trace
                         }
                     });
                 }
@@ -1022,12 +1022,12 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StateHasChanged Error] {ex.Message}");
+                // StateHasChanged error
             }
         }
         else
         {
-            Console.WriteLine($"[UI Update] アクティブセッション {activeSessionId} が見つかりません");
+            // Active session not found
         }
     }
     
@@ -1060,12 +1060,12 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StateHasChanged Error] {ex.Message}");
+                // StateHasChanged error
             }
         }
         else
         {
-            Console.WriteLine($"[UI Update] アクティブセッション {activeSessionId} が見つかりません");
+            // Active session not found
         }
     }
     
@@ -1096,12 +1096,12 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StateHasChanged Error] {ex.Message}");
+                // StateHasChanged error
             }
         }
         else
         {
-            Console.WriteLine($"[UI Update] セッション {sessionId} が見つかりません");
+            // Session not found
         }
     }
 
@@ -1408,7 +1408,7 @@
         var parentSession = SessionManager.GetSessionInfo(parentSessionId);
         if (parentSession == null)
         {
-            Console.WriteLine($"[AddExistingWorktreeSession] 親セッションが見つかりません: {parentSessionId}");
+            // Parent session not found
             return null;
         }
             
@@ -1438,7 +1438,7 @@
             var parentSession = SessionManager.GetSessionInfo(parentSessionId);
             if (parentSession == null)
             {
-                Console.WriteLine($"[CreateNewFolderSession] 親セッションが見つかりません: {parentSessionId}");
+                // Parent session not found
                 return null;
             }
                 
@@ -1467,7 +1467,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CreateNewFolderSession] エラー: {ex.Message}");
+            // CreateNewFolderSession error
             return null;
         }
     }
@@ -1553,7 +1553,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[History] 履歴保存エラー: {ex.Message}");
+            // History save error
         }
     }
     
@@ -1570,7 +1570,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[History] 履歴読み込みエラー: {ex.Message}");
+            // History load error
         }
     }
 
@@ -1632,13 +1632,13 @@
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionInfo == null)
         {
-            Console.WriteLine($"[RestartSessionWithoutContinue] セッション情報が見つかりません: {sessionId}");
+            // Session info not found
             return;
         }
 
         try
         {
-            Console.WriteLine($"[RestartSessionWithoutContinue] --continueなしでセッションを再起動します: {sessionId}");
+            // Restarting session without --continue
             
             
             // セッションを再起動（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
@@ -1664,13 +1664,13 @@
             }
             else
             {
-                Console.WriteLine($"[RestartSessionWithoutContinue] セッション再起動に失敗しました: {sessionId}");
+                // Session restart failed
                 toast?.ShowError("セッション再起動に失敗しました");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[RestartSessionWithoutContinue] エラー: {ex.Message}");
+            // RestartSessionWithoutContinue error
             toast?.ShowError($"セッション再起動エラー: {ex.Message}");
         }
     }

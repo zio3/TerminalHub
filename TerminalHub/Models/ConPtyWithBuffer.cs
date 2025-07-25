@@ -161,7 +161,7 @@ namespace TerminalHub.Models
                 // リサイズ時も再描画モードを開始
                 _isInRedrawMode = true;
                 _redrawLineCount = 0;
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] リサイズによる再描画モード開始 - サイズ: {cols}x{rows}");
+                // リサイズによる再描画モード開始
             }
         }
         
@@ -242,7 +242,7 @@ namespace TerminalHub.Models
                             
                             if (!shouldBuffer)
                             {
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] バッファリング無効 - データ垂れ流しモード");
+                                // バッファリング無効 - データ垂れ流しモード
                             }
                             
                             // イベント発火（表示は常に行う）
@@ -559,7 +559,7 @@ namespace TerminalHub.Models
             }
             
             var status = wasBuffered ? "バッファ追記" : "スキップ";
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {status}: {displayData}");
+            // デバッグ出力を削除
         }
         
         /// <summary>
@@ -609,7 +609,7 @@ namespace TerminalHub.Models
                     {
                         _isInRedrawMode = true;
                         _redrawLineCount = 0;
-                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] セッション切替による再描画モード開始 - 行クリア数: {CountOccurrences(data, "\x1b[K")}");
+                        // セッション切替による再描画モード開始
                         return false; // バッファに保存しない
                     }
                 }
@@ -624,7 +624,7 @@ namespace TerminalHub.Models
                 if (_redrawLineCount >= _currentRows)
                 {
                     _isInRedrawMode = false;
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] 再描画モード終了 - 処理行数: {_redrawLineCount}");
+                    // 再描画モード終了
                 }
                 
                 return false; // バッファに保存しない
