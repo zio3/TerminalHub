@@ -249,6 +249,9 @@ window.terminalFunctions = {
             cursorBlink: true,
             fontSize: 14,
             fontFamily: 'Consolas, monospace',
+            scrollback: 10000,
+            scrollOnInput: true,
+            scrollOnOutput: true,
             theme: {
                 background: '#1e1e1e',
                 foreground: '#d4d4d4',
@@ -273,7 +276,8 @@ window.terminalFunctions = {
             cols: 120,  // 固定列数
             rows: 30,   // 固定行数
             convertEol: true,
-            windowsMode: true  // Windows環境用の設定
+            windowsMode: true,  // Windows環境用の設定
+            allowProposedApi: true  // 提案中のAPIを許可（スクロールバック保持のため）
         });
         
         // FitAddonを使う
@@ -301,6 +305,9 @@ window.terminalFunctions = {
                     dotNetRef.invokeMethodAsync('SendInput', sessionId, data);
                 }
             });
+            
+            // レンダリング後のイベント（再描画完了を検出）
+            // 自動スクロールは削除 - ユーザーのスクロール操作を妨げないため
             
             // カスタムキーハンドラー（Ctrl+Cをコピー用に使う）
             term.attachCustomKeyEventHandler((arg) => {
@@ -340,7 +347,20 @@ window.terminalFunctions = {
                 });
             }, 150);
             
-            term.onResize(debouncedOnResize);
+            term.onResize((size) => {
+                // リサイズイベントをトラック
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                if (terminalInfo) {
+                    console.log(`[JS] ターミナルリサイズ検出: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                    // リサイズトリックが適用された場合のフラグ設定
+                    if (terminalInfo.isFirstWrite) {
+                        terminalInfo.resizeCount = 1;
+                        console.log('[JS] リサイズトリック検出 - resizeCount=1');
+                    }
+                }
+                // 元のデバウンス処理も実行
+                debouncedOnResize(size);
+            });
             
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
@@ -393,8 +413,53 @@ window.terminalFunctions = {
             // console.log(`[JS] 現在のターミナル数: ${Object.keys(window.multiSessionTerminals).length}`);
         }
         
+        // ターミナルごとの状態を保存
+        window.multiSessionTerminals[sessionId].isFirstWrite = true;
+        window.multiSessionTerminals[sessionId].resizeCount = 0;
+        
         return {
-            write: (data) => term.write(data),
+            write: (data) => {
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                
+                // リサイズ直後の書き込みはカウント
+                if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
+                    terminalInfo.resizeCount++;
+                    console.log(`[JS] リサイズ後の書き込み #${terminalInfo.resizeCount}`);
+                    // リサイズデータは通常通り処理
+                    term.write(data);
+                    
+                    if (terminalInfo.resizeCount >= 2) {
+                        // リサイズ完了 - スクロールバック復元完了
+                        console.log('[JS] リサイズ完了 - スクロールバック復元');
+                        terminalInfo.resizeCount = 0;
+                        
+                    }
+                }
+                // セッション切り替え直後の最初の書き込みを検出（リサイズトリック前）
+                else if (terminalInfo.isFirstWrite && data.includes('\x1b[2J') && (data.match(/\x1b\[K/g) || []).length > 10) {
+                    // 画面クリアをスキップして、カーソル位置のみ適用
+                    let processedData = data;
+                    
+                    // 画面クリア(\x1b[2J)を削除
+                    processedData = processedData.replace(/\x1b\[2J/g, '');
+                    // ホーム位置への移動(\x1b[H)も一時的に削除
+                    processedData = processedData.replace(/\x1b\[H/g, '');
+                    
+                    // 改行を追加して続きから表示
+                    term.write('\r\n--- セッション再開 ---\r\n');
+                    term.write(processedData);
+                    
+                    console.log('[JS] セッション切り替え検出 - スクロールバック保持');
+                    terminalInfo.isFirstWrite = false;
+                    
+                    // リサイズトリックを待つ
+                    terminalInfo.resizeCount = 1;
+                } else {
+                    // 通常の書き込み
+                    term.write(data);
+                    terminalInfo.isFirstWrite = false;
+                }
+            },
             clear: () => term.clear(),
             focus: () => term.focus(),
             resize: () => {
@@ -415,7 +480,9 @@ window.terminalFunctions = {
             getScrollPosition: () => {
                 return {
                     scrollY: term.buffer.active.viewportY,
-                    scrollTop: term.buffer.active.baseY
+                    scrollTop: term.buffer.active.baseY,
+                    length: term.buffer.active.length,
+                    cursorY: term.buffer.active.cursorY
                 };
             },
             dispose: () => {
@@ -437,6 +504,38 @@ window.terminalFunctions = {
         const terminal = document.getElementById(`terminal-${sessionId}`);
         if (terminal) {
             terminal.style.display = 'block';
+            
+            // セッション表示時に初回書き込みフラグをリセット
+            if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+                window.multiSessionTerminals[sessionId].isFirstWrite = true;
+                console.log(`[JS] セッション ${sessionId} の初回書き込みフラグをリセット`);
+            }
+        }
+    },
+    
+    // ターミナルを一時的に非表示にして、データ受信後に表示
+    showTerminalWithDelay: function(sessionId, delayMs = 100) {
+        const terminal = document.getElementById(`terminal-${sessionId}`);
+        if (terminal) {
+            // まず非表示にする（opacity使用でスムーズに）
+            terminal.style.transition = 'opacity 0.2s ease-in-out';
+            terminal.style.opacity = '0';
+            terminal.style.display = 'block';
+            
+            // セッション表示時に初回書き込みフラグをリセット
+            if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                terminalInfo.isFirstWrite = true;
+                terminalInfo.pendingShow = true;
+                console.log(`[JS] セッション ${sessionId} を一時非表示に設定`);
+                
+                // 指定時間後にフェードイン
+                setTimeout(() => {
+                    terminal.style.opacity = '1';
+                    terminalInfo.pendingShow = false;
+                    console.log(`[JS] セッション ${sessionId} をフェードイン表示`);
+                }, delayMs);
+            }
         }
     },
 

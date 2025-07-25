@@ -4,6 +4,7 @@
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject INotificationService NotificationService
+@inject ISessionManager SessionManager
 @implements IAsyncDisposable
 
 @if (IsVisible)
@@ -49,6 +50,36 @@
             <div class="mb-3">
                 <h6>通知テスト結果</h6>
                 <small class="text-muted">@notificationTestResult</small>
+            </div>
+            <hr />
+            <h5>バッファダウンロード</h5>
+            <div class="mb-3">
+                <div class="mb-2">
+                    <label class="form-label">セッション選択</label>
+                    <select class="form-select" @bind="selectedSessionForDownload">
+                        <option value="">-- セッションを選択 --</option>
+                        @foreach (var session in GetAvailableSessions())
+                        {
+                            <option value="@session.SessionId">@session.GetDisplayName()</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">ダウンロード行数（空欄で全体）</label>
+                    <input type="number" class="form-control" @bind="downloadLineCount" placeholder="例: 1000" min="1" />
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary me-2" @onclick="DownloadBuffer" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload))">
+                        <i class="bi bi-download"></i> バッファダウンロード
+                    </button>
+                    <button class="btn btn-secondary" @onclick="DownloadSnapshot" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload))">
+                        <i class="bi bi-file-earmark-image"></i> スナップショットダウンロード
+                    </button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <h6>ダウンロード結果</h6>
+                <small class="text-muted">@downloadResult</small>
             </div>
             <hr />
             <p class="text-muted">その他の開発ツールは後で追加します</p>
@@ -119,6 +150,9 @@
     private string scrollInfo = "スクロール位置情報が表示されます";
     private int testElapsedSeconds = 10;
     private string notificationTestResult = "テスト結果がここに表示されます";
+    private string selectedSessionForDownload = "";
+    private int? downloadLineCount = null;
+    private string downloadResult = "ダウンロード結果がここに表示されます";
     
     private string GetWindowStyle()
     {
@@ -290,6 +324,113 @@
         }
     }
 
+    private IEnumerable<SessionInfo> GetAvailableSessions()
+    {
+        return SessionManager.GetAllSessions();
+    }
+    
+    private async Task DownloadBuffer()
+    {
+        try
+        {
+            if (!Guid.TryParse(selectedSessionForDownload, out var sessionId))
+            {
+                downloadResult = "セッションを選択してください";
+                return;
+            }
+            
+            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+            if (sessionInfo?.ConPtyBuffer == null)
+            {
+                downloadResult = "バッファが利用できません";
+                return;
+            }
+            
+            downloadResult = "バッファデータを取得中...";
+            StateHasChanged();
+            
+            string content;
+            string filename;
+            
+            // バッファリングが無効化されているため、機能は利用不可
+            content = "バッファリングが無効化されています。\nConPTYが画面状態を管理しているため、過去のデータは取得できません。\n\n" +
+                     "この変更により、メモリ使用量が削減され、セッション切り替え時の重複問題が解決されました。";
+            filename = $"buffer_disabled_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+            
+            // ダウンロード実行
+            await DownloadFile(filename, content);
+            
+            downloadResult = $"ダウンロード完了: {filename} ({content.Length:N0} 文字)";
+        }
+        catch (Exception ex)
+        {
+            downloadResult = $"エラー: {ex.Message}";
+        }
+    }
+    
+    private async Task DownloadSnapshot()
+    {
+        try
+        {
+            if (!Guid.TryParse(selectedSessionForDownload, out var sessionId))
+            {
+                downloadResult = "セッションを選択してください";
+                return;
+            }
+            
+            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+            if (sessionInfo?.ConPtyBuffer == null)
+            {
+                downloadResult = "バッファが利用できません";
+                return;
+            }
+            
+            downloadResult = "スナップショットを取得中...";
+            StateHasChanged();
+            
+            // バッファリングが無効化されているため、機能は利用不可
+            var content = "バッファリングが無効化されています。\nConPTYが画面状態を管理しているため、スナップショットは取得できません。\n\n" +
+                         "セッション切り替え時は、ConPTYが自動的に現在の画面状態を送信します。";
+            var filename = $"snapshot_disabled_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+            
+            // ダウンロード実行
+            await DownloadFile(filename, content);
+            
+            downloadResult = $"スナップショットダウンロード完了: {filename} ({content.Length:N0} 文字)";
+        }
+        catch (Exception ex)
+        {
+            downloadResult = $"エラー: {ex.Message}";
+        }
+    }
+    
+    private async Task DownloadFile(string filename, string content)
+    {
+        // Base64エンコード
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(bytes);
+        
+        // JavaScriptでダウンロード実行
+        await JSRuntime.InvokeVoidAsync("eval", $@"
+            const link = document.createElement('a');
+            link.href = 'data:text/plain;charset=utf-8;base64,{base64}';
+            link.download = '{filename}';
+            link.click();
+        ");
+    }
+    
+    private string SanitizeFilename(string filename)
+    {
+        // ファイル名に使用できない文字を置換
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = filename;
+        foreach (var c in invalidChars)
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return sanitized;
+    }
+    
     private async Task Close()
     {
         await IsVisibleChanged.InvokeAsync(false);
@@ -326,7 +467,7 @@
     .dev-window {
         position: fixed;
         width: 600px;
-        height: 400px;
+        height: 600px;
         background-color: white;
         border: 1px solid #dee2e6;
         border-radius: 0.5rem;

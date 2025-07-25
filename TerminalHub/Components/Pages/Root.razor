@@ -444,30 +444,61 @@
             // エラーは無視
         }
 
-        // ConPtyWithBufferのスナップショットをターミナルに復元
+        // ConPTYから全バッファを取得するためのトリック
         if (selectedSession?.ConPtyBuffer != null)
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
-            if (activeTerminal != null)
-            {
-                // ターミナルサイズに基づいて適切な行数を計算
-                var (cols, rows) = selectedSession.ConPtyBuffer.GetTerminalSize();
-                // 実際に表示可能な行数分のデータを取得（制御シーケンスを考慮）
-                var visibleLines = Math.Max(_defaultSnapshotLines, rows * 3);
-                
-                var snapshot = selectedSession.ConPtyBuffer.GetVisibleLinesSnapshot(visibleLines);
-                if (!string.IsNullOrEmpty(snapshot))
-                {
-                    _ = activeTerminal.InvokeVoidAsync("write", snapshot);
-                }
-            }
+            // 現在のサイズを取得
+            var (currentCols, currentRows) = selectedSession.ConPtyBuffer.GetTerminalSize();
+            
+            // 全バッファを取得するためのトリック
+            // 方法4: リサイズ + クリア + リサイズ
+            Console.WriteLine($"[SelectSession] リサイズ+クリアトリック開始 - 現在: {currentCols}x{currentRows}");
+            
+            // 1. 1行増やす（全バッファ取得トリガー）
+            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows + 1);
+            
+            // 2. バッファ取得を待つ（ConPTYが全バッファを送信する時間）
+            await Task.Delay(100);
+            
+            // 3. 画面をクリア（オプション：これにより新しい状態から開始）
+            // await selectedSession.ConPtyBuffer.ClearScreen();
+            // await Task.Delay(50);
+            
+            // 4. 元のサイズに戻す
+            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows);
+            
+            Console.WriteLine($"[SelectSession] リサイズ+クリアトリック完了");
         }
 
         // ConPtyWithBufferのイベントハンドラーを設定
         if (selectedSession?.ConPtyBuffer != null)
         {
             Console.WriteLine($"[SelectSession] ConPtyWithBufferイベントハンドラーを設定: sessionId={sessionId}");
+            
+            // 既存のイベントハンドラーをクリア
+            selectedSession.ConPtyBuffer.ClearEventHandlers();
+            
+            // セッション切り替え直後のフラグ
+            bool isInitialData = true;
+            var initialDataTimer = new System.Threading.Timer(async _ =>
+            {
+                if (isInitialData)
+                {
+                    isInitialData = false;
+                    // 再描画データ受信完了と判断して最下部へスクロール
+                    await InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
+                            Console.WriteLine($"[SelectSession] 再描画完了後のスクロール実行");
+                        }
+                        catch { }
+                    });
+                }
+            }, null, 500, Timeout.Infinite); // 500ms後に実行
             
             // データ受信イベントハンドラー
             selectedSession.ConPtyBuffer.DataReceived += async (data) =>
@@ -486,6 +517,7 @@
             selectedSession.ConPtyBuffer.Disconnected += () =>
             {
                 Console.WriteLine($"[ConPtyBuffer] セッション {sessionId} が切断されました");
+                initialDataTimer?.Dispose();
             };
         }
         else
@@ -772,22 +804,14 @@
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
 
-                // ConPtyWithBufferのスナップショットを復元
+                // ConPTYから自動的に画面状態が送信されるため、スナップショット送信は不要
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                 if (selectedSessionInfo?.ConPtyBuffer != null && activeTerminal != null)
                 {
                     await Task.Delay(100); // ターミナル初期化完了を待つ
                     
-                    // ターミナルサイズに基づいて適切な行数を計算
-                    var (cols, rows) = selectedSessionInfo.ConPtyBuffer.GetTerminalSize();
-                    // 再作成時は実際に表示可能な行数を多めに取得
-                    var visibleLines = Math.Max(_recreateSnapshotLines, rows * 5);
-                    
-                    var snapshot = selectedSessionInfo.ConPtyBuffer.GetVisibleLinesSnapshot(visibleLines);
-                    if (!string.IsNullOrEmpty(snapshot))
-                    {
-                        _ = activeTerminal.InvokeVoidAsync("write", snapshot);
-                    }
+                    // スナップショット送信を無効化（ConPTYが画面状態を自動送信）
+                    Console.WriteLine($"[RecreateSession] ConPTYによる画面状態の自動復元に依存");
                     
                     // データ受信イベントハンドラー
                     selectedSessionInfo.ConPtyBuffer.DataReceived += async (data) =>

@@ -23,12 +23,34 @@ namespace TerminalHub.Models
         // ターミナルサイズを記録
         private int _currentCols = 80;
         private int _currentRows = 24;
+        
+        // カーソル点滅パターン検出用
+        private bool _isInCursorBlinkMode = false;
+        private string? _lastProcessedData = null;
+        private DateTime _lastCursorBlinkTime = DateTime.MinValue;
+        private readonly TimeSpan _cursorBlinkTimeout = TimeSpan.FromSeconds(2);
+        private readonly Queue<string> _recentCursorControlLines = new Queue<string>();
+        private const int RecentLinesWindowSize = 5;
+        
+        // セッション切り替え時の再描画検出用
+        private bool _isInRedrawMode = false;
+        private int _redrawLineCount = 0;
+        private DateTime _lastDataReceivedTime = DateTime.MinValue;
 
         // イベント：新しいデータを受信した時
         public event Action<string>? DataReceived;
         
         // イベント：セッションが切断された時
         public event Action? Disconnected;
+        
+        /// <summary>
+        /// すべてのイベントハンドラーをクリア
+        /// </summary>
+        public void ClearEventHandlers()
+        {
+            DataReceived = null;
+            Disconnected = null;
+        }
 
         public ConPtyWithBuffer(ConPtySession conPtySession, ILogger logger, int bufferCapacity = 10000)
         {
@@ -56,25 +78,21 @@ namespace TerminalHub.Models
         }
 
         /// <summary>
-        /// バッファ内の全ての出力を取得
+        /// バッファ内の全ての出力を取得（廃止）
         /// </summary>
         public string GetBufferedOutput()
         {
-            if (_disposed)
-                return string.Empty;
-
-            return _outputBuffer.GetAllText("");
+            // バッファリング無効化のため、常に空文字列を返す
+            return string.Empty;
         }
 
         /// <summary>
-        /// バッファ内の最新N行を取得
+        /// バッファ内の最新N行を取得（廃止）
         /// </summary>
         public IEnumerable<string> GetLastLines(int count)
         {
-            if (_disposed)
-                return Enumerable.Empty<string>();
-
-            return _outputBuffer.GetLastLines(count);
+            // バッファリング無効化のため、常に空のリストを返す
+            return Enumerable.Empty<string>();
         }
 
         /// <summary>
@@ -84,20 +102,8 @@ namespace TerminalHub.Models
         /// <returns>ターミナルに表示可能な形式の文字列</returns>
         public string GetSnapshot(int? maxLines = null)
         {
-            if (_disposed)
-                return string.Empty;
-
-            if (!maxLines.HasValue)
-            {
-                // 全行を取得
-                return _outputBuffer.GetAllText("");
-            }
-            else
-            {
-                // 指定行数の最新行を取得
-                var lines = _outputBuffer.GetLastLines(maxLines.Value);
-                return string.Join("", lines);
-            }
+            // バッファリング無効化のため、常に空文字列を返す
+            return string.Empty;
         }
 
         /// <summary>
@@ -108,12 +114,8 @@ namespace TerminalHub.Models
         /// <returns>ターミナル表示用の文字列</returns>
         public string GetTerminalSizedSnapshot(int terminalRows, double bufferMultiplier = 2.0)
         {
-            if (_disposed)
-                return string.Empty;
-
-            // ターミナルサイズの2倍程度を取得（スクロール分を考慮）
-            var targetLines = Math.Max(terminalRows, (int)(terminalRows * bufferMultiplier));
-            return GetSnapshot(targetLines);
+            // バッファリング無効化のため、常に空文字列を返す
+            return string.Empty;
         }
 
         /// <summary>
@@ -124,108 +126,10 @@ namespace TerminalHub.Models
         /// <returns>ターミナル表示用の文字列</returns>
         public string GetVisibleLinesSnapshot(int visibleRows, int? maxDataLines = null)
         {
-            if (_disposed || visibleRows <= 0)
-                return string.Empty;
-
-            // 制御シーケンスを考慮して、表示行数の5倍程度のデータを取得
-            var dataLinesToFetch = maxDataLines ?? (visibleRows * 5);
-            var lines = _outputBuffer.GetLastLines(dataLinesToFetch).ToList();
-            
-            // 最新から遡って画面クリア命令を探す
-            int startIndex = 0;
-            var combinedLines = new List<string>();
-            
-            // 逆順で確認（最新から古い方へ）
-            for (int i = lines.Count - 1; i >= 0; i--)
-            {
-                // 画面クリア命令を含む行を探す
-                if (lines[i].Contains("\x1b[2J") || lines[i].Contains("\x1b[H\x1b[2J") || lines[i].Contains("\x1b[H\x1b[J"))
-                {
-                    // 画面クリア以降のデータのみを使用
-                    startIndex = i;
-                    
-                    // クリア命令を含む行から、クリア命令以降の部分を取得
-                    var clearIndex = lines[i].LastIndexOf("\x1b[2J");
-                    if (clearIndex == -1) clearIndex = lines[i].LastIndexOf("\x1b[J");
-                    
-                    if (clearIndex >= 0 && clearIndex < lines[i].Length - 1)
-                    {
-                        // クリア命令の後にデータがある場合は、その部分を含める
-                        lines[i] = lines[i].Substring(clearIndex);
-                    }
-                    else
-                    {
-                        // クリア命令で行が終わる場合は、次の行から開始
-                        startIndex = i + 1;
-                    }
-                    break;
-                }
-            }
-            
-            // 画面クリア以降のデータを結合
-            var relevantLines = lines.Skip(startIndex).ToList();
-            var rawData = string.Join("", relevantLines);
-            
-            // エスケープシーケンスを解析して実際の表示行数を計算
-            var estimatedVisibleLines = EstimateVisibleLines(rawData);
-            
-            // 表示行数が不足している場合は、さらにデータを取得（ただし画面クリアより前には遡らない）
-            if (estimatedVisibleLines < visibleRows && dataLinesToFetch < _outputBuffer.Count && startIndex == 0)
-            {
-                // 画面クリアが見つからなかった場合のみ、追加データを取得
-                var additionalLines = (int)((visibleRows - estimatedVisibleLines) * 3);
-                dataLinesToFetch = Math.Min(dataLinesToFetch + additionalLines, _outputBuffer.Count);
-                
-                // 再帰的に呼び出し（maxDataLinesを更新）
-                return GetVisibleLinesSnapshot(visibleRows, dataLinesToFetch);
-            }
-            
-            return rawData;
+            // バッファリング無効化のため、常に空文字列を返す
+            return string.Empty;
         }
 
-        /// <summary>
-        /// データから実際の表示行数を推定（簡易版）
-        /// </summary>
-        private int EstimateVisibleLines(string data)
-        {
-            if (string.IsNullOrEmpty(data))
-                return 0;
-
-            // 簡易的な推定：
-            // - 改行文字をカウント
-            // - カーソル上移動(\033[nA)を減算
-            // - 行クリア(\033[K, \033[2K)は影響なし
-            // - 画面クリア(\033[2J)は全行クリア
-            
-            int visibleLines = 0;
-            var lines = data.Split(new[] { '\n', '\r' }, StringSplitOptions.None);
-            
-            foreach (var line in lines)
-            {
-                if (!string.IsNullOrEmpty(line))
-                {
-                    visibleLines++;
-                    
-                    // カーソル上移動を検出（簡易版）
-                    if (line.Contains("\x1b[") && line.Contains("A"))
-                    {
-                        // 非常に簡易的な処理（本来は数値を解析すべき）
-                        visibleLines = Math.Max(0, visibleLines - 1);
-                    }
-                }
-            }
-            
-            // 画面クリアがある場合はリセット
-            if (data.Contains("\x1b[2J"))
-            {
-                // 最後の画面クリア以降のデータのみを考慮
-                var lastClearIndex = data.LastIndexOf("\x1b[2J");
-                var afterClear = data.Substring(lastClearIndex);
-                return EstimateVisibleLines(afterClear);
-            }
-            
-            return Math.Max(1, visibleLines);
-        }
 
         /// <summary>
         /// バッファをクリア
@@ -253,6 +157,11 @@ namespace TerminalHub.Models
                 _conPtySession.Resize(cols, rows);
                 _currentCols = cols;
                 _currentRows = rows;
+                
+                // リサイズ時も再描画モードを開始
+                _isInRedrawMode = true;
+                _redrawLineCount = 0;
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] リサイズによる再描画モード開始 - サイズ: {cols}x{rows}");
             }
         }
         
@@ -263,13 +172,55 @@ namespace TerminalHub.Models
         {
             return (_currentCols, _currentRows);
         }
+        
+        /// <summary>
+        /// 画面の再描画を要求（実験的）
+        /// </summary>
+        public async Task RequestRedraw()
+        {
+            if (!_disposed)
+            {
+                // 方法1: 画面の再描画を要求する制御シーケンス
+                await WriteAsync("\x1b[7t");  // Request terminal status
+                await Task.Delay(10);
+                
+                // 方法2: カーソル位置の保存と復元
+                await WriteAsync("\x1b[s");   // Save cursor position
+                await WriteAsync("\x1b[u");   // Restore cursor position
+            }
+        }
+        
+        /// <summary>
+        /// 画面をクリアする
+        /// </summary>
+        public async Task ClearScreen()
+        {
+            if (!_disposed)
+            {
+                // 画面全体をクリアしてカーソルをホーム位置に移動
+                await WriteAsync("\x1b[2J\x1b[H");
+            }
+        }
+        
+        /// <summary>
+        /// スクロールバックバッファをクリア（実験的）
+        /// </summary>
+        public async Task ClearScrollbackBuffer()
+        {
+            if (!_disposed)
+            {
+                // スクロールバックバッファをクリアする制御シーケンス
+                await WriteAsync("\x1b[3J");
+            }
+        }
 
         /// <summary>
         /// バックグラウンドでConPtyからデータを継続的に読み取り
         /// </summary>
         private async Task ReadFromConPtyAsync()
         {
-            var buffer = new char[4096];
+            // より大きなバッファサイズを使用（64KB）
+            var buffer = new char[65536];
             var stringBuilder = new StringBuilder();
 
             try
@@ -284,10 +235,17 @@ namespace TerminalHub.Models
                         {
                             var data = new string(buffer, 0, bytesRead);
                             
-                            // バッファに保存
-                            ProcessAndBufferData(data);
+                            // バッファリングを完全に無効化（実験的）
+                            var shouldBuffer = false; // 常にfalse
                             
-                            // イベント発火
+                            LogBufferAddition(data, shouldBuffer);
+                            
+                            if (!shouldBuffer)
+                            {
+                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] バッファリング無効 - データ垂れ流しモード");
+                            }
+                            
+                            // イベント発火（表示は常に行う）
                             DataReceived?.Invoke(data);
                         }
                         else
@@ -343,14 +301,454 @@ namespace TerminalHub.Models
             if (string.IsNullOrEmpty(data))
                 return;
 
+            // まず、連続する制御シーケンスをクリーンアップ
+            data = CleanupRepeatedControlSequences(data);
+
             // 改行で分割して行ごとに処理
             var lines = data.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
             
             foreach (var line in lines)
             {
+                // カーソル点滅パターンのチェック
+                if (ShouldSkipCursorBlinkPattern(line))
+                {
+                    continue;
+                }
+                
                 // 空行も含めてバッファに追加（ターミナル出力の整合性のため）
                 _outputBuffer.AddLine(line);
             }
+        }
+        
+        /// <summary>
+        /// 連続する制御シーケンスをクリーンアップ
+        /// </summary>
+        private string CleanupRepeatedControlSequences(string data)
+        {
+            if (string.IsNullOrEmpty(data))
+                return data;
+            
+            // 大量の[Kの繰り返しを削減
+            // [K[K[K... を [K[K[K] (3回)に制限
+            var result = System.Text.RegularExpressions.Regex.Replace(
+                data, 
+                @"(\x1b\[K){4,}",  // 4回以上の[Kの繰り返し
+                "\x1b[K\x1b[K\x1b[K");  // 3回に置換
+            
+            // カーソル表示/非表示の過度な繰り返しを削減
+            // [?25h[?25l[?25h[?25l... のパターン
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result,
+                @"((\x1b\[\?25[hl]){2}){2,}",  // 表示/非表示のペアが2回以上
+                "$2$2");  // 1ペア（2回）に置換
+            
+            return result;
+        }
+        
+        /// <summary>
+        /// カーソル点滅パターンをスキップすべきか判定（シンプル版）
+        /// </summary>
+        private bool ShouldSkipCursorBlinkPattern(string line)
+        {
+            // カーソル表示/非表示のみの行かチェック
+            if (!IsCursorShowHideOnlyLine(line))
+            {
+                // カーソル表示/非表示以外の内容があれば履歴をクリア
+                _recentCursorControlLines.Clear();
+                return false;
+            }
+            
+            // 最近のカーソル制御行を記録
+            _recentCursorControlLines.Enqueue(line);
+            if (_recentCursorControlLines.Count > RecentLinesWindowSize)
+            {
+                _recentCursorControlLines.Dequeue();
+            }
+            
+            // 最低2つの履歴があれば点滅パターンをチェック
+            if (_recentCursorControlLines.Count >= 2)
+            {
+                var lines = _recentCursorControlLines.ToArray();
+                var lastLine = lines[lines.Length - 1];
+                var prevLine = lines[lines.Length - 2];
+                
+                // カーソル表示と非表示が交互に来ているかチェック
+                if ((ContainsCursorHide(lastLine) && ContainsCursorShow(prevLine)) ||
+                    (ContainsCursorShow(lastLine) && ContainsCursorHide(prevLine)))
+                {
+                    // 点滅パターンと判定 - スキップ
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// カーソル非表示を含むかチェック
+        /// </summary>
+        private bool ContainsCursorHide(string line)
+        {
+            return line.Contains("\x1b[?25l");
+        }
+        
+        /// <summary>
+        /// カーソル表示を含むかチェック
+        /// </summary>
+        private bool ContainsCursorShow(string line)
+        {
+            return line.Contains("\x1b[?25h");
+        }
+        
+        /// <summary>
+        /// カーソル表示/非表示のみの行かどうか判定
+        /// </summary>
+        private bool IsCursorShowHideOnlyLine(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return false;
+                
+            var trimmed = line.Trim();
+            
+            // カーソル表示/非表示のパターンのみかチェック
+            return trimmed == "\x1b[?25h" ||      // カーソル表示
+                   trimmed == "\x1b[?25l" ||      // カーソル非表示
+                   trimmed == "\x1b[?25h\x1b[K" || // カーソル表示 + 行クリア
+                   trimmed == "\x1b[?25l\x1b[K" || // カーソル非表示 + 行クリア
+                   trimmed == "\x1b[K" ||          // 行クリアのみ（連続する場合が多い）
+                   IsRepeatedClearLine(trimmed);   // 複数の[Kの繰り返し
+        }
+        
+        /// <summary>
+        /// 繰り返しの行クリアかどうか判定
+        /// </summary>
+        private bool IsRepeatedClearLine(string line)
+        {
+            // [K[K[K... のパターンをチェック
+            if (!line.StartsWith("\x1b[K"))
+                return false;
+                
+            // すべて[Kの繰り返しかチェック
+            var clearPattern = "\x1b[K";
+            var repeatCount = 0;
+            var index = 0;
+            
+            while (index < line.Length)
+            {
+                if (index + clearPattern.Length <= line.Length && 
+                    line.Substring(index, clearPattern.Length) == clearPattern)
+                {
+                    repeatCount++;
+                    index += clearPattern.Length;
+                }
+                else
+                {
+                    // [K以外の文字が含まれている
+                    return false;
+                }
+            }
+            
+            // 3回以上の繰り返しなら除外対象
+            return repeatCount >= 3;
+        }
+        
+        /// <summary>
+        /// カーソル制御のみの行かどうか判定
+        /// </summary>
+        private bool IsCursorControlOnlyLine(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return false;
+            
+            // よくあるカーソル制御パターン
+            var cursorPatterns = new[]
+            {
+                "\x1b[K",      // 行末までクリア
+                "\x1b[2K",     // 行全体クリア
+                "\x1b[?25h",   // カーソル表示
+                "\x1b[?25l",   // カーソル非表示
+                "\x1b[H",      // ホーム位置
+                "\x1b[J",      // 画面下部クリア
+                "\x1b[2J",     // 画面全体クリア
+            };
+            
+            // エスケープシーケンスのみで構成されているかチェック
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+                return false;
+                
+            // 既知のカーソル制御パターンのみかチェック
+            foreach (var pattern in cursorPatterns)
+            {
+                if (trimmed == pattern)
+                    return true;
+            }
+            
+            // 複数のエスケープシーケンスの組み合わせ（例: \x1b[?25l\x1b[K）
+            if (trimmed.StartsWith("\x1b[") && !trimmed.Contains(' ') && trimmed.Length < 20)
+            {
+                // 印字可能文字が含まれていない場合は制御シーケンスとみなす
+                var hasVisibleChar = false;
+                foreach (var ch in trimmed)
+                {
+                    if (ch >= ' ' && ch < '\x7f' && ch != '[' && ch != ';' && ch != '?' && !char.IsDigit(ch))
+                    {
+                        hasVisibleChar = true;
+                        break;
+                    }
+                }
+                return !hasVisibleChar;
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// バッファ追記のログ出力
+        /// </summary>
+        private void LogBufferAddition(string data, bool wasBuffered)
+        {
+            var displayData = new StringBuilder();
+            
+            // データを文字ごとに処理
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (i < data.Length - 1 && data[i] == '\x1b' && data[i + 1] == '[')
+                {
+                    // エスケープシーケンスの開始を検出
+                    int seqEnd = i + 2;
+                    
+                    // シーケンスの終端を探す
+                    while (seqEnd < data.Length && !IsControlSequenceTerminator(data[seqEnd]))
+                    {
+                        seqEnd++;
+                    }
+                    
+                    if (seqEnd < data.Length)
+                    {
+                        seqEnd++; // 終端文字を含める
+                        var sequence = data.Substring(i, seqEnd - i);
+                        displayData.Append($"[制御文:{EscapeSequenceToReadable(sequence)}] ");
+                        i = seqEnd - 1; // forループで+1されるため
+                    }
+                    else
+                    {
+                        displayData.Append(data[i]);
+                    }
+                }
+                else if (data[i] == '\r')
+                {
+                    displayData.Append("[CR] ");
+                }
+                else if (data[i] == '\n')
+                {
+                    displayData.Append("[LF] ");
+                }
+                else if (data[i] == '\t')
+                {
+                    displayData.Append("[TAB] ");
+                }
+                else if (data[i] < ' ' || data[i] == '\x7f')
+                {
+                    displayData.Append($"[制御:{(int)data[i]:X2}] ");
+                }
+                else
+                {
+                    displayData.Append(data[i]);
+                }
+            }
+            
+            var status = wasBuffered ? "バッファ追記" : "スキップ";
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {status}: {displayData}");
+        }
+        
+        /// <summary>
+        /// 制御シーケンスの終端文字かどうか判定
+        /// </summary>
+        private bool IsControlSequenceTerminator(char c)
+        {
+            return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '~' || c == '=' || c == '>' || c == '<';
+        }
+        
+        /// <summary>
+        /// エスケープシーケンスを読みやすい形式に変換
+        /// </summary>
+        private string EscapeSequenceToReadable(string sequence)
+        {
+            return sequence
+                .Replace("\x1b[?25h", "カーソル表示")
+                .Replace("\x1b[?25l", "カーソル非表示")
+                .Replace("\x1b[K", "行末クリア")
+                .Replace("\x1b[2K", "行全体クリア")
+                .Replace("\x1b[H", "ホーム")
+                .Replace("\x1b[J", "画面下部クリア")
+                .Replace("\x1b[2J", "画面クリア")
+                .Replace("\x1b[1;6~", "特殊キー")
+                .Replace("\x1b", "ESC");
+        }
+
+        /// <summary>
+        /// セッション切り替え時の再描画を検出
+        /// </summary>
+        /// <param name="data">受信したデータ</param>
+        /// <returns>バッファに保存すべきならtrue</returns>
+        private bool ProcessSessionSwitchRedraw(string data)
+        {
+            var now = DateTime.UtcNow;
+            var timeSinceLastData = now - _lastDataReceivedTime;
+            _lastDataReceivedTime = now;
+            
+            // 再描画モードでない場合のみ、新規再描画を検出
+            if (!_isInRedrawMode)
+            {
+                // 3秒以上データが来ていない場合は、セッション切り替えの可能性
+                if (timeSinceLastData > TimeSpan.FromSeconds(3))
+                {
+                    // 大量の行クリア制御文を含む場合は再描画モード開始
+                    if (data.Contains("\x1b[K") && CountOccurrences(data, "\x1b[K") > 10)
+                    {
+                        _isInRedrawMode = true;
+                        _redrawLineCount = 0;
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] セッション切替による再描画モード開始 - 行クリア数: {CountOccurrences(data, "\x1b[K")}");
+                        return false; // バッファに保存しない
+                    }
+                }
+            }
+            
+            // 再描画モード中
+            if (_isInRedrawMode)
+            {
+                _redrawLineCount++;
+                
+                // 画面サイズ分の行を受信したら再描画モード終了
+                if (_redrawLineCount >= _currentRows)
+                {
+                    _isInRedrawMode = false;
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] 再描画モード終了 - 処理行数: {_redrawLineCount}");
+                }
+                
+                return false; // バッファに保存しない
+            }
+            
+            return true; // 通常のデータはバッファに保存
+        }
+        
+        /// <summary>
+        /// 文字列内の特定の部分文字列の出現回数を数える
+        /// </summary>
+        private int CountOccurrences(string text, string pattern)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(pattern, index)) != -1)
+            {
+                count++;
+                index += pattern.Length;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// カーソル点滅状態を処理し、バッファに保存すべきか判定
+        /// </summary>
+        /// <param name="data">受信したデータ</param>
+        /// <returns>バッファに保存すべきならtrue</returns>
+        private bool ProcessCursorBlinkState(string data)
+        {
+            if (string.IsNullOrEmpty(data))
+                return true; // 空データは保存
+
+            var now = DateTime.UtcNow;
+            
+            // カーソル点滅パターンのチェック
+            // 改行なしで制御コードが連続する場合を考慮
+            bool containsCursorControl = data.Contains("\x1b[?25h") || data.Contains("\x1b[?25l") || data.Contains("\x1b[K");
+            bool containsOnlyCursorControl = IsCursorControlOnlyData(data);
+            
+            if (containsOnlyCursorControl)
+            {
+                // カーソル制御のみのデータ
+                if (_isInCursorBlinkMode)
+                {
+                    // 既に点滅モード中 - バッファに保存しない
+                    _lastCursorBlinkTime = now;
+                    return false;
+                }
+                else if (_lastProcessedData != null && IsCursorControlOnlyData(_lastProcessedData))
+                {
+                    // 前回もカーソル制御のみだった - 点滅モード開始
+                    _isInCursorBlinkMode = true;
+                    _lastCursorBlinkTime = now;
+                    return false;
+                }
+            }
+            else
+            {
+                // カーソル制御以外の内容を含む
+                if (_isInCursorBlinkMode)
+                {
+                    // 点滅モード終了
+                    _isInCursorBlinkMode = false;
+                }
+            }
+            
+            // タイムアウトチェック
+            if (_isInCursorBlinkMode && (now - _lastCursorBlinkTime) > _cursorBlinkTimeout)
+            {
+                // タイムアウト - 点滅モード終了
+                _isInCursorBlinkMode = false;
+            }
+            
+            _lastProcessedData = data;
+            return !_isInCursorBlinkMode;
+        }
+        
+        /// <summary>
+        /// データがカーソル制御のみかどうか判定（改行なしの連続データ対応）
+        /// </summary>
+        private bool IsCursorControlOnlyData(string data)
+        {
+            if (string.IsNullOrEmpty(data))
+                return false;
+            
+            // 制御シーケンスのパターン
+            string[] controlPatterns = {
+                "\x1b[?25h",    // カーソル表示
+                "\x1b[?25l",    // カーソル非表示
+                "\x1b[K",       // 行末までクリア
+                "\x1b[2K",      // 行全体クリア
+                "\x1b[H",       // ホーム位置
+                "\x1b[J",       // 画面下部クリア
+                "\x1b[2J",      // 画面全体クリア
+                "\x1b[1;6~"     // 特殊キーシーケンス
+            };
+            
+            // データを一時的にコピーして処理
+            string remaining = data;
+            
+            // 全ての制御シーケンスを削除
+            foreach (var pattern in controlPatterns)
+            {
+                remaining = remaining.Replace(pattern, "");
+            }
+            
+            // 数字とセミコロンを含む位置指定パターン (\x1b[数字;数字H など) を削除
+            remaining = System.Text.RegularExpressions.Regex.Replace(
+                remaining, 
+                @"\x1b\[\d+;\d+[HfR]", 
+                "");
+            
+            // 単純な数字付きパターン (\x1b[数字A など) を削除
+            remaining = System.Text.RegularExpressions.Regex.Replace(
+                remaining, 
+                @"\x1b\[\d+[ABCDEFGJKST]", 
+                "");
+            
+            // エスケープ文字自体を削除
+            remaining = remaining.Replace("\x1b", "");
+            
+            // 残りが空白文字のみかチェック
+            return string.IsNullOrWhiteSpace(remaining);
         }
 
         /// <summary>
@@ -361,7 +759,7 @@ namespace TerminalHub.Models
             if (_disposed)
                 return "ConPtyWithBuffer: Disposed";
 
-            return $"ConPtyWithBuffer: BufferLines={_outputBuffer.Count}, BufferCapacity={_outputBuffer.Capacity}, IsDisposed={_disposed}";
+            return $"ConPtyWithBuffer: BufferLines={_outputBuffer.Count}, BufferCapacity={_outputBuffer.Capacity}, IsDisposed={_disposed}, CursorBlinkMode={_isInCursorBlinkMode}";
         }
 
         public void Dispose()

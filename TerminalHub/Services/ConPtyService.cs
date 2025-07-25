@@ -53,8 +53,9 @@ namespace TerminalHub.Services
         private IntPtr _hPipeOut = IntPtr.Zero;
         private readonly ILogger _logger;
         private StreamWriter? _writer;
-        private StreamReader? _reader;
+        private FileStream? _pipeOutStream;
         private bool _disposed;
+        private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
 
         private int _cols;
         private int _rows;
@@ -86,10 +87,11 @@ namespace TerminalHub.Services
             
             try
             {
-                // パイプの作成
+                // パイプの作成（バッファサイズを64KBに設定）
                 // Console.WriteLine($"[ConPtySession] パイプ作成開始");
-                CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, 0);
-                CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, 0);
+                const uint pipeBufferSize = 65536; // 64KB
+                CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, pipeBufferSize);
+                CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, pipeBufferSize);
                 // Console.WriteLine($"[ConPtySession] パイプ作成完了");
 
                 _hPipeIn = hPipeIn;
@@ -168,7 +170,16 @@ namespace TerminalHub.Services
                 var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
 
                 _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
-                _reader = new StreamReader(new FileStream(pipeOut, FileAccess.Read), Encoding.UTF8);
+                _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
+                
+                // デバッグ: FileStreamの詳細情報
+                Console.WriteLine($"[ConPtySession] FileStream created - Type: {_pipeOutStream.GetType().FullName}");
+                Console.WriteLine($"[ConPtySession] FileStream properties - CanSeek: {_pipeOutStream.CanSeek}, CanRead: {_pipeOutStream.CanRead}, IsAsync: {_pipeOutStream.IsAsync}");
+                if (_pipeOutStream.CanSeek)
+                {
+                    Console.WriteLine($"[ConPtySession] WARNING: Pipe FileStream is seekable! Position: {_pipeOutStream.Position}, Length: {_pipeOutStream.Length}");
+                }
+                
                 // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
                 
                 // SafeFileHandleに所有権を移したので、元のハンドルは無効化
@@ -215,22 +226,8 @@ namespace TerminalHub.Services
 
         public async Task<string?> ReadLineAsync()
         {
-            if (_disposed)
-                return null;
-                
-            await _readSemaphore.WaitAsync();
-            try
-            {
-                if (_disposed || _reader == null)
-                    return null;
-                    
-                return await _reader.ReadLineAsync();
-            }
-            finally
-            {
-                if (!_disposed)
-                    _readSemaphore.Release();
-            }
+            // この実装は StreamReader を前提としていたため、削除予定
+            throw new NotSupportedException("ReadLineAsync is no longer supported. Use ReadAsync instead.");
         }
 
         public async Task<int> ReadAsync(char[] buffer, int offset, int count)
@@ -241,10 +238,28 @@ namespace TerminalHub.Services
             await _readSemaphore.WaitAsync();
             try
             {
-                if (_disposed || _reader == null)
+                if (_disposed || _pipeOutStream == null)
                     return 0;
-                    
-                return await _reader.ReadAsync(buffer, offset, count);
+                
+                // デバッグ: ストリームの状態を確認
+                // Console.WriteLine($"[ConPtySession.ReadAsync] Stream Type: {_pipeOutStream.GetType().Name}, CanSeek: {_pipeOutStream.CanSeek}, CanRead: {_pipeOutStream.CanRead}");
+                // Console.WriteLine($"[ConPtySession.ReadAsync] Stream Position: {(_pipeOutStream.CanSeek ? _pipeOutStream.Position.ToString() : "Cannot seek")}, Length: {(_pipeOutStream.CanSeek ? _pipeOutStream.Length.ToString() : "Cannot seek")}");
+                
+                // バイトバッファを用意（UTF-8では最大4バイト/文字）
+                var byteBuffer = new byte[count * 4];
+                var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
+                
+                // Console.WriteLine($"[ConPtySession.ReadAsync] Bytes read: {bytesRead}");
+                
+                if (bytesRead == 0)
+                    return 0;
+                
+                // UTF-8をcharに変換（ステートフルなデコーダーを使用）
+                var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, buffer, offset);
+                
+                // Console.WriteLine($"[ConPtySession.ReadAsync] Chars read: {charsRead}, First 50 chars: {new string(buffer, offset, Math.Min(charsRead, 50)).Replace("\r", "\\r").Replace("\n", "\\n")}");
+                
+                return charsRead;
             }
             finally
             {
@@ -255,16 +270,17 @@ namespace TerminalHub.Services
 
         public Stream? GetOutputStream()
         {
-            return _reader?.BaseStream;
+            return _pipeOutStream;
         }
 
         public async Task<string> ReadAvailableOutputAsync(int timeoutMs = 2000)
         {
-            if (_disposed || _reader == null)
+            if (_disposed || _pipeOutStream == null)
                 return string.Empty;
 
             var output = new StringBuilder();
-            var buffer = new char[1024];
+            var byteBuffer = new byte[4096];
+            var charBuffer = new char[4096];
             var startTime = DateTime.Now;
 
             await _readSemaphore.WaitAsync();
@@ -272,18 +288,15 @@ namespace TerminalHub.Services
             {
                 while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
                 {
-                    if (_disposed || _reader == null)
+                    if (_disposed || _pipeOutStream == null)
                         break;
 
-                    // データが利用可能かチェック
-                    if (_reader.BaseStream.CanRead && _reader.BaseStream.Length > 0)
+                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
+                    if (bytesRead > 0)
                     {
-                        var bytesRead = await _reader.ReadAsync(buffer, 0, buffer.Length);
-                        if (bytesRead > 0)
-                        {
-                            output.Append(buffer, 0, bytesRead);
-                            continue;
-                        }
+                        var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
+                        output.Append(charBuffer, 0, charsRead);
+                        continue;
                     }
 
                     // 短い待機
@@ -323,7 +336,7 @@ namespace TerminalHub.Services
 
             // ストリームを破棄
             try { _writer?.Dispose(); } catch { }
-            try { _reader?.Dispose(); } catch { }
+            try { _pipeOutStream?.Dispose(); } catch { }
 
             // プロセスを終了
             if (_process != null && !_process.HasExited)
