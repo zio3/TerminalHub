@@ -38,7 +38,7 @@ Windows向けのWebベースターミナルエミュレータ。AIアシスタ�
 
 1. リポジトリをクローン:
 ```bash
-git clone https://github.com/YOUR_USERNAME/TerminalHub.git
+git clone https://github.com/zio3/TerminalHub
 cd TerminalHub
 ```
 
