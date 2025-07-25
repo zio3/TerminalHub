@@ -39,6 +39,184 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
+// URL検出の設定
+function setupUrlDetection(term) {
+    // HTTP/HTTPSのURLパターン
+    const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+    
+    // デバッグ: APIの存在確認
+    console.log('[URL Detection] Available APIs:', {
+        registerLinkProvider: typeof term.registerLinkProvider,
+        registerLinkMatcher: typeof term.registerLinkMatcher,
+        registerDecoration: typeof term.registerDecoration
+    });
+    
+    // xterm.js v5用のregisterLinkProvider実装
+    if (typeof term.registerLinkProvider === 'function') {
+        const linkProvider = {
+            provideLinks: (bufferLineNumber, callback) => {
+                const line = term.buffer.active.getLine(bufferLineNumber);
+                if (!line) {
+                    callback(undefined);
+                    return;
+                }
+                
+                // 行のテキストを取得
+                let lineText = '';
+                for (let i = 0; i < line.length; i++) {
+                    const cell = line.getCell(i);
+                    if (cell) {
+                        lineText += cell.getChars() || ' ';
+                    }
+                }
+                
+                // URLを検出
+                const links = [];
+                let match;
+                urlRegex.lastIndex = 0; // 正規表現をリセット
+                
+                while ((match = urlRegex.exec(lineText)) !== null) {
+                    const link = {
+                        range: {
+                            start: { x: match.index + 1, y: bufferLineNumber + 1 },
+                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber + 1 }
+                        },
+                        text: match[0],
+                        activate: (e, uri) => {
+                            console.log('[URL Detection] Link activated:', uri);
+                            window.open(uri, '_blank');
+                        }
+                    };
+                    links.push(link);
+                    console.log('[URL Detection] Found link:', match[0], 'at line', bufferLineNumber + 1);
+                }
+                
+                callback(links);
+            }
+        };
+        
+        term.registerLinkProvider(linkProvider);
+        console.log('[URL Detection] URL検出機能を有効化しました（registerLinkProvider使用）');
+    } else {
+        console.error('[URL Detection] registerLinkProvider APIが利用できません');
+    }
+}
+
+// デバッグ用データ記録
+window.terminalDebug = {
+    enabled: true,  // デバッグモードの有効/無効
+    dataLog: [],    // 受信データのログ
+    ansiLog: [],    // ANSIシーケンスのログ
+    maxLogSize: 1000,  // 最大ログサイズ
+    
+    // データをログに記録
+    logData: function(sessionId, data, context) {
+        if (!this.enabled) return;
+        
+        const entry = {
+            timestamp: new Date().toISOString(),
+            sessionId: sessionId,
+            context: context,
+            dataLength: data.length,
+            data: data.substring(0, 200),  // 最初の200文字のみ保存
+            fullData: data  // 完全なデータ（必要に応じて）
+        };
+        
+        this.dataLog.push(entry);
+        if (this.dataLog.length > this.maxLogSize) {
+            this.dataLog.shift();  // 古いエントリを削除
+        }
+        
+        // ANSIシーケンスを検出
+        this.detectAnsiSequences(sessionId, data);
+    },
+    
+    // ANSIエスケープシーケンスを検出して記録
+    detectAnsiSequences: function(sessionId, data) {
+        const sequences = [];
+        const regex = /\x1b\[([0-9;]*)([A-Za-z])/g;
+        let match;
+        
+        while ((match = regex.exec(data)) !== null) {
+            const seq = {
+                timestamp: new Date().toISOString(),
+                sessionId: sessionId,
+                sequence: match[0],
+                params: match[1],
+                command: match[2],
+                index: match.index,
+                context: this.getSequenceDescription(match[2], match[1])
+            };
+            
+            sequences.push(seq);
+            this.ansiLog.push(seq);
+        }
+        
+        if (this.ansiLog.length > this.maxLogSize) {
+            this.ansiLog = this.ansiLog.slice(-this.maxLogSize);
+        }
+        
+        // 重要なシーケンスを検出したら警告
+        if (sequences.length > 0) {
+            console.log(`[TerminalDebug] ANSIシーケンス検出: sessionId=${sessionId}`, sequences);
+        }
+    },
+    
+    // ANSIシーケンスの説明を取得
+    getSequenceDescription: function(command, params) {
+        const descriptions = {
+            'A': `カーソル上移動(${params || 1}行)`,
+            'B': `カーソル下移動(${params || 1}行)`,
+            'C': `カーソル右移動(${params || 1}列)`,
+            'D': `カーソル左移動(${params || 1}列)`,
+            'H': `カーソル位置設定(${params || '1,1'})`,
+            'J': params === '2' ? '画面全体クリア' : '画面部分クリア',
+            'K': params === '2' ? '行全体クリア' : '行部分クリア',
+            'm': 'テキスト属性設定',
+            's': 'カーソル位置保存',
+            'u': 'カーソル位置復元'
+        };
+        
+        return descriptions[command] || `不明なコマンド(${command})`;
+    },
+    
+    // デバッグ情報を表示
+    showReport: function() {
+        console.group('[TerminalDebug] デバッグレポート');
+        console.log('データログ数:', this.dataLog.length);
+        console.log('ANSIログ数:', this.ansiLog.length);
+        
+        // 最近のデータログ
+        console.group('最近のデータ受信:');
+        this.dataLog.slice(-10).forEach(entry => {
+            console.log(`${entry.timestamp} [${entry.context}] ${entry.dataLength}バイト`);
+        });
+        console.groupEnd();
+        
+        // ANSIシーケンスの統計
+        const ansiStats = {};
+        this.ansiLog.forEach(seq => {
+            const key = seq.command;
+            ansiStats[key] = (ansiStats[key] || 0) + 1;
+        });
+        
+        console.group('ANSIシーケンス統計:');
+        Object.entries(ansiStats).forEach(([cmd, count]) => {
+            console.log(`${cmd}: ${count}回`);
+        });
+        console.groupEnd();
+        
+        console.groupEnd();
+    },
+    
+    // ログをクリア
+    clear: function() {
+        this.dataLog = [];
+        this.ansiLog = [];
+        console.log('[TerminalDebug] ログをクリアしました');
+    }
+};
+
 // ページアンロード時のクリーンアップ
 window.addEventListener('unload', () => {
     console.log('[ResizeObserverManager] ページアンロード時のクリーンアップ実行');
@@ -51,54 +229,6 @@ window.addEventListener('unload', () => {
         });
     }
 });
-
-//// IME検出とフォーカス制御
-//function setupIMEDetection(term, element, sessionId) {
-//    console.log(`[IME Detection] セットアップ開始: sessionId=${sessionId}`);
-    
-//    // xterm.jsのテキストエリアを取得
-//    const textareas = element.querySelectorAll('.xterm-helper-textarea');
-//    if (textareas.length === 0) {
-//        console.log('[IME Detection] helper-textareaが見つかりません');
-//        return;
-//    }
-    
-//    const helperTextarea = textareas[0];
-    
-//    // composition開始イベントをリッスン
-//    helperTextarea.addEventListener('compositionstart', (e) => {
-//        console.log(`[IME Detection] IME開始検出: sessionId=${sessionId}`);
-        
-//        // 下部のテキストエリアを探してフォーカス
-//        const inputTextarea = document.querySelector('textarea#inputText');
-//        if (inputTextarea) {
-//            console.log('[IME Detection] テキストエリアにフォーカスを移動');
-//            inputTextarea.focus();
-            
-//            // 既存の入力があれば、それを保持
-//            const existingText = inputTextarea.value;
-//            if (existingText) {
-//                // カーソルを最後に移動
-//                inputTextarea.setSelectionRange(existingText.length, existingText.length);
-//            }
-//        } else {
-//            console.log('[IME Detection] 入力用テキストエリアが見つかりません');
-//        }
-//    });
-    
-//    // キーダウンイベントでもIMEを検出（keyCode 229）
-//    helperTextarea.addEventListener('keydown', (e) => {
-//        if (e.keyCode === 229) {
-//            console.log(`[IME Detection] IME keyCode 229検出: sessionId=${sessionId}`);
-            
-//            const inputTextarea = document.querySelector('textarea#inputText');
-//            if (inputTextarea && document.activeElement !== inputTextarea) {
-//                console.log('[IME Detection] テキストエリアにフォーカスを移動 (keyCode 229)');
-//                inputTextarea.focus();
-//            }
-//        }
-//    });
-//}
 
 // 右クリック検出とIMEスタイル制御
 function setupContextMenuAndIME(element, sessionId) {
@@ -257,18 +387,44 @@ window.terminalFunctions = {
             let resizeTimeout = null;
             term.onResize((size) => {
                 console.log(`[JS] xterm.onResize: sessionId=${sessionId}, cols=${size.cols}, rows=${size.rows}`);
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                if (!terminalInfo) return;
                 
                 // 既存のタイマーをクリア
                 if (resizeTimeout) {
                     clearTimeout(resizeTimeout);
                 }
+                if (terminalInfo.resizeScrollTimer) {
+                    clearTimeout(terminalInfo.resizeScrollTimer);
+                }
                 
                 // デバウンス: 300ms後に実行
                 resizeTimeout = setTimeout(() => {
                     console.log(`[JS] リサイズデバウンス完了: sessionId=${sessionId}`);
-                    requestAnimationFrame(() => {
-                        window.terminalFunctions.scrollToBottomReliably(sessionId);
-                    });
+                    
+                    // スクロール処理の定義
+                    const performScroll = () => {
+                        // 書き込み中でない場合は即座にスクロール
+                        if (!terminalInfo.isWriting) {
+                            // 確実なスクロールメソッドを使用
+                            window.terminalFunctions.scrollToBottomReliably(sessionId);
+                            console.log(`[JS] リサイズ後即座に確実なスクロール: sessionId=${sessionId}`);
+                        } else {
+                            // 書き込み中の場合はフラグを設定
+                            terminalInfo.pendingScrollAfterWrite = true;
+                            console.log(`[JS] 書き込み中のためスクロール遅延: sessionId=${sessionId}`);
+                            
+                            // 500ms後に強制スクロール（フェイルセーフ）
+                            terminalInfo.resizeScrollTimer = setTimeout(() => {
+                                window.terminalFunctions.scrollToBottomReliably(sessionId);
+                                console.log(`[JS] リサイズ後の強制確実なスクロール: sessionId=${sessionId}`);
+                                terminalInfo.pendingScrollAfterWrite = false;
+                            }, 500);
+                        }
+                    };
+                    
+                    // 次のフレームで実行
+                    requestAnimationFrame(performScroll);
                 }, 300);
             });
             
@@ -290,20 +446,60 @@ window.terminalFunctions = {
                             dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
                         }
                         
-                        // デバウンス完了後に確実なスクロールを実行
-                        setTimeout(() => {
-                            window.terminalFunctions.scrollToBottomReliably(sessionId);
-                            console.log(`[JS] ResizeObserver後確実なスクロール: sessionId=${sessionId}`);
-                        }, 50);
+                        // リサイズ完了後のスクロール処理
+                        const terminalInfo = window.multiSessionTerminals[sessionId];
+                        if (!terminalInfo) {
+                            // 初回作成時のため、シンプルなスクロール処理
+                            setTimeout(() => {
+                                term.scrollToBottom();
+                                console.log(`[JS] ResizeObserver初回スクロール: sessionId=${sessionId}`);
+                            }, 100);
+                            return;
+                        }
+                        
+                        // 既存のタイマーをクリア
+                        if (terminalInfo.resizeScrollTimer) {
+                            clearTimeout(terminalInfo.resizeScrollTimer);
+                        }
+                        
+                        const performScrollAfterObserver = () => {
+                            // 書き込み中でない場合は即座にスクロール
+                            if (!terminalInfo.isWriting) {
+                                // 確実なスクロールを実行
+                                window.terminalFunctions.scrollToBottomReliably(sessionId);
+                                console.log(`[JS] ResizeObserver後確実なスクロール: sessionId=${sessionId}`);
+                            } else {
+                                // 書き込み中の場合はフラグを設定
+                                terminalInfo.pendingScrollAfterWrite = true;
+                                console.log(`[JS] ResizeObserver: 書き込み中のためスクロール遅延`);
+                                
+                                // 500ms後に強制スクロール
+                                terminalInfo.resizeScrollTimer = setTimeout(() => {
+                                    window.terminalFunctions.scrollToBottomReliably(sessionId);
+                                    console.log(`[JS] ResizeObserver後の強制スクロール`);
+                                    terminalInfo.pendingScrollAfterWrite = false;
+                                }, 500);
+                            }
+                        };
+                        
+                        // デバウンス完了後に実行
+                        setTimeout(performScrollAfterObserver, 50);
                     }
                 }, 200);
             });
+            
+            // URL検出機能を追加
+            setupUrlDetection(term);
             
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
                 fitAddon: fitAddon,
                 scrollPosition: 0,
-                hasBufferedContent: false
+                hasBufferedContent: false,
+                lastWriteTime: 0,
+                isWriting: false,
+                pendingScrollAfterWrite: false,
+                resizeScrollTimer: null
             };
             
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
@@ -311,7 +507,31 @@ window.terminalFunctions = {
         }
         
         return {
-            write: (data) => term.write(data),
+            write: (data) => {
+                const terminalInfo = window.multiSessionTerminals[sessionId];
+                if (terminalInfo) {
+                    // 書き込み開始を記録
+                    terminalInfo.lastWriteTime = Date.now();
+                    terminalInfo.isWriting = true;
+                    
+                    term.write(data, () => {
+                        // 書き込み完了を記録
+                        terminalInfo.isWriting = false;
+                        terminalInfo.lastWriteTime = Date.now();
+                        
+                        // リサイズ中のスクロール待機があれば実行
+                        if (terminalInfo.pendingScrollAfterWrite) {
+                            setTimeout(() => {
+                                term.scrollToBottom();
+                                console.log(`[JS] 書き込み完了後の遅延スクロール実行: sessionId=${sessionId}`);
+                                terminalInfo.pendingScrollAfterWrite = false;
+                            }, 50);
+                        }
+                    });
+                } else {
+                    term.write(data);
+                }
+            },
             clear: () => term.clear(),
             focus: () => term.focus(),
             resize: () => {
@@ -374,8 +594,15 @@ window.terminalFunctions = {
         
         // ターミナルインスタンスのクリーンアップ
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            if (window.multiSessionTerminals[sessionId].terminal) {
-                window.multiSessionTerminals[sessionId].terminal.dispose();
+            const terminalInfo = window.multiSessionTerminals[sessionId];
+            
+            // タイマーのクリーンアップ
+            if (terminalInfo.resizeScrollTimer) {
+                clearTimeout(terminalInfo.resizeScrollTimer);
+            }
+            
+            if (terminalInfo.terminal) {
+                terminalInfo.terminal.dispose();
                 // console.log(`[JS] ターミナル ${sessionId} を破棄`);
             }
             delete window.multiSessionTerminals[sessionId];
@@ -427,6 +654,9 @@ window.terminalFunctions = {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
             
+            // デバッグログ
+            window.terminalDebug.logData(sessionId, data, 'writeBuffered');
+            
             // データを行単位で分割
             const lines = data.split('\n');
             const terminalRows = term.rows;
@@ -441,22 +671,25 @@ window.terminalFunctions = {
                 console.log(`[JS] バッファ最適化: ${lines.length}行 → ${truncatedLines.length}行 (画面${terminalRows}行の2倍制限)`);
             }
             
-            // 最適化されたバッファ内容を書き込み
-            term.write(processedData);
-            
-            // バッファ内容の場合は確実なスクロールを実行
-            if (terminalInfo.hasBufferedContent) {
-                // 既にバッファ内容がある場合は通常のスクロール
-                setTimeout(() => {
-                    term.scrollToBottom();
-                }, 50);
-            } else {
-                // 初回バッファ内容の場合は確実なスクロール
-                setTimeout(() => {
-                    window.terminalFunctions.scrollToBottomReliably(sessionId);
-                    console.log(`[JS] バッファ内容書き込み後の確実なスクロール: sessionId=${sessionId}`);
-                }, 100);
-            }
+            // 大きなデータをチャンクに分割して書き込み
+            this.writeDataInChunks(term, processedData).then(() => {
+                // 書き込み完了後に確実なスクロール
+                if (terminalInfo.hasBufferedContent) {
+                    // 既にバッファ内容がある場合は通常のスクロール
+                    setTimeout(() => {
+                        term.scrollToBottom();
+                        console.log(`[JS] バッファ内容書き込み後スクロール: sessionId=${sessionId}`);
+                    }, 50);
+                } else {
+                    // 初回バッファ内容の場合は確実なスクロール
+                    setTimeout(() => {
+                        window.terminalFunctions.scrollToBottomReliably(sessionId);
+                        console.log(`[JS] バッファ内容書き込み後の確実なスクロール: sessionId=${sessionId}`);
+                    }, 100);
+                }
+            }).catch(error => {
+                console.error(`[JS] バッファ書き込みエラー: sessionId=${sessionId}`, error);
+            });
             
             terminalInfo.hasBufferedContent = true;
         }
@@ -659,6 +892,31 @@ window.terminalFunctions = {
         
         // 初回実行
         attemptScroll();
+    },
+
+    // データをチャンクに分割して順次書き込み
+    writeDataInChunks: async function(terminal, data, chunkSize = 1024) {
+        if (!data || data.length === 0) return;
+        
+        // データが小さい場合は直接書き込み
+        if (data.length <= chunkSize) {
+            return new Promise((resolve) => {
+                terminal.write(data, resolve);
+            });
+        }
+        
+        // 大きなデータをチャンクに分割
+        for (let i = 0; i < data.length; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            await new Promise((resolve) => {
+                terminal.write(chunk, resolve);
+            });
+            
+            // 次のチャンクの前に少し待機（UIのブロックを防ぐ）
+            if (i + chunkSize < data.length) {
+                await new Promise(resolve => setTimeout(resolve, 1));
+            }
+        }
     },
 
     // スクロール位置を保存

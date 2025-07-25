@@ -286,7 +286,7 @@
                 var newSession = await SessionManager.CreateSessionAsync(
                     sessionInfo.SessionId,
                     sessionInfo.FolderPath,
-                    sessionInfo.DisplayName,
+                    sessionInfo.DisplayName ?? "",
                     sessionInfo.TerminalType,
                     sessionInfo.Options);
 
@@ -403,8 +403,11 @@
 
     private async Task SelectSession(Guid sessionId)
     {
+        Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}");
+        
         if (activeSessionId == sessionId)
         {
+            Console.WriteLine($"[SelectSession] 既にアクティブなセッション: {sessionId}");
             return;
         }
 
@@ -438,7 +441,8 @@
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
         // 再起動後の新しいセッションを確実に取得
-        activeSession = SessionManager.GetSession(sessionId);
+        activeSession = await SessionManager.GetSessionAsync(sessionId);
+        Console.WriteLine($"[SelectSession] SessionManager.GetSession結果: {(activeSession != null ? "成功" : "null")}");
         
         // セッションが存在しない場合はエラー
         if (activeSession == null)
@@ -515,24 +519,21 @@
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
-            lock (selectedSessionInfo.BufferLock)
+            if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
             {
-                if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
+                if (isMasterConnection)
                 {
-                    if (isMasterConnection)
-                    {
-                        // マスターの場合のみバッファの内容を書き込み（画面高さの2倍制限付き）
-                        var bufferedData = string.Join("", selectedSessionInfo.OutputBuffer);
-                        _ = activeTerminal.InvokeVoidAsync("terminalFunctions.writeBuffered", activeSessionId, bufferedData);
-                        
-                        // バッファをクリア
-                        selectedSessionInfo.OutputBuffer.Clear();
-                    }
-                    else
-                    {
-                        // スレーブの場合はバッファをクリアせず、後でマスターになった時に使用
-                        Console.WriteLine($"[Connection] スレーブモードのためバッファ書き込みをスキップ: {selectedSessionInfo.OutputBuffer.Count}件");
-                    }
+                    // マスターの場合のみバッファの内容を書き込み（画面高さの2倍制限付き）
+                    var bufferedData = selectedSessionInfo.OutputBuffer.GetAllText("");
+                    _ = activeTerminal.InvokeVoidAsync("terminalFunctions.writeBuffered", activeSessionId, bufferedData);
+                    
+                    // バッファをクリア
+                    selectedSessionInfo.OutputBuffer.Clear();
+                }
+                else
+                {
+                    // スレーブの場合はバッファをクリアせず、後でマスターになった時に使用
+                    Console.WriteLine($"[Connection] スレーブモードのためバッファ書き込みをスキップ: {selectedSessionInfo.OutputBuffer.Count}件");
                 }
             }
         }
@@ -597,12 +598,12 @@
 
     private async Task ReadSessionOutput(Guid sessionId, CancellationToken cancellationToken)
     {
-        // Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
+        //Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
 
-        var session = SessionManager.GetSession(sessionId);
+        var session = await SessionManager.GetSessionAsync(sessionId);
         if (session == null)
         {
-            // Console.WriteLine($"[ReadSessionOutput] セッションが見つからない: {sessionId}");
+            Console.WriteLine($"[ReadSessionOutput] セッションが見つからない: {sessionId}");
             return;
         }
 
@@ -624,7 +625,11 @@
                         break;
 
                     var data = new string(buffer, 0, charsRead);
-                    // Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} に {charsRead} 文字書き込み");
+                    //Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} から {charsRead} 文字読み取り");
+                    
+                    // 最初の100文字を表示（デバッグ用）
+                    var preview = data.Length > 100 ? data.Substring(0, 100) + "..." : data;
+                    //Console.WriteLine($"[ReadSessionOutput] データプレビュー: {preview.Replace("\r", "\\r").Replace("\n", "\\n")}");
 
                     var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                     if (sessionInfo != null)
@@ -640,20 +645,13 @@
                             // フラグを設定して重複送信を防ぐ
                             sessionInfo.HasContinueErrorOccurred = true;
                             
-                            // 既存のセッションに--continueなしでclaudeを起動
-                            _ = Task.Run(async () =>
+                            // セッションを再起動（--continueなし）
+                            await InvokeAsync(async () =>
                             {
-                                try
-                                {
-                                    await StartClaudeWithoutContinue(sessionId);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine($"[Claude Continue Error] Claude起動エラー: {ex.Message}");
-                                }
+                                await RestartSessionWithoutContinue(sessionId);
                             });
                             
-                            continue; // 通常の処理をスキップ
+                            return; // 読み取りループを終了
                         }
 
                         // 出力解析（ターミナルタイプに応じた解析器を使用）
@@ -667,31 +665,28 @@
                         else
                         {
                             // 非アクティブセッションはバッファに保存
-                            lock (sessionInfo.BufferLock)
-                            {
-                                sessionInfo.OutputBuffer.Enqueue(data);
-                                
-                                // バッファサイズ制限（古いデータから削除）
-                                while (sessionInfo.OutputBuffer.Count > sessionInfo.MaxBufferSize)
-                                {
-                                    sessionInfo.OutputBuffer.Dequeue();
-                                }
-                            }
+                            sessionInfo.OutputBuffer.AddLine(data);
                         }
                     }
                 }
+                else if (charsRead == 0)
+                {
+                    // セッションが終了した場合
+                    Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} が終了しました");
+                    break; // 読み取りループを終了
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    // Console.WriteLine($"[ReadOutput] 読み取りエラー: {ex.Message}");
+                    Console.WriteLine($"[ReadSessionOutput] 読み取りエラー: {ex.Message}");
                 }
                 break;
             }
         }
 
-        // Console.WriteLine($"[ReadOutput] 終了: sessionId={localSessionId}");
+        Console.WriteLine($"[ReadSessionOutput] 終了: sessionId={sessionId}");
     }
 
     private void StartEditingMemo(Guid sessionId, string currentMemo)
@@ -743,10 +738,7 @@
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove != null)
         {
-            lock (sessionToRemove.BufferLock)
-            {
-                sessionToRemove.OutputBuffer.Clear();
-            }
+            sessionToRemove.OutputBuffer.Clear();
         }
         
         // セッションのタイマーを停止
@@ -916,7 +908,6 @@
                     {
                         // Enterキーを送信してプロンプトを表示
                         await activeSession.WriteAsync("\r\n");
-                        // Console.WriteLine($"[RecreateTerminal] プロンプト送信完了");
                     }
                 }
 
@@ -1032,9 +1023,10 @@
                 //Console.WriteLine($"[Notification Debug] ProcessingElapsedSeconds: {session.ProcessingElapsedSeconds}");
                 
                 // 処理完了時の通知
-                if (session.ProcessingElapsedSeconds.HasValue)
+                var processingElapsedSeconds = session.ProcessingElapsedSeconds;
+                if (processingElapsedSeconds.HasValue)
                 {
-                    //Console.WriteLine($"[Notification Debug] 通知サービスを呼び出し中 - {session.ProcessingElapsedSeconds.Value}秒");
+                    //Console.WriteLine($"[Notification Debug] 通知サービスを呼び出し中 - {processingElapsedSeconds.Value}秒");
                     
                     // 通知フラグを設定（アクティブでない場合のみ）
                     if (activeSessionId != session.SessionId)
@@ -1057,9 +1049,9 @@
                         Options = session.Options,
                         Memo = session.Memo
                     };
-                    var elapsedSecondsCopy = session.ProcessingElapsedSeconds.Value;
+                    var elapsedSecondsCopy = processingElapsedSeconds.Value;
                     
-                    _ = Task.Run(async () => 
+                    var notificationTask = Task.Run(async () => 
                     {
                         try
                         {
@@ -1228,8 +1220,14 @@
     private void CheckSessionTimeout(Guid sessionId)
     {
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null && session.LastProcessingUpdateTime.HasValue)
+        if (session != null)
         {
+            var lastUpdateTime = session.LastProcessingUpdateTime;
+            if (!lastUpdateTime.HasValue)
+            {
+                return;
+            }
+            
             // ユーザー入力待ち状態の場合はタイムアウトしない
             if (session.IsWaitingForUserInput)
             {
@@ -1238,7 +1236,7 @@
                 return;
             }
             
-            var elapsedTime = (DateTime.Now - session.LastProcessingUpdateTime.Value).TotalSeconds;
+            var elapsedTime = (DateTime.Now - lastUpdateTime.Value).TotalSeconds;
             
             if (elapsedTime >= 5)
             {
@@ -1497,7 +1495,10 @@
         // 親セッション情報を取得
         var parentSession = SessionManager.GetSessionInfo(parentSessionId);
         if (parentSession == null)
+        {
+            Console.WriteLine($"[AddExistingWorktreeSession] 親セッションが見つかりません: {parentSessionId}");
             return null;
+        }
             
         // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
         var sessionInfo = await SessionManager.CreateSessionAsync(
@@ -1524,7 +1525,10 @@
             // 親セッション情報を取得
             var parentSession = SessionManager.GetSessionInfo(parentSessionId);
             if (parentSession == null)
+            {
+                Console.WriteLine($"[CreateNewFolderSession] 親セッションが見つかりません: {parentSessionId}");
                 return null;
+            }
                 
             // フォルダが存在しない場合は作成
             if (!Directory.Exists(folderPath))
@@ -1724,58 +1728,65 @@
         }
     }
 
-    private async Task StartClaudeWithoutContinue(Guid sessionId)
+    private async Task RestartSessionWithoutContinue(Guid sessionId)
     {
-        var session = SessionManager.GetSession(sessionId);
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session == null || sessionInfo == null) return;
-
-        Console.WriteLine($"[Claude Continue Fix] セッション {sessionId} に--continueなしでClaude起動コマンドを送信します");
-
-        await InvokeAsync(async () =>
+        if (sessionInfo == null)
         {
-            try
+            Console.WriteLine($"[RestartSessionWithoutContinue] セッション情報が見つかりません: {sessionId}");
+            return;
+        }
+
+        try
+        {
+            Console.WriteLine($"[RestartSessionWithoutContinue] --continueなしでセッションを再起動します: {sessionId}");
+            
+            // 読み取りタスクを停止
+            if (sessionReadCts.TryGetValue(sessionId, out var cts))
             {
-                // 既存のオプションから--continueを除去してコマンドを構築
-                var optionsWithoutContinue = new Dictionary<string, string>(sessionInfo.Options);
-                optionsWithoutContinue.Remove("continue");
-                
-                // フルパスでclaude.cmdを指定し、ClaudeCodeArgs形式でコマンドを構築
-                var claudeCmdPath = Configuration.GetValue<string>("ExternalTools:ClaudeCmdPath");
-                if (string.IsNullOrEmpty(claudeCmdPath))
+                try
                 {
-                    var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    claudeCmdPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+                    cts.Cancel();
+                    cts.Dispose();
                 }
-                
-                var args = TerminalConstants.BuildClaudeCodeArgs(optionsWithoutContinue);
-                var command = string.IsNullOrWhiteSpace(args) 
-                    ? $"\"{claudeCmdPath}\"" 
-                    : $"\"{claudeCmdPath}\" {args}";
-                
-                Console.WriteLine($"[Claude Continue Fix] 送信予定のコマンド: '{command}'");
-                Console.WriteLine($"[Claude Continue Fix] コマンド長: {command.Length} バイト");
-                
-                // 現在のプロンプトをクリアし、確実にコマンドを送信
-                await session.WriteAsync("\u0003"); // Ctrl+Cで現在の入力をキャンセル
-                await Task.Delay(200);
-                
-                // バックスペースを複数回送信して見えない制御文字をクリア
-                for (int i = 0; i < 10; i++)
+                finally
                 {
-                    await session.WriteAsync("\b \b"); // バックスペース、スペース、バックスペースで確実にクリア
+                    sessionReadCts.Remove(sessionId);
                 }
-                await Task.Delay(100);
-                
-                await session.WriteAsync($"{command}\r\n");
-                
-                Console.WriteLine($"[Claude Continue Fix] Claude起動コマンドを送信しました");
             }
-            catch (Exception ex)
+            
+            // セッションを再起動（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
+            var success = await SessionManager.RestartSessionAsync(sessionId);
+            if (success)
             {
-                Console.WriteLine($"[Claude Continue Fix] コマンド送信エラー: {ex.Message}");
+                // セッション一覧を更新
+                sessions = SessionManager.GetAllSessions().ToList();
+                
+                // ローカルストレージに保存
+                await LocalStorageService.SaveSessionsAsync(sessions);
+                
+                // 強制的にセッションを再初期化するため、一旦nullにする
+                activeSessionId = null;
+                activeSession = null;
+                StateHasChanged();
+                await Task.Delay(100); // UIの更新を待つ
+                
+                // 再起動後のセッションを選択
+                await SelectSession(sessionId);
+                
+                toast?.ShowInfo("--continueオプションなしでセッションを再起動しました");
             }
-        });
+            else
+            {
+                Console.WriteLine($"[RestartSessionWithoutContinue] セッション再起動に失敗しました: {sessionId}");
+                toast?.ShowError("セッション再起動に失敗しました");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RestartSessionWithoutContinue] エラー: {ex.Message}");
+            toast?.ShowError($"セッション再起動エラー: {ex.Message}");
+        }
     }
     
     public async ValueTask DisposeAsync()

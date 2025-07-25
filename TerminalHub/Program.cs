@@ -26,6 +26,9 @@ builder.Services.AddSingleton<IGitService, GitService>();
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
 
+// PackageJsonServiceを登録
+builder.Services.AddSingleton<IPackageJsonService, PackageJsonService>();
+
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 

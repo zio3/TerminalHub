@@ -35,6 +35,19 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <small class="text-muted">セッションID:</small>
+                                <div class="d-flex align-items-center">
+                                    <code class="text-muted small">@sessionInfo.SessionId</code>
+                                    <button type="button" class="btn btn-link btn-sm text-muted ms-2" 
+                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString())" 
+                                            title="セッションIDをコピー">
+                                        <i class="bi bi-clipboard small"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <hr />
@@ -111,15 +124,15 @@
     private string errorMessage = "";
     private bool restartSession = true;
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         if (IsVisible && SessionId.HasValue)
         {
-            await LoadSessionInfo();
+            LoadSessionInfo();
         }
     }
 
-    private async Task LoadSessionInfo()
+    private void LoadSessionInfo()
     {
         if (!SessionId.HasValue)
             return;
@@ -130,7 +143,7 @@
             // 現在の設定を読み込む
             displayName = sessionInfo.DisplayName ?? "";
             selectedType = sessionInfo.TerminalType;
-            maxBufferSize = sessionInfo.MaxBufferSize;
+            maxBufferSize = sessionInfo.OutputBuffer.Capacity;
 
             // オプションを解析
             var options = sessionInfo.Options;
@@ -174,8 +187,13 @@
             // オプションを更新
             sessionInfo.Options = optionsSelector.GetOptions();
             
-            // バッファサイズを更新
-            sessionInfo.MaxBufferSize = maxBufferSize;
+            // バッファサイズを更新（新しいバッファを作成）
+            if (sessionInfo.OutputBuffer.Capacity != maxBufferSize)
+            {
+                var oldLines = sessionInfo.OutputBuffer.GetLines().ToList();
+                sessionInfo.OutputBuffer = new CircularLineBuffer(maxBufferSize);
+                sessionInfo.OutputBuffer.AddLines(oldLines);
+            }
 
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);

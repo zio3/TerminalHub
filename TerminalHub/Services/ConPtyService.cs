@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -26,8 +27,6 @@ namespace TerminalHub.Services
 
         public async Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
         {
-            // Console.WriteLine($"[ConPtyService] CreateSessionAsync: {command}");
-            
             try
             {
                 return await Task.Run(() => new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows));
@@ -59,15 +58,17 @@ namespace TerminalHub.Services
         private int _cols;
         private int _rows;
         private readonly SemaphoreSlim _readSemaphore = new(1, 1);
+        
+        // デバッグ用データログ
+        private readonly ConcurrentQueue<ConPtyDebugEntry> _debugLog = new();
+        private const int MaxDebugLogSize = 1000;
 
         public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
         {
-            // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
             _logger = logger;
             _cols = cols;
             _rows = rows;
             InitializeConPty(command, arguments, workingDirectory);
-            // Console.WriteLine($"[ConPtySession] コンストラクタ完了");
         }
 
         private void InitializeConPty(string command, string? arguments, string? workingDirectory)
@@ -101,7 +102,6 @@ namespace TerminalHub.Services
             var hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, 0, out _hPC);
             if (hr != 0)
             {
-                Console.WriteLine($"[ConPtySession] CreatePseudoConsole失敗: HRESULT={hr:X}");
                 _logger.LogError($"CreatePseudoConsole failed with HRESULT: {hr:X}");
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
@@ -150,14 +150,11 @@ namespace TerminalHub.Services
             if (!result)
             {
                 var error = Marshal.GetLastWin32Error();
-                Console.WriteLine($"[ConPtySession] CreateProcess失敗: Win32Error={error}");
                 _logger.LogError($"CreateProcess failed with error: {error}");
                 throw new InvalidOperationException($"Failed to create process: {error}");
             }
 
-            // Console.WriteLine($"[ConPtySession] CreateProcess成功: PID={processInfo.dwProcessId}");
             _process = Process.GetProcessById((int)processInfo.dwProcessId);
-            // Console.WriteLine($"[ConPtySession] Process取得完了");
 
                 processInfoHandle = processInfo.hProcess;
                 threadInfoHandle = processInfo.hThread;
@@ -219,10 +216,27 @@ namespace TerminalHub.Services
 
         public async Task WriteAsync(string input)
         {
-            if (_writer != null)
+            if (_writer != null && !_disposed)
             {
-                await _writer.WriteAsync(input);
-                await _writer.FlushAsync();
+                try
+                {
+                    await _writer.WriteAsync(input);
+                    await _writer.FlushAsync();
+                    
+                    // デバッグログに追加
+                    AddToDebugLog("WriteAsync", input, input.Length);
+                    
+                    // 確実な書き込みのため追加フラッシュ
+                    if (_writer.BaseStream != null)
+                    {
+                        await _writer.BaseStream.FlushAsync();
+                    }
+                }
+                catch (Exception ex) when (!_disposed)
+                {
+                    _logger.LogWarning(ex, "Failed to write to terminal input stream");
+                    throw;
+                }
             }
         }
 
@@ -256,8 +270,29 @@ namespace TerminalHub.Services
             {
                 if (_disposed || _reader == null)
                     return 0;
+                
+                // より安全な読み取り処理
+                var bytesRead = await _reader.ReadAsync(buffer, offset, count);
+                
+                // デバッグ: 読み取ったデータをログ
+                if (bytesRead > 0)
+                {
+                    var data = new string(buffer, offset, bytesRead);
+                    _logger.LogDebug($"[ConPty ReadAsync] Read {bytesRead} bytes, first 50 chars: {data.Substring(0, Math.Min(50, data.Length))}");
                     
-                return await _reader.ReadAsync(buffer, offset, count);
+                    // デバッグログに追加
+                    AddToDebugLog("ReadAsync", data, bytesRead);
+                    
+                    // ANSIエスケープシーケンスの検出
+                    if (data.Contains("\x1b["))
+                    {
+                        _logger.LogDebug($"[ConPty ReadAsync] ANSI sequences detected in data");
+                    }
+                    
+                    await Task.Delay(1);
+                }
+                
+                return bytesRead;
             }
             finally
             {
@@ -281,7 +316,7 @@ namespace TerminalHub.Services
 
             const int maxOutputSize = 1024 * 1024; // 1MB制限
             var output = new StringBuilder();
-            var buffer = new char[1024];
+            var buffer = new char[4096]; // バッファサイズを4倍に増加
             var startTime = DateTime.Now;
             var readCount = 0;
 
@@ -422,6 +457,52 @@ namespace TerminalHub.Services
             try { _readSemaphore?.Dispose(); } catch { }
         }
 
+        // デバッグ用メソッド
+        private void AddToDebugLog(string operation, string data, int length)
+        {
+            var entry = new ConPtyDebugEntry
+            {
+                Timestamp = DateTime.Now,
+                Operation = operation,
+                Data = data.Length > 200 ? data.Substring(0, 200) + "..." : data,
+                Length = length,
+                HasAnsiSequences = data.Contains("\x1b[")
+            };
+
+            _debugLog.Enqueue(entry);
+
+            // ログサイズを制限
+            while (_debugLog.Count > MaxDebugLogSize)
+            {
+                _debugLog.TryDequeue(out _);
+            }
+        }
+
+        public ConPtyDebugEntry[] GetDebugLog()
+        {
+            return _debugLog.ToArray();
+        }
+
+        public void ClearDebugLog()
+        {
+            while (_debugLog.TryDequeue(out _)) { }
+        }
+
+        public ConPtyDebugStats GetDebugStats()
+        {
+            var entries = _debugLog.ToArray();
+            return new ConPtyDebugStats
+            {
+                TotalEntries = entries.Length,
+                ReadOperations = entries.Count(e => e.Operation == "ReadAsync"),
+                WriteOperations = entries.Count(e => e.Operation == "WriteAsync"),
+                TotalBytesRead = entries.Where(e => e.Operation == "ReadAsync").Sum(e => e.Length),
+                TotalBytesWritten = entries.Where(e => e.Operation == "WriteAsync").Sum(e => e.Length),
+                EntriesWithAnsi = entries.Count(e => e.HasAnsiSequences),
+                LastActivity = entries.LastOrDefault()?.Timestamp
+            };
+        }
+
         // P/Invoke定義
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, IntPtr lpPipeAttributes, uint nSize);
@@ -505,5 +586,26 @@ namespace TerminalHub.Services
             public uint dwProcessId;
             public uint dwThreadId;
         }
+    }
+
+    // デバッグ用クラス
+    public class ConPtyDebugEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Operation { get; set; } = "";
+        public string Data { get; set; } = "";
+        public int Length { get; set; }
+        public bool HasAnsiSequences { get; set; }
+    }
+
+    public class ConPtyDebugStats
+    {
+        public int TotalEntries { get; set; }
+        public int ReadOperations { get; set; }
+        public int WriteOperations { get; set; }
+        public int TotalBytesRead { get; set; }
+        public int TotalBytesWritten { get; set; }
+        public int EntriesWithAnsi { get; set; }
+        public DateTime? LastActivity { get; set; }
     }
 }
