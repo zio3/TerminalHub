@@ -25,7 +25,7 @@ namespace TerminalHub.Constants
         public const int ProcThreadAttributePseudoConsole = 0x00020016;
         
         // セッション
-        public const int DefaultMaxSessions = 10;
+        public const int DefaultMaxSessions = 25; // 20セッション + 余裕
         public const int SessionIdDisplayLength = 8;
         
         // ファイルパス

@@ -42,6 +42,9 @@ namespace TerminalHub.Models
         public CircularLineBuffer OutputBuffer { get; set; } = new CircularLineBuffer(10000);
         
         [System.Text.Json.Serialization.JsonIgnore]
+        public ConPtyWithBuffer? ConPtyBuffer { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public int LastKnownScrollPosition { get; set; } = 0;
         
         [System.Text.Json.Serialization.JsonIgnore]

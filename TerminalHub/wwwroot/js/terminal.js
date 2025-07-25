@@ -1,14 +1,32 @@
+// デバウンス関数
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 // ResizeObserver管理クラス
 class ResizeObserverManager {
     constructor() {
         this.observers = new Map();
+        this.resizeCallbacks = new Map();
     }
 
     add(sessionId, element, callback) {
         // 既存のObserverがあれば削除
         this.remove(sessionId);
         
-        const observer = new ResizeObserver(callback);
+        // デバウンス処理を追加（200ms待機）
+        const debouncedCallback = debounce(callback, 200);
+        this.resizeCallbacks.set(sessionId, debouncedCallback);
+        
+        const observer = new ResizeObserver(debouncedCallback);
         observer.observe(element);
         this.observers.set(sessionId, observer);
         // console.log(`[ResizeObserverManager] Observer追加: sessionId=${sessionId}`);
@@ -19,6 +37,7 @@ class ResizeObserverManager {
             const observer = this.observers.get(sessionId);
             observer.disconnect();
             this.observers.delete(sessionId);
+            this.resizeCallbacks.delete(sessionId);
             // console.log(`[ResizeObserverManager] Observer削除: sessionId=${sessionId}`);
         }
     }
@@ -29,6 +48,7 @@ class ResizeObserverManager {
             // console.log(`[ResizeObserverManager] Observer削除: sessionId=${sessionId}`);
         });
         this.observers.clear();
+        this.resizeCallbacks.clear();
     }
 
     has(sessionId) {
@@ -303,8 +323,8 @@ window.terminalFunctions = {
             // IME検出とフォーカス制御
          //   setupIMEDetection(term, element, sessionId);
             
-            // xterm.jsのリサイズイベントリスナーを追加
-            term.onResize((size) => {
+            // xterm.jsのリサイズイベントリスナーを追加（デバウンス付き）
+            const debouncedOnResize = debounce((size) => {
                 // リサイズ完了時に最下部にスクロール（複数回実行して確実に）
                 const scrollToBottomReliable = () => {
                     term.scrollToBottom();
@@ -318,7 +338,9 @@ window.terminalFunctions = {
                 requestAnimationFrame(() => {
                     scrollToBottomReliable();
                 });
-            });
+            }, 150);
+            
+            term.onResize(debouncedOnResize);
             
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {

@@ -237,9 +237,11 @@ namespace TerminalHub.Services
                 removed = true;
             }
             
-            // SessionInfoを削除
-            if (_sessionInfos.TryRemove(sessionId, out _))
+            // SessionInfoを削除（ConPtyBufferも破棄）
+            if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
             {
+                // ConPtyBufferを破棄
+                sessionInfo.ConPtyBuffer?.Dispose();
                 removed = true;
             }
             
@@ -295,8 +297,14 @@ namespace TerminalHub.Services
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
                 
+                // ConPtyWithBufferを作成してSessionInfoに設定
+                var bufferCapacity = _configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000);
+                sessionInfo.ConPtyBuffer = new ConPtyWithBuffer(newSession, _logger, bufferCapacity);
+                // 初期サイズを設定
+                sessionInfo.ConPtyBuffer.Resize(cols, rows);
+                
                 sessionInfo.LastAccessedAt = DateTime.Now;
-                _logger.LogInformation($"ConPty session initialized on-demand: {sessionId}");
+                _logger.LogInformation($"ConPty session with buffer initialized on-demand: {sessionId}");
                 
                 return newSession;
             }
@@ -629,6 +637,12 @@ namespace TerminalHub.Services
                 session.Dispose();
             }
             _sessions.Clear();
+            
+            // ConPtyBufferも破棄
+            foreach (var sessionInfo in _sessionInfos.Values)
+            {
+                sessionInfo.ConPtyBuffer?.Dispose();
+            }
             _sessionInfos.Clear();
             
             foreach (var initLock in _initializationLocks.Values)

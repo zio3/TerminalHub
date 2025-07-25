@@ -167,7 +167,6 @@
     // テキスト履歴機能
     private List<string> inputHistory = new();
     private int historyIndex = -1;
-    private Dictionary<Guid, CancellationTokenSource> sessionReadCts = new();
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
@@ -185,6 +184,10 @@
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
     
+    // スナップショット設定
+    private int _defaultSnapshotLines = 50;
+    private int _recreateSnapshotLines = 100;
+    
     // 処理状態管理用（セッションごと）
     private Dictionary<Guid, System.Threading.Timer> sessionProcessingTimers = new();
 
@@ -195,6 +198,10 @@
         // 開発モード設定を読み込み
         showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
         showDevWindow = Configuration.GetValue<bool>("DevelopmentMode:ShowDevWindowOnStartup", false);
+        
+        // スナップショット設定を読み込み
+        _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
+        _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
         
         // 通知権限をリクエスト（削除 - 設定モーダルに移動）
         // await NotificationService.RequestBrowserNotificationPermissionAsync();
@@ -437,50 +444,53 @@
             // エラーは無視
         }
 
-        // バッファに蓄積された出力をターミナルに再生
-        var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (selectedSessionInfo != null && selectedSessionInfo.OutputBuffer.Count > 0)
+        // ConPtyWithBufferのスナップショットをターミナルに復元
+        if (selectedSession?.ConPtyBuffer != null)
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
-            if (activeTerminal != null && selectedSessionInfo.OutputBuffer.Count > 0)
+            if (activeTerminal != null)
             {
-                // バッファの内容を一度に書き込み
-                var bufferedData = selectedSessionInfo.OutputBuffer.GetAllText("");
-                _ = activeTerminal.InvokeVoidAsync("write", bufferedData);
+                // ターミナルサイズに基づいて適切な行数を計算
+                var (cols, rows) = selectedSession.ConPtyBuffer.GetTerminalSize();
+                // 実際に表示可能な行数分のデータを取得（制御シーケンスを考慮）
+                var visibleLines = Math.Max(_defaultSnapshotLines, rows * 3);
                 
-                // バッファをクリア
-                selectedSessionInfo.OutputBuffer.Clear();
+                var snapshot = selectedSession.ConPtyBuffer.GetVisibleLinesSnapshot(visibleLines);
+                if (!string.IsNullOrEmpty(snapshot))
+                {
+                    _ = activeTerminal.InvokeVoidAsync("write", snapshot);
+                }
             }
         }
 
-        // 出力読み取りを開始（既存のものがなければ）
-        if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
+        // ConPtyWithBufferのイベントハンドラーを設定
+        if (selectedSession?.ConPtyBuffer != null)
         {
-            Console.WriteLine($"[SelectSession] 読み取りタスクを開始: sessionId={sessionId}");
-            var cts = new CancellationTokenSource();
-            sessionReadCts[sessionId] = cts;
-            // Fire-and-forget の代わりに Task を保持して適切に管理
-            var readTask = Task.Run(async () => 
+            Console.WriteLine($"[SelectSession] ConPtyWithBufferイベントハンドラーを設定: sessionId={sessionId}");
+            
+            // データ受信イベントハンドラー
+            selectedSession.ConPtyBuffer.DataReceived += async (data) =>
             {
                 try
                 {
-                    await ReadSessionOutput(sessionId, cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // キャンセルは正常な動作
-                    Console.WriteLine($"[ReadSessionOutput] キャンセルされました: sessionId={sessionId}");
+                    await ProcessReceivedData(sessionId, data);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
+                    Console.WriteLine($"[DataReceived] エラー: {ex.Message}");
                 }
-            }, cts.Token);
+            };
+            
+            // 切断イベントハンドラー
+            selectedSession.ConPtyBuffer.Disconnected += () =>
+            {
+                Console.WriteLine($"[ConPtyBuffer] セッション {sessionId} が切断されました");
+            };
         }
         else
         {
-            Console.WriteLine($"[SelectSession] 読み取りタスクは既に存在: sessionId={sessionId}");
+            Console.WriteLine($"[SelectSession] ConPtyBufferが利用不可: sessionId={sessionId}");
         }
 
         // ターミナルを最下段にスクロール
@@ -533,98 +543,50 @@
         }
     }
 
-    private async Task ReadSessionOutput(Guid sessionId, CancellationToken cancellationToken)
+    private async Task ProcessReceivedData(Guid sessionId, string data)
     {
-        Console.WriteLine($"[ReadSessionOutput] 開始: sessionId={sessionId}");
-
-        var session = await SessionManager.GetSessionAsync(sessionId);
-        if (session == null)
+        try
         {
-            Console.WriteLine($"[ReadSessionOutput] セッションが見つからない: {sessionId}");
-            return;
-        }
-
-        var buffer = new char[TerminalConstants.DefaultBufferSize];
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
+            var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+            if (sessionInfo != null)
             {
-                // キャンセルが要求されているか再確認
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                var charsRead = await session.ReadAsync(buffer, 0, buffer.Length);
-                if (charsRead > 0)
+                // Claude Codeの場合、"No conversation found to continue"エラーをチェック
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
+                    data.Contains("No conversation found to continue") &&
+                    sessionInfo.Options.ContainsKey("continue") &&
+                    !sessionInfo.HasContinueErrorOccurred)
                 {
-                    // データ書き込み前に再度キャンセルを確認
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
-
-                    var data = new string(buffer, 0, charsRead);
-                    Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} から {charsRead} 文字読み取り");
+                    Console.WriteLine($"[Claude Continue Error] セッション {sessionId} で 'No conversation found to continue' エラーを検知しました");
                     
-                    // 最初の100文字を表示（デバッグ用）
-                    var preview = data.Length > 100 ? data.Substring(0, 100) + "..." : data;
-                    Console.WriteLine($"[ReadSessionOutput] データプレビュー: {preview.Replace("\r", "\\r").Replace("\n", "\\n")}");
-
-                    var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                    if (sessionInfo != null)
+                    // フラグを設定して重複送信を防ぐ
+                    sessionInfo.HasContinueErrorOccurred = true;
+                    
+                    // セッション再起動のコマンドを送信
+                    _ = InvokeAsync(async () =>
                     {
-                        // Claude Codeの場合、"No conversation found to continue"エラーをチェック
-                        if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
-                            data.Contains("No conversation found to continue") &&
-                            sessionInfo.Options.ContainsKey("continue") &&
-                            !sessionInfo.HasContinueErrorOccurred)
-                        {
-                            Console.WriteLine($"[Claude Continue Error] セッション {sessionId} で 'No conversation found to continue' エラーを検知しました");
-                            
-                            // フラグを設定して重複送信を防ぐ
-                            sessionInfo.HasContinueErrorOccurred = true;
-                            
-                            // セッションを再起動（--continueなし）
-                            await InvokeAsync(async () =>
-                            {
-                                await RestartSessionWithoutContinue(sessionId);
-                            });
-                            
-                            return; // 読み取りループを終了
-                        }
+                        await RestartSessionWithoutContinue(sessionId);
+                    });
+                    return;
+                }
 
-                        // 出力解析（ターミナルタイプに応じた解析器を使用）
-                        AnalyzeOutput(data, sessionId, sessionInfo.TerminalType);
-
-                        // アクティブセッションはターミナルに直接書き込み
-                        if (activeSessionId == sessionId && activeTerminal != null)
-                        {
-                            await activeTerminal.InvokeVoidAsync("write", data);
-                        }
-                        else
-                        {
-                            // 非アクティブセッションはバッファに保存
-                            sessionInfo.OutputBuffer.AddLine(data);
-                        }
-                    }
-                }
-                else if (charsRead == 0)
+                // アクティブセッションの場合は直接ターミナルに出力
+                if (activeSessionId == sessionId && activeTerminal != null)
                 {
-                    // セッションが終了した場合
-                    Console.WriteLine($"[ReadSessionOutput] セッション {sessionId} が終了しました");
-                    break; // 読み取りループを終了
+                    await activeTerminal.InvokeVoidAsync("write", data);
+                    
+                    // 出力解析の実行
+                    _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
                 }
-            }
-            catch (Exception ex)
-            {
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    Console.WriteLine($"[ReadSessionOutput] 読み取りエラー: {ex.Message}");
-                }
-                break;
+                // 非アクティブセッションの場合はバッファリングはConPtyWithBufferが担当
+                // 特別な処理は不要
             }
         }
-
-        Console.WriteLine($"[ReadSessionOutput] 終了: sessionId={sessionId}");
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProcessReceivedData] エラー: {ex.Message}");
+        }
     }
+
 
     private void StartEditingMemo(Guid sessionId, string currentMemo)
     {
@@ -671,29 +633,16 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
-        // バッファのクリーンアップ
+        // ConPtyWithBufferのクリーンアップ
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionToRemove != null)
+        if (sessionToRemove?.ConPtyBuffer != null)
         {
-            sessionToRemove.OutputBuffer.Clear();
+            sessionToRemove.ConPtyBuffer.Dispose();
         }
         
         // セッションのタイマーを停止
         StopSessionTimer(sessionId);
 
-        // セッションの読み取りタスクを停止
-        if (sessionReadCts.TryGetValue(sessionId, out var cts))
-        {
-            try
-            {
-                cts.Cancel();
-                cts.Dispose();
-            }
-            finally
-            {
-                sessionReadCts.Remove(sessionId);
-            }
-        }
 
         // アクティブセッションの場合の追加処理
         if (sessionId == activeSessionId)
@@ -753,7 +702,19 @@
         var guid = Guid.Parse(sessionId);
         if (guid == activeSessionId && activeSession != null)
         {
+            // ConPtyにリサイズを通知
             activeSession.Resize(cols, rows);
+            
+            // ConPtyWithBufferもリサイズを通知
+            var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
+            if (selectedSession?.ConPtyBuffer != null)
+            {
+                selectedSession.ConPtyBuffer.Resize(cols, rows);
+            }
+            
+            // リサイズ時のスナップショット再表示は削除
+            // ConPTYは自身でリフロー処理を行い、アプリケーションが再描画する
+            // 手動でクリア＆再描画すると、ConPTYの再描画と競合する可能性がある
         }
     }
 
@@ -774,14 +735,6 @@
                 // Console.WriteLine($"[DestroyTerminal] C#側のターミナル参照を削除");
             }
 
-            // セッションの読み取り処理を停止（非アクティブでも）
-            if (sessionReadCts.TryGetValue(sessionId, out var cts))
-            {
-                cts.Cancel();
-                cts.Dispose();
-                sessionReadCts.Remove(sessionId);
-                // Console.WriteLine($"[DestroyTerminal] 読み取り処理を停止");
-            }
 
             if (showAlert)
             {
@@ -819,30 +772,44 @@
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
 
-                // 読み取り処理を再開（既存のものがなければ）
-                if (activeSession != null && !sessionReadCts.ContainsKey(sessionId))
+                // ConPtyWithBufferのスナップショットを復元
+                var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                if (selectedSessionInfo?.ConPtyBuffer != null && activeTerminal != null)
                 {
-                    var cts = new CancellationTokenSource();
-                    sessionReadCts[sessionId] = cts;
-                    var readTask = Task.Run(async () => 
+                    await Task.Delay(100); // ターミナル初期化完了を待つ
+                    
+                    // ターミナルサイズに基づいて適切な行数を計算
+                    var (cols, rows) = selectedSessionInfo.ConPtyBuffer.GetTerminalSize();
+                    // 再作成時は実際に表示可能な行数を多めに取得
+                    var visibleLines = Math.Max(_recreateSnapshotLines, rows * 5);
+                    
+                    var snapshot = selectedSessionInfo.ConPtyBuffer.GetVisibleLinesSnapshot(visibleLines);
+                    if (!string.IsNullOrEmpty(snapshot))
+                    {
+                        _ = activeTerminal.InvokeVoidAsync("write", snapshot);
+                    }
+                    
+                    // データ受信イベントハンドラー
+                    selectedSessionInfo.ConPtyBuffer.DataReceived += async (data) =>
                     {
                         try
                         {
-                            await ReadSessionOutput(sessionId, cts.Token);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            // キャンセルは正常な動作
+                            await ProcessReceivedData(sessionId, data);
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[ReadSessionOutput] エラー: {ex.Message}");
+                            Console.WriteLine($"[DataReceived] エラー: {ex.Message}");
                         }
-                    }, cts.Token);
-                    // Console.WriteLine($"[RecreateTerminal] 読み取り処理を再開");
+                    };
+                    
+                    // 切断イベントハンドラー
+                    selectedSessionInfo.ConPtyBuffer.Disconnected += () =>
+                    {
+                        Console.WriteLine($"[ConPtyBuffer] セッション {sessionId} が切断されました");
+                    };
 
                     // ターミナルに初期プロンプトを送信して接続を確認
-                    if (activeTerminal != null)
+                    if (activeSession != null)
                     {
                         // Enterキーを送信してプロンプトを表示
                         await activeSession.WriteAsync("\r\n");
@@ -1601,19 +1568,6 @@
         {
             var sessionId = settingsSessionId.Value;
             
-            // 既存の読み取りタスクを停止
-            if (sessionReadCts.TryGetValue(sessionId, out var cts))
-            {
-                try
-                {
-                    cts.Cancel();
-                    cts.Dispose();
-                }
-                finally
-                {
-                    sessionReadCts.Remove(sessionId);
-                }
-            }
             
             // 一旦nullにして再選択することで、ターミナルコンポーネントを再作成
             activeSessionId = null;
@@ -1662,19 +1616,6 @@
         {
             Console.WriteLine($"[RestartSessionWithoutContinue] --continueなしでセッションを再起動します: {sessionId}");
             
-            // 読み取りタスクを停止
-            if (sessionReadCts.TryGetValue(sessionId, out var cts))
-            {
-                try
-                {
-                    cts.Cancel();
-                    cts.Dispose();
-                }
-                finally
-                {
-                    sessionReadCts.Remove(sessionId);
-                }
-            }
             
             // セッションを再起動（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
             var success = await SessionManager.RestartSessionAsync(sessionId);
@@ -1723,17 +1664,6 @@
         }
         sessionProcessingTimers.Clear();
         
-        // すべてのセッションの読み取りタスクを停止
-        foreach (var kvp in sessionReadCts)
-        {
-            try
-            {
-                kvp.Value.Cancel();
-                kvp.Value.Dispose();
-            }
-            catch { }
-        }
-        sessionReadCts.Clear();
         
         // 履歴を保存
         await SaveInputHistoryAsync();
