@@ -24,7 +24,7 @@
 <SessionCreateDialog IsVisible="showCreateDialog" 
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
-<DevWindow @bind-IsVisible="showDevWindow" />
+<DevWindow @ref="devWindow" @bind-IsVisible="showDevWindow" />
 <SettingsDialog @bind-IsVisible="showSettingsDialog" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
@@ -121,7 +121,7 @@
                                         @if (showDevButton)
                                         {
                                             <button class="btn btn-secondary" 
-                                                    @onclick="() => showDevWindow = !showDevWindow" 
+                                                    @onclick="ToggleDevWindow" 
                                                     title="開発ツール">
                                                 <i class="bi bi-code-square"></i> Dev
                                             </button>
@@ -161,7 +161,7 @@
     private Guid? activeSessionId;
     private bool isAddingSession = false;
     private bool showCreateDialog = false;
-    private IJSObjectReference? activeTerminal;
+    private Dictionary<Guid, IJSObjectReference> terminals = new();
     private ConPtySession? activeSession;
     
     // テキスト履歴機能
@@ -175,6 +175,7 @@
     private string tempMemoText = "";
     private bool showDevWindow = false;
     private bool showDevButton = false;
+    private DevWindow? devWindow;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
@@ -255,7 +256,7 @@
 
                 restoredSessionIds.Add(newSession.SessionId);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Failed to restore session
             }
@@ -306,6 +307,16 @@
     {
         showSettingsDialog = true;
     }
+    
+    private void ToggleDevWindow()
+    {
+        showDevWindow = !showDevWindow;
+        if (showDevWindow && devWindow != null)
+        {
+            // DevWindowにターミナル辞書を渡す
+            devWindow.SetTerminalsDict(terminals);
+        }
+    }
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
     {
@@ -348,128 +359,133 @@
 
     private async Task SelectSession(Guid sessionId)
     {
-        // [SelectSession] 開始
+        Console.WriteLine($"[SelectSession] ★ 開始: {sessionId}");
         
         if (activeSessionId == sessionId)
         {
-            // 既にアクティブなセッション
+            Console.WriteLine($"[SelectSession] 既にアクティブなセッション: {sessionId}");
             return;
         }
 
         // 前のセッションの処理は継続させるため、キャンセルしない
-
-        // 既存のアクティブターミナルを破棄
-        if (activeTerminal != null)
-        {
-            try
-            {
-                await activeTerminal.DisposeAsync();
-            }
-            catch (Exception)
-            {
-                // Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
-            }
-            activeTerminal = null;
-        }
+        // セッションも常時接続状態を保つため、ターミナルも破棄しない
 
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
+        Console.WriteLine($"[SelectSession] ターミナル非表示処理開始");
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
+            Console.WriteLine($"[SelectSession] ターミナル非表示処理完了");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // エラーは無視
+            Console.WriteLine($"[SelectSession] ターミナル非表示処理エラー: {ex.Message}");
+            Console.WriteLine($"[SelectSession] スタックトレース: {ex.StackTrace}");
+            // エラーが発生しても処理を継続
         }
 
         // セッションをアクティブに
+        Console.WriteLine($"[SelectSession] セッションアクティブ化開始: {sessionId}");
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
-        // 再起動後の新しいセッションを確実に取得
-        activeSession = await SessionManager.GetSessionAsync(sessionId);
-        // SessionManager.GetSession結果確認
+        Console.WriteLine($"[SelectSession] セッションアクティブ化完了: {sessionId}");
         
-        // セッションが存在しない場合はエラー
+        // セッションを取得（初回は接続、2回目以降は既存のものを再利用）
+        Console.WriteLine($"[SelectSession] セッション取得開始: {sessionId}");
+        activeSession = await SessionManager.GetSessionAsync(sessionId);
         if (activeSession == null)
         {
-            // セッションが見つからない
+            Console.WriteLine($"[SelectSession] ★★★ エラー: セッションが見つからない: {sessionId}");
             activeSessionId = null;
             return;
         }
+        Console.WriteLine($"[SelectSession] セッション取得完了: {sessionId}");
         
         // 通知フラグをクリア
+        Console.WriteLine($"[SelectSession] 通知フラグクリア処理開始");
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (selectedSession != null && selectedSession.HasNotificationPending)
         {
             selectedSession.HasNotificationPending = false;
-            //Console.WriteLine($"[Notification Debug] セッション {sessionId} の通知フラグをクリア");
+            Console.WriteLine($"[SelectSession] 通知フラグをクリア: {sessionId}");
         }
 
         // アクティブセッション変更を即座にUIに反映
+        Console.WriteLine($"[SelectSession] UI更新処理開始");
         StateHasChanged();
+        Console.WriteLine($"[SelectSession] UI更新処理完了");
 
         // アクティブセッションIDをローカルストレージに保存
+        Console.WriteLine($"[SelectSession] ローカルストレージ保存開始");
         await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
+        Console.WriteLine($"[SelectSession] ローカルストレージ保存完了");
 
         // ターミナルdivが存在するか確認し、表示する
+        Console.WriteLine($"[SelectSession] ターミナルdiv存在確認開始");
         try
         {
             var divExists = await JSRuntime.InvokeAsync<bool>("terminalHubHelpers.checkElementExists", 
                 $"terminal-{sessionId.ToString()}");
+            Console.WriteLine($"[SelectSession] ターミナルdiv存在確認結果: {divExists}");
 
             if (divExists)
             {
-                // 新しいターミナルを表示
+                Console.WriteLine($"[SelectSession] ターミナル表示処理開始");
                 await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId.ToString());
+                Console.WriteLine($"[SelectSession] ターミナル表示処理完了");
+            }
+            else
+            {
+                Console.WriteLine($"[SelectSession] ★★★ 警告: ターミナルdivが存在しない: terminal-{sessionId}");
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // エラーは無視
+            Console.WriteLine($"[SelectSession] ターミナルdiv処理エラー: {ex.Message}");
         }
 
         // ターミナルを初期化
+        Console.WriteLine($"[SelectSession] ターミナル初期化開始");
         await InitializeTerminal(sessionId);
+        Console.WriteLine($"[SelectSession] ターミナル初期化完了");
 
-        // ターミナルのリサイズを強制的に実行
+        // アクティブターミナルのリサイズを強制的に実行
+        Console.WriteLine($"[SelectSession] リサイズ処理開始");
         try
         {
-            if (activeTerminal != null)
+            if (terminals.TryGetValue(sessionId, out var terminal))
             {
-                await activeTerminal.InvokeVoidAsync("resize");
+                Console.WriteLine($"[SelectSession] ターミナルが見つかりました、リサイズ実行");
+                await terminal.InvokeVoidAsync("resize");
+                Console.WriteLine($"[SelectSession] リサイズ完了");
+            }
+            else
+            {
+                Console.WriteLine($"[SelectSession] ★★★ 警告: ターミナルが辞書に存在しない");
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // エラーは無視
+            Console.WriteLine($"[SelectSession] リサイズエラー: {ex.Message}");
         }
 
-        // ConPTYから全バッファを取得するためのトリック
-        if (selectedSession?.ConPtyBuffer != null)
+        // セッション選択時はバッファから内容を取得して表示
+        if (selectedSession?.ConPtyBuffer != null && terminals.TryGetValue(sessionId, out var selectedTerminal))
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
-            // 現在のサイズを取得
-            var (currentCols, currentRows) = selectedSession.ConPtyBuffer.GetTerminalSize();
-            
-            // 全バッファを取得するためのトリック
-            // 方法4: リサイズ + クリア + リサイズ
-            // リサイズ+クリアトリック開始
-            
-            // 1. 1行増やす（全バッファ取得トリガー）
-            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows + 1);
-            
-            // 2. バッファ取得を待つ（ConPTYが全バッファを送信する時間）
-            await Task.Delay(100);
-            
-            // 3. 画面をクリア（オプション：これにより新しい状態から開始）
-            // await selectedSession.ConPtyBuffer.ClearScreen();
-            // await Task.Delay(50);
-            
-            // 4. 元のサイズに戻す
-            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows);
-            
-            // リサイズ+クリアトリック完了
+            // バッファの内容をターミナルに書き込む（初回表示）
+            var bufferedOutput = selectedSession.ConPtyBuffer.GetBufferedOutput();
+            if (!string.IsNullOrEmpty(bufferedOutput))
+            {
+                try
+                {
+                    // ターミナルをクリアしてからバッファ内容を表示
+                    await selectedTerminal.InvokeVoidAsync("clear");
+                    await selectedTerminal.InvokeVoidAsync("write", bufferedOutput);
+                }
+                catch { }
+            }
         }
 
         // ConPtyWithBufferのイベントハンドラーを設定
@@ -516,8 +532,25 @@
             // 切断イベントハンドラー
             selectedSession.ConPtyBuffer.Disconnected += () =>
             {
-                // セッション切断検出
+                Console.WriteLine($"[CreateSession] セッション切断検出: {sessionId}");
                 initialDataTimer?.Dispose();
+                
+                // UI更新のためInvokeAsyncを使用
+                _ = InvokeAsync(async () =>
+                {
+                    // セッションがまだ存在するか確認（再起動中の場合は削除しない）
+                    var sessionStillExists = sessions.Any(s => s.SessionId == sessionId);
+                    if (sessionStillExists)
+                    {
+                        Console.WriteLine($"[CreateSession] セッションを削除: {sessionId}");
+                        await RemoveSession(sessionId);
+                        toast?.ShowInfo("セッションが終了しました");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[CreateSession] セッションは既に削除済み: {sessionId}");
+                    }
+                });
             };
         }
         else
@@ -549,30 +582,45 @@
     private async Task InitializeTerminal(Guid sessionId)
     {
         var terminalId = $"terminal-{sessionId.ToString()}";
-        // Console.WriteLine($"[InitializeTerminal] 開始: terminalId={terminalId}");
+        Console.WriteLine($"[InitializeTerminal] ★ 開始: terminalId={terminalId}");
 
-        // JavaScript側の既存ターミナルも削除
-        try
+        // 既存のターミナルがあればそれを使用、なければ新規作成
+        if (!terminals.ContainsKey(sessionId))
         {
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
-        }
-        catch { }
+            Console.WriteLine($"[InitializeTerminal] 新規ターミナル作成開始");
+            // JavaScript側の既存ターミナルも削除（初回作成時のみ）
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
+                Console.WriteLine($"[InitializeTerminal] 既存ターミナルクリーンアップ完了");
+            }
+            catch (Exception ex) 
+            { 
+                Console.WriteLine($"[InitializeTerminal] クリーンアップエラー: {ex.Message}");
+            }
 
-        // Console.WriteLine($"[InitializeTerminal] 新しいターミナルを作成");
-        try
-        {
-            activeTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
-                "terminalFunctions.createMultiSessionTerminal", 
-                terminalId, 
-                sessionId.ToString(), 
-                dotNetRef);
+            try
+            {
+                Console.WriteLine($"[InitializeTerminal] JavaScript側ターミナル作成開始");
+                var terminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                    "terminalFunctions.createMultiSessionTerminal", 
+                    terminalId, 
+                    sessionId.ToString(), 
+                    dotNetRef);
 
-            // Console.WriteLine($"[InitializeTerminal] ターミナル作成成功");
+                terminals[sessionId] = terminal;
+                Console.WriteLine($"[InitializeTerminal] ターミナル作成完了、辞書に登録");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[InitializeTerminal] ★★★ ターミナル作成エラー: {ex.Message}");
+            }
         }
-        catch (Exception)
+        else
         {
-            // Console.WriteLine($"[InitializeTerminal] ターミナル作成エラー: {ex.Message}");
+            Console.WriteLine($"[InitializeTerminal] 既存ターミナルを再利用");
         }
+        Console.WriteLine($"[InitializeTerminal] ★ 完了");
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data)
@@ -588,7 +636,7 @@
                     sessionInfo.Options.ContainsKey("continue") &&
                     !sessionInfo.HasContinueErrorOccurred)
                 {
-                    // Claude Continue Error detected
+                    Console.WriteLine($"[ProcessReceivedData] Claude Code --continue エラー検出: {sessionId}");
                     
                     // フラグを設定して重複送信を防ぐ
                     sessionInfo.HasContinueErrorOccurred = true;
@@ -601,10 +649,10 @@
                     return;
                 }
 
-                // アクティブセッションの場合は直接ターミナルに出力
-                if (activeSessionId == sessionId && activeTerminal != null)
+                // 対応するターミナルに出力（アクティブでなくても）
+                if (terminals.TryGetValue(sessionId, out var terminal))
                 {
-                    await activeTerminal.InvokeVoidAsync("write", data);
+                    await terminal.InvokeVoidAsync("write", data);
                     
                     // 出力解析の実行
                     _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
@@ -665,32 +713,44 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
+        Console.WriteLine($"[RemoveSession] ★ セッション削除開始: {sessionId}");
+        
         // ConPtyWithBufferのクリーンアップ
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove?.ConPtyBuffer != null)
         {
             sessionToRemove.ConPtyBuffer.Dispose();
+            Console.WriteLine($"[RemoveSession] ConPtyBufferを破棄");
         }
         
         // セッションのタイマーを停止
         StopSessionTimer(sessionId);
+        Console.WriteLine($"[RemoveSession] タイマー停止");
 
-
-        // アクティブセッションの場合の追加処理
-        if (sessionId == activeSessionId)
+        // 対応するターミナルをクリーンアップ
+        if (terminals.TryGetValue(sessionId, out var terminal))
         {
-
-            if (activeTerminal != null)
-            {
-                await activeTerminal.DisposeAsync();
-                activeTerminal = null;
-            }
+            Console.WriteLine($"[RemoveSession] ターミナル破棄開始");
+            await terminal.DisposeAsync();
+            terminals.Remove(sessionId);
+            Console.WriteLine($"[RemoveSession] ターミナル辞書から削除");
         }
-
-        // ターミナルのクリーンアップはdestroyTerminalで処理される
+        
+        // JavaScript側のクリーンアップも明示的に実行
+        try
+        {
+            Console.WriteLine($"[RemoveSession] JavaScript側クリーンアップ開始");
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
+            Console.WriteLine($"[RemoveSession] JavaScript側クリーンアップ完了");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RemoveSession] JavaScript側クリーンアップエラー: {ex.Message}");
+        }
 
         await SessionManager.RemoveSessionAsync(sessionId);
         sessions = SessionManager.GetAllSessions().ToList();
+        Console.WriteLine($"[RemoveSession] セッション削除後の残りセッション数: {sessions.Count}");
 
         // ローカルストレージを更新
         await LocalStorageService.SaveSessionsAsync(sessions);
@@ -729,25 +789,42 @@
     }
 
     [JSInvokable]
-    public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
+    public async Task OnTerminalSizeChanged(string sessionId, int cols, int rows)
     {
         var guid = Guid.Parse(sessionId);
-        if (guid == activeSessionId && activeSession != null)
+        
+        // アクティブセッションでない場合は何もしない
+        if (guid != activeSessionId) return;
+        
+        // セッション情報を取得
+        var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
+        if (selectedSession?.ConPtyBuffer == null) return;
+        
+        // アクティブセッションのリサイズ処理
+        // 画面をクリア
+        if (terminals.TryGetValue(guid, out var terminal))
         {
-            // ConPtyにリサイズを通知
-            activeSession.Resize(cols, rows);
-            
-            // ConPtyWithBufferもリサイズを通知
-            var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
-            if (selectedSession?.ConPtyBuffer != null)
+            try
             {
-                selectedSession.ConPtyBuffer.Resize(cols, rows);
+                await terminal.InvokeVoidAsync("clear");
             }
-            
-            // リサイズ時のスナップショット再表示は削除
-            // ConPTYは自身でリフロー処理を行い、アプリケーションが再描画する
-            // 手動でクリア＆再描画すると、ConPTYの再描画と競合する可能性がある
+            catch { }
         }
+        
+        // バッファをクリア（リサイズ前に必須）
+        selectedSession.ConPtyBuffer.ClearBuffer();
+        
+        // ConPtyにリサイズを通知（activeSessionが存在する場合のみ）
+        if (activeSession != null)
+        {
+            activeSession.Resize(cols, rows);
+        }
+        
+        // ConPtyWithBufferもリサイズを通知
+        selectedSession.ConPtyBuffer.Resize(cols, rows);
+        
+        // リサイズ後、ConPTYが全バッファを送信してくるので
+        // それを新しいバッファに蓄積していく
     }
 
     private async Task DestroyTerminal(Guid sessionId, bool showAlert = true)
@@ -759,12 +836,11 @@
             // JavaScript側のターミナルを破棄
             await JSRuntime.InvokeVoidAsync("terminalFunctions.destroyTerminal", sessionId.ToString());
 
-            // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
-            if (activeSessionId == sessionId && activeTerminal != null)
+            // C#側のターミナル参照を削除
+            if (terminals.TryGetValue(sessionId, out var terminal))
             {
-                await activeTerminal.DisposeAsync();
-                activeTerminal = null;
-                // Console.WriteLine($"[DestroyTerminal] C#側のターミナル参照を削除");
+                await terminal.DisposeAsync();
+                terminals.Remove(sessionId);
             }
 
 
@@ -806,7 +882,7 @@
 
                 // ConPTYから自動的に画面状態が送信されるため、スナップショット送信は不要
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                if (selectedSessionInfo?.ConPtyBuffer != null && activeTerminal != null)
+                if (selectedSessionInfo?.ConPtyBuffer != null && terminals.ContainsKey(sessionId))
                 {
                     await Task.Delay(100); // ターミナル初期化完了を待つ
                     
@@ -829,7 +905,24 @@
                     // 切断イベントハンドラー
                     selectedSessionInfo.ConPtyBuffer.Disconnected += () =>
                     {
-                        // セッション切断検出
+                        Console.WriteLine($"[InitializeAndSwitchToSession] セッション切断検出: {sessionId}");
+                        
+                        // UI更新のためInvokeAsyncを使用
+                        _ = InvokeAsync(async () =>
+                        {
+                            // セッションがまだ存在するか確認（再起動中の場合は削除しない）
+                            var sessionStillExists = sessions.Any(s => s.SessionId == sessionId);
+                            if (sessionStillExists)
+                            {
+                                Console.WriteLine($"[InitializeAndSwitchToSession] セッションを削除: {sessionId}");
+                                await RemoveSession(sessionId);
+                                toast?.ShowInfo("セッションが終了しました");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[InitializeAndSwitchToSession] セッションは既に削除済み: {sessionId}");
+                            }
+                        });
                     };
 
                     // ターミナルに初期プロンプトを送信して接続を確認
@@ -1588,17 +1681,90 @@
         await LocalStorageService.SaveSessionsAsync(sessions);
         
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
-        if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)
+        if (settingsSessionId.HasValue)
         {
             var sessionId = settingsSessionId.Value;
+            Console.WriteLine($"[OnSessionSettingsSaved] セッション設定保存後の処理開始: {sessionId}");
             
+            // ターミナルをクリーンアップして再作成
+            if (terminals.ContainsKey(sessionId))
+            {
+                Console.WriteLine($"[OnSessionSettingsSaved] 既存ターミナルをクリーンアップ");
+                try
+                {
+                    var terminal = terminals[sessionId];
+                    await terminal.DisposeAsync();
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"[OnSessionSettingsSaved] ターミナル破棄エラー: {ex.Message}");
+                }
+                
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"[OnSessionSettingsSaved] JavaScript側クリーンアップエラー: {ex.Message}");
+                }
+                terminals.Remove(sessionId);
+            }
             
-            // 一旦nullにして再選択することで、ターミナルコンポーネントを再作成
-            activeSessionId = null;
-            activeSession = null;
-            StateHasChanged();
-            await Task.Delay(100); // UIの更新を待つ
-            await SelectSession(sessionId);
+            if (sessionId == activeSessionId)
+            {
+                // アクティブセッションの場合は再選択
+                activeSessionId = null;
+                activeSession = null;
+                StateHasChanged();
+                await Task.Delay(100); // UIの更新を待つ
+                await SelectSession(sessionId);
+            }
+            else
+            {
+                Console.WriteLine($"[OnSessionSettingsSaved] 非アクティブセッションのためターミナル再作成はスキップ");
+                
+                // しかし、イベントハンドラーの再登録は必要
+                var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                if (sessionInfo?.ConPtyBuffer != null)
+                {
+                    Console.WriteLine($"[OnSessionSettingsSaved] イベントハンドラー再登録");
+                    
+                    // まず既存のハンドラーをクリア
+                    sessionInfo.ConPtyBuffer.ClearEventHandlers();
+                    
+                    // データ受信イベントハンドラー再登録
+                    sessionInfo.ConPtyBuffer.DataReceived += async (data) =>
+                    {
+                        try
+                        {
+                            await ProcessReceivedData(sessionId, data);
+                        }
+                        catch
+                        {
+                            // エラー処理
+                        }
+                    };
+                    
+                    // 切断イベントハンドラー再登録
+                    sessionInfo.ConPtyBuffer.Disconnected += () =>
+                    {
+                        Console.WriteLine($"[OnSessionSettingsSaved] セッション切断検出: {sessionId}");
+                        
+                        // UI更新のためInvokeAsyncを使用
+                        _ = InvokeAsync(async () =>
+                        {
+                            // セッションがまだ存在するか確認
+                            var sessionStillExists = sessions.Any(s => s.SessionId == sessionId);
+                            if (sessionStillExists)
+                            {
+                                await RemoveSession(sessionId);
+                                toast?.ShowInfo("セッションが終了しました");
+                            }
+                        });
+                    };
+                }
+            }
         }
         else
         {
@@ -1641,24 +1807,100 @@
             // Restarting session without --continue
             
             
+            Console.WriteLine($"[RestartSessionWithoutContinue] セッション再起動開始: {sessionId}");
+            
             // セッションを再起動（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
             var success = await SessionManager.RestartSessionAsync(sessionId);
             if (success)
             {
+                Console.WriteLine($"[RestartSessionWithoutContinue] セッション再起動成功");
+                
                 // セッション一覧を更新
                 sessions = SessionManager.GetAllSessions().ToList();
                 
                 // ローカルストレージに保存
                 await LocalStorageService.SaveSessionsAsync(sessions);
                 
-                // 強制的にセッションを再初期化するため、一旦nullにする
-                activeSessionId = null;
-                activeSession = null;
-                StateHasChanged();
-                await Task.Delay(100); // UIの更新を待つ
+                // ターミナルも削除して再作成を強制
+                if (terminals.ContainsKey(sessionId))
+                {
+                    Console.WriteLine($"[RestartSessionWithoutContinue] 既存ターミナルを削除");
+                    try
+                    {
+                        var terminal = terminals[sessionId];
+                        await terminal.DisposeAsync();
+                    }
+                    catch (Exception ex) 
+                    { 
+                        Console.WriteLine($"[RestartSessionWithoutContinue] ターミナル破棄エラー: {ex.Message}");
+                    }
+                    
+                    try
+                    {
+                        await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
+                    }
+                    catch (Exception ex) 
+                    { 
+                        Console.WriteLine($"[RestartSessionWithoutContinue] JavaScript側クリーンアップエラー: {ex.Message}");
+                    }
+                    terminals.Remove(sessionId);
+                }
                 
-                // 再起動後のセッションを選択
-                await SelectSession(sessionId);
+                // 再起動するセッションがアクティブな場合のみ再選択
+                if (activeSessionId == sessionId)
+                {
+                    Console.WriteLine($"[RestartSessionWithoutContinue] アクティブセッションの再起動のため再選択");
+                    // 強制的にセッションを再初期化するため、一旦nullにする
+                    activeSessionId = null;
+                    activeSession = null;
+                    StateHasChanged();
+                    await Task.Delay(100); // UIの更新を待つ
+                    
+                    // 再起動後のセッションを選択
+                    await SelectSession(sessionId);
+                }
+                else
+                {
+                    Console.WriteLine($"[RestartSessionWithoutContinue] 非アクティブセッションの再起動のため再選択はスキップ");
+                    // 非アクティブセッションの場合は、イベントハンドラーの再登録のみ
+                    var restartedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                    if (restartedSessionInfo?.ConPtyBuffer != null)
+                    {
+                        Console.WriteLine($"[RestartSessionWithoutContinue] イベントハンドラー再登録");
+                        
+                        // 既存のハンドラーをクリア
+                        restartedSessionInfo.ConPtyBuffer.ClearEventHandlers();
+                        
+                        // データ受信イベントハンドラー再登録
+                        restartedSessionInfo.ConPtyBuffer.DataReceived += async (data) =>
+                        {
+                            try
+                            {
+                                await ProcessReceivedData(sessionId, data);
+                            }
+                            catch
+                            {
+                                // エラー処理
+                            }
+                        };
+                        
+                        // 切断イベントハンドラー再登録
+                        restartedSessionInfo.ConPtyBuffer.Disconnected += () =>
+                        {
+                            Console.WriteLine($"[RestartSessionWithoutContinue] セッション切断検出: {sessionId}");
+                            
+                            _ = InvokeAsync(async () =>
+                            {
+                                var sessionStillExists = sessions.Any(s => s.SessionId == sessionId);
+                                if (sessionStillExists)
+                                {
+                                    await RemoveSession(sessionId);
+                                    toast?.ShowInfo("セッションが終了しました");
+                                }
+                            });
+                        };
+                    }
+                }
                 
                 toast?.ShowInfo("--continueオプションなしでセッションを再起動しました");
             }
@@ -1692,10 +1934,12 @@
         // 履歴を保存
         await SaveInputHistoryAsync();
         
-        if (activeTerminal != null)
+        // すべてのターミナルを破棄
+        foreach (var terminal in terminals.Values)
         {
-            await activeTerminal.DisposeAsync();
+            await terminal.DisposeAsync();
         }
+        terminals.Clear();
         
         dotNetRef?.Dispose();
         

@@ -64,22 +64,79 @@
                         }
                     </select>
                 </div>
-                <div class="mb-2">
-                    <label class="form-label">ダウンロード行数（空欄で全体）</label>
-                    <input type="number" class="form-control" @bind="downloadLineCount" placeholder="例: 1000" min="1" />
-                </div>
                 <div class="btn-group">
                     <button class="btn btn-primary me-2" @onclick="DownloadBuffer" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload))">
                         <i class="bi bi-download"></i> バッファダウンロード
-                    </button>
-                    <button class="btn btn-secondary" @onclick="DownloadSnapshot" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload))">
-                        <i class="bi bi-file-earmark-image"></i> スナップショットダウンロード
                     </button>
                 </div>
             </div>
             <div class="mb-3">
                 <h6>ダウンロード結果</h6>
                 <small class="text-muted">@downloadResult</small>
+            </div>
+            <hr />
+            <h5>診断情報</h5>
+            <div class="mb-3">
+                <button class="btn btn-info me-2" @onclick="RefreshDiagnostics">
+                    <i class="bi bi-arrow-clockwise"></i> 診断情報を更新
+                </button>
+                <button class="btn btn-warning" @onclick="RunJSDiagnostics">
+                    <i class="bi bi-bug"></i> JS診断実行
+                </button>
+            </div>
+            <div class="mb-3">
+                <h6>セッション一覧</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>SessionId</th>
+                                <th>状態</th>
+                                <th>名前</th>
+                                <th>Terminal</th>
+                                <th>ConPTY</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (diagnosticSessions != null)
+                            {
+                                @foreach (var session in diagnosticSessions)
+                                {
+                                    <tr>
+                                        <td class="text-truncate" style="max-width: 200px;" title="@session.SessionId">@session.SessionId</td>
+                                        <td>@(session.IsActive ? "Active" : "Inactive")</td>
+                                        <td>@session.GetDisplayName()</td>
+                                        <td>
+                                            @if (TerminalsDict != null && TerminalsDict.ContainsKey(session.SessionId))
+                                            {
+                                                <span class="badge bg-success">有</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger">無</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (session.ConPtyBuffer != null)
+                                            {
+                                                <span class="badge bg-primary">有</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning">無</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="mb-3">
+                <h6>ターミナル一覧</h6>
+                <p>JavaScript側ターミナル数: <span class="badge bg-info">@jsTerminalCount</span></p>
+                <p>C#側ターミナル辞書数: <span class="badge bg-info">@(TerminalsDict?.Count ?? 0)</span></p>
             </div>
             <hr />
             <p class="text-muted">その他の開発ツールは後で追加します</p>
@@ -151,8 +208,12 @@
     private int testElapsedSeconds = 10;
     private string notificationTestResult = "テスト結果がここに表示されます";
     private string selectedSessionForDownload = "";
-    private int? downloadLineCount = null;
     private string downloadResult = "ダウンロード結果がここに表示されます";
+    
+    // 診断情報用
+    private List<SessionInfo>? diagnosticSessions;
+    private Dictionary<Guid, IJSObjectReference>? TerminalsDict;
+    private int jsTerminalCount = 0;
     
     private string GetWindowStyle()
     {
@@ -329,6 +390,42 @@
         return SessionManager.GetAllSessions();
     }
     
+    private async Task RefreshDiagnostics()
+    {
+        try
+        {
+            // セッション一覧を取得
+            diagnosticSessions = SessionManager.GetAllSessions().ToList();
+            
+            // JavaScript側のターミナル数を取得
+            jsTerminalCount = await JSRuntime.InvokeAsync<int>("terminalHubHelpers.getTerminalCount");
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DevWindow] 診断情報取得エラー: {ex.Message}");
+        }
+    }
+    
+    public void SetTerminalsDict(Dictionary<Guid, IJSObjectReference> terminals)
+    {
+        TerminalsDict = terminals;
+        StateHasChanged();
+    }
+    
+    private async Task RunJSDiagnostics()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.diagnoseTerminals");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DevWindow] JS診断エラー: {ex.Message}");
+        }
+    }
+    
     private async Task DownloadBuffer()
     {
         try
@@ -352,10 +449,25 @@
             string content;
             string filename;
             
-            // バッファリングが無効化されているため、機能は利用不可
-            content = "バッファリングが無効化されています。\nConPTYが画面状態を管理しているため、過去のデータは取得できません。\n\n" +
-                     "この変更により、メモリ使用量が削減され、セッション切り替え時の重複問題が解決されました。";
-            filename = $"buffer_disabled_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+            // バッファ全体を取得
+            content = sessionInfo.ConPtyBuffer.GetBufferedOutput();
+            
+            if (string.IsNullOrEmpty(content))
+            {
+                content = "バッファが空です。";
+            }
+            
+            var bufferInfo = new
+            {
+                Status = "Enabled",
+                BufferSize = content.Length,
+                LineCount = content.Split('\n').Length,
+                TerminalSize = sessionInfo.ConPtyBuffer.GetTerminalSize(),
+                SessionId = sessionId
+            };
+            
+            content = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n" + content;
+            filename = $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
             
             // ダウンロード実行
             await DownloadFile(filename, content);
@@ -368,41 +480,6 @@
         }
     }
     
-    private async Task DownloadSnapshot()
-    {
-        try
-        {
-            if (!Guid.TryParse(selectedSessionForDownload, out var sessionId))
-            {
-                downloadResult = "セッションを選択してください";
-                return;
-            }
-            
-            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
-            if (sessionInfo?.ConPtyBuffer == null)
-            {
-                downloadResult = "バッファが利用できません";
-                return;
-            }
-            
-            downloadResult = "スナップショットを取得中...";
-            StateHasChanged();
-            
-            // バッファリングが無効化されているため、機能は利用不可
-            var content = "バッファリングが無効化されています。\nConPTYが画面状態を管理しているため、スナップショットは取得できません。\n\n" +
-                         "セッション切り替え時は、ConPTYが自動的に現在の画面状態を送信します。";
-            var filename = $"snapshot_disabled_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-            
-            // ダウンロード実行
-            await DownloadFile(filename, content);
-            
-            downloadResult = $"スナップショットダウンロード完了: {filename} ({content.Length:N0} 文字)";
-        }
-        catch (Exception ex)
-        {
-            downloadResult = $"エラー: {ex.Message}";
-        }
-    }
     
     private async Task DownloadFile(string filename, string content)
     {

@@ -78,69 +78,24 @@ namespace TerminalHub.Models
         }
 
         /// <summary>
-        /// バッファ内の全ての出力を取得（廃止）
+        /// バッファ内の全ての出力を取得
         /// </summary>
         public string GetBufferedOutput()
         {
-            // バッファリング無効化のため、常に空文字列を返す
-            return string.Empty;
-        }
+            if (_disposed)
+                return string.Empty;
 
-        /// <summary>
-        /// バッファ内の最新N行を取得（廃止）
-        /// </summary>
-        public IEnumerable<string> GetLastLines(int count)
-        {
-            // バッファリング無効化のため、常に空のリストを返す
-            return Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// バッファのスナップショットを取得（ターミナル表示用）
-        /// </summary>
-        /// <param name="maxLines">取得する最大行数。nullの場合は全ての行を取得</param>
-        /// <returns>ターミナルに表示可能な形式の文字列</returns>
-        public string GetSnapshot(int? maxLines = null)
-        {
-            // バッファリング無効化のため、常に空文字列を返す
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// ターミナルサイズに最適化されたスナップショットを取得
-        /// </summary>
-        /// <param name="terminalRows">ターミナルの行数</param>
-        /// <param name="bufferMultiplier">バッファの倍率（デフォルト2倍）</param>
-        /// <returns>ターミナル表示用の文字列</returns>
-        public string GetTerminalSizedSnapshot(int terminalRows, double bufferMultiplier = 2.0)
-        {
-            // バッファリング無効化のため、常に空文字列を返す
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// 実際に表示可能なN行分のデータを取得（制御シーケンスを考慮）
-        /// </summary>
-        /// <param name="visibleRows">表示したい行数</param>
-        /// <param name="maxDataLines">取得する最大データ行数（デフォルト: visibleRows * 5）</param>
-        /// <returns>ターミナル表示用の文字列</returns>
-        public string GetVisibleLinesSnapshot(int visibleRows, int? maxDataLines = null)
-        {
-            // バッファリング無効化のため、常に空文字列を返す
-            return string.Empty;
-        }
-
-
-        /// <summary>
-        /// バッファをクリア
-        /// </summary>
-        public void ClearBuffer()
-        {
-            if (!_disposed)
+            // CircularLineBufferから全行を取得
+            var allLines = new List<string>();
+            foreach (var line in _outputBuffer)
             {
-                _outputBuffer.Clear();
+                allLines.Add(line);
             }
+            
+            return string.Join("\r\n", allLines);
         }
+
+
 
         /// <summary>
         /// バッファの現在の行数
@@ -203,6 +158,29 @@ namespace TerminalHub.Models
         }
         
         /// <summary>
+        /// バッファをクリアする
+        /// </summary>
+        public void ClearBuffer()
+        {
+            if (!_disposed)
+            {
+                _outputBuffer.Clear();
+            }
+        }
+        
+        /// <summary>
+        /// データを処理してバッファに追加
+        /// </summary>
+        private void ProcessDataForBuffer(string data)
+        {
+            var lines = data.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+            foreach (var line in lines)
+            {
+                _outputBuffer.AddLine(line);
+            }
+        }
+        
+        /// <summary>
         /// スクロールバックバッファをクリア（実験的）
         /// </summary>
         public async Task ClearScrollbackBuffer()
@@ -235,14 +213,16 @@ namespace TerminalHub.Models
                         {
                             var data = new string(buffer, 0, bytesRead);
                             
-                            // バッファリングを完全に無効化（実験的）
-                            var shouldBuffer = false; // 常にfalse
+                            // バッファリングを有効化
+                            var shouldBuffer = true;
                             
                             LogBufferAddition(data, shouldBuffer);
                             
-                            if (!shouldBuffer)
+                            if (shouldBuffer)
                             {
-                                // バッファリング無効 - データ垂れ流しモード
+                                // バッファに書き込み
+                                // データを行ごとに分割してバッファに追加
+                                ProcessDataForBuffer(data);
                             }
                             
                             // イベント発火（表示は常に行う）

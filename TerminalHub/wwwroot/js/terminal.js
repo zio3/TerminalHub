@@ -230,16 +230,19 @@ function setupContextMenuAndIME(element, sessionId) {
 window.terminalFunctions = {
     // マルチセッション用のターミナル作成関数
     createMultiSessionTerminal: function(terminalId, sessionId, dotNetRef) {
-        // console.log(`[JS] createMultiSessionTerminal開始: terminalId=${terminalId}, sessionId=${sessionId}`);
+        console.log(`[JS] createMultiSessionTerminal開始: terminalId=${terminalId}, sessionId=${sessionId}`);
         
         // 初期化
         if (!window.multiSessionTerminals) {
             window.multiSessionTerminals = {};
+            console.log(`[JS] createMultiSessionTerminal: multiSessionTerminals初期化`);
         }
         
         // 既存のターミナルがあれば警告
         if (window.multiSessionTerminals[sessionId]) {
-            console.warn(`[JS] 警告: セッション ${sessionId} のターミナルは既に存在します！`);
+            console.warn(`[JS] ★★★ 警告: セッション ${sessionId} のターミナルは既に存在します！`);
+            const existing = window.multiSessionTerminals[sessionId];
+            console.log(`[JS] 既存ターミナル状態: term=${!!existing.term}, disposed=${existing.disposed}`);
         }
         
         const Terminal = window.Terminal;
@@ -286,6 +289,9 @@ window.terminalFunctions = {
         
         const element = document.getElementById(terminalId);
         if (element) {
+            // 既存の内容をクリア（重要！）
+            element.innerHTML = '';
+            
             term.open(element);
             
             // requestAnimationFrameを使用してDOMの準備を確実に待つ
@@ -463,9 +469,17 @@ window.terminalFunctions = {
             clear: () => term.clear(),
             focus: () => term.focus(),
             resize: () => {
+                console.log(`[JS] resize: 開始 sessionId=${sessionId}`);
                 if (fitAddon) {
-                    fitAddon.fit();
-                    // 手動リサイズ時はxterm.onResizeイベントで自動的にスクロールされる
+                    try {
+                        fitAddon.fit();
+                        console.log(`[JS] resize: fitAddon.fit()実行完了 cols=${term.cols}, rows=${term.rows}`);
+                        // 手動リサイズ時はxterm.onResizeイベントで自動的にスクロールされる
+                    } catch (e) {
+                        console.log(`[JS] resize: エラー ${e.message}`);
+                    }
+                } else {
+                    console.log(`[JS] resize: ★★★ fitAddonが存在しない`);
                 }
             },
             getSize: () => {
@@ -494,22 +508,79 @@ window.terminalFunctions = {
 
     // ターミナル表示制御関数
     hideAllTerminals: function() {
+        console.log('[JS] hideAllTerminals: 開始');
         const allTerminals = document.querySelectorAll('[id^="terminal-"]');
+        console.log(`[JS] hideAllTerminals: ${allTerminals.length}個のターミナルを非表示に`);
         allTerminals.forEach(terminal => {
+            console.log(`[JS] hideAllTerminals: ${terminal.id}を非表示に設定`);
             terminal.style.display = 'none';
         });
+        console.log('[JS] hideAllTerminals: 完了');
     },
 
     showTerminal: function(sessionId) {
+        console.log(`[JS] showTerminal: 開始 sessionId=${sessionId}`);
         const terminal = document.getElementById(`terminal-${sessionId}`);
         if (terminal) {
+            console.log(`[JS] showTerminal: ターミナル要素が見つかりました`);
+            console.log(`[JS] showTerminal: 設定前 display=${terminal.style.display}, visibility=${terminal.style.visibility}, opacity=${terminal.style.opacity}`);
             terminal.style.display = 'block';
+            console.log(`[JS] showTerminal: ターミナルを表示に設定`);
+            console.log(`[JS] showTerminal: 設定後 display=${terminal.style.display}, offsetWidth=${terminal.offsetWidth}, offsetHeight=${terminal.offsetHeight}`);
             
             // セッション表示時に初回書き込みフラグをリセット
             if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
                 window.multiSessionTerminals[sessionId].isFirstWrite = true;
-                // 初回書き込みフラグをリセット
+                console.log(`[JS] showTerminal: 初回書き込みフラグをリセット`);
+                
+                // xtermオブジェクトの存在確認
+                const termObj = window.multiSessionTerminals[sessionId];
+                console.log(`[JS] showTerminal: xterm存在確認 - terminal=${!!termObj.terminal}, element=${!!termObj.terminal?.element}`);
+                if (termObj.terminal && termObj.terminal.element) {
+                    console.log(`[JS] showTerminal: xterm.element - display=${termObj.terminal.element.style.display}, 親要素=${!!termObj.terminal.element.parentElement}`);
+                    
+                    // xterm要素を強制的に表示
+                    if (termObj.terminal.element.style.display === 'none' || !termObj.terminal.element.style.display) {
+                        console.log(`[JS] showTerminal: xterm要素を強制表示`);
+                        termObj.terminal.element.style.display = 'block';
+                    }
+                    
+                    // 子要素も確認
+                    const children = termObj.terminal.element.children;
+                    console.log(`[JS] showTerminal: xterm子要素数=${children.length}`);
+                    for (let i = 0; i < children.length; i++) {
+                        if (children[i].style.display === 'none') {
+                            console.log(`[JS] showTerminal: 子要素${i}を表示に変更`);
+                            children[i].style.display = '';
+                        }
+                    }
+                    
+                    // 強制的にフォーカスとリフレッシュ
+                    try {
+                        // xterm要素が正しい親要素にあるか確認
+                        if (termObj.terminal.element.parentNode !== terminal) {
+                            console.log(`[JS] showTerminal: ★★★ 警告: xterm要素が正しい親要素にありません！`);
+                            console.log(`[JS] showTerminal: 修復: xterm要素を再アタッチ`);
+                            terminal.appendChild(termObj.terminal.element);
+                        }
+                        
+                        termObj.terminal.focus();
+                        termObj.terminal.refresh(0, termObj.terminal.rows - 1);
+                        console.log(`[JS] showTerminal: フォーカスとリフレッシュ実行`);
+                    } catch (e) {
+                        console.log(`[JS] showTerminal: フォーカス/リフレッシュエラー: ${e.message}`);
+                    }
+                }
+            } else {
+                console.log(`[JS] showTerminal: ★★★ 警告: multiSessionTerminalsが見つからない sessionId=${sessionId}`);
+                console.log(`[JS] showTerminal: デバッグ - window.multiSessionTerminals=${!!window.multiSessionTerminals}`);
+                if (window.multiSessionTerminals) {
+                    console.log(`[JS] showTerminal: 利用可能なセッション: ${Object.keys(window.multiSessionTerminals).join(', ')}`);
+                }
             }
+            console.log(`[JS] showTerminal: 完了`);
+        } else {
+            console.log(`[JS] showTerminal: ★★★ エラー: ターミナル要素が見つからない terminal-${sessionId}`);
         }
     },
     
@@ -545,6 +616,15 @@ window.terminalFunctions = {
 
     // ターミナルクリーンアップ関数
     cleanupTerminal: function(sessionId) {
+        console.log(`[JS] cleanupTerminal: ★★★ 開始 sessionId=${sessionId}`);
+        console.trace(`[JS] cleanupTerminal: 呼び出し元`);
+        
+        // 削除前の状態を記録
+        if (window.multiSessionTerminals) {
+            console.log(`[JS] cleanupTerminal: 削除前のターミナル数=${Object.keys(window.multiSessionTerminals).length}`);
+            console.log(`[JS] cleanupTerminal: 削除前のセッションID一覧: ${Object.keys(window.multiSessionTerminals).join(', ')}`);
+        }
+        
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
         
@@ -552,9 +632,13 @@ window.terminalFunctions = {
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             if (window.multiSessionTerminals[sessionId].terminal) {
                 window.multiSessionTerminals[sessionId].terminal.dispose();
-                // console.log(`[JS] ターミナル ${sessionId} を破棄`);
+                console.log(`[JS] cleanupTerminal: ターミナル ${sessionId} を破棄`);
             }
             delete window.multiSessionTerminals[sessionId];
+            console.log(`[JS] cleanupTerminal: multiSessionTerminalsから削除`);
+        }
+        else {
+            console.log(`[JS] cleanupTerminal: ★★★ 警告: 削除対象のターミナルが存在しない sessionId=${sessionId}`);
         }
         
         // ターミナルdiv内をクリア
