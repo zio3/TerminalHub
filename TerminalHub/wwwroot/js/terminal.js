@@ -462,6 +462,124 @@ window.terminalFunctions = {
         }
     },
 
+    // ターミナルに文字列を書き込む
+    write: function(sessionId, data) {
+        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+            const terminal = window.multiSessionTerminals[sessionId].terminal;
+            if (terminal) {
+                // デバッグ: ターミナルの状態確認
+                const element = document.getElementById(`task-terminal-${sessionId}`);
+                if (element) {
+                    console.log(`[JS] ターミナル要素存在確認: ${element.style.display || 'default'}, visible: ${element.offsetWidth}x${element.offsetHeight}`);
+                }
+                
+                // 実際の書き込み
+                terminal.write(data);
+                
+                // デバッグ: 書き込み後の確認
+                console.log(`[JS] ターミナル ${sessionId} に ${data.length} 文字書き込み: "${data.substring(0, 50)}${data.length > 50 ? '...' : ''}"`);
+                
+                // 強制的にスクロール
+                setTimeout(() => {
+                    terminal.scrollToBottom();
+                }, 50);
+            } else {
+                console.error(`[JS] ターミナル ${sessionId} が見つかりません`);
+            }
+        } else {
+            console.error(`[JS] セッション ${sessionId} のターミナル情報が見つかりません`);
+        }
+    },
+
+    // ターミナルをクリア
+    clear: function(sessionId) {
+        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+            const terminal = window.multiSessionTerminals[sessionId].terminal;
+            if (terminal) {
+                terminal.clear();
+                console.log(`[JS] ターミナル ${sessionId} をクリア`);
+            }
+        }
+    },
+
+    // タスクランナー用のミニターミナルを作成
+    createMiniTerminal: function(elementId, sessionId, dotNetRef) {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            console.error(`[JS] 要素が見つかりません: ${elementId}`);
+            return null;
+        }
+
+        console.log(`[JS] ターミナル要素確認: ${elementId}, サイズ: ${element.offsetWidth}x${element.offsetHeight}`);
+
+        // 既存のターミナルがあれば破棄
+        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+            window.terminalFunctions.cleanupTerminal(sessionId);
+        }
+
+        // 要素にデバッグ用の背景色を設定
+        element.style.backgroundColor = '#1e1e1e';
+        element.style.minHeight = '300px';
+        element.style.border = '1px solid #333';
+
+        const term = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: 'Consolas, Monaco, monospace',
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#d4d4d4'
+            },
+            rows: 20,  // ミニターミナル用の行数
+            cols: 80   // ミニターミナル用の列数
+        });
+
+        // FitAddonを追加
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        term.open(element);
+        
+        // DOM更新を待ってからfit
+        setTimeout(() => {
+            fitAddon.fit();
+            console.log(`[JS] フィット後サイズ: ${term.cols}x${term.rows}`);
+            
+            // テスト用の初期メッセージを表示
+            term.write('タスクランナーターミナル準備完了\r\n');
+        }, 100);
+
+        // ターミナル情報を保存
+        if (!window.multiSessionTerminals) {
+            window.multiSessionTerminals = {};
+        }
+        
+        window.multiSessionTerminals[sessionId] = {
+            terminal: term,
+            fitAddon: fitAddon,
+            dotNetRef: dotNetRef,
+            hasBufferedContent: false
+        };
+
+        // リサイズハンドラー
+        window.resizeObserverManager.add(sessionId, element, () => {
+            if (window.multiSessionTerminals[sessionId]) {
+                fitAddon.fit();
+                console.log(`[JS] リサイズ後フィット: ${term.cols}x${term.rows}`);
+            }
+        });
+
+        // 入力イベントのハンドラー
+        term.onData(data => {
+            if (dotNetRef) {
+                dotNetRef.invokeMethodAsync('SendInput', sessionId, data);
+            }
+        });
+
+        console.log(`[JS] ミニターミナル作成完了: sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
+        return term;
+    },
+
     // バッファ内容を画面高さの2倍に制限して書き込む
     writeBufferedOptimized: function(sessionId, dataArray) {
         if (!window.multiSessionTerminals || !window.multiSessionTerminals[sessionId]) {

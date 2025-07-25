@@ -84,21 +84,42 @@
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
-                    @if (currentSession != null && (currentSession.TerminalType == TerminalType.ClaudeCode || currentSession.TerminalType == TerminalType.GeminiCLI))
+                    @if (currentSession != null)
                     {
-                        <div class="p-3 h-100 d-flex flex-column">
-                            
-                            <div class="flex-grow-1 d-flex flex-column">
-                                <textarea id="inputText" 
-                                          class="form-control flex-grow-1" 
-                                          data-input-area
-                                          @bind="inputText"
-                                          @bind:event="oninput"
-                                          @onkeydown="OnTextAreaKeyDown"
-                                          @onkeydown:preventDefault="@shouldPreventDefault"
-                                          placeholder="@(GetPlaceholderText(currentSession.TerminalType))"
-                                          style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
-                                </textarea>
+                        <div class="h-100 d-flex flex-column">
+                            @if (currentSession.TerminalType == TerminalType.ClaudeCode || currentSession.TerminalType == TerminalType.GeminiCLI)
+                            {
+                                <!-- タブナビゲーション -->
+                                <ul class="nav nav-tabs px-3 pt-2">
+                                    <li class="nav-item">
+                                        <button class="nav-link @(activeBottomTab == "input" ? "active" : "")" 
+                                                @onclick="@(() => activeBottomTab = "input")">
+                                            <i class="bi bi-keyboard"></i> テキスト入力
+                                        </button>
+                                    </li>
+                                    <li class="nav-item">
+                                        <button class="nav-link @(activeBottomTab == "taskrunner" ? "active" : "")" 
+                                                @onclick="@(() => activeBottomTab = "taskrunner")">
+                                            <i class="bi bi-play-circle"></i> タスクランナー
+                                        </button>
+                                    </li>
+                                </ul>
+                                
+                                <!-- タブコンテンツ -->
+                                <div class="flex-grow-1 p-3">
+                                    @if (activeBottomTab == "input")
+                                    {
+                                        <div class="h-100 d-flex flex-column">
+                                            <textarea id="inputText" 
+                                                      class="form-control flex-grow-1" 
+                                                      data-input-area
+                                                      @bind="inputText"
+                                                      @bind:event="oninput"
+                                                      @onkeydown="OnTextAreaKeyDown"
+                                                      @onkeydown:preventDefault="@shouldPreventDefault"
+                                                      placeholder="@(GetPlaceholderText(currentSession.TerminalType))"
+                                                      style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
+                                            </textarea>
                                 
                                 <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <div>
@@ -140,6 +161,22 @@
                                     </div>
                                 </div>
                             </div>
+                                    }
+                                    else if (activeBottomTab == "taskrunner")
+                                    {
+                                        <TaskRunner FolderPath="@currentSession.FolderPath" 
+                                                   OnTaskStatusChanged="@((status) => toast?.ShowInfo(status))" />
+                                    }
+                                </div>
+                            }
+                            else if (currentSession.TerminalType == TerminalType.Terminal)
+                            {
+                                <!-- 通常のターミナルセッションでもタスクランナーを表示 -->
+                                <div class="h-100">
+                                    <TaskRunner FolderPath="@currentSession.FolderPath" 
+                                               OnTaskStatusChanged="@((status) => toast?.ShowInfo(status))" />
+                                </div>
+                            }
                         </div>
                     }
                     else
@@ -1276,6 +1313,7 @@
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
     private bool isCtrlCPressed = false;
+    private string activeBottomTab = "input"; // "input" または "taskrunner"
 
     private async Task SendCtrlC()
     {

@@ -274,12 +274,18 @@ namespace TerminalHub.Services
         public async Task<string> ReadAvailableOutputAsync(int timeoutMs = 2000)
         {
             if (_disposed || _reader == null)
+            {
+                Console.WriteLine("[ConPtyService] ReadAvailableOutputAsync: disposed または reader が null");
                 return string.Empty;
+            }
 
             const int maxOutputSize = 1024 * 1024; // 1MB制限
             var output = new StringBuilder();
             var buffer = new char[1024];
             var startTime = DateTime.Now;
+            var readCount = 0;
+
+            Console.WriteLine($"[ConPtyService] ReadAvailableOutputAsync開始: タイムアウト={timeoutMs}ms");
 
             await _readSemaphore.WaitAsync();
             try
@@ -290,11 +296,14 @@ namespace TerminalHub.Services
                         break;
 
                     // データが利用可能かチェック
-                    if (_reader.BaseStream.CanRead && _reader.BaseStream.Length > 0)
+                    if (_reader.BaseStream.CanRead)
                     {
                         var bytesRead = await _reader.ReadAsync(buffer, 0, buffer.Length);
                         if (bytesRead > 0)
                         {
+                            readCount++;
+                            Console.WriteLine($"[ConPtyService] データ読み取り成功: {bytesRead}文字, 累計読み取り回数: {readCount}");
+                            
                             // メモリ使用量の制限
                             if (output.Length + bytesRead > maxOutputSize)
                             {
@@ -305,17 +314,30 @@ namespace TerminalHub.Services
                             }
                             
                             output.Append(buffer, 0, bytesRead);
+                            
+                            // データが読み取れた場合は少し待機してさらに読み取りを試行
+                            await Task.Delay(10);
                             continue;
                         }
+                        else
+                        {
+                            // 0文字読み取りの場合
+                            Console.WriteLine($"[ConPtyService] 0文字読み取り, 経過時間: {(DateTime.Now - startTime).TotalMilliseconds}ms");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[ConPtyService] ストリーム読み取り不可, 経過時間: {(DateTime.Now - startTime).TotalMilliseconds}ms");
                     }
 
                     // 短い待機
-                    await Task.Delay(100);
+                    await Task.Delay(25);
                 }
             }
             catch (Exception ex)
             {
                 // エラーが発生した場合は空文字を返す
+                Console.WriteLine($"[ConPtyService] ReadAvailableOutputAsync エラー: {ex.Message}");
                 _logger.LogError(ex, "ReadAvailableOutputAsync でエラーが発生しました");
             }
             finally
@@ -324,7 +346,10 @@ namespace TerminalHub.Services
                     _readSemaphore.Release();
             }
 
-            return output.ToString();
+            var result = output.ToString();
+            Console.WriteLine($"[ConPtyService] ReadAvailableOutputAsync完了: {result.Length}文字, 読み取り回数: {readCount}");
+            
+            return result;
         }
 
         public void Resize(int cols, int rows)

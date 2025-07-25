@@ -1,0 +1,409 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@using Microsoft.JSInterop
+@inject IPackageJsonService PackageJsonService
+@inject ISessionManager SessionManager
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<style>
+    .task-runner-container {
+        display: flex;
+        height: 100%;
+        gap: 10px;
+    }
+    
+    .task-list {
+        flex: 0 0 300px;
+        border-right: 1px solid #dee2e6;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
+    
+    .task-terminal {
+        flex: 1;
+        background-color: #1e1e1e;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .task-item {
+        padding: 8px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .task-item:hover {
+        background-color: #f8f9fa;
+        border-color: #0d6efd;
+    }
+    
+    .task-item.running {
+        background-color: #e7f1ff;
+        border-color: #0d6efd;
+    }
+    
+    .task-name {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .task-command {
+        font-size: 0.875rem;
+        color: #6c757d;
+        font-family: 'Consolas', 'Monaco', monospace;
+        margin-top: 4px;
+    }
+    
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        border-width: 0.2em;
+    }
+    
+    .terminal-header {
+        background-color: #2d2d30;
+        color: #cccccc;
+        padding: 8px 12px;
+        font-size: 0.875rem;
+        border-bottom: 1px solid #3e3e42;
+    }
+    
+    .no-tasks {
+        text-align: center;
+        color: #6c757d;
+        padding: 20px;
+    }
+</style>
+
+<div class="task-runner-container">
+    <div class="task-list">
+        <h6 class="mb-3">NPM Scripts</h6>
+        
+        @if (isLoading)
+        {
+            <div class="text-center">
+                <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else if (tasks.Count == 0)
+        {
+            <div class="no-tasks">
+                <i class="bi bi-info-circle"></i>
+                <p class="mt-2">package.json が見つかりません</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var task in tasks)
+            {
+                <div class="task-item @(task.IsRunning ? "running" : "")" 
+                     @onclick="() => RunTask(task)">
+                    <div class="task-name">
+                        @if (task.IsRunning)
+                        {
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">実行中...</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <i class="bi bi-play-circle text-primary"></i>
+                        }
+                        <span>@task.Name</span>
+                    </div>
+                    <div class="task-command">@task.Command</div>
+                </div>
+            }
+        }
+    </div>
+    
+    <div class="task-terminal">
+        @if (taskRunnerSessionId.HasValue)
+        {
+            <div class="terminal-header">
+                <i class="bi bi-terminal"></i> タスク出力
+                @if (currentTask != null)
+                {
+                    <span class="ms-2">- @currentTask.Name</span>
+                }
+            </div>
+            <div id="task-terminal-@taskRunnerSessionId" 
+                 style="height: calc(100% - 40px); background-color: #1e1e1e;">
+            </div>
+        }
+        else
+        {
+            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                <div class="text-center">
+                    <i class="bi bi-terminal" style="font-size: 2rem;"></i>
+                    <p class="mt-2">タスクを選択して実行してください</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? FolderPath { get; set; }
+    [Parameter] public EventCallback<string> OnTaskStatusChanged { get; set; }
+    
+    private List<TaskInfo> tasks = new();
+    private bool isLoading = false;
+    private Guid? taskRunnerSessionId;
+    private TaskInfo? currentTask;
+    private CancellationTokenSource? readCts;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadTasks();
+    }
+    
+    private async Task LoadTasks()
+    {
+        if (string.IsNullOrEmpty(FolderPath))
+            return;
+            
+        isLoading = true;
+        try
+        {
+            tasks = await PackageJsonService.GetTasksAsync(FolderPath);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    
+    private async Task RunTask(TaskInfo task)
+    {
+        if (task.IsRunning)
+            return;
+            
+        // 他のタスクが実行中の場合は停止
+        foreach (var t in tasks.Where(t => t.IsRunning))
+        {
+            t.IsRunning = false;
+        }
+        
+        task.IsRunning = true;
+        currentTask = task;
+        
+        // タスクランナー用セッションがない場合は作成
+        if (!taskRunnerSessionId.HasValue)
+        {
+            await CreateTaskRunnerSession();
+        }
+        
+        // ターミナルをクリア
+        if (taskRunnerSessionId.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.clear", taskRunnerSessionId.ToString());
+            
+            // 読み取りタスクが停止している場合は再開
+            if (readCts == null || readCts.IsCancellationRequested)
+            {
+                readCts?.Dispose();
+                readCts = new CancellationTokenSource();
+                _ = Task.Run(() => ReadSessionOutput(readCts.Token));
+            }
+        }
+        
+        // タスクを実行
+        var session = SessionManager.GetSession(taskRunnerSessionId!.Value);
+        if (session != null)
+        {
+            // npm run コマンドを実行
+            var command = $"npm run {task.Name}\r\n";
+            Console.WriteLine($"[TaskRunner] コマンド実行開始: {command.Trim()}");
+            
+            try
+            {
+                await session.WriteAsync(command);
+                Console.WriteLine($"[TaskRunner] コマンド送信完了: {command.Trim()}");
+                await OnTaskStatusChanged.InvokeAsync($"実行中: {task.Name}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TaskRunner] コマンド送信エラー: {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[TaskRunner] セッションが見つかりません: {taskRunnerSessionId}");
+        }
+        
+        // タスクの実行状態を監視
+        _ = Task.Run(async () =>
+        {
+            // タスクが実際に完了するまで監視（最大30秒）
+            var timeout = DateTime.Now.AddSeconds(30);
+            while (task.IsRunning && DateTime.Now < timeout)
+            {
+                await Task.Delay(500);
+            }
+            
+            task.IsRunning = false;
+            await InvokeAsync(StateHasChanged);
+            await OnTaskStatusChanged.InvokeAsync($"完了: {task.Name}");
+        });
+    }
+    
+    private async Task CreateTaskRunnerSession()
+    {
+        // タスクランナー専用のセッションを作成
+        var sessionInfo = await SessionManager.CreateSessionAsync(
+            Guid.NewGuid(),
+            FolderPath!,
+            "Task Runner",
+            TerminalType.Terminal,
+            new Dictionary<string, string>()
+        );
+        
+        if (sessionInfo != null)
+        {
+            taskRunnerSessionId = sessionInfo.SessionId;
+            
+            // UIを更新してDOMに要素を追加
+            StateHasChanged();
+            
+            // ターミナルを初期化
+            await Task.Delay(200); // DOMの更新を待つ
+            await InitializeTaskTerminal();
+            
+            // 出力読み取りを開始
+            readCts = new CancellationTokenSource();
+            _ = Task.Run(() => ReadSessionOutput(readCts.Token));
+            
+            Console.WriteLine($"[TaskRunner] セッション作成完了: {taskRunnerSessionId}");
+        }
+    }
+    
+    private async Task ReadSessionOutput(CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"[TaskRunner] 出力読み取り開始: {taskRunnerSessionId}");
+        
+        if (!taskRunnerSessionId.HasValue)
+            return;
+            
+        var session = SessionManager.GetSession(taskRunnerSessionId.Value);
+        if (session == null)
+        {
+            Console.WriteLine($"[TaskRunner] セッションが見つかりません: {taskRunnerSessionId}");
+            return;
+        }
+            
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                // タイムアウトを長くして、npmコマンドの出力を確実に取得
+                var output = await session.ReadAvailableOutputAsync(2000);
+                if (!string.IsNullOrEmpty(output))
+                {
+                    Console.WriteLine($"[TaskRunner] 出力読み取り成功: {output.Length}文字 - 内容: {output.Substring(0, Math.Min(100, output.Length))}...");
+                    
+                    // ターミナルに出力を書き込み（UIスレッドで非同期実行）
+                    try
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                await JSRuntime.InvokeVoidAsync(
+                                    "terminalFunctions.write",
+                                    taskRunnerSessionId.ToString(),
+                                    output
+                                );
+                                Console.WriteLine($"[TaskRunner] JavaScript write呼び出し完了");
+                            }
+                            catch (JSDisconnectedException)
+                            {
+                                Console.WriteLine($"[TaskRunner] JavaScript回路が切断されています - 出力読み取りを停止");
+                                return; // 回路が切断されている場合は停止
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[TaskRunner] JavaScript write呼び出しエラー: {ex.Message}");
+                            }
+                        });
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        Console.WriteLine($"[TaskRunner] コンポーネントが破棄されています - 出力読み取りを停止");
+                        break; // コンポーネントが破棄されている場合はループを抜ける
+                    }
+                }
+                else
+                {
+                    // 出力がない場合のデバッグログ
+                    Console.WriteLine($"[TaskRunner] 出力なし (タイムアウト2秒)");
+                }
+                await Task.Delay(50, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine($"[TaskRunner] 出力読み取りキャンセル");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TaskRunner] 出力読み取りエラー: {ex.Message}");
+        }
+    }
+    
+    private async Task InitializeTaskTerminal()
+    {
+        if (taskRunnerSessionId.HasValue)
+        {
+            Console.WriteLine($"[TaskRunner] ターミナル初期化開始: task-terminal-{taskRunnerSessionId}");
+            
+            // JavaScriptでミニターミナルを初期化
+            await JSRuntime.InvokeVoidAsync(
+                "terminalFunctions.createMiniTerminal",
+                $"task-terminal-{taskRunnerSessionId}",
+                taskRunnerSessionId.ToString(),
+                DotNetObjectReference.Create(this)
+            );
+            
+            Console.WriteLine($"[TaskRunner] ターミナル初期化完了");
+        }
+    }
+    
+    [JSInvokable]
+    public async Task SendInput(string sessionId, string data)
+    {
+        var guid = Guid.Parse(sessionId);
+        var session = SessionManager.GetSession(guid);
+        if (session != null)
+        {
+            await session.WriteAsync(data);
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        // 読み取りタスクをキャンセル
+        readCts?.Cancel();
+        readCts?.Dispose();
+        
+        // タスクランナーセッションを破棄
+        if (taskRunnerSessionId.HasValue)
+        {
+            await SessionManager.RemoveSessionAsync(taskRunnerSessionId.Value);
+        }
+    }
+}
