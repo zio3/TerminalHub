@@ -101,7 +101,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadRecentFolders();
+        // JavaScript interopはOnAfterRenderAsyncで実行
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadRecentFolders();
+            StateHasChanged();
+        }
     }
 
     private async Task LoadRecentFolders()

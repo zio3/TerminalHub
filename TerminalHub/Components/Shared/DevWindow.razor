@@ -153,17 +153,23 @@
         dotNetRef = DotNetObjectReference.Create(this);
         currentInstance = this;
         
-        // LocalStorageから位置を読み込み
-        var savedPosition = await LocalStorageService.GetAsync<DevWindowPosition>("devWindowPosition");
-        if (savedPosition != null)
-        {
-            windowX = savedPosition.X;
-            windowY = savedPosition.Y;
-        }
+        // JavaScript interopはOnAfterRenderAsyncで実行
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // LocalStorageから位置を読み込み
+            var savedPosition = await LocalStorageService.GetAsync<DevWindowPosition>("devWindowPosition");
+            if (savedPosition != null)
+            {
+                windowX = savedPosition.X;
+                windowY = savedPosition.Y;
+                StateHasChanged();
+            }
+        }
+        
         if (IsVisible && firstRender || (IsVisible && !firstRender))
         {
             // 画面内に収まっているかチェック

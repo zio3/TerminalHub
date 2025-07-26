@@ -49,9 +49,14 @@
                     <div class="d-flex w-100 justify-content-between align-items-center">
                         <div class="flex-fill">
                             <h6 class="mb-1">
-                                @if (session.ParentSessionId.HasValue)
+                                @if (!session.ParentSessionId.HasValue && HasChildren(session))
                                 {
-                                    <span class="text-muted me-1">└─</span>
+                                    <button class="btn btn-sm btn-link text-decoration-none p-0 me-1"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => ToggleExpanded(session.SessionId)"
+                                            style="font-size: 0.8rem; line-height: 1;">
+                                        <i class="bi @(session.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                                    </button>
                                 }
                             @if (session.HasNotificationPending)
                             {
@@ -74,6 +79,12 @@
                                     }
                                 </span>
                             }
+                            @if (!session.ParentSessionId.HasValue && HasChildren(session) && !session.IsExpanded)
+                            {
+                                <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">
+                                    @GetChildrenCount(session) 件
+                                </span>
+                            }
                             @if (!session.IsWorktree)
                             {
                                 <button class="btn btn-sm btn-outline-success border-0 ms-1" 
@@ -85,7 +96,16 @@
                                 </button>
                             }
                         </h6>
-                        @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
+                        @if (session.IsInitializing)
+                        {
+                            <div>
+                                <small class="text-info">
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    初期化中...
+                                </small>
+                            </div>
+                        }
+                        else if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
                         {
                             <div>
                                 <small class="@(session.IsWaitingForUserInput ? "text-warning" : "text-primary")">
@@ -259,15 +279,30 @@
                 group.Add(session);
                 processed.Add(session.SessionId);
                 
-                // 子セッション（ParentSessionIdがこのセッションを指すもの）を探す
-                var children = Sessions
-                    .Where(s => s.ParentSessionId == session.SessionId)
-                    .OrderBy(s => s.CreatedAt);
-                    
-                foreach (var child in children)
+                // 親セッションが展開されている場合のみ子セッションを表示
+                if (session.IsExpanded)
                 {
-                    group.Add(child);
-                    processed.Add(child.SessionId);
+                    // 子セッション（ParentSessionIdがこのセッションを指すもの）を探す
+                    var children = Sessions
+                        .Where(s => s.ParentSessionId == session.SessionId)
+                        .OrderBy(s => s.CreatedAt);
+                        
+                    foreach (var child in children)
+                    {
+                        group.Add(child);
+                        processed.Add(child.SessionId);
+                    }
+                }
+                else
+                {
+                    // 折りたたまれている場合も子セッションを処理済みとしてマーク
+                    var children = Sessions
+                        .Where(s => s.ParentSessionId == session.SessionId);
+                        
+                    foreach (var child in children)
+                    {
+                        processed.Add(child.SessionId);
+                    }
                 }
             }
             // 親が存在しない子セッションの場合（親が削除された場合など）
@@ -293,5 +328,25 @@
         
         // Gitステータスを再確認
         await OnGitStatusRefresh(sessionId);
+    }
+    
+    private bool HasChildren(SessionInfo session)
+    {
+        return Sessions.Any(s => s.ParentSessionId == session.SessionId);
+    }
+    
+    private void ToggleExpanded(Guid sessionId)
+    {
+        var session = Sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null)
+        {
+            session.IsExpanded = !session.IsExpanded;
+            StateHasChanged();
+        }
+    }
+    
+    private int GetChildrenCount(SessionInfo session)
+    {
+        return Sessions.Count(s => s.ParentSessionId == session.SessionId);
     }
 }

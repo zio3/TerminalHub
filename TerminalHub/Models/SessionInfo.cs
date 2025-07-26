@@ -78,6 +78,15 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
         
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsInitializing { get; set; } // ConPty初期化中かどうか
+        
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasReceivedFirstData { get; set; } // 最初のデータを受信したかどうか
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))

@@ -296,6 +296,10 @@ namespace TerminalHub.Services
                 
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
                 
+                // 初期化開始を設定
+                sessionInfo.IsInitializing = true;
+                sessionInfo.HasReceivedFirstData = false;
+                
                 Console.WriteLine($"[SessionManager] ★★★ 新規セッション接続開始: {sessionId} ★★★");
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
@@ -307,6 +311,10 @@ namespace TerminalHub.Services
                 sessionInfo.ConPtyBuffer.Resize(cols, rows);
                 
                 sessionInfo.LastAccessedAt = DateTime.Now;
+                
+                // ConPty接続は完了したが、まだ初期化中（最初のデータ待ち）
+                // sessionInfo.IsInitializing は true のまま維持
+                
                 Console.WriteLine($"[SessionManager] ★★★ 新規セッション接続完了: {sessionId} ★★★");
                 _logger.LogInformation($"ConPty session with buffer initialized on-demand: {sessionId}");
                 
@@ -314,6 +322,8 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
+                // 初期化失敗時もフラグをリセット
+                sessionInfo.IsInitializing = false;
                 _logger.LogError(ex, "Failed to initialize ConPty session on-demand for {SessionId}", sessionId);
                 throw;
             }
@@ -629,6 +639,10 @@ namespace TerminalHub.Services
 
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
 
+                // 再起動時も初期化中として扱う
+                sessionInfo.IsInitializing = true;
+                sessionInfo.HasReceivedFirstData = false;
+                
                 // 新しいセッションを作成
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
