@@ -228,12 +228,12 @@ namespace TerminalHub.Models
                             // イベント発火（表示は常に行う）
                             if (DataReceived != null)
                             {
-                                _logger.LogInformation($"[ConPtyWithBuffer] データ受信イベント発火 (長さ: {data.Length})");
+                                //_logger.LogInformation($"[ConPtyWithBuffer] データ受信イベント発火 (長さ: {data.Length})");
                                 DataReceived?.Invoke(data);
                             }
                             else
                             {
-                                _logger.LogWarning($"[ConPtyWithBuffer] DataReceivedハンドラーが未設定");
+                                //_logger.LogWarning($"[ConPtyWithBuffer] DataReceivedハンドラーが未設定");
                             }
                         }
                         else

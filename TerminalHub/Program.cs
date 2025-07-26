@@ -32,6 +32,9 @@ builder.Services.AddScoped<ITerminalService, TerminalService>();
 // OutputAnalyzerServiceを登録
 builder.Services.AddScoped<IOutputAnalyzerService, OutputAnalyzerService>();
 
+// InputHistoryServiceを登録
+builder.Services.AddScoped<IInputHistoryService, InputHistoryService>();
+
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 

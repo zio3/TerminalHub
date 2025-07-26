@@ -17,6 +17,7 @@
 @inject IGitService GitService
 @inject ITerminalService TerminalService
 @inject IOutputAnalyzerService OutputAnalyzerService
+@inject IInputHistoryService InputHistoryService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -166,9 +167,6 @@
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
     
-    // テキスト履歴機能
-    private List<string> inputHistory = new();
-    private int historyIndex = -1;
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
@@ -219,7 +217,7 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
             
             // テキスト履歴を読み込み
-            await LoadInputHistoryAsync();
+            await InputHistoryService.LoadHistoryAsync();
             
             // ローカルストレージからセッション情報を復元
             var savedSessions = await LocalStorageService.LoadSessionsAsync();
@@ -809,7 +807,7 @@
         if (!string.IsNullOrWhiteSpace(inputText))
         {
             // テキスト履歴に追加
-            AddToInputHistory(inputText);
+            InputHistoryService.AddToHistory(inputText);
             
             await activeSession.WriteAsync(inputText);
             
@@ -837,12 +835,16 @@
         else if (e.Key == "ArrowUp" && e.CtrlKey)
         {
             shouldPreventDefault = true;
-            NavigateHistory(-1);
+            var historyText = InputHistoryService.NavigateHistory(-1);
+            if (historyText != null)
+                inputText = historyText;
         }
         else if (e.Key == "ArrowDown" && e.CtrlKey)
         {
             shouldPreventDefault = true;
-            NavigateHistory(1);
+            var historyText = InputHistoryService.NavigateHistory(1);
+            if (historyText != null)
+                inputText = historyText;
         }
         else
         {
@@ -1122,94 +1124,9 @@
 
     
     // テキスト履歴関連メソッド
-    private void AddToInputHistory(string text)
-    {
-        // 空白やnullは履歴に追加しない
-        if (string.IsNullOrWhiteSpace(text))
-            return;
-            
-        // 同じテキストが連続する場合は追加しない
-        if (inputHistory.Count > 0 && inputHistory[inputHistory.Count - 1] == text)
-            return;
-            
-        inputHistory.Add(text);
-        
-        // 履歴の最大数を制限（100件）
-        if (inputHistory.Count > 100)
-        {
-            inputHistory.RemoveAt(0);
-        }
-        
-        // 履歴インデックスをリセット
-        historyIndex = -1;
-    }
     
-    private void NavigateHistory(int direction)
-    {
-        if (inputHistory.Count == 0)
-            return;
-            
-        // 初回の履歴操作時
-        if (historyIndex == -1)
-        {
-            if (direction < 0) // 上矢印（古い履歴へ）
-            {
-                historyIndex = inputHistory.Count - 1;
-                inputText = inputHistory[historyIndex];
-            }
-            return;
-        }
-        
-        // 履歴を移動
-        var newIndex = historyIndex + direction;
-        
-        if (newIndex >= 0 && newIndex < inputHistory.Count)
-        {
-            historyIndex = newIndex;
-            inputText = inputHistory[historyIndex];
-        }
-        else if (newIndex < 0)
-        {
-            // 最古の履歴より前に行こうとした場合
-            historyIndex = 0;
-            inputText = inputHistory[historyIndex];
-        }
-        else if (newIndex >= inputHistory.Count)
-        {
-            // 最新の履歴より後に行こうとした場合は空にする
-            historyIndex = -1;
-            inputText = "";
-        }
-    }
     
-    private async Task SaveInputHistoryAsync()
-    {
-        try
-        {
-            await LocalStorageService.SetAsync("inputHistory", inputHistory);
-        }
-        catch (Exception ex)
-        {
-            // History save error
-        }
-    }
     
-    private async Task LoadInputHistoryAsync()
-    {
-        try
-        {
-            var savedHistory = await LocalStorageService.GetAsync<List<string>>("inputHistory");
-            if (savedHistory != null)
-            {
-                inputHistory = savedHistory;
-                historyIndex = -1;
-            }
-        }
-        catch (Exception ex)
-        {
-            // History load error
-        }
-    }
 
     private void ShowSessionSettingsDialog(Guid sessionId)
     {
@@ -1354,7 +1271,7 @@
         try
         {
             // 履歴を保存（JavaScript interopを使用）
-            await SaveInputHistoryAsync();
+            await InputHistoryService.SaveHistoryAsync();
         }
         catch (JSDisconnectedException)
         {
