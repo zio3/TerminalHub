@@ -61,6 +61,9 @@ namespace TerminalHub.Services
         private int _rows;
         private readonly SemaphoreSlim _readSemaphore = new(1, 1);
 
+        public int Cols => _cols;
+        public int Rows => _rows;
+
         public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
         {
             // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
@@ -241,23 +244,44 @@ namespace TerminalHub.Services
                 if (_disposed || _pipeOutStream == null)
                     return 0;
                 
-                // デバッグ: ストリームの状態を確認
-                // Console.WriteLine($"[ConPtySession.ReadAsync] Stream Type: {_pipeOutStream.GetType().Name}, CanSeek: {_pipeOutStream.CanSeek}, CanRead: {_pipeOutStream.CanRead}");
-                // Console.WriteLine($"[ConPtySession.ReadAsync] Stream Position: {(_pipeOutStream.CanSeek ? _pipeOutStream.Position.ToString() : "Cannot seek")}, Length: {(_pipeOutStream.CanSeek ? _pipeOutStream.Length.ToString() : "Cannot seek")}");
-                
-                // バイトバッファを用意（UTF-8では最大4バイト/文字）
-                var byteBuffer = new byte[count * 4];
+                // バイトバッファを用意（読み込みサイズを制限）
+                var maxBytesToRead = Math.Min(count * 4, 65536); // 最大64KBに制限
+                var byteBuffer = new byte[maxBytesToRead];
                 var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
-                
-                // Console.WriteLine($"[ConPtySession.ReadAsync] Bytes read: {bytesRead}");
                 
                 if (bytesRead == 0)
                     return 0;
                 
+                // デコードに必要なchar数を計算（UTF-8の最悪ケースを考慮）
+                var charCountNeeded = _utf8Decoder.GetCharCount(byteBuffer, 0, bytesRead);
+                
+                // バッファサイズを確認
+                if (offset + charCountNeeded > buffer.Length)
+                {
+                    // バッファが小さすぎる場合は、読み込むバイト数を調整
+                    var availableChars = buffer.Length - offset;
+                    if (availableChars <= 0)
+                        return 0;
+                    
+                    // 安全に読み込めるバイト数を推定（1文字1バイトと仮定して調整）
+                    var safeBytesToDecode = Math.Min(bytesRead, availableChars);
+                    
+                    // 不完全なUTF-8シーケンスを避けるため、末尾を調整
+                    while (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0x80) == 0x80)
+                    {
+                        safeBytesToDecode--;
+                        if (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0xC0) == 0xC0)
+                            break;
+                    }
+                    
+                    if (safeBytesToDecode == 0)
+                        return 0;
+                    
+                    bytesRead = safeBytesToDecode;
+                }
+                
                 // UTF-8をcharに変換（ステートフルなデコーダーを使用）
                 var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, buffer, offset);
-                
-                // Console.WriteLine($"[ConPtySession.ReadAsync] Chars read: {charsRead}, First 50 chars: {new string(buffer, offset, Math.Min(charsRead, 50)).Replace("\r", "\\r").Replace("\n", "\\n")}");
                 
                 return charsRead;
             }

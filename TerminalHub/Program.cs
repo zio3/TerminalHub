@@ -26,6 +26,12 @@ builder.Services.AddSingleton<IGitService, GitService>();
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
 
+// TerminalServiceを登録
+builder.Services.AddScoped<ITerminalService, TerminalService>();
+
+// OutputAnalyzerServiceを登録
+builder.Services.AddScoped<IOutputAnalyzerService, OutputAnalyzerService>();
+
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 

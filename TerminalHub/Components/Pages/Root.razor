@@ -15,6 +15,8 @@
 @inject INotificationService NotificationService
 @inject IOutputAnalyzerFactory AnalyzerFactory
 @inject IGitService GitService
+@inject ITerminalService TerminalService
+@inject IOutputAnalyzerService OutputAnalyzerService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -188,8 +190,6 @@
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
     
-    // 処理状態管理用（セッションごと）
-    private Dictionary<Guid, System.Threading.Timer> sessionProcessingTimers = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -389,14 +389,7 @@
 
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
         Console.WriteLine($"[SelectSession] すべてのターミナルを非表示に");
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.hideAllTerminals");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[SelectSession] ターミナル非表示エラー: {ex.Message}");
-        }
+        await TerminalService.HideAllTerminalsAsync();
 
         // セッションをアクティブに
         Console.WriteLine($"[SelectSession] SessionManagerでアクティブに設定");
@@ -445,63 +438,42 @@
 
         // ターミナルdivが存在するか確認し、表示する
         Console.WriteLine($"[SelectSession] ターミナルdivの存在確認");
-        try
+        var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
+        Console.WriteLine($"[SelectSession] ターミナルdiv存在: {divExists}");
+        if (divExists)
         {
-            var divExists = await JSRuntime.InvokeAsync<bool>("terminalHubHelpers.checkElementExists", 
-                $"terminal-{sessionId.ToString()}");
-
-            Console.WriteLine($"[SelectSession] ターミナルdiv存在: {divExists}");
-            if (divExists)
-            {
-                // 新しいターミナルを表示
-                Console.WriteLine($"[SelectSession] ターミナルを表示");
-                await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId.ToString());
-            }
+            // 新しいターミナルを表示
+            Console.WriteLine($"[SelectSession] ターミナルを表示");
+            await TerminalService.ShowTerminalAsync(sessionId);
+        }
 
         // ターミナルを初期化
         Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
         await InitializeTerminal(sessionId);
 
         // ターミナルのリサイズを強制的に実行
-        try
+        if (activeTerminal != null)
         {
-            if (activeTerminal != null)
-            {
-                await activeTerminal.InvokeVoidAsync("resize");
-            }
-        }
-        catch (Exception)
-        {
-            // エラーは無視
+            await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
-        // ConPTYから全バッファを取得するためのトリック
         if (selectedSession?.ConPtyBuffer != null)
         {
             await Task.Delay(100); // ターミナル初期化完了を待つ
-            
+
             // 現在のサイズを取得
             var (currentCols, currentRows) = selectedSession.ConPtyBuffer.GetTerminalSize();
-            
+
             // 全バッファを取得するためのトリック
             // 方法4: リサイズ + クリア + リサイズ
             // リサイズ+クリアトリック開始
-            
+
             // 1. 1行増やす（全バッファ取得トリガー）
-            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows + 1);
-            
-            // 2. バッファ取得を待つ（ConPTYが全バッファを送信する時間）
-            await Task.Delay(100);
-            
-            // 3. 画面をクリア（オプション：これにより新しい状態から開始）
-            // await selectedSession.ConPtyBuffer.ClearScreen();
-            // await Task.Delay(50);
-            
-            // 4. 元のサイズに戻す
-            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows);
-            
+            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows - 1);
+
             // リサイズ+クリアトリック完了
         }
+
 
         // ConPtyWithBufferのイベントハンドラーを設定
         if (selectedSession?.ConPtyBuffer != null)
@@ -511,34 +483,11 @@
             // 既存のイベントハンドラーをクリア
             selectedSession.ConPtyBuffer.ClearEventHandlers();
             
-            // セッション切り替え直後のフラグ
-            bool isInitialData = true;
-            var initialDataTimer = new System.Threading.Timer(async _ =>
-            {
-                if (isInitialData)
-                {
-                    isInitialData = false;
-                    // 再描画データ受信完了と判断して最下部へスクロール
-                    await InvokeAsync(async () =>
-                    {
-                        try
-                        {
-                            await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
-                            // 再描画完了後のスクロール実行
-                        }
-                        catch { }
-                    });
-                }
-            }, null, 500, Timeout.Infinite); // 500ms後に実行
-            
-            // イベントハンドラーを設定
+
+                        // イベントハンドラーを設定
             SetupSessionEventHandlers(selectedSession);
             
             // 切断時にタイマーをクリーンアップ
-            selectedSession.ConPtyBuffer.Disconnected += () =>
-            {
-                initialDataTimer?.Dispose();
-            };
         }
         else
         {
@@ -546,14 +495,7 @@
         }
 
         // ターミナルを最下段にスクロール
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
-        }
-        catch (Exception)
-        {
-            // エラーは無視
-        }
+   //     await TerminalService.ScrollToBottomAsync(sessionId);
 
         // テキストエリアにフォーカス
         try
@@ -568,35 +510,7 @@
 
     private async Task InitializeTerminal(Guid sessionId)
     {
-        var terminalId = $"terminal-{sessionId.ToString()}";
-        Console.WriteLine($"[InitializeTerminal] 開始: terminalId={terminalId}");
-
-        // JavaScript側の既存ターミナルも削除
-        Console.WriteLine($"[InitializeTerminal] 既存ターミナルをクリーンアップ");
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", sessionId.ToString());
-        }
-        catch (Exception ex)
-        { 
-            Console.WriteLine($"[InitializeTerminal] クリーンアップエラー: {ex.Message}");
-        }
-
-        Console.WriteLine($"[InitializeTerminal] 新しいターミナルを作成");
-        try
-        {
-            activeTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
-                "terminalFunctions.createMultiSessionTerminal", 
-                terminalId, 
-                sessionId.ToString(), 
-                dotNetRef);
-
-            Console.WriteLine($"[InitializeTerminal] ターミナル作成成功");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[InitializeTerminal] ターミナル作成エラー: {ex.Message}");
-        }
+        activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, DotNetObjectReference.Create<object>(this));
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data)
@@ -615,7 +529,7 @@
                     // 初期化完了としてフラグをリセット
                     if (sessionInfo.IsInitializing)
                     {
-                        Console.WriteLine($"[ProcessReceivedData] 初期化完了 - スピナー非表示");
+                        Console.WriteLine($"[ProcessReceivedData] 初期化完了 - スピナー非表示 {DateTime.Now}");
                         sessionInfo.IsInitializing = false;
                         // UIを更新してスピナーを非表示にする
                         _ = InvokeAsync(StateHasChanged);
@@ -623,7 +537,7 @@
                 }
                 // Claude Codeの場合、"No conversation found to continue"エラーをチェック
                 if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
-                    data.Contains("No conversation found to continue") &&
+                    data.StartsWith("No conversation found to continue") &&
                     sessionInfo.Options.ContainsKey("continue") &&
                     !sessionInfo.HasContinueErrorOccurred)
                 {
@@ -643,18 +557,32 @@
                 // アクティブセッションの場合は直接ターミナルに出力
                 if (activeSessionId == sessionId && activeTerminal != null)
                 {
-                    Console.WriteLine($"[ProcessReceivedData] アクティブセッション - XTermにデータ送信 (長さ: {data.Length})");
-                    await activeTerminal.InvokeVoidAsync("write", data);
+                    //Console.WriteLine($"[ProcessReceivedData] アクティブセッション - XTermにデータ送信 (長さ: {data.Length}) {DateTime.Now }");
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, data);
                     
                     // 出力解析の実行
-                    _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
+                    _ = InvokeAsync(() => 
+                    {
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                            (id, status) => InvokeAsync(() => 
+                            {
+                                StateHasChanged();
+                            }));
+                    });
                 }
                 else
                 {
-                    Console.WriteLine($"[ProcessReceivedData] 非アクティブセッション {sessionId} - バッファのみ更新");
+                    //Console.WriteLine($"[ProcessReceivedData] 非アクティブセッション {sessionId} - バッファのみ更新 {DateTime.Now}");
                     // 非アクティブセッションの場合はバッファリングはConPtyWithBufferが担当
                     // ただし、出力解析は実行してステータスを更新
-                    _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
+                    _ = InvokeAsync(() => 
+                    {
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                            (id, status) => InvokeAsync(() => 
+                            {
+                                StateHasChanged();
+                            }));
+                    });
                 }
             }
         }
@@ -718,7 +646,7 @@
         }
         
         // セッションのタイマーを停止
-        StopSessionTimer(sessionId);
+        OutputAnalyzerService.StopSessionTimer(sessionId);
 
 
         // アクティブセッションの場合の追加処理
@@ -797,21 +725,17 @@
 
     private async Task DestroyTerminal(Guid sessionId, bool showAlert = true)
     {
-        // Console.WriteLine($"[DestroyTerminal] セッション {sessionId} のターミナルを破棄");
-
         try
         {
             // JavaScript側のターミナルを破棄
-            await JSRuntime.InvokeVoidAsync("terminalFunctions.destroyTerminal", sessionId.ToString());
+            await TerminalService.DestroyTerminalAsync(sessionId, showAlert);
 
             // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
             if (activeSessionId == sessionId && activeTerminal != null)
             {
                 await activeTerminal.DisposeAsync();
                 activeTerminal = null;
-                // Console.WriteLine($"[DestroyTerminal] C#側のターミナル参照を削除");
             }
-
 
             if (showAlert)
             {
@@ -820,7 +744,6 @@
         }
         catch (Exception ex)
         {
-            // Console.WriteLine($"[DestroyTerminal] エラー: {ex.Message}");
             if (showAlert)
             {
                 toast?.ShowError($"ターミナル破棄エラー: {ex.Message}");
@@ -830,8 +753,6 @@
 
     private async Task RecreateTerminal(Guid sessionId)
     {
-        // Console.WriteLine($"[RecreateTerminal] セッション {sessionId} のターミナルを再作成");
-
         try
         {
             // セッションがアクティブな場合のみ再作成
@@ -840,34 +761,17 @@
                 // 既存のターミナルを破棄（アラートなし）
                 await DestroyTerminal(sessionId, false);
 
-                // DOM更新と読み取りタスクの完全な終了を待つ
-                await Task.Delay(TerminalConstants.SessionCreationDelay);
-
-                // ターミナルdivの表示状態を確実に設定
-                await JSRuntime.InvokeVoidAsync("terminalFunctions.ensureTerminalVisible", sessionId.ToString());
-
                 // 新しいターミナルを初期化
                 await InitializeTerminal(sessionId);
 
-                // ConPTYから自動的に画面状態が送信されるため、スナップショット送信は不要
+                // ターミナル再作成処理
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                if (selectedSessionInfo?.ConPtyBuffer != null && activeTerminal != null)
-                {
-                    await Task.Delay(100); // ターミナル初期化完了を待つ
-                    
-                    // スナップショット送信を無効化（ConPTYが画面状態を自動送信）
-                    // ConPTYによる画面状態の自動復元に依存
-                    
-                    // イベントハンドラーを設定
-                    SetupSessionEventHandlers(selectedSessionInfo);
+                await TerminalService.RecreateTerminalAsync(sessionId, selectedSessionInfo!, activeSession);
 
-                    // ターミナルに初期プロンプトを送信して接続を確認
-                    if (activeSession != null)
-                    {
-                        // Enterキーを送信してプロンプトを表示
-                        await activeSession.WriteAsync("\r\n");
-                        // Console.WriteLine($"[RecreateTerminal] プロンプト送信完了");
-                    }
+                // イベントハンドラーを設定
+                if (selectedSessionInfo != null)
+                {
+                    SetupSessionEventHandlers(selectedSessionInfo);
                 }
 
                 toast?.ShowSuccess("ターミナルを再作成しました");
@@ -879,314 +783,18 @@
         }
         catch (Exception ex)
         {
-            // Console.WriteLine($"[RecreateTerminal] エラー: {ex.Message}");
             toast?.ShowError($"ターミナル再作成エラー: {ex.Message}");
         }
     }
 
 
 
-    private void AnalyzeOutput(string data, Guid sessionId, TerminalType terminalType)
-    {
-        try
-        {
-            // ターミナルタイプに応じた解析器を取得
-            var analyzer = AnalyzerFactory.GetAnalyzer(terminalType);
-            if (analyzer == null)
-            {
-                // 解析器がない場合は何もしない
-                return;
-            }
 
-            // 解析を実行
-            if (analyzer.TryAnalyze(data, out var result))
-            {
-                var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                if (session == null) return;
+    
+    
 
-                if (result.IsInterrupted)
-                {
-                    // 処理が中断された
-                    UpdateSessionProcessingStatus(sessionId, null);
-                }
-                else if (result.IsProcessing)
-                {
-                    // ユーザー入力待ち状態をセッションに設定
-                    session.IsWaitingForUserInput = result.IsWaitingForUser;
-                    
-                    // 処理中
-                    if (result.ElapsedSeconds.HasValue)
-                    {
-                        // 秒数の変化をチェック
-                        var secondsStr = result.ElapsedSeconds.Value.ToString();
-                        if (session.LastProcessingSeconds == secondsStr)
-                        {
-                            // 秒数が変わらない場合はタイマーのリセットのみ
-                            session.LastProcessingUpdateTime = DateTime.Now;
-                            ResetSessionTimer(sessionId);
-                            return;
-                        }
-                        
-                        session.LastProcessingSeconds = secondsStr;
-                        
-                        // GeminiCLIの場合はステータステキストも含める
-                        if (!string.IsNullOrEmpty(result.StatusText))
-                        {
-                            UpdateSessionProcessingStatus(sessionId, result.StatusText, result.ElapsedSeconds.Value, 
-                                result.Tokens ?? "", result.Direction ?? "");
-                        }
-                        else
-                        {
-                            UpdateSessionProcessingStatus(sessionId, result.ElapsedSeconds.Value, 
-                                result.Tokens ?? "", result.Direction ?? "");
-                        }
-                    }
-                    else if (!string.IsNullOrEmpty(result.StatusText))
-                    {
-                        // ステータステキストのみの更新
-                        UpdateSessionProcessingStatus(sessionId, result.StatusText);
-                    }
-                }
-                else
-                {
-                    // 処理完了
-                    UpdateSessionProcessingStatus(sessionId, null);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // Output Analysis Error
-        }
-    }
-
-    private void UpdateSessionProcessingStatus(Guid sessionId, string? statusText)
-    {
-        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null)
-        {
-            // Console.WriteLine($"[UI Update] セッション {activeSessionId} の処理状態を更新: {statusText ?? "null"}");
-            
-            session.ProcessingStatus = statusText;
-            if (statusText != null)
-            {
-                session.ProcessingStartTime = DateTime.Now;
-                session.LastProcessingUpdateTime = DateTime.Now;
-                
-                // セッションごとのタイマーをリセット
-                ResetSessionTimer(sessionId);
-            }
-            else
-            {
-                //Console.WriteLine($"[Notification Debug] UpdateSessionProcessingStatus - 処理完了を検出");
-                //Console.WriteLine($"[Notification Debug] ProcessingElapsedSeconds: {session.ProcessingElapsedSeconds}");
-                
-                // 処理完了時の通知
-                var processingElapsedSeconds = session.ProcessingElapsedSeconds;
-                if (processingElapsedSeconds.HasValue)
-                {
-                    //Console.WriteLine($"[Notification Debug] 通知サービスを呼び出し中 - {processingElapsedSeconds.Value}秒");
-                    
-                    // 通知フラグを設定（アクティブでない場合のみ）
-                    if (activeSessionId != session.SessionId)
-                    {
-                        session.HasNotificationPending = true;
-                        //Console.WriteLine($"[Notification Debug] セッション {session.SessionId} に通知フラグを設定");
-                    }
-                    
-                    // セッション情報をコピー（非同期処理で使用するため）
-                    var sessionCopy = new SessionInfo
-                    {
-                        SessionId = session.SessionId,
-                        DisplayName = session.DisplayName,
-                        FolderPath = session.FolderPath,
-                        FolderName = session.FolderName,
-                        CreatedAt = session.CreatedAt,
-                        LastAccessedAt = session.LastAccessedAt,
-                        IsActive = session.IsActive,
-                        TerminalType = session.TerminalType,
-                        Options = session.Options,
-                        Memo = session.Memo
-                    };
-                    var elapsedSecondsCopy = processingElapsedSeconds.Value;
-                    
-                    var notificationTask = Task.Run(async () => 
-                    {
-                        try
-                        {
-                            //Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し開始");
-                            //Console.WriteLine($"[Notification Debug] SessionCopy - Id: {sessionCopy.SessionId}, FolderPath: {sessionCopy.FolderPath}");
-                            await NotificationService.NotifyProcessingCompleteAsync(sessionCopy, elapsedSecondsCopy);
-                            //Console.WriteLine($"[Notification Debug] NotifyProcessingCompleteAsync呼び出し完了");
-                        }
-                        catch (Exception ex)
-                        {
-                            // Notification error
-                            // Stack trace
-                        }
-                    });
-                }
-                else
-                {
-                    //Console.WriteLine($"[Notification Debug] ProcessingElapsedSecondsがnullのため通知をスキップ");
-                }
-                
-                session.ProcessingStartTime = null;
-                session.ProcessingElapsedSeconds = null;
-                session.ProcessingTokens = null;
-                session.ProcessingDirection = null;
-                session.LastProcessingUpdateTime = null;
-                session.LastProcessingSeconds = null;
-                session.IsWaitingForUserInput = false;
-                
-                // セッションのタイマーを停止
-                StopSessionTimer(sessionId);
-            }
-            
-            // UIスレッドで強制的に更新
-            try
-            {
-                InvokeAsync(StateHasChanged);
-                //Console.WriteLine("[UI Update] StateHasChanged実行完了");
-            }
-            catch (Exception ex)
-            {
-                // StateHasChanged error
-            }
-        }
-        else
-        {
-            // Active session not found
-        }
-    }
     
-    private void UpdateSessionProcessingStatus(Guid sessionId, int elapsedSeconds, string tokens, string direction)
-    {
-        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null)
-        {
-            // Console.WriteLine($"[UI Update] セッション {activeSessionId} の処理状態を更新: {elapsedSeconds}秒, {tokens}トークン, {direction}");
-            
-            session.ProcessingElapsedSeconds = elapsedSeconds;
-            session.ProcessingTokens = tokens;
-            session.ProcessingDirection = direction;
-            
-            if (session.ProcessingStartTime == null)
-            {
-                session.ProcessingStartTime = DateTime.Now;
-            }
-            
-            session.LastProcessingUpdateTime = DateTime.Now;
-            
-            // セッションごとのタイマーをリセット
-            ResetSessionTimer(sessionId);
-            
-            // UIスレッドで強制的に更新
-            try
-            {
-                InvokeAsync(StateHasChanged);
-                //Console.WriteLine("[UI Update] StateHasChanged実行完了");
-            }
-            catch (Exception ex)
-            {
-                // StateHasChanged error
-            }
-        }
-        else
-        {
-            // Active session not found
-        }
-    }
     
-    private void UpdateSessionProcessingStatus(Guid sessionId, string statusText, int elapsedSeconds, string tokens, string direction)
-    {
-        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null)
-        {
-            session.ProcessingStatus = statusText;
-            session.ProcessingElapsedSeconds = elapsedSeconds;
-            session.ProcessingTokens = tokens;
-            session.ProcessingDirection = direction;
-            
-            if (session.ProcessingStartTime == null)
-            {
-                session.ProcessingStartTime = DateTime.Now;
-            }
-            
-            session.LastProcessingUpdateTime = DateTime.Now;
-            
-            // セッションごとのタイマーをリセット
-            ResetSessionTimer(sessionId);
-            
-            // UIスレッドで強制的に更新
-            try
-            {
-                InvokeAsync(StateHasChanged);
-            }
-            catch (Exception ex)
-            {
-                // StateHasChanged error
-            }
-        }
-        else
-        {
-            // Session not found
-        }
-    }
-
-    private void ResetSessionTimer(Guid sessionId)
-    {
-        // 既存のタイマーを停止
-        StopSessionTimer(sessionId);
-        
-        // 新しいタイマーを作成
-        var timer = new System.Threading.Timer(
-            (state) => CheckSessionTimeout(sessionId),
-            null,
-            TimeSpan.FromSeconds(5),
-            Timeout.InfiniteTimeSpan
-        );
-        
-        sessionProcessingTimers[sessionId] = timer;
-    }
-    
-    private void StopSessionTimer(Guid sessionId)
-    {
-        if (sessionProcessingTimers.TryGetValue(sessionId, out var timer))
-        {
-            timer?.Dispose();
-            sessionProcessingTimers.Remove(sessionId);
-        }
-    }
-    
-    private void CheckSessionTimeout(Guid sessionId)
-    {
-        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null)
-        {
-            var lastUpdateTime = session.LastProcessingUpdateTime;
-            if (!lastUpdateTime.HasValue)
-            {
-                return;
-            }
-            
-            // ユーザー入力待ち状態の場合はタイムアウトしない
-            if (session.IsWaitingForUserInput)
-            {
-                // タイマーを再設定して後でまた確認
-                ResetSessionTimer(sessionId);
-                return;
-            }
-            
-            var elapsedTime = (DateTime.Now - lastUpdateTime.Value).TotalSeconds;
-            
-            if (elapsedTime >= 5)
-            {
-                // Console.WriteLine($"[Claude Code Status] セッション {sessionId} で5秒間更新がないため処理終了と判定");
-                InvokeAsync(() => UpdateSessionProcessingStatus(sessionId, null));
-            }
-        }
-    }
 
     private async Task SendInput()
     {
@@ -1739,16 +1347,8 @@
     
     public async ValueTask DisposeAsync()
     {
-        // すべてのセッションのタイマーを停止
-        foreach (var kvp in sessionProcessingTimers)
-        {
-            try
-            {
-                kvp.Value?.Dispose();
-            }
-            catch { }
-        }
-        sessionProcessingTimers.Clear();
+        // OutputAnalyzerServiceのクリーンアップ
+        OutputAnalyzerService?.Dispose();
         
         // JavaScript interopを安全に処理
         try
