@@ -457,11 +457,6 @@
                 Console.WriteLine($"[SelectSession] ターミナルを表示");
                 await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", sessionId.ToString());
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[SelectSession] ターミナル表示エラー: {ex.Message}");
-        }
 
         // ターミナルを初期化
         Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
