@@ -605,12 +605,10 @@
                 if (activeSessionId == sessionId && activeTerminal != null)
                 {
                     await activeTerminal.InvokeVoidAsync("write", data);
-                    
-                    // 出力解析の実行
-                    _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
                 }
-                // 非アクティブセッションの場合はバッファリングはConPtyWithBufferが担当
-                // 特別な処理は不要
+                
+                // 出力解析の実行（アクティブ・非アクティブ両方で実行）
+                _ = InvokeAsync(() => AnalyzeOutput(data, sessionId, sessionInfo.TerminalType));
             }
         }
         catch (Exception ex)
