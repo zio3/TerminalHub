@@ -446,8 +446,24 @@
         {
             // タスクランナータブに切り替え
             await CleanupSingleDosTerminal();
-            await LoadNpmScripts();
-            await InitializeTaskRunnerTerminal();
+            
+            // 現在のセッションのpackage.jsonを確認
+            var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+            if (currentSession != null)
+            {
+                hasPackageJson = await PackageJsonService.HasPackageJsonAsync(currentSession.FolderPath);
+                if (hasPackageJson)
+                {
+                    await LoadNpmScripts();
+                    await InitializeTaskRunnerTerminal();
+                }
+                else
+                {
+                    // package.jsonがない場合はテキスト入力タブに切り替え
+                    bottomPanelTab = BottomPanelTab.TextInput;
+                    StateHasChanged();
+                }
+            }
         }
         else if (tab == BottomPanelTab.TextInput)
         {
@@ -755,6 +771,7 @@
         if (selectedSession != null)
         {
             hasPackageJson = await PackageJsonService.HasPackageJsonAsync(selectedSession.FolderPath);
+            StateHasChanged(); // UIを更新
         }
 
         // テキストエリアにフォーカス
@@ -1029,7 +1046,11 @@
         else
         {
             // 通常のセッションのサイズ変更を処理
-            var guid = Guid.Parse(sessionId);
+            if (!Guid.TryParse(sessionId, out var guid))
+            {
+                // GUIDではない値（タスクランナーなど）は無視
+                return;
+            }
             if (guid == activeSessionId && activeSession != null)
             {
                 // ConPtyにリサイズを通知
