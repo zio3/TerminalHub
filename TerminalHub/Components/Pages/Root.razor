@@ -1959,20 +1959,55 @@
             
             // 既存のConPTYセッションがあれば破棄
             Console.WriteLine($"[RunSelectedScript] 既存のtaskRunnerSessionを破棄: {(taskRunnerSession != null ? "存在" : "null")}");
-            taskRunnerSession?.Dispose();
+            if (taskRunnerSession != null)
+            {
+                try
+                {
+                    taskRunnerSession.Dispose();
+                    Console.WriteLine("[RunSelectedScript] 既存セッションの破棄完了");
+                }
+                catch (Exception disposeEx)
+                {
+                    Console.WriteLine($"[RunSelectedScript] 既存セッション破棄エラー: {disposeEx.Message}");
+                }
+                taskRunnerSession = null;
+            }
             
             // npm run [script] コマンドを実行
             var command = $"npm run {selectedScript}";
-            var conPtySession = await ConPtyService.CreateSessionAsync("cmd.exe", null, currentSession.FolderPath, 120, 30);
+            Console.WriteLine($"[RunSelectedScript] ConPTYセッション作成開始 - フォルダ: {currentSession.FolderPath}");
+            Console.WriteLine($"[RunSelectedScript] ConPtyService: {(ConPtyService != null ? "存在" : "null")}");
+            
+            ConPtySession? conPtySession = null;
+            try
+            {
+                conPtySession = await ConPtyService.CreateSessionAsync("cmd.exe", null, currentSession.FolderPath, 120, 30);
+                Console.WriteLine($"[RunSelectedScript] CreateSessionAsync完了 - conPtySession: {(conPtySession != null ? "存在" : "null")}");
+            }
+            catch (Exception createEx)
+            {
+                Console.WriteLine($"[RunSelectedScript] CreateSessionAsyncエラー: {createEx.GetType().Name} - {createEx.Message}");
+                Console.WriteLine($"[RunSelectedScript] スタックトレース: {createEx.StackTrace}");
+                throw;
+            }
+            
+            if (conPtySession == null)
+            {
+                Console.WriteLine("[RunSelectedScript] エラー: ConPTYセッションの作成に失敗");
+                runningScripts.Remove(selectedScript);
+                toast?.ShowError("ターミナルセッションの作成に失敗しました");
+                return;
+            }
             
             taskRunnerSession = conPtySession;
+            Console.WriteLine("[RunSelectedScript] ConPTYセッション作成成功");
             conPtySession.Start();
             taskRunnerSession.DataReceived += (sender, args) => OnTaskRunnerDataReceived(args.Data);
             taskRunnerSession.ProcessExited += (sender, args) => OnTaskRunnerExited(selectedScript);
             
             // ターミナルをクリアして実行コマンドを表示
             Console.WriteLine($"[RunSelectedScript] taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}");
-            if (taskRunnerTerminal != null)
+            if (taskRunnerTerminal != null && taskRunnerSession != null)
             {
                 Console.WriteLine("[RunSelectedScript] ターミナルをクリア");
                 await taskRunnerTerminal.InvokeVoidAsync("clear");
