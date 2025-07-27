@@ -20,6 +20,7 @@
 @inject IOutputAnalyzerService OutputAnalyzerService
 @inject IInputHistoryService InputHistoryService
 @inject IPackageJsonService PackageJsonService
+@inject IConPtyService ConPtyService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -101,7 +102,6 @@
                                     <i class="bi bi-terminal"></i> DOSターミナル
                                 </a>
                             </li>
-                            @* タスクランナー機能は一時的に無効化
                             @if (hasPackageJson)
                             {
                                 <li class="nav-item">
@@ -113,7 +113,6 @@
                                     </a>
                                 </li>
                             }
-                            *@
                         </ul>
                         
                         <!-- タブコンテンツ -->
@@ -181,7 +180,6 @@
                                     <!-- 単一のDOSターミナル -->
                                 </div>
                             }
-                            @* タスクランナー機能は一時的に無効化
                             else if (bottomPanelTab == BottomPanelTab.TaskRunner)
                             {
                                 <div class="h-100 p-3 d-flex">
@@ -247,7 +245,6 @@
                                     </div>
                                 </div>
                             }
-                            *@
                         </div>
                     }
                 </div>
@@ -447,7 +444,6 @@
             await CleanupTaskRunnerTerminal();
             await InitializeSingleDosTerminal();
         }
-        @* タスクランナー機能は一時的に無効化
         else if (tab == BottomPanelTab.TaskRunner && activeSessionId != null)
         {
             // タスクランナータブに切り替え
@@ -455,7 +451,6 @@
             await LoadNpmScripts();
             await InitializeTaskRunnerTerminal();
         }
-        *@
         else if (tab == BottomPanelTab.TextInput)
         {
             // テキスト入力タブに切り替え - ターミナルをクリーンアップ
@@ -783,7 +778,6 @@
             await CleanupSingleDosTerminal();
             await InitializeSingleDosTerminal();
         }
-        @* タスクランナー機能は一時的に無効化
         else if (bottomPanelTab == BottomPanelTab.TaskRunner && selectedSession != null && hasPackageJson)
         {
             Console.WriteLine($"[SelectSession] タスクランナータブが選択されているのでnpm scriptsを読み込み");
@@ -792,7 +786,6 @@
             await LoadNpmScripts();
             await InitializeTaskRunnerTerminal();
         }
-        *@
     }
 
     private async Task InitializeTerminal(Guid sessionId)
@@ -1765,8 +1758,7 @@
             
             // npm run [script] コマンドを実行
             var command = $"npm run {selectedScript}";
-            var conPtyService = new ConPtyService(LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyService>());
-            var conPtySession = await conPtyService.CreateSessionAsync("cmd.exe", "", currentSession.FolderPath, 120, 30);
+            var conPtySession = await ConPtyService.CreateSessionAsync("cmd.exe", null, currentSession.FolderPath, 120, 30);
             
             taskRunnerSession = conPtySession;
             conPtySession.Start();
