@@ -291,12 +291,6 @@
     }
 
     [JSInvokable]
-    public async Task OnShortcutNewSession()
-    {
-        await AddSession();
-    }
-    
-    [JSInvokable]
     public async Task OnNotificationClick(string sessionId)
     {
         if (Guid.TryParse(sessionId, out var guid))
