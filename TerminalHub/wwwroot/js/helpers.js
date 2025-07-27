@@ -122,28 +122,16 @@ window.terminalHubHelpers = {
     // Keyboard shortcuts
     setupKeyboardShortcuts: function(dotNetRef) {
         window.terminalHubKeyHandler = function(e) {
-            // Ctrl + Shift + D: デバッグ情報を表示
+            // Ctrl + Shift + D: デバッグ情報を表示（開発機能内で利用）
             if (e.ctrlKey && e.shiftKey && e.key === 'D') {
                 e.preventDefault();
+                console.log('[TerminalHub] Debug shortcut triggered');
+                // デバッグ情報をコンソールに出力
                 console.log('Debug Info:');
                 console.log('Sessions:', Object.keys(window.multiSessionTerminals || {}));
                 console.log('Active terminals:', window.multiSessionTerminals);
                 console.log('LocalStorage sessions:', localStorage.getItem('terminalHub_sessions'));
                 console.log('LocalStorage activeSession:', localStorage.getItem('terminalHub_activeSession'));
-            }
-            // Ctrl + Shift + C: ローカルストレージをクリア
-            else if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-                e.preventDefault();
-                if (confirm('ローカルストレージをクリアしますか？')) {
-                    localStorage.removeItem('terminalHub_sessions');
-                    localStorage.removeItem('terminalHub_activeSession');
-                    window.location.reload();
-                }
-            }
-            // Ctrl + Shift + N: 新しいセッション
-            else if (e.ctrlKey && e.shiftKey && e.key === 'N') {
-                e.preventDefault();
-                dotNetRef.invokeMethodAsync('OnShortcutNewSession');
             }
         };
         
