@@ -477,8 +477,9 @@
     
     private async Task SwitchBottomPanelTab(BottomPanelTab tab)
     {
-        Console.WriteLine($"[SwitchBottomPanelTab] tab={tab}, activeSessionId={activeSessionId}");
+        Console.WriteLine($"[SwitchBottomPanelTab] タブ切り替え: {bottomPanelTab} -> {tab}, activeSessionId={activeSessionId}");
         bottomPanelTab = tab;
+        StateHasChanged();
         
         if (tab == BottomPanelTab.DosTerminal && activeSessionId != null)
         {
@@ -505,9 +506,10 @@
         }
         else if (tab == BottomPanelTab.TextInput)
         {
-            // テキスト入力タブに切り替え - ターミナルをクリーンアップ
+            // テキスト入力タブに切り替え - DOSターミナルのみクリーンアップ
+            // タスクランナーターミナルは保持（タスク実行ボタンから使う可能性があるため）
+            Console.WriteLine("[SwitchBottomPanelTab] テキスト入力に切り替え - DOSターミナルのみクリーンアップ");
             await CleanupSingleDosTerminal();
-            await CleanupTaskRunnerTerminal();
         }
     }
     
@@ -1765,20 +1767,35 @@
     {
         try
         {
-            if (taskRunnerTerminal != null) return;
+            Console.WriteLine($"[InitializeTaskRunnerTerminal] 初期化開始 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}");
+            if (taskRunnerTerminal != null)
+            {
+                Console.WriteLine("[InitializeTaskRunnerTerminal] 既に初期化済みのためスキップ");
+                return;
+            }
             
             // DOM要素の存在を確認
             var elementExists = await JSRuntime.InvokeAsync<bool>("eval", @"
                 !!document.getElementById('task-runner-terminal')
             ");
             
+            Console.WriteLine($"[InitializeTaskRunnerTerminal] DOM要素確認 - elementExists: {elementExists}");
+            
             if (!elementExists)
             {
+                Console.WriteLine("[InitializeTaskRunnerTerminal] DOM要素がないためStateHasChangedと200ms待機");
                 StateHasChanged();
                 await Task.Delay(200); // DOM更新を待つ
+                
+                // 再度確認
+                elementExists = await JSRuntime.InvokeAsync<bool>("eval", @"
+                    !!document.getElementById('task-runner-terminal')
+                ");
+                Console.WriteLine($"[InitializeTaskRunnerTerminal] DOM要素再確認 - elementExists: {elementExists}");
             }
             
             // 新しいXTermを作成
+            Console.WriteLine("[InitializeTaskRunnerTerminal] createMultiSessionTerminalを呼び出し");
             taskRunnerTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
                 "terminalFunctions.createMultiSessionTerminal",
                 "task-runner-terminal",
@@ -1786,8 +1803,11 @@
                 dotNetRef
             );
             
+            Console.WriteLine($"[InitializeTaskRunnerTerminal] ターミナル作成完了 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "成功" : "失敗")}");
+            
             // 初期メッセージを表示
             await taskRunnerTerminal.InvokeVoidAsync("write", "タスクランナーターミナル準備完了\r\n");
+            Console.WriteLine("[InitializeTaskRunnerTerminal] 初期メッセージ表示完了");
         }
         catch (Exception ex)
         {
@@ -1800,6 +1820,7 @@
     {
         try
         {
+            Console.WriteLine($"[CleanupTaskRunnerTerminal] クリーンアップ開始 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}");
             if (taskRunnerTerminal != null)
             {
                 // JavaScript側で破棄
@@ -1917,33 +1938,28 @@
     
     private async Task RunScriptFromTextInput(string scriptName)
     {
+        Console.WriteLine($"[RunScriptFromTextInput] 開始 - scriptName: {scriptName}, activeSessionId: {activeSessionId}");
+        
         if (activeSessionId == null) return;
         
         var sessionId = activeSessionId.Value; // 値をキャプチャ
         
         // タスクランナータブに切り替え
-        bottomPanelTab = BottomPanelTab.TaskRunner;
-        StateHasChanged();
+        Console.WriteLine("[RunScriptFromTextInput] タスクランナータブに切り替え");
+        await SwitchBottomPanelTab(BottomPanelTab.TaskRunner);
         
-        // タスクランナータブの初期化を待つ
-        await Task.Delay(100);
+        // DOM更新を待つ
+        await Task.Delay(200);
         
         // セッションが変わっていないか確認
-        if (activeSessionId != sessionId) return;
-        
-        // npm scriptsが読み込まれているか確認
-        if (npmScripts == null || npmScripts.Count == 0)
+        if (activeSessionId != sessionId)
         {
-            await LoadNpmScripts();
-        }
-        
-        // タスクランナーターミナルが初期化されているか確認
-        if (taskRunnerTerminal == null)
-        {
-            await InitializeTaskRunnerTerminal();
+            Console.WriteLine("[RunScriptFromTextInput] セッションが変更されたため中断");
+            return;
         }
         
         // スクリプトを選択して実行
+        Console.WriteLine($"[RunScriptFromTextInput] スクリプト実行: {scriptName}");
         selectedScript = scriptName;
         await RunSelectedScript();
     }
