@@ -35,6 +35,9 @@ builder.Services.AddScoped<IOutputAnalyzerService, OutputAnalyzerService>();
 // InputHistoryServiceを登録
 builder.Services.AddScoped<IInputHistoryService, InputHistoryService>();
 
+// PackageJsonServiceを登録
+builder.Services.AddScoped<IPackageJsonService, PackageJsonService>();
+
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 

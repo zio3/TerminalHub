@@ -213,6 +213,13 @@ namespace TerminalHub.Models
                         {
                             var data = new string(buffer, 0, bytesRead);
                             
+                            // BOM (Byte Order Mark) を削除
+                            if (data.Length > 0 && data[0] == '\uFEFF')
+                            {
+                                data = data.Substring(1);
+                                _logger.LogInformation("BOM detected and removed from ConPTY output");
+                            }
+                            
                             // バッファリングを有効化
                             var shouldBuffer = true;
                             

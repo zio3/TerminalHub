@@ -1,3 +1,5 @@
+using Microsoft.JSInterop;
+
 namespace TerminalHub.Models
 {
     public enum TerminalType
@@ -5,6 +7,13 @@ namespace TerminalHub.Models
         Terminal,
         ClaudeCode,
         GeminiCLI
+    }
+
+    public enum BottomPanelTab
+    {
+        TextInput,
+        DosTerminal,
+        TaskRunner
     }
 
     public class SessionInfo
@@ -55,6 +64,10 @@ namespace TerminalHub.Models
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput { get; set; }
+        
+        // DOSターミナル関連プロパティ
+        [System.Text.Json.Serialization.JsonIgnore]
+        public ConPtyWithBuffer? DosTerminalSession { get; set; }
         
         // Git関連プロパティ
         [System.Text.Json.Serialization.JsonIgnore]
