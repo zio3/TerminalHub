@@ -134,6 +134,7 @@
                                         <div>
                                             <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
                                         </div>
+                                        @* タスク実行ドロップダウンを一時的に無効化
                                         @if (checkedScripts.Count > 0 && npmScripts != null)
                                         {
                                             <div class="dropdown">
@@ -162,6 +163,7 @@
                                                 </ul>
                                             </div>
                                         }
+                                        *@
                                     </div>
                                     <div class="btn-group">
                                         <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
@@ -223,12 +225,14 @@
                                                          @onclick="() => SelectScript(script.Key)">
                                                         <div class="d-flex justify-content-between align-items-start mb-2">
                                                             <div class="d-flex align-items-start flex-grow-1">
+                                                                @* チェックボックスを一時的に無効化
                                                                 <input type="checkbox" 
                                                                        class="form-check-input me-2" 
                                                                        id="@($"script-check-{script.Key}")"
                                                                        checked="@checkedScripts.Contains(script.Key)"
                                                                        @onchange="() => ToggleScriptCheck(script.Key)"
                                                                        @onclick:stopPropagation="true" />
+                                                                *@
                                                                 <div class="flex-grow-1">
                                                                     <label for="@($"script-check-{script.Key}")" class="mb-0">
                                                                         <strong>@script.Key</strong>
