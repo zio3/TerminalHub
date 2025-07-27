@@ -334,6 +334,7 @@
     private HashSet<string> checkedScripts = new HashSet<string>();
     private IJSObjectReference? taskRunnerTerminal;
     private ConPtySession? taskRunnerSession;
+    private bool TaskRunnerInitialized = false;
     
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
@@ -484,13 +485,15 @@
         if (tab == BottomPanelTab.DosTerminal && activeSessionId != null)
         {
             // DOSターミナルタブに切り替え - 常に新しいXTermを作成
+            Console.WriteLine("[SwitchBottomPanelTab] DOSターミナルタブに切り替え");
             await CleanupSingleDosTerminal();
-            await CleanupTaskRunnerTerminal();
+            // タスクランナーターミナルはクリーンアップしない（保持）
             await InitializeSingleDosTerminal();
         }
         else if (tab == BottomPanelTab.TaskRunner && activeSessionId != null)
         {
             // タスクランナータブに切り替え
+            Console.WriteLine($"[SwitchBottomPanelTab] タスクランナータブに切り替え - TaskRunnerInitialized: {TaskRunnerInitialized}");
             await CleanupSingleDosTerminal();
             
             // 現在のセッションのpackage.jsonを確認
@@ -501,7 +504,22 @@
                 Console.WriteLine($"[SwitchBottomPanelTab] TaskRunner - Session: {currentSession.DisplayName}, hasPackageJson: {hasPackageJson}");
                 // package.jsonの有無に関わらずタスクランナーを表示
                 await LoadNpmScripts();
-                await InitializeTaskRunnerTerminal();
+                
+                // 既に初期化済みの場合は再初期化しない
+                if (!TaskRunnerInitialized)
+                {
+                    Console.WriteLine("[SwitchBottomPanelTab] タスクランナーターミナルを初期化");
+                    await InitializeTaskRunnerTerminal();
+                }
+                else
+                {
+                    Console.WriteLine("[SwitchBottomPanelTab] タスクランナーターミナルは既に初期化済み - 表示のみ");
+                    // 既存のターミナルを表示
+                    if (taskRunnerTerminal != null)
+                    {
+                        await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", "task-runner-terminal");
+                    }
+                }
             }
         }
         else if (tab == BottomPanelTab.TextInput)
@@ -1051,27 +1069,49 @@
     {
         Console.WriteLine($"[SendInput JSInvokable] 呼び出し - sessionId: {sessionId}, data長: {data?.Length ?? 0}");
         
-        // DOSターミナルからの入力を処理
-        if (sessionId.StartsWith("dos-terminal-"))
+        try
         {
-            var guidStr = sessionId.Replace("dos-terminal-", "");
-            if (Guid.TryParse(guidStr, out var guid))
+            // タスクランナーターミナルからの入力を処理
+            if (sessionId == "task-runner-terminal")
             {
-                var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (session?.DosTerminalConPtySession != null)
+                Console.WriteLine($"[SendInput JSInvokable] タスクランナーターミナルからの入力: {data}");
+                if (taskRunnerSession != null)
                 {
-                    await session.DosTerminalConPtySession.WriteAsync(data);
+                    await taskRunnerSession.WriteAsync(data);
+                    Console.WriteLine("[SendInput JSInvokable] タスクランナーへの送信完了");
+                }
+                else
+                {
+                    Console.WriteLine("[SendInput JSInvokable] エラー: taskRunnerSessionがnull");
+                }
+            }
+            // DOSターミナルからの入力を処理
+            else if (sessionId.StartsWith("dos-terminal-"))
+            {
+                var guidStr = sessionId.Replace("dos-terminal-", "");
+                if (Guid.TryParse(guidStr, out var guid))
+                {
+                    var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+                    if (session?.DosTerminalConPtySession != null)
+                    {
+                        await session.DosTerminalConPtySession.WriteAsync(data);
+                    }
+                }
+            }
+            else
+            {
+                // 通常のセッションからの入力を処理
+                var guid = Guid.Parse(sessionId);
+                if (activeSession != null && guid == activeSessionId)
+                {
+                    await activeSession.WriteAsync(data);
                 }
             }
         }
-        else
+        catch (Exception ex)
         {
-            // 通常のセッションからの入力を処理
-            var guid = Guid.Parse(sessionId);
-            if (activeSession != null && guid == activeSessionId)
-            {
-                await activeSession.WriteAsync(data);
-            }
+            Console.WriteLine($"[SendInput JSInvokable] エラー: {ex.GetType().Name} - {ex.Message}");
+            throw;
         }
     }
 
@@ -1859,7 +1899,10 @@
     {
         try
         {
-            Console.WriteLine($"[CleanupTaskRunnerTerminal] クリーンアップ開始 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}");
+            Console.WriteLine($"[CleanupTaskRunnerTerminal] クリーンアップ開始 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}, TaskRunnerInitialized: {TaskRunnerInitialized}");
+            Console.WriteLine("[CleanupTaskRunnerTerminal] 呼び出し元のスタックトレース:");
+            Console.WriteLine(Environment.StackTrace);
+            
             if (taskRunnerTerminal != null)
             {
                 // JavaScript側で破棄
@@ -1876,11 +1919,14 @@
                 
                 await taskRunnerTerminal.DisposeAsync();
                 taskRunnerTerminal = null;
+                TaskRunnerInitialized = false;
             }
             
             // ConPTYセッションがあれば破棄
             taskRunnerSession?.Dispose();
             taskRunnerSession = null;
+            
+            Console.WriteLine("[CleanupTaskRunnerTerminal] クリーンアップ完了 - taskRunnerTerminal=null, TaskRunnerInitialized=false");
         }
         catch (Exception ex)
         {
