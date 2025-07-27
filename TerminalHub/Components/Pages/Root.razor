@@ -1911,9 +1911,29 @@
     {
         if (activeSessionId == null) return;
         
+        var sessionId = activeSessionId.Value; // 値をキャプチャ
+        
         // タスクランナータブに切り替え
         bottomPanelTab = BottomPanelTab.TaskRunner;
-        await SwitchBottomPanelTab(BottomPanelTab.TaskRunner);
+        StateHasChanged();
+        
+        // タスクランナータブの初期化を待つ
+        await Task.Delay(100);
+        
+        // セッションが変わっていないか確認
+        if (activeSessionId != sessionId) return;
+        
+        // npm scriptsが読み込まれているか確認
+        if (npmScripts == null || npmScripts.Count == 0)
+        {
+            await LoadNpmScripts();
+        }
+        
+        // タスクランナーターミナルが初期化されているか確認
+        if (taskRunnerTerminal == null)
+        {
+            await InitializeTaskRunnerTerminal();
+        }
         
         // スクリプトを選択して実行
         selectedScript = scriptName;

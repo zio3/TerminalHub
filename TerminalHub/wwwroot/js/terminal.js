@@ -374,31 +374,18 @@ window.terminalFunctions = {
             const originalScrollToLine = term.scrollToLine.bind(term);
             
             term.scrollToBottom = function() {
-                console.log(`[Scroll] xterm.scrollToBottom() called internally for session: ${sessionId}`);
-                const caller = new Error().stack.split('\n')[2];
-                console.log(`[Scroll] Called from: ${caller.trim()}`);
-                console.log(`[Scroll] Current viewport: Y=${term.buffer.active.viewportY}, Base=${term.buffer.active.baseY}, Length=${term.buffer.active.length}, CursorY=${term.buffer.active.cursorY}`);
-                const result = originalScrollToBottom();
-                console.log(`[Scroll] After scroll viewport: Y=${term.buffer.active.viewportY}`);
-                return result;
+                return originalScrollToBottom();
             };
             
             term.scrollToTop = function() {
-                console.log(`[Scroll] xterm.scrollToTop() called internally for session: ${sessionId}`);
                 return originalScrollToTop();
             };
             
             term.scrollToLine = function(line) {
-                console.log(`[Scroll] xterm.scrollToLine(${line}) called internally for session: ${sessionId}`);
                 return originalScrollToLine(line);
             };
             
             // スクロール設定の状態を確認
-            console.log(`[Scroll] Terminal options for session ${sessionId}:`, {
-                scrollOnInput: term.options.scrollOnInput,
-                scrollOnOutput: term.options.scrollOnOutput,
-                scrollback: term.options.scrollback
-            });
             
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
@@ -458,13 +445,7 @@ window.terminalFunctions = {
                     const beforeLength = term.buffer.active.length;
                     const isAtBottom = beforeViewportY + term.rows >= beforeLength;
                     
-                    console.log(`[Scroll] Normal write: Before - ViewportY=${beforeViewportY}, Length=${beforeLength}, IsAtBottom=${isAtBottom}, DataLength=${data.length}`);
-                    
                     term.write(data);
-                    
-                    const afterViewportY = term.buffer.active.viewportY;
-                    const afterLength = term.buffer.active.length;
-                    console.log(`[Scroll] Normal write: After - ViewportY=${afterViewportY}, Length=${afterLength}`);
                     
                     terminalInfo.isFirstWrite = false;
                 }
@@ -668,18 +649,12 @@ window.terminalFunctions = {
 
     // ターミナルを最下段にスクロール
     scrollToBottom: function(sessionId) {
-        console.log(`[Scroll] scrollToBottom called for session: ${sessionId}`);
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             const terminal = window.multiSessionTerminals[sessionId].terminal;
             if (terminal) {
                 // xtermのscrollToBottom機能を1回だけ実行
-                console.log(`[Scroll] Executing terminal.scrollToBottom() for session: ${sessionId}`);
                 terminal.scrollToBottom();
-            } else {
-                console.log(`[Scroll] Terminal not found for session: ${sessionId}`);
             }
-        } else {
-            console.log(`[Scroll] Session not found: ${sessionId}`);
         }
     },
 
@@ -700,26 +675,20 @@ window.terminalFunctions = {
 
     // スクロール位置を保存
     saveScrollPosition: function(sessionId) {
-        console.log(`[Scroll] saveScrollPosition called for session: ${sessionId}`);
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
             terminalInfo.scrollPosition = term.buffer.active.viewportY;
-            console.log(`[Scroll] Saved scroll position: ${terminalInfo.scrollPosition}`);
         }
     },
 
     // スクロール位置を復元
     restoreScrollPosition: function(sessionId) {
-        console.log(`[Scroll] restoreScrollPosition called for session: ${sessionId}`);
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
             if (terminalInfo.scrollPosition > 0) {
-                console.log(`[Scroll] Restoring scroll position to: ${terminalInfo.scrollPosition}`);
                 term.scrollToLine(terminalInfo.scrollPosition);
-            } else {
-                console.log(`[Scroll] No scroll position to restore`);
             }
         }
     }
