@@ -480,6 +480,11 @@ namespace TerminalHub.Services
 
                 // Worktreeの作成先パスを決定（常に親と同じ階層に作成）
                 var parentPath = parentSession.FolderPath;
+                // 末尾のディレクトリ区切り文字を削除
+                if (parentPath.EndsWith(Path.DirectorySeparatorChar) || parentPath.EndsWith(Path.AltDirectorySeparatorChar))
+                {
+                    parentPath = parentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
                 var worktreeName = $"{Path.GetFileName(parentPath)}-{branchName}";
                 // 親ディレクトリと同じ階層に作成（親ディレクトリが取得できない場合は、親の親を使用）
                 var parentDir = Path.GetDirectoryName(parentPath);
