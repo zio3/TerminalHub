@@ -478,10 +478,17 @@ namespace TerminalHub.Services
                     return existingWorktreeSessionInfo;
                 }
 
-                // Worktreeの作成先パスを決定
+                // Worktreeの作成先パスを決定（常に親と同じ階層に作成）
                 var parentPath = parentSession.FolderPath;
                 var worktreeName = $"{Path.GetFileName(parentPath)}-{branchName}";
-                var worktreePath = Path.Combine(Path.GetDirectoryName(parentPath) ?? parentPath, worktreeName);
+                // 親ディレクトリと同じ階層に作成（親ディレクトリが取得できない場合は、親の親を使用）
+                var parentDir = Path.GetDirectoryName(parentPath);
+                if (string.IsNullOrEmpty(parentDir))
+                {
+                    // ルートディレクトリの場合は、一つ上の階層を作成
+                    parentDir = Path.GetDirectoryName(Path.GetFullPath(parentPath)) ?? parentPath;
+                }
+                var worktreePath = Path.Combine(parentDir, worktreeName);
 
                 // 既に存在する場合は別の名前を試す
                 int counter = 1;
