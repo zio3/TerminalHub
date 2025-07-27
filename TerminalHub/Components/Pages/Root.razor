@@ -130,8 +130,38 @@
                                 </textarea>
                                 
                                 <div class="mt-2 d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div>
+                                            <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
+                                        </div>
+                                        @if (checkedScripts.Count > 0 && npmScripts != null)
+                                        {
+                                            <div class="dropdown">
+                                                <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="bi bi-play-fill"></i> タスク実行 (@checkedScripts.Count)
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    @foreach (var scriptName in checkedScripts.OrderBy(s => s))
+                                                    {
+                                                        @if (npmScripts.ContainsKey(scriptName))
+                                                        {
+                                                            <li>
+                                                                <button class="dropdown-item @(runningScripts.Contains(scriptName) ? "disabled" : "")" 
+                                                                        @onclick="() => RunScriptFromTextInput(scriptName)"
+                                                                        disabled="@runningScripts.Contains(scriptName)">
+                                                                    @if (runningScripts.Contains(scriptName))
+                                                                    {
+                                                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                                                    }
+                                                                    <strong>@scriptName</strong>
+                                                                    <div class="small text-muted">@npmScripts[scriptName]</div>
+                                                                </button>
+                                                            </li>
+                                                        }
+                                                    }
+                                                </ul>
+                                            </div>
+                                        }
                                     </div>
                                     <div class="btn-group">
                                         <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
@@ -192,13 +222,23 @@
                                                          style="cursor: pointer; @(selectedScript == script.Key ? "background-color: #e7f1ff; border-color: #0d6efd; border-width: 2px;" : "")"
                                                          @onclick="() => SelectScript(script.Key)">
                                                         <div class="d-flex justify-content-between align-items-start mb-2">
-                                                            <div class="flex-grow-1 me-2">
-                                                                <strong>@script.Key</strong>
-                                                                <div class="small text-muted" style="white-space: pre-wrap;">@script.Value</div>
+                                                            <div class="d-flex align-items-start flex-grow-1">
+                                                                <input type="checkbox" 
+                                                                       class="form-check-input me-2" 
+                                                                       id="@($"script-check-{script.Key}")"
+                                                                       checked="@checkedScripts.Contains(script.Key)"
+                                                                       @onchange="() => ToggleScriptCheck(script.Key)"
+                                                                       @onclick:stopPropagation="true" />
+                                                                <div class="flex-grow-1">
+                                                                    <label for="@($"script-check-{script.Key}")" class="mb-0">
+                                                                        <strong>@script.Key</strong>
+                                                                    </label>
+                                                                    <div class="small text-muted" style="white-space: pre-wrap;">@script.Value</div>
+                                                                </div>
                                                             </div>
                                                             @if (runningScripts.Contains(script.Key))
                                                             {
-                                                                <span class="spinner-border spinner-border-sm text-primary" role="status">
+                                                                <span class="spinner-border spinner-border-sm text-primary ms-2" role="status">
                                                                     <span class="visually-hidden">Loading...</span>
                                                                 </span>
                                                             }
@@ -291,6 +331,7 @@
     private Dictionary<string, string>? npmScripts = null;
     private string? selectedScript = null;
     private HashSet<string> runningScripts = new HashSet<string>();
+    private HashSet<string> checkedScripts = new HashSet<string>();
     private IJSObjectReference? taskRunnerTerminal;
     private ConPtySession? taskRunnerSession;
     
@@ -762,6 +803,10 @@
         {
             hasPackageJson = await PackageJsonService.HasPackageJsonAsync(selectedSession.FolderPath);
             Console.WriteLine($"[SelectSession] Session: {selectedSession.DisplayName}, Path: {selectedSession.FolderPath}, hasPackageJson: {hasPackageJson}");
+            
+            // チェックされたスクリプトを復元
+            checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
+            
             StateHasChanged(); // UIを更新
         }
 
@@ -1684,6 +1729,30 @@
         selectedScript = scriptName;
     }
     
+    private void ToggleScriptCheck(string scriptName)
+    {
+        if (activeSessionId == null) return;
+        
+        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        if (currentSession == null) return;
+        
+        if (currentSession.CheckedScripts.Contains(scriptName))
+        {
+            currentSession.CheckedScripts.Remove(scriptName);
+        }
+        else
+        {
+            currentSession.CheckedScripts.Add(scriptName);
+        }
+        
+        // グローバルのcheckedScriptsも更新
+        checkedScripts = new HashSet<string>(currentSession.CheckedScripts);
+        StateHasChanged();
+        
+        // セッション情報を保存
+        _ = LocalStorageService.SaveSessionsAsync(sessions);
+    }
+    
     private async Task InitializeTaskRunnerTerminal()
     {
         try
@@ -1836,6 +1905,19 @@
             
             StateHasChanged();
         });
+    }
+    
+    private async Task RunScriptFromTextInput(string scriptName)
+    {
+        if (activeSessionId == null) return;
+        
+        // タスクランナータブに切り替え
+        bottomPanelTab = BottomPanelTab.TaskRunner;
+        await SwitchBottomPanelTab(BottomPanelTab.TaskRunner);
+        
+        // スクリプトを選択して実行
+        selectedScript = scriptName;
+        await RunSelectedScript();
     }
     
     public async ValueTask DisposeAsync()
