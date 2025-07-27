@@ -147,7 +147,7 @@
                                                         {
                                                             <li>
                                                                 <button class="dropdown-item @(runningScripts.Contains(scriptName) ? "disabled" : "")" 
-                                                                        @onclick="() => { Console.WriteLine($\"[UI] タスク実行ボタンクリック: {scriptName}\"); RunScriptFromTextInput(scriptName); }"
+                                                                        @onclick="() => OnTaskButtonClick(scriptName)"
                                                                         disabled="@runningScripts.Contains(scriptName)">
                                                                     @if (runningScripts.Contains(scriptName))
                                                                     {
@@ -1996,6 +1996,12 @@
             
             StateHasChanged();
         });
+    }
+    
+    private async void OnTaskButtonClick(string scriptName)
+    {
+        Console.WriteLine($"[UI] タスク実行ボタンクリック: {scriptName}");
+        await RunScriptFromTextInput(scriptName);
     }
     
     private async Task RunScriptFromTextInput(string scriptName)
