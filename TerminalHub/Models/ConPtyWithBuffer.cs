@@ -17,7 +17,6 @@ namespace TerminalHub.Models
         private readonly CircularLineBuffer _outputBuffer;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _cancellationTokenSource;
-        private readonly Task _readTask;
         private bool _disposed;
         
         // ターミナルサイズを記録
@@ -59,11 +58,16 @@ namespace TerminalHub.Models
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _cancellationTokenSource = new CancellationTokenSource();
             
-            // ConPtySessionから初期サイズを取得したいが、現在は公開されていないのでデフォルト値を使用
-            // TODO: ConPtySessionにサイズプロパティを追加
+            // ConPtySessionから初期サイズを取得
+            _currentCols = _conPtySession.Cols;
+            _currentRows = _conPtySession.Rows;
 
-            // バックグラウンドでConPtyからデータを読み取り続ける
-            _readTask = Task.Run(ReadFromConPtyAsync, _cancellationTokenSource.Token);
+            // イベントハンドラを登録
+            _conPtySession.DataReceived += OnConPtyDataReceived;
+            _conPtySession.ProcessExited += OnConPtyProcessExited;
+
+            // ConPtySessionを開始（これによりバックグラウンドでの読み取りが開始される）
+            _conPtySession.Start();
         }
 
         /// <summary>
@@ -193,98 +197,70 @@ namespace TerminalHub.Models
         }
 
         /// <summary>
-        /// バックグラウンドでConPtyからデータを継続的に読み取り
+        /// ConPtySessionからデータ受信時のイベントハンドラ
         /// </summary>
-        private async Task ReadFromConPtyAsync()
+        private void OnConPtyDataReceived(object? sender, DataReceivedEventArgs e)
         {
-            // より大きなバッファサイズを使用（64KB）
-            var buffer = new char[65536];
-            var stringBuilder = new StringBuilder();
+            if (_disposed)
+                return;
 
             try
             {
-                while (!_cancellationTokenSource.Token.IsCancellationRequested && !_disposed)
+                var data = e.Data;
+                
+                // BOM (Byte Order Mark) を削除
+                if (data.Length > 0 && data[0] == '\uFEFF')
                 {
-                    try
-                    {
-                        var bytesRead = await _conPtySession.ReadAsync(buffer, 0, buffer.Length);
-                        
-                        if (bytesRead > 0)
-                        {
-                            var data = new string(buffer, 0, bytesRead);
-                            
-                            // BOM (Byte Order Mark) を削除
-                            if (data.Length > 0 && data[0] == '\uFEFF')
-                            {
-                                data = data.Substring(1);
-                                _logger.LogInformation("BOM detected and removed from ConPTY output");
-                            }
-                            
-                            // バッファリングを有効化
-                            var shouldBuffer = true;
-                            
-                            LogBufferAddition(data, shouldBuffer);
-                            
-                            if (shouldBuffer)
-                            {
-                                // バッファに書き込み
-                                // データを行ごとに分割してバッファに追加
-                                ProcessDataForBuffer(data);
-                            }
-                            
-                            // イベント発火（表示は常に行う）
-                            if (DataReceived != null)
-                            {
-                                //_logger.LogInformation($"[ConPtyWithBuffer] データ受信イベント発火 (長さ: {data.Length})");
-                                DataReceived?.Invoke(data);
-                            }
-                            else
-                            {
-                                //_logger.LogWarning($"[ConPtyWithBuffer] DataReceivedハンドラーが未設定");
-                            }
-                        }
-                        else
-                        {
-                            // データがない場合は短時間待機
-                            await Task.Delay(10, _cancellationTokenSource.Token);
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // キャンセルされた場合は正常終了
-                        break;
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        // オブジェクトが破棄された場合は終了
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error reading from ConPty in ConPtyWithBuffer");
-                        await Task.Delay(100, _cancellationTokenSource.Token); // エラー時は少し長く待機
-                    }
+                    data = data.Substring(1);
+                    _logger.LogInformation("BOM detected and removed from ConPTY output");
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // 正常なキャンセル
+                
+                // バッファリングを有効化
+                var shouldBuffer = true;
+                
+                LogBufferAddition(data, shouldBuffer);
+                
+                if (shouldBuffer)
+                {
+                    // バッファに書き込み
+                    // データを行ごとに分割してバッファに追加
+                    ProcessDataForBuffer(data);
+                }
+                
+                // イベント発火（表示は常に行う）
+                if (DataReceived != null)
+                {
+                    //_logger.LogInformation($"[ConPtyWithBuffer] データ受信イベント発火 (長さ: {data.Length})");
+                    DataReceived?.Invoke(data);
+                }
+                else
+                {
+                    //_logger.LogWarning($"[ConPtyWithBuffer] DataReceivedハンドラーが未設定");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Fatal error in ConPtyWithBuffer read loop");
+                _logger.LogError(ex, "Error processing ConPTY data");
             }
-            finally
+        }
+
+        /// <summary>
+        /// ConPtySessionプロセス終了時のイベントハンドラ
+        /// </summary>
+        private void OnConPtyProcessExited(object? sender, EventArgs e)
+        {
+            if (_disposed)
+                return;
+
+            // 切断イベントを発火
+            try
             {
-                // 切断イベントを発火
-                try
-                {
-                    Disconnected?.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error firing Disconnected event");
-                }
+                _logger.LogInformation("ConPtyセッションが終了しました");
+                Disconnected?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error firing Disconnected event");
             }
         }
 
@@ -769,11 +745,9 @@ namespace TerminalHub.Models
                 // 読み取りタスクをキャンセル
                 _cancellationTokenSource.Cancel();
                 
-                // タスクの完了を待機（最大1秒）
-                if (!_readTask.IsCompleted)
-                {
-                    _readTask.Wait(TimeSpan.FromSeconds(1));
-                }
+                // イベントハンドラを解除
+                _conPtySession.DataReceived -= OnConPtyDataReceived;
+                _conPtySession.ProcessExited -= OnConPtyProcessExited;
             }
             catch (Exception ex)
             {

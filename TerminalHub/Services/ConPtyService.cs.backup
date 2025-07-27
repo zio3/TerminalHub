@@ -1,0 +1,496 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+
+namespace TerminalHub.Services
+{
+    // Terminal定数 (ConPtyService内部で使用)
+    internal static class ConPtyTerminalConstants
+    {
+        public const uint ExtendedStartupinfoPresent = 0x00080000;
+        public const int ProcThreadAttributePseudoConsole = 0x00020016;
+    }
+    
+    public interface IConPtyService
+    {
+        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24);
+    }
+    
+    public class DataReceivedEventArgs : EventArgs
+    {
+        public string Data { get; }
+        
+        public DataReceivedEventArgs(string data)
+        {
+            Data = data;
+        }
+    }
+
+    public class ConPtyService : IConPtyService
+    {
+        private readonly ILogger<ConPtyService> _logger;
+
+        public ConPtyService(ILogger<ConPtyService> logger)
+        {
+            _logger = logger;
+        }
+
+        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
+        {
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
+        }
+        
+        // xterm.js用の推奨設定でセッションを作成
+        public Task<ConPtySession> CreateXTermJsSessionAsync(string command, string? arguments = null, string? workingDirectory = null, int cols = 80, int rows = 24)
+        {
+            // xterm.jsではクライアント側でサイズを管理するため、引数で受け取る
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
+        }
+    }
+
+    public class ConPtySession : IDisposable
+    {
+        private Process? _process;
+        private IntPtr _hPC = IntPtr.Zero;
+        private IntPtr _hPipeIn = IntPtr.Zero;
+        private IntPtr _hPipeOut = IntPtr.Zero;
+        private readonly ILogger _logger;
+        private StreamWriter? _writer;
+        private FileStream? _pipeOutStream;
+        private bool _disposed;
+        private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
+
+        private int _cols;
+        private int _rows;
+        private readonly SemaphoreSlim _readSemaphore = new(1, 1);
+
+        public int Cols => _cols;
+        public int Rows => _rows;
+
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
+        {
+            // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
+            _logger = logger;
+            _cols = cols;
+            _rows = rows;
+            InitializeConPty(command, arguments, workingDirectory);
+            // Console.WriteLine($"[ConPtySession] コンストラクタ完了");
+        }
+
+        private void InitializeConPty(string command, string? arguments, string? workingDirectory)
+        {
+            // Console.WriteLine($"[ConPtySession] InitializeConPty開始");
+            
+            // ConPTYの初期化
+            var startupInfo = new STARTUPINFOEX();
+            startupInfo.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
+            // Console.WriteLine($"[ConPtySession] STARTUPINFOEX初期化完了");
+
+            IntPtr hWritePipe = IntPtr.Zero;
+            IntPtr hReadPipe = IntPtr.Zero;
+            IntPtr processInfoHandle = IntPtr.Zero;
+            IntPtr threadInfoHandle = IntPtr.Zero;
+            
+            try
+            {
+                // パイプの作成（バッファサイズを64KBに設定）
+                // Console.WriteLine($"[ConPtySession] パイプ作成開始");
+                const uint pipeBufferSize = 65536; // 64KB
+                CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, pipeBufferSize);
+                CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, pipeBufferSize);
+                // Console.WriteLine($"[ConPtySession] パイプ作成完了");
+
+                _hPipeIn = hPipeIn;
+                _hPipeOut = hPipeOut;
+
+            // ConPTYの作成
+            // Console.WriteLine($"[ConPtySession] CreatePseudoConsole呼び出し開始");
+            var size = new COORD { X = (short)_cols, Y = (short)_rows };
+            var hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, 0, out _hPC);
+            if (hr != 0)
+            {
+                Console.WriteLine($"[ConPtySession] CreatePseudoConsole失敗: HRESULT={hr:X}");
+                _logger.LogError($"CreatePseudoConsole failed with HRESULT: {hr:X}");
+                throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
+            }
+            // Console.WriteLine($"[ConPtySession] CreatePseudoConsole成功");
+
+                // プロセス属性リストの初期化
+                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化開始");
+                var lpSize = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
+                startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
+                InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
+                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化完了");
+
+            // 擬似コンソールの属性を設定
+            // Console.WriteLine($"[ConPtySession] UpdateProcThreadAttribute呼び出し");
+            UpdateProcThreadAttribute(
+                startupInfo.lpAttributeList,
+                0,
+                (IntPtr)ConPtyTerminalConstants.ProcThreadAttributePseudoConsole,
+                _hPC,
+                (IntPtr)IntPtr.Size,
+                IntPtr.Zero,
+                IntPtr.Zero);
+            // Console.WriteLine($"[ConPtySession] UpdateProcThreadAttribute完了");
+
+            // プロセスの作成
+            var processInfo = new PROCESS_INFORMATION();
+            // argumentsが空の場合は余分なスペースを追加しない
+            var cmdline = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
+
+            // Console.WriteLine($"[ConPtySession] CreateProcess: {cmdline}");
+            _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");
+            
+            var result = CreateProcess(
+                null,
+                cmdline,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                ConPtyTerminalConstants.ExtendedStartupinfoPresent,
+                IntPtr.Zero,
+                workingDirectory,
+                ref startupInfo,
+                out processInfo);
+                
+            if (!result)
+            {
+                var error = Marshal.GetLastWin32Error();
+                Console.WriteLine($"[ConPtySession] CreateProcess失敗: Win32Error={error}");
+                _logger.LogError($"CreateProcess failed with error: {error}");
+                throw new InvalidOperationException($"Failed to create process: {error}");
+            }
+
+            // Console.WriteLine($"[ConPtySession] CreateProcess成功: PID={processInfo.dwProcessId}");
+            _process = Process.GetProcessById((int)processInfo.dwProcessId);
+            // Console.WriteLine($"[ConPtySession] Process取得完了");
+
+                processInfoHandle = processInfo.hProcess;
+                threadInfoHandle = processInfo.hThread;
+                
+                // ストリームの作成
+                // Console.WriteLine($"[ConPtySession] ストリーム作成開始");
+                var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
+                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
+
+                _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
+                _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
+                
+                // デバッグ: FileStreamの詳細情報
+                Console.WriteLine($"[ConPtySession] FileStream created - Type: {_pipeOutStream.GetType().FullName}");
+                Console.WriteLine($"[ConPtySession] FileStream properties - CanSeek: {_pipeOutStream.CanSeek}, CanRead: {_pipeOutStream.CanRead}, IsAsync: {_pipeOutStream.IsAsync}");
+                if (_pipeOutStream.CanSeek)
+                {
+                    Console.WriteLine($"[ConPtySession] WARNING: Pipe FileStream is seekable! Position: {_pipeOutStream.Position}, Length: {_pipeOutStream.Length}");
+                }
+                
+                // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                
+                // SafeFileHandleに所有権を移したので、元のハンドルは無効化
+                hWritePipe = IntPtr.Zero;
+                hReadPipe = IntPtr.Zero;
+
+                // ハンドルのクリーンアップ
+                // Console.WriteLine($"[ConPtySession] ハンドルクリーンアップ開始");
+                CloseHandle(processInfoHandle);
+                CloseHandle(threadInfoHandle);
+                DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
+                Marshal.FreeHGlobal(startupInfo.lpAttributeList);
+                // Console.WriteLine($"[ConPtySession] InitializeConPty完了");
+            }
+            catch
+            {
+                // エラー時のクリーンアップ
+                if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
+                if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                if (processInfoHandle != IntPtr.Zero) CloseHandle(processInfoHandle);
+                if (threadInfoHandle != IntPtr.Zero) CloseHandle(threadInfoHandle);
+                if (startupInfo.lpAttributeList != IntPtr.Zero)
+                {
+                    DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
+                    Marshal.FreeHGlobal(startupInfo.lpAttributeList);
+                }
+                if (_hPC != IntPtr.Zero)
+                {
+                    ClosePseudoConsole(_hPC);
+                    _hPC = IntPtr.Zero;
+                }
+                throw;
+            }
+        }
+
+        public async Task WriteAsync(string input)
+        {
+            if (_writer != null)
+            {
+                await _writer.WriteAsync(input);
+                await _writer.FlushAsync();
+            }
+        }
+
+        public async Task<string?> ReadLineAsync()
+        {
+            // この実装は StreamReader を前提としていたため、削除予定
+            throw new NotSupportedException("ReadLineAsync is no longer supported. Use ReadAsync instead.");
+        }
+
+        public async Task<int> ReadAsync(char[] buffer, int offset, int count)
+        {
+            if (_disposed)
+                return 0;
+                
+            await _readSemaphore.WaitAsync();
+            try
+            {
+                if (_disposed || _pipeOutStream == null)
+                    return 0;
+                
+                // バイトバッファを用意（読み込みサイズを制限）
+                var maxBytesToRead = Math.Min(count * 4, 65536); // 最大64KBに制限
+                var byteBuffer = new byte[maxBytesToRead];
+                var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
+                
+                if (bytesRead == 0)
+                    return 0;
+                
+                // デコードに必要なchar数を計算（UTF-8の最悪ケースを考慮）
+                var charCountNeeded = _utf8Decoder.GetCharCount(byteBuffer, 0, bytesRead);
+                
+                // バッファサイズを確認
+                if (offset + charCountNeeded > buffer.Length)
+                {
+                    // バッファが小さすぎる場合は、読み込むバイト数を調整
+                    var availableChars = buffer.Length - offset;
+                    if (availableChars <= 0)
+                        return 0;
+                    
+                    // 安全に読み込めるバイト数を推定（1文字1バイトと仮定して調整）
+                    var safeBytesToDecode = Math.Min(bytesRead, availableChars);
+                    
+                    // 不完全なUTF-8シーケンスを避けるため、末尾を調整
+                    while (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0x80) == 0x80)
+                    {
+                        safeBytesToDecode--;
+                        if (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0xC0) == 0xC0)
+                            break;
+                    }
+                    
+                    if (safeBytesToDecode == 0)
+                        return 0;
+                    
+                    bytesRead = safeBytesToDecode;
+                }
+                
+                // UTF-8をcharに変換（ステートフルなデコーダーを使用）
+                var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, buffer, offset);
+                
+                return charsRead;
+            }
+            finally
+            {
+                if (!_disposed)
+                    _readSemaphore.Release();
+            }
+        }
+
+        public Stream? GetOutputStream()
+        {
+            return _pipeOutStream;
+        }
+
+        public async Task<string> ReadAvailableOutputAsync(int timeoutMs = 2000)
+        {
+            if (_disposed || _pipeOutStream == null)
+                return string.Empty;
+
+            var output = new StringBuilder();
+            var byteBuffer = new byte[4096];
+            var charBuffer = new char[4096];
+            var startTime = DateTime.Now;
+
+            await _readSemaphore.WaitAsync();
+            try
+            {
+                while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
+                {
+                    if (_disposed || _pipeOutStream == null)
+                        break;
+
+                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
+                    if (bytesRead > 0)
+                    {
+                        var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
+                        output.Append(charBuffer, 0, charsRead);
+                        continue;
+                    }
+
+                    // 短い待機
+                    await Task.Delay(100);
+                }
+            }
+            catch
+            {
+                // エラーが発生した場合は空文字を返す
+            }
+            finally
+            {
+                if (!_disposed)
+                    _readSemaphore.Release();
+            }
+
+            return output.ToString();
+        }
+
+        public void Resize(int cols, int rows)
+        {
+            if (_hPC != IntPtr.Zero)
+            {
+                _cols = cols;
+                _rows = rows;
+                var size = new COORD { X = (short)cols, Y = (short)rows };
+                ResizePseudoConsole(_hPC, size);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            // まず破棄フラグを設定
+            _disposed = true;
+
+            // ストリームを破棄
+            try { _writer?.Dispose(); } catch { }
+            try { _pipeOutStream?.Dispose(); } catch { }
+
+            // プロセスを終了
+            if (_process != null && !_process.HasExited)
+            {
+                try
+                {
+                    _process.Kill();
+                    _process.WaitForExit(1000); // 1秒待機
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to terminate process");
+                }
+            }
+
+            // プロセスとハンドルを破棄
+            if (_hPC != IntPtr.Zero)
+            {
+                ClosePseudoConsole(_hPC);
+                _hPC = IntPtr.Zero;
+            }
+
+            if (_hPipeIn != IntPtr.Zero)
+            {
+                CloseHandle(_hPipeIn);
+                _hPipeIn = IntPtr.Zero;
+            }
+
+            if (_hPipeOut != IntPtr.Zero)
+            {
+                CloseHandle(_hPipeOut);
+                _hPipeOut = IntPtr.Zero;
+            }
+
+            try { _process?.Dispose(); } catch { }
+            
+            // 最後にセマフォを破棄
+            try { _readSemaphore?.Dispose(); } catch { }
+        }
+
+        // P/Invoke定義
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, IntPtr lpPipeAttributes, uint nSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern int CreatePseudoConsole(COORD size, IntPtr hInput, IntPtr hOutput, uint dwFlags, out IntPtr phPC);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern void ClosePseudoConsole(IntPtr hPC);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ResizePseudoConsole(IntPtr hPC, COORD size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool InitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref IntPtr lpSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr Attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool CreateProcess(
+            string? lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string? lpCurrentDirectory,
+            ref STARTUPINFOEX lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct COORD
+        {
+            public short X;
+            public short Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct STARTUPINFO
+        {
+            public int cb;
+            public IntPtr lpReserved;
+            public IntPtr lpDesktop;
+            public IntPtr lpTitle;
+            public int dwX;
+            public int dwY;
+            public int dwXSize;
+            public int dwYSize;
+            public int dwXCountChars;
+            public int dwYCountChars;
+            public int dwFillAttribute;
+            public int dwFlags;
+            public short wShowWindow;
+            public short cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput;
+            public IntPtr hStdOutput;
+            public IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct STARTUPINFOEX
+        {
+            public STARTUPINFO StartupInfo;
+            public IntPtr lpAttributeList;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_INFORMATION
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public uint dwProcessId;
+            public uint dwThreadId;
+        }
+    }
+}
