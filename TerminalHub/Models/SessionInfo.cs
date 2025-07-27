@@ -30,6 +30,9 @@ namespace TerminalHub.Models
         public Dictionary<string, string> Options { get; set; } = new();
         public string Memo { get; set; } = string.Empty;
         
+        // チェックされたnpmスクリプト
+        public HashSet<string> CheckedScripts { get; set; } = new HashSet<string>();
+        
         [System.Text.Json.Serialization.JsonIgnore]
         public string? ProcessingStatus { get; set; }
         

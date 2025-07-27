@@ -38,7 +38,7 @@ namespace TerminalHub.Services
                 if (!document.RootElement.TryGetProperty("scripts", out var scriptsElement))
                 {
                     _logger.LogWarning("No 'scripts' property found in package.json");
-                    return new Dictionary<string, string>(); // 空の辞書を返す
+                    return null; // nullを返す
                 }
 
                 var scripts = new Dictionary<string, string>();
