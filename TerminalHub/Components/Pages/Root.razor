@@ -1981,7 +1981,9 @@
             ConPtySession? conPtySession = null;
             try
             {
-                conPtySession = await ConPtyService.CreateSessionAsync("cmd.exe", null, currentSession.FolderPath, 120, 30);
+                var folderPath = currentSession.FolderPath ?? Environment.CurrentDirectory;
+                Console.WriteLine($"[RunSelectedScript] FolderPath: {folderPath}");
+                conPtySession = await ConPtyService.CreateSessionAsync("cmd.exe", null, folderPath, 120, 30);
                 Console.WriteLine($"[RunSelectedScript] CreateSessionAsync完了 - conPtySession: {(conPtySession != null ? "存在" : "null")}");
             }
             catch (Exception createEx)
@@ -2016,8 +2018,17 @@
                 
                 // コマンドを実行
                 Console.WriteLine($"[RunSelectedScript] ConPTYにコマンド送信: {command}");
-                await taskRunnerSession.WriteAsync($"{command}\r");
-                Console.WriteLine("[RunSelectedScript] コマンド送信完了");
+                Console.WriteLine($"[RunSelectedScript] taskRunnerSession再確認: {(taskRunnerSession != null ? "存在" : "null")}");
+                if (taskRunnerSession != null)
+                {
+                    await taskRunnerSession.WriteAsync($"{command}\r");
+                    Console.WriteLine("[RunSelectedScript] コマンド送信完了");
+                }
+                else
+                {
+                    Console.WriteLine("[RunSelectedScript] エラー: taskRunnerSessionがnullのためコマンド送信できません");
+                    throw new InvalidOperationException("taskRunnerSession is null after initialization");
+                }
             }
             else
             {
