@@ -15,6 +15,7 @@ namespace TerminalHub.Services
         private readonly INotificationService _notificationService;
         private readonly IOutputAnalyzerFactory _analyzerFactory;
         private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
+        private Action<Guid>? _timeoutCallback;
         private bool _disposed;
 
         public OutputAnalyzerService(
@@ -27,7 +28,7 @@ namespace TerminalHub.Services
             _analyzerFactory = analyzerFactory;
         }
 
-        public void AnalyzeOutput(string data, SessionInfo sessionInfo, Action<Guid, string?> updateStatus)
+        public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?> updateStatus)
         {
             try
             {
@@ -46,7 +47,7 @@ namespace TerminalHub.Services
                     if (result.IsInterrupted)
                     {
                         // 処理が中断された
-                        UpdateSessionProcessingStatus(sessionInfo, null, updateStatus);
+                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus);
                     }
                     else if (result.IsProcessing)
                     {
@@ -72,24 +73,24 @@ namespace TerminalHub.Services
                             if (!string.IsNullOrEmpty(result.StatusText))
                             {
                                 UpdateSessionProcessingStatus(sessionInfo, result.StatusText, result.ElapsedSeconds.Value, 
-                                    result.Tokens ?? "", result.Direction ?? "", updateStatus);
+                                    result.Tokens ?? "", result.Direction ?? "", activeSessionId, updateStatus);
                             }
                             else
                             {
                                 UpdateSessionProcessingStatus(sessionInfo, result.ElapsedSeconds.Value, 
-                                    result.Tokens ?? "", result.Direction ?? "", updateStatus);
+                                    result.Tokens ?? "", result.Direction ?? "", activeSessionId, updateStatus);
                             }
                         }
                         else if (!string.IsNullOrEmpty(result.StatusText))
                         {
                             // ステータステキストのみの更新
-                            UpdateSessionProcessingStatus(sessionInfo, result.StatusText, updateStatus);
+                            UpdateSessionProcessingStatus(sessionInfo, result.StatusText, activeSessionId, updateStatus);
                         }
                     }
                     else
                     {
                         // 処理完了
-                        UpdateSessionProcessingStatus(sessionInfo, null, updateStatus);
+                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus);
                     }
                 }
             }
@@ -99,7 +100,7 @@ namespace TerminalHub.Services
             }
         }
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Action<Guid, string?> updateStatus)
+        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?> updateStatus)
         {
                 session.ProcessingStatus = statusText;
                 if (statusText != null)
@@ -112,16 +113,28 @@ namespace TerminalHub.Services
                 }
                 else
                 {
-                    // 処理完了時の通知
+                    _logger.LogDebug("Processing completed for session {SessionId}. ProcessingElapsedSeconds: {ElapsedSeconds}", 
+                        session.SessionId, session.ProcessingElapsedSeconds);
+                    
+                    // 処理完了時の通知（クリア前にチェック）
                     var processingElapsedSeconds = session.ProcessingElapsedSeconds;
+                    
+                    // セッション情報をクリア
+                    session.ProcessingStartTime = null;
+                    session.ProcessingElapsedSeconds = null;
+                    session.ProcessingTokens = null;
+                    session.ProcessingDirection = null;
+                    session.LastProcessingUpdateTime = null;
+                    session.LastProcessingSeconds = null;
+                    session.IsWaitingForUserInput = false;
+                    
+                    // セッションのタイマーを停止
+                    StopSessionTimer(session.SessionId);
+                    
+                    // 通知処理（経過時間があった場合のみ）
                     if (processingElapsedSeconds.HasValue)
                     {
-                        // 通知フラグを設定（アクティブでない場合のみ）
-                        if (!session.IsActive)
-                        {
-                            session.HasNotificationPending = true;
-                        }
-                        
+                       
                         // セッション情報をコピー（非同期処理で使用するため）
                         var sessionCopy = new SessionInfo
                         {
@@ -150,24 +163,17 @@ namespace TerminalHub.Services
                             }
                         });
                     }
-                    
-                    session.ProcessingStartTime = null;
-                    session.ProcessingElapsedSeconds = null;
-                    session.ProcessingTokens = null;
-                    session.ProcessingDirection = null;
-                    session.LastProcessingUpdateTime = null;
-                    session.LastProcessingSeconds = null;
-                    session.IsWaitingForUserInput = false;
-                    
-                    // セッションのタイマーを停止
-                    StopSessionTimer(session.SessionId);
+                    else
+                    {
+                        _logger.LogDebug("ProcessingElapsedSeconds is null for session {SessionId}, notification flag NOT set", session.SessionId);
+                    }
                 }
                 
                 // UIを更新
                 updateStatus(session.SessionId, statusText);
         }
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, int elapsedSeconds, string tokens, string direction, Action<Guid, string?> updateStatus)
+        private void UpdateSessionProcessingStatus(SessionInfo session, int elapsedSeconds, string tokens, string direction, Guid activeSessionId, Action<Guid, string?> updateStatus)
         {
                 session.ProcessingElapsedSeconds = elapsedSeconds;
                 session.ProcessingTokens = tokens;
@@ -187,7 +193,7 @@ namespace TerminalHub.Services
                 updateStatus(session.SessionId, $"{elapsedSeconds}s");
         }
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, string statusText, int elapsedSeconds, string tokens, string direction, Action<Guid, string?> updateStatus)
+        private void UpdateSessionProcessingStatus(SessionInfo session, string statusText, int elapsedSeconds, string tokens, string direction, Guid activeSessionId, Action<Guid, string?> updateStatus)
         {
                 session.ProcessingStatus = statusText;
                 session.ProcessingElapsedSeconds = elapsedSeconds;
@@ -235,8 +241,13 @@ namespace TerminalHub.Services
 
         private void CheckSessionTimeout(Guid sessionId)
         {
-            // タイムアウト処理はRoot.razor側でセッション情報を参照して実装する必要がある
-            // ここではタイマー管理のみを行う
+            _logger.LogDebug("CheckSessionTimeout called for session {SessionId}", sessionId);
+            _timeoutCallback?.Invoke(sessionId);
+        }
+
+        public void SetTimeoutCallback(Action<Guid> timeoutCallback)
+        {
+            _timeoutCallback = timeoutCallback;
         }
 
         public void Dispose()

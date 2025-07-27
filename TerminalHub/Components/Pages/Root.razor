@@ -166,7 +166,7 @@
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
-    
+
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
@@ -183,11 +183,11 @@
     private bool subSessionParentSessionIsGitRepository = true;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
-    
+
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
-    
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,14 +196,20 @@
         // 開発モード設定を読み込み
         showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
         showDevWindow = Configuration.GetValue<bool>("DevelopmentMode:ShowDevWindowOnStartup", false);
-        
+
         // スナップショット設定を読み込み
         _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
         _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
-        
+
         // 通知権限をリクエスト（削除 - 設定モーダルに移動）
         // await NotificationService.RequestBrowserNotificationPermissionAsync();
-        
+
+        // OutputAnalyzerServiceのタイムアウトコールバックを設定
+        OutputAnalyzerService.SetTimeoutCallback(sessionId => 
+        {
+            InvokeAsync(() => OnSessionTimeout(sessionId));
+        });
+
         // JavaScript interopはOnAfterRenderAsyncで実行
     }
 
@@ -215,10 +221,10 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
             // 通知用のDotNetRefを設定
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
-            
+
             // テキスト履歴を読み込み
             await InputHistoryService.LoadHistoryAsync();
-            
+
             // ローカルストレージからセッション情報を復元
             var savedSessions = await LocalStorageService.LoadSessionsAsync();
             var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
@@ -253,13 +259,13 @@
                         {
                             createdSession.Memo = sessionInfo.Memo;
                         }
-                        
+
                         // 親子関係を復元
                         if (sessionInfo.ParentSessionId.HasValue)
                         {
                             createdSession.ParentSessionId = sessionInfo.ParentSessionId;
                         }
-                        
+
                         await SessionManager.SaveSessionInfoAsync(createdSession);
                     }
 
@@ -272,7 +278,7 @@
             }
 
             sessions = SessionManager.GetAllSessions().ToList();
-            
+
             // すべてのセッションにイベントハンドラーを設定
             foreach (var session in sessions)
             {
@@ -284,7 +290,7 @@
             {
                 await SelectSession(savedActiveId.Value);
             }
-            
+
             // UIを更新
             StateHasChanged();
         }
@@ -295,7 +301,7 @@
     {
         await AddSession();
     }
-    
+
     [JSInvokable]
     public async Task OnNotificationClick(string sessionId)
     {
@@ -310,7 +316,7 @@
         showCreateDialog = true;
         await Task.CompletedTask; // 必要に応じて非同期処理を追加
     }
-    
+
     private void ShowSettings()
     {
         showSettingsDialog = true;
@@ -333,7 +339,7 @@
 
             // ローカルストレージに保存
             await LocalStorageService.SaveSessionsAsync(sessions);
-            
+
             // 新しいセッションのConPtyWithBufferにイベントハンドラーを設定
             SetupSessionEventHandlers(sessionInfo);
 
@@ -361,7 +367,7 @@
     private async Task SelectSession(Guid sessionId)
     {
         Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}");
-        
+
         if (activeSessionId == sessionId)
         {
             Console.WriteLine($"[SelectSession] 既にアクティブなセッション: {sessionId}");
@@ -393,7 +399,7 @@
         Console.WriteLine($"[SelectSession] SessionManagerでアクティブに設定");
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
-        
+
         // セッション情報を取得して、初期化中の場合はUIを更新
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionInfo != null && sessionInfo.ConPtyBuffer == null)
@@ -403,12 +409,12 @@
             sessionInfo.IsInitializing = true;
             StateHasChanged(); // スピナーを表示するためにUIを更新
         }
-        
+
         // 再起動後の新しいセッションを確実に取得
         Console.WriteLine($"[SelectSession] SessionManager.GetSessionAsync呼び出し");
         activeSession = await SessionManager.GetSessionAsync(sessionId);
         Console.WriteLine($"[SelectSession] SessionManager.GetSession結果: {(activeSession != null ? "成功" : "失敗")}");
-        
+
         // セッションが存在しない場合はエラー
         if (activeSession == null)
         {
@@ -416,10 +422,10 @@
             activeSessionId = null;
             return;
         }
-        
+
         // ConPty接続は完了したが、まだXTermの初期表示待ち
         // IsInitializingフラグは維持（最初のデータ受信時にリセット）
-        
+
         // 通知フラグをクリア
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (selectedSession != null && selectedSession.HasNotificationPending)
@@ -477,14 +483,14 @@
         if (selectedSession?.ConPtyBuffer != null)
         {
             // ConPtyWithBufferイベントハンドラーを設定
-            
+
             // 既存のイベントハンドラーをクリア
             selectedSession.ConPtyBuffer.ClearEventHandlers();
-            
 
-                        // イベントハンドラーを設定
+
+            // イベントハンドラーを設定
             SetupSessionEventHandlers(selectedSession);
-            
+
             // 切断時にタイマーをクリーンアップ
         }
         else
@@ -493,7 +499,7 @@
         }
 
         // ターミナルを最下段にスクロール
-   //     await TerminalService.ScrollToBottomAsync(sessionId);
+        //     await TerminalService.ScrollToBottomAsync(sessionId);
 
         // テキストエリアにフォーカス
         try
@@ -523,7 +529,7 @@
                 {
                     Console.WriteLine($"[ProcessReceivedData] セッション {sessionId} の最初のデータ受信 (長さ: {data.Length})");
                     sessionInfo.HasReceivedFirstData = true;
-                    
+
                     // 初期化完了としてフラグをリセット
                     if (sessionInfo.IsInitializing)
                     {
@@ -540,10 +546,10 @@
                     !sessionInfo.HasContinueErrorOccurred)
                 {
                     // Claude Continue Error detected
-                    
+
                     // フラグを設定して重複送信を防ぐ
                     sessionInfo.HasContinueErrorOccurred = true;
-                    
+
                     // セッション再起動のコマンドを送信
                     _ = InvokeAsync(async () =>
                     {
@@ -557,11 +563,11 @@
                 {
                     //Console.WriteLine($"[ProcessReceivedData] アクティブセッション - XTermにデータ送信 (長さ: {data.Length}) {DateTime.Now }");
                     await TerminalService.WriteToTerminalAsync(activeTerminal, data);
-                    
+
                     // 出力解析の実行
                     _ = InvokeAsync(() => 
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
                             (id, status) => InvokeAsync(() => 
                             {
                                 StateHasChanged();
@@ -575,7 +581,7 @@
                     // ただし、出力解析は実行してステータスを更新
                     _ = InvokeAsync(() => 
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
                             (id, status) => InvokeAsync(() => 
                             {
                                 StateHasChanged();
@@ -642,7 +648,7 @@
         {
             sessionToRemove.ConPtyBuffer.Dispose();
         }
-        
+
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);
 
@@ -707,14 +713,14 @@
         {
             // ConPtyにリサイズを通知
             activeSession.Resize(cols, rows);
-            
+
             // ConPtyWithBufferもリサイズを通知
             var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
             if (selectedSession?.ConPtyBuffer != null)
             {
                 selectedSession.ConPtyBuffer.Resize(cols, rows);
             }
-            
+
             // リサイズ時のスナップショット再表示は削除
             // ConPTYは自身でリフロー処理を行い、アプリケーションが再描画する
             // 手動でクリア＆再描画すると、ConPTYの再描画と競合する可能性がある
@@ -788,11 +794,11 @@
 
 
 
-    
-    
 
-    
-    
+
+
+
+
 
     private async Task SendInput()
     {
@@ -808,16 +814,16 @@
         {
             // テキスト履歴に追加
             InputHistoryService.AddToHistory(inputText);
-            
+
             await activeSession.WriteAsync(inputText);
-            
+
             // テキスト送信後、Enter送信前に0.2秒待機
             await Task.Delay(200);
         }
-        
+
         // Enterキーを送信（空の場合でも送信）
         await SendEnterKeyDirect();
-        
+
         // 入力フィールドをクリア
         inputText = "";
     }
@@ -939,7 +945,7 @@
         try
         {
             SessionInfo? newSession = null;
-            
+
             switch (result.OperationType)
             {
                 case SubSessionDialog.SubSessionType.CreateNew:
@@ -957,7 +963,7 @@
                             subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.AddExisting:
                     // 既存Worktree追加
                     if (!string.IsNullOrEmpty(result.WorktreePath))
@@ -965,7 +971,7 @@
                         newSession = await AddExistingWorktreeSession(subSessionParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.SamePath:
                     // 同じフォルダでセッション作成
                     if (!string.IsNullOrEmpty(subSessionParentSessionPath))
@@ -974,7 +980,7 @@
                             subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.NewFolder:
                     // 新しいフォルダでセッション作成
                     if (!string.IsNullOrEmpty(result.WorktreePath))
@@ -984,18 +990,18 @@
                     }
                     break;
             }
-            
+
             if (newSession != null)
             {
                 // セッション一覧を更新
                 sessions = SessionManager.GetAllSessions().ToList();
-                
+
                 // ローカルストレージに保存
                 await LocalStorageService.SaveSessionsAsync(sessions);
-                
+
                 // 新しいセッションを選択
                 await SelectSession(newSession.SessionId);
-                
+
                 string successMessage = result.OperationType switch
                 {
                     SubSessionDialog.SubSessionType.CreateNew => 
@@ -1008,7 +1014,7 @@
                         $"新しいフォルダ '{result.WorktreePath}' でセッションを作成しました",
                     _ => "セッションを作成しました"
                 };
-                
+
                 toast?.ShowSuccess(successMessage);
             }
             else
@@ -1029,7 +1035,7 @@
             subSessionParentSessionIsGitRepository = true;
         }
     }
-    
+
     private string GetSessionTypeName(TerminalType terminalType)
     {
         return terminalType switch
@@ -1040,7 +1046,7 @@
             _ => "セッション"
         };
     }
-    
+
     private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath, string branchName, TerminalType terminalType, Dictionary<string, string> options)
     {
         // 親セッション情報を取得
@@ -1050,7 +1056,7 @@
             // Parent session not found
             return null;
         }
-            
+
         // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
@@ -1058,17 +1064,17 @@
             terminalType,
             options
         );
-        
+
         // 親子関係を設定
         if (sessionInfo != null)
         {
             sessionInfo.ParentSessionId = parentSessionId;
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
         }
-        
+
         return sessionInfo;
     }
-    
+
     private async Task<SessionInfo?> CreateNewFolderSession(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string> options)
     {
         try
@@ -1080,13 +1086,13 @@
                 // Parent session not found
                 return null;
             }
-                
+
             // フォルダが存在しない場合は作成
             if (!Directory.Exists(folderPath))
             {
                 Directory.CreateDirectory(folderPath);
             }
-            
+
             // 新しいフォルダでセッション作成（統一された表示名を使用）
             var sessionInfo = await SessionManager.CreateSessionAsync(
                 folderPath,
@@ -1094,14 +1100,14 @@
                 terminalType,
                 options
             );
-            
+
             // 親子関係を設定
             if (sessionInfo != null)
             {
                 sessionInfo.ParentSessionId = parentSessionId;
                 await SessionManager.SaveSessionInfoAsync(sessionInfo);
             }
-            
+
             return sessionInfo;
         }
         catch (Exception ex)
@@ -1120,6 +1126,56 @@
         // 様々なEnterキーのパターンを試す
         // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
         await activeSession.WriteAsync("\r");
+    }
+
+    private async Task OnSessionTimeout(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null)
+        {
+            var lastUpdateTime = session.LastProcessingUpdateTime;
+            if (!lastUpdateTime.HasValue)
+            {
+                return;
+            }
+
+            // ユーザー入力待ち状態の場合はタイムアウトしない
+            if (session.IsWaitingForUserInput)
+            {
+                // タイマーを再設定
+                OutputAnalyzerService.ResetSessionTimer(sessionId);
+                return;
+            }
+
+            var elapsedTime = (DateTime.Now - lastUpdateTime.Value).TotalSeconds;
+
+            if (elapsedTime >= 5)
+            {
+                // 5秒間更新がないため処理終了と判定
+                Console.WriteLine($"[Session Timeout] セッション {sessionId} で5秒間更新がないため処理終了と判定");
+
+                // ステータスを直接クリア（UpdateSessionProcessingStatusの処理完了ロジックを実行）
+                session.ProcessingStatus = null;
+                session.ProcessingStartTime = null;
+                session.ProcessingElapsedSeconds = null;
+                session.ProcessingTokens = null;
+                session.ProcessingDirection = null;
+                session.LastProcessingUpdateTime = null;
+                session.LastProcessingSeconds = null;
+                session.IsWaitingForUserInput = false;
+
+                if(activeSessionId != sessionId)
+                {
+                    session.HasNotificationPending = true;
+                }
+
+                // タイマーを停止
+                OutputAnalyzerService.StopSessionTimer(sessionId);
+                
+                // UIを更新
+                StateHasChanged();
+            }
+        }
     }
 
     
