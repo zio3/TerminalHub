@@ -80,7 +80,7 @@ namespace TerminalHub.Services
                 await EnsureTerminalVisibleAsync(sessionId);
 
                 // ConPTYから自動的に画面状態が送信されるため、スナップショット送信は不要
-                if (sessionInfo?.ConPtyBuffer != null && activeSession != null)
+                if (sessionInfo?.ConPtySession != null && activeSession != null)
                 {
                     await Task.Delay(100); // ターミナル初期化完了を待つ
 

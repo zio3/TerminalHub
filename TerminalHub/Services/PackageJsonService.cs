@@ -11,10 +11,10 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task<bool> HasPackageJsonAsync(string folderPath)
+        public Task<bool> HasPackageJsonAsync(string folderPath)
         {
             var packageJsonPath = Path.Combine(folderPath, "package.json");
-            return File.Exists(packageJsonPath);
+            return Task.FromResult(File.Exists(packageJsonPath));
         }
 
         public async Task<Dictionary<string, string>?> GetNpmScriptsAsync(string folderPath)

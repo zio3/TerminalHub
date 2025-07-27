@@ -477,7 +477,9 @@ namespace TerminalHub.Services
         }
         
         // フローコントロール（XON/XOFF）のサポート
+        #pragma warning disable CS0414 // フィールドは割り当てられていますが、その値は使用されていません
         private bool _isPaused = false;
+        #pragma warning restore CS0414
         private const char XON = '\x11';  // Ctrl+Q
         private const char XOFF = '\x13'; // Ctrl+S
         

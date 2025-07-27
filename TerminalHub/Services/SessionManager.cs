@@ -237,11 +237,11 @@ namespace TerminalHub.Services
                 removed = true;
             }
             
-            // SessionInfoを削除（ConPtyBufferも破棄）
+            // SessionInfoを削除（ConPtySessionも破棄）
             if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
             {
-                // ConPtyBufferを破棄
-                sessionInfo.ConPtyBuffer?.Dispose();
+                // ConPtySessionを破棄
+                sessionInfo.ConPtySession?.Dispose();
                 removed = true;
             }
             
@@ -304,11 +304,12 @@ namespace TerminalHub.Services
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
                 
-                // ConPtyWithBufferを作成してSessionInfoに設定
-                var bufferCapacity = _configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000);
-                sessionInfo.ConPtyBuffer = new ConPtyWithBuffer(newSession, _logger, bufferCapacity);
+                // ConPtySessionをSessionInfoに設定
+                sessionInfo.ConPtySession = newSession;
+                // Startメソッドを呼ぶ
+                newSession.Start();
                 // 初期サイズを設定
-                sessionInfo.ConPtyBuffer.Resize(cols, rows);
+                newSession.Resize(cols, rows);
                 
                 sessionInfo.LastAccessedAt = DateTime.Now;
                 
@@ -618,13 +619,12 @@ namespace TerminalHub.Services
                     currentSession.Dispose();
                     _sessions.TryRemove(sessionId, out _);
                     
-                    // ConPtyBufferも破棄（イベントハンドラーをクリアしてから）
-                    if (sessionInfo.ConPtyBuffer != null)
+                    // ConPtySessionも破棄
+                    if (sessionInfo.ConPtySession != null)
                     {
-                        sessionInfo.ConPtyBuffer.ClearEventHandlers();
-                        sessionInfo.ConPtyBuffer.Dispose();
-                        sessionInfo.ConPtyBuffer = null;
-                        _logger.LogInformation("ConPtyBufferを破棄しました: {SessionId}", sessionId);
+                        sessionInfo.ConPtySession.Dispose();
+                        sessionInfo.ConPtySession = null;
+                        _logger.LogInformation("ConPtySessionを破棄しました: {SessionId}", sessionId);
                     }
                     
                     // リソースのクリーンアップを待つ
@@ -654,11 +654,12 @@ namespace TerminalHub.Services
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
                 
-                // 新しいConPtyBufferを作成
-                var bufferCapacity = _configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000);
-                sessionInfo.ConPtyBuffer = new ConPtyWithBuffer(newSession, _logger, bufferCapacity);
-                sessionInfo.ConPtyBuffer.Resize(cols, rows);
-                _logger.LogInformation("新しいConPtyBufferを作成しました: {SessionId}", sessionId);
+                // ConPtySessionをSessionInfoに設定
+                sessionInfo.ConPtySession = newSession;
+                // Startメソッドを呼ぶ
+                newSession.Start();
+                newSession.Resize(cols, rows);
+                _logger.LogInformation("新しいConPtySessionを作成しました: {SessionId}", sessionId);
 
                 _logger.LogInformation("セッション再起動成功: {SessionId}, タイプ: {Type}", sessionId, sessionInfo.TerminalType);
                 return true;
@@ -678,10 +679,10 @@ namespace TerminalHub.Services
             }
             _sessions.Clear();
             
-            // ConPtyBufferも破棄
+            // ConPtySessionも破棄
             foreach (var sessionInfo in _sessionInfos.Values)
             {
-                sessionInfo.ConPtyBuffer?.Dispose();
+                sessionInfo.ConPtySession?.Dispose();
             }
             _sessionInfos.Clear();
             
