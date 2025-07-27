@@ -472,12 +472,10 @@
             var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
             if (currentSession == null) return;
             
-            Console.WriteLine($"[InitializeSingleDosTerminal] 開始: SessionId={activeSessionId}");
             
             // ConPTYセッションがなければ作成
             if (currentSession.DosTerminalSession == null)
             {
-                Console.WriteLine($"[InitializeSingleDosTerminal] ConPTYセッション作成");
                 var conPtyService = new ConPtyService(LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyService>());
                 var conPtySession = await conPtyService.CreateSessionAsync("cmd.exe", "", currentSession.FolderPath, 120, 30);
                 
@@ -496,7 +494,6 @@
             
             if (!elementExists)
             {
-                Console.WriteLine($"[InitializeSingleDosTerminal] DOM要素が見つかりません。StateHasChangedを呼び出します。");
                 StateHasChanged();
                 await Task.Delay(200); // DOM更新を待つ
             }
@@ -510,18 +507,11 @@
             );
             
             currentDosTerminalSessionId = activeSessionId;
-            Console.WriteLine($"[InitializeSingleDosTerminal] XTerm作成完了");
             
             // バッファ内容を表示
             var bufferedOutput = currentSession.DosTerminalSession.GetBufferedOutput();
             if (!string.IsNullOrEmpty(bufferedOutput))
             {
-                // バッファ内容をデバッグ出力
-                Console.WriteLine($"[InitializeSingleDosTerminal] バッファ内容: '{bufferedOutput.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x1b", "\\x1b")}'");
-                if (bufferedOutput.Length > 0)
-                {
-                    Console.WriteLine($"[InitializeSingleDosTerminal] 最初の文字コード: {(int)bufferedOutput[0]}");
-                }
                 
                 // 初期の制御シーケンスをフィルタリング
                 var cleanedOutput = bufferedOutput;
@@ -551,15 +541,8 @@
                 // 先頭の空白も除去
                 cleanedOutput = cleanedOutput.TrimStart();
                 
-                if (cleanedOutput != bufferedOutput)
-                {
-                    Console.WriteLine($"[InitializeSingleDosTerminal] 制御シーケンスを除去しました");
-                    Console.WriteLine($"[InitializeSingleDosTerminal] 元: '{bufferedOutput.Replace("\x1b", "ESC")}'");
-                    Console.WriteLine($"[InitializeSingleDosTerminal] クリーン後: '{cleanedOutput.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x1b", "\\x1b")}'");
-                }
                 
                 await singleDosTerminal.InvokeVoidAsync("write", cleanedOutput);
-                Console.WriteLine($"[InitializeSingleDosTerminal] 初期データ書き込み完了: {cleanedOutput.Length}文字");
             }
             
             // フォーカスとリサイズ
@@ -588,7 +571,6 @@
         {
             if (singleDosTerminal != null)
             {
-                Console.WriteLine($"[CleanupSingleDosTerminal] DOSターミナルのクリーンアップ");
                 
                 // JavaScriptで破棄
                 await JSRuntime.InvokeVoidAsync("eval", $@"

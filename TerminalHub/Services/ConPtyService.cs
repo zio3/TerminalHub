@@ -6,13 +6,29 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using TerminalHub.Constants;
 
 namespace TerminalHub.Services
 {
+    // Terminal定数 (ConPtyService内部で使用)
+    internal static class ConPtyTerminalConstants
+    {
+        public const uint ExtendedStartupinfoPresent = 0x00080000;
+        public const int ProcThreadAttributePseudoConsole = 0x00020016;
+    }
+    
     public interface IConPtyService
     {
         Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24);
+    }
+    
+    public class DataReceivedEventArgs : EventArgs
+    {
+        public string Data { get; }
+        
+        public DataReceivedEventArgs(string data)
+        {
+            Data = data;
+        }
     }
 
     public class ConPtyService : IConPtyService
@@ -24,24 +40,16 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
+        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
         {
-            // Console.WriteLine($"[ConPtyService] CreateSessionAsync: {command}");
-            
-            try
-            {
-                return await Task.Run(() => new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows));
-            }
-            catch (InvalidOperationException ex)
-            {
-                _logger.LogError(ex, "Failed to create ConPTY session: {Message}", ex.Message);
-                throw new InvalidOperationException($"ターミナルの初期化に失敗しました: {ex.Message}", ex);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error creating ConPTY session");
-                throw new InvalidOperationException("ターミナルの初期化中に予期しないエラーが発生しました。", ex);
-            }
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
+        }
+        
+        // xterm.js用の推奨設定でセッションを作成
+        public Task<ConPtySession> CreateXTermJsSessionAsync(string command, string? arguments = null, string? workingDirectory = null, int cols = 80, int rows = 24)
+        {
+            // xterm.jsではクライアント側でサイズを管理するため、引数で受け取る
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
         }
     }
 
@@ -52,36 +60,137 @@ namespace TerminalHub.Services
         private IntPtr _hPipeIn = IntPtr.Zero;
         private IntPtr _hPipeOut = IntPtr.Zero;
         private readonly ILogger _logger;
-        private StreamWriter? _writer;
+        private FileStream? _pipeInStream;
         private FileStream? _pipeOutStream;
+        private StreamWriter? _writer;
         private bool _disposed;
         private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
+        private Task? _readTask;
+        private CancellationTokenSource? _readCancellationTokenSource;
+        private bool _started = false;
+        
+        // 環境変数フラグ
+        private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+        
+        // パフォーマンス最適化設定
+        private bool _enableBuffering = false; // デフォルトは無効
+        private readonly SemaphoreSlim _outputSemaphore = new(1, 1);
+        private System.Timers.Timer? _flushTimer;
+        private readonly StringBuilder _outputBuffer = new();
+        private const int FLUSH_INTERVAL_MS = 16; // 約60fps
+        private const int MAX_BUFFER_SIZE = 65536; // 64KB
 
-        private int _cols;
-        private int _rows;
-        private readonly SemaphoreSlim _readSemaphore = new(1, 1);
+        public int Cols { get; private set; }
+        public int Rows { get; private set; }
+        
+        // プロセス情報
+        public int ProcessId => _process?.Id ?? -1;
+        public bool HasExited => _process?.HasExited ?? true;
+        
+        // 統計情報
+        public long TotalBytesRead { get; private set; } = 0;
+        public long TotalBytesWritten { get; private set; } = 0;
+        
+        // データ受信イベント
+        public event EventHandler<DataReceivedEventArgs>? DataReceived;
+        
+        // プロセス終了イベント
+        public event EventHandler? ProcessExited;
 
-        public int Cols => _cols;
-        public int Rows => _rows;
-
-        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = false)
         {
-            // Console.WriteLine($"[ConPtySession] コンストラクタ開始");
             _logger = logger;
-            _cols = cols;
-            _rows = rows;
+            Cols = cols;
+            Rows = rows;
+            _enableBuffering = enableBuffering;
+            
+            // バッファリング用タイマーの初期化（有効時のみ）
+            if (_enableBuffering)
+            {
+                _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
+                _flushTimer.Elapsed += async (sender, e) =>
+                {
+                    if (!_disposed)
+                        await FlushOutputBuffer();
+                };
+                _flushTimer.AutoReset = true;
+            }
+            
             InitializeConPty(command, arguments, workingDirectory);
-            // Console.WriteLine($"[ConPtySession] コンストラクタ完了");
+        }
+        
+        public void Start()
+        {
+            if (_started || _disposed)
+                return;
+                
+            _started = true;
+            
+            // xterm.jsを使用する場合、初期化シーケンスは不要
+            // xterm.jsが自動的にエスケープシーケンスを処理
+            
+            // バッファリングが有効な場合はタイマーを開始
+            if (_enableBuffering)
+            {
+                _flushTimer?.Start();
+            }
+            
+            _readCancellationTokenSource = new CancellationTokenSource();
+            _readTask = Task.Run(() => ReadPipeAsync(_readCancellationTokenSource.Token));
+        }
+        
+        // xterm.jsを使用する場合、このメソッドは不要
+        // private void SendXTermInitSequences()
+        // {
+        //     // xterm.jsが自動的にエスケープシーケンスを処理するため、
+        //     // ConPTY側での初期化シーケンス送信は不要
+        // }
+        
+        private IntPtr CreateEnvironmentBlock()
+        {
+            // xterm.js用の環境変数を設定
+            var envVars = new Dictionary<string, string>
+            {
+                ["TERM"] = "xterm-256color",          // xterm.jsは256色をサポート
+                ["COLORTERM"] = "truecolor",           // xterm.jsは24ビットカラーをサポート
+                // 行数と列数はConPTYが管理するため設定不要
+                // ["LINES"] = Rows.ToString(),
+                // ["COLUMNS"] = Cols.ToString(),
+            };
+            
+            // 既存の環境変数を取得してマージ
+            var currentEnv = Environment.GetEnvironmentVariables();
+            foreach (System.Collections.DictionaryEntry env in currentEnv)
+            {
+                var key = env.Key?.ToString();
+                var value = env.Value?.ToString();
+                if (key != null && value != null && !envVars.ContainsKey(key))
+                {
+                    envVars[key] = value;
+                }
+            }
+            
+            // 環境変数ブロックを作成（Unicode形式）
+            var envBlock = new System.Text.StringBuilder();
+            foreach (var kvp in envVars)
+            {
+                envBlock.Append($"{kvp.Key}={kvp.Value}\0");
+            }
+            envBlock.Append('\0'); // 終端のnull
+            
+            // Unicodeバイト配列に変換してマーシャリング
+            var bytes = Encoding.Unicode.GetBytes(envBlock.ToString());
+            var ptr = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, ptr, bytes.Length);
+            
+            return ptr;
         }
 
         private void InitializeConPty(string command, string? arguments, string? workingDirectory)
         {
-            // Console.WriteLine($"[ConPtySession] InitializeConPty開始");
-            
             // ConPTYの初期化
             var startupInfo = new STARTUPINFOEX();
             startupInfo.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
-            // Console.WriteLine($"[ConPtySession] STARTUPINFOEX初期化完了");
 
             IntPtr hWritePipe = IntPtr.Zero;
             IntPtr hReadPipe = IntPtr.Zero;
@@ -90,55 +199,52 @@ namespace TerminalHub.Services
             
             try
             {
-                // パイプの作成（バッファサイズを64KBに設定）
-                // Console.WriteLine($"[ConPtySession] パイプ作成開始");
-                const uint pipeBufferSize = 65536; // 64KB
+                // パイプの作成
+                const uint pipeBufferSize = 65536;
                 CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, pipeBufferSize);
                 CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, pipeBufferSize);
-                // Console.WriteLine($"[ConPtySession] パイプ作成完了");
 
                 _hPipeIn = hPipeIn;
                 _hPipeOut = hPipeOut;
 
-            // ConPTYの作成
-            // Console.WriteLine($"[ConPtySession] CreatePseudoConsole呼び出し開始");
-            var size = new COORD { X = (short)_cols, Y = (short)_rows };
-            var hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, 0, out _hPC);
+            // ConPTYの作成（XTerm互換のための設定）
+            var size = new COORD { X = (short)Cols, Y = (short)Rows };
+            
+            // ConPTYフラグ（現在は0しか定義されていない）
+            uint conPtyFlags = 0;
+            
+            var hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, conPtyFlags, out _hPC);
             if (hr != 0)
             {
-                Console.WriteLine($"[ConPtySession] CreatePseudoConsole失敗: HRESULT={hr:X}");
                 _logger.LogError($"CreatePseudoConsole failed with HRESULT: {hr:X}");
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
-            // Console.WriteLine($"[ConPtySession] CreatePseudoConsole成功");
 
                 // プロセス属性リストの初期化
-                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化開始");
                 var lpSize = IntPtr.Zero;
                 InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
                 startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
                 InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
-                // Console.WriteLine($"[ConPtySession] プロセス属性リスト初期化完了");
 
             // 擬似コンソールの属性を設定
-            // Console.WriteLine($"[ConPtySession] UpdateProcThreadAttribute呼び出し");
             UpdateProcThreadAttribute(
                 startupInfo.lpAttributeList,
                 0,
-                (IntPtr)TerminalConstants.ProcThreadAttributePseudoConsole,
+                (IntPtr)ConPtyTerminalConstants.ProcThreadAttributePseudoConsole,
                 _hPC,
                 (IntPtr)IntPtr.Size,
                 IntPtr.Zero,
                 IntPtr.Zero);
-            // Console.WriteLine($"[ConPtySession] UpdateProcThreadAttribute完了");
 
             // プロセスの作成
             var processInfo = new PROCESS_INFORMATION();
             // argumentsが空の場合は余分なスペースを追加しない
             var cmdline = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
 
-            // Console.WriteLine($"[ConPtySession] CreateProcess: {cmdline}");
             _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");
+            
+            // XTerm互換のための環境変数を設定
+            var envBlock = CreateEnvironmentBlock();
             
             var result = CreateProcess(
                 null,
@@ -146,56 +252,51 @@ namespace TerminalHub.Services
                 IntPtr.Zero,
                 IntPtr.Zero,
                 false,
-                TerminalConstants.ExtendedStartupinfoPresent,
-                IntPtr.Zero,
+                ConPtyTerminalConstants.ExtendedStartupinfoPresent | CREATE_UNICODE_ENVIRONMENT,
+                envBlock,
                 workingDirectory,
                 ref startupInfo,
                 out processInfo);
                 
+            // 環境変数ブロックを解放
+            if (envBlock != IntPtr.Zero)
+                Marshal.FreeHGlobal(envBlock);
+                
             if (!result)
             {
                 var error = Marshal.GetLastWin32Error();
-                Console.WriteLine($"[ConPtySession] CreateProcess失敗: Win32Error={error}");
                 _logger.LogError($"CreateProcess failed with error: {error}");
                 throw new InvalidOperationException($"Failed to create process: {error}");
             }
 
-            // Console.WriteLine($"[ConPtySession] CreateProcess成功: PID={processInfo.dwProcessId}");
             _process = Process.GetProcessById((int)processInfo.dwProcessId);
-            // Console.WriteLine($"[ConPtySession] Process取得完了");
 
                 processInfoHandle = processInfo.hProcess;
                 threadInfoHandle = processInfo.hThread;
                 
                 // ストリームの作成
-                // Console.WriteLine($"[ConPtySession] ストリーム作成開始");
                 var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
                 var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
 
-                _writer = new StreamWriter(new FileStream(pipeIn, FileAccess.Write), Encoding.UTF8) { AutoFlush = true };
+                _pipeInStream = new FileStream(pipeIn, FileAccess.Write);
                 _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
                 
-                // デバッグ: FileStreamの詳細情報
-                Console.WriteLine($"[ConPtySession] FileStream created - Type: {_pipeOutStream.GetType().FullName}");
-                Console.WriteLine($"[ConPtySession] FileStream properties - CanSeek: {_pipeOutStream.CanSeek}, CanRead: {_pipeOutStream.CanRead}, IsAsync: {_pipeOutStream.IsAsync}");
-                if (_pipeOutStream.CanSeek)
+                // StreamWriterを作成（XTerm向けにUTF-8、改行コードLF）
+                _writer = new StreamWriter(_pipeInStream, new UTF8Encoding(false))
                 {
-                    Console.WriteLine($"[ConPtySession] WARNING: Pipe FileStream is seekable! Position: {_pipeOutStream.Position}, Length: {_pipeOutStream.Length}");
-                }
-                
-                // Console.WriteLine($"[ConPtySession] ストリーム作成完了");
+                    AutoFlush = true,
+                    NewLine = "\n"  // LF改行（Unix形式）
+                };
                 
                 // SafeFileHandleに所有権を移したので、元のハンドルは無効化
                 hWritePipe = IntPtr.Zero;
                 hReadPipe = IntPtr.Zero;
 
                 // ハンドルのクリーンアップ
-                // Console.WriteLine($"[ConPtySession] ハンドルクリーンアップ開始");
                 CloseHandle(processInfoHandle);
                 CloseHandle(threadInfoHandle);
                 DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
                 Marshal.FreeHGlobal(startupInfo.lpAttributeList);
-                // Console.WriteLine($"[ConPtySession] InitializeConPty完了");
             }
             catch
             {
@@ -220,135 +321,178 @@ namespace TerminalHub.Services
 
         public async Task WriteAsync(string input)
         {
-            if (_writer != null)
+            if (_writer != null && !_disposed)
             {
                 await _writer.WriteAsync(input);
                 await _writer.FlushAsync();
+                
+                // 統計情報を更新
+                TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
             }
         }
-
-        public async Task<string?> ReadLineAsync()
+        
+        // バッファリング関連メソッド
+        private async Task BufferOutput(string data)
         {
-            // この実装は StreamReader を前提としていたため、削除予定
-            throw new NotSupportedException("ReadLineAsync is no longer supported. Use ReadAsync instead.");
-        }
-
-        public async Task<int> ReadAsync(char[] buffer, int offset, int count)
-        {
-            if (_disposed)
-                return 0;
+            if (_disposed || _outputSemaphore == null)
+                return;
                 
-            await _readSemaphore.WaitAsync();
             try
             {
-                if (_disposed || _pipeOutStream == null)
-                    return 0;
-                
-                // バイトバッファを用意（読み込みサイズを制限）
-                var maxBytesToRead = Math.Min(count * 4, 65536); // 最大64KBに制限
-                var byteBuffer = new byte[maxBytesToRead];
-                var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
-                
-                if (bytesRead == 0)
-                    return 0;
-                
-                // デコードに必要なchar数を計算（UTF-8の最悪ケースを考慮）
-                var charCountNeeded = _utf8Decoder.GetCharCount(byteBuffer, 0, bytesRead);
-                
-                // バッファサイズを確認
-                if (offset + charCountNeeded > buffer.Length)
+                await _outputSemaphore.WaitAsync();
+                try
                 {
-                    // バッファが小さすぎる場合は、読み込むバイト数を調整
-                    var availableChars = buffer.Length - offset;
-                    if (availableChars <= 0)
-                        return 0;
-                    
-                    // 安全に読み込めるバイト数を推定（1文字1バイトと仮定して調整）
-                    var safeBytesToDecode = Math.Min(bytesRead, availableChars);
-                    
-                    // 不完全なUTF-8シーケンスを避けるため、末尾を調整
-                    while (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0x80) == 0x80)
+                    if (!_disposed)
                     {
-                        safeBytesToDecode--;
-                        if (safeBytesToDecode > 0 && (byteBuffer[safeBytesToDecode - 1] & 0xC0) == 0xC0)
-                            break;
+                        _outputBuffer.Append(data);
+                        
+                        // バッファサイズが上限に達したら即座にフラッシュ
+                        if (_outputBuffer.Length >= MAX_BUFFER_SIZE)
+                        {
+                            var bufferedData = _outputBuffer.ToString();
+                            _outputBuffer.Clear();
+                            DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
+                        }
                     }
-                    
-                    if (safeBytesToDecode == 0)
-                        return 0;
-                    
-                    bytesRead = safeBytesToDecode;
                 }
-                
-                // UTF-8をcharに変換（ステートフルなデコーダーを使用）
-                var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, buffer, offset);
-                
-                return charsRead;
+                finally
+                {
+                    if (!_disposed)
+                        _outputSemaphore.Release();
+                }
             }
-            finally
+            catch (ObjectDisposedException)
             {
-                if (!_disposed)
-                    _readSemaphore.Release();
+                // セマフォが破棄されている場合は無視
             }
         }
-
-        public Stream? GetOutputStream()
+        
+        private async Task FlushOutputBuffer()
         {
-            return _pipeOutStream;
-        }
-
-        public async Task<string> ReadAvailableOutputAsync(int timeoutMs = 2000)
-        {
-            if (_disposed || _pipeOutStream == null)
-                return string.Empty;
-
-            var output = new StringBuilder();
-            var byteBuffer = new byte[4096];
-            var charBuffer = new char[4096];
-            var startTime = DateTime.Now;
-
-            await _readSemaphore.WaitAsync();
+            if (_disposed || _outputSemaphore == null)
+                return;
+                
             try
             {
-                while ((DateTime.Now - startTime).TotalMilliseconds < timeoutMs)
+                await _outputSemaphore.WaitAsync();
+                try
                 {
-                    if (_disposed || _pipeOutStream == null)
-                        break;
+                    if (!_disposed && _outputBuffer.Length > 0)
+                    {
+                        var data = _outputBuffer.ToString();
+                        _outputBuffer.Clear();
+                        
+                        // メインスレッドでイベントを発生
+                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                    }
+                }
+                finally
+                {
+                    if (!_disposed)
+                        _outputSemaphore.Release();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // セマフォが破棄されている場合は無視
+            }
+        }
 
-                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length);
+        // バックグラウンドでパイプを読み取るメソッド
+        private async Task ReadPipeAsync(CancellationToken cancellationToken)
+        {
+            var byteBuffer = new byte[65536]; // 64KB
+            var charBuffer = new char[65536]; // 64KB
+            
+            while (!cancellationToken.IsCancellationRequested && !_disposed)
+            {
+                try
+                {
+                    if (_pipeOutStream == null)
+                        break;
+                        
+                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken);
+                    
                     if (bytesRead > 0)
                     {
+                        // 統計情報を更新
+                        TotalBytesRead += bytesRead;
+                        
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
-                        output.Append(charBuffer, 0, charsRead);
-                        continue;
+                        var data = new string(charBuffer, 0, charsRead);
+                        
+                        if (_enableBuffering)
+                        {
+                            // バッファリングが有効な場合
+                            await BufferOutput(data);
+                        }
+                        else
+                        {
+                            // 直接イベントを発生
+                            DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                        }
                     }
-
-                    // 短い待機
-                    await Task.Delay(100);
+                    else
+                    {
+                        // ストリームが閉じられた場合
+                        break;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // キャンセルされた場合は正常終了
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error reading from pipe");
+                    break;
                 }
             }
-            catch
+            
+            // バッファリングタイマーを即座に停止
+            if (_enableBuffering && _flushTimer != null)
             {
-                // エラーが発生した場合は空文字を返す
+                _flushTimer.Stop();
+                _flushTimer.Dispose();
+                _flushTimer = null;
             }
-            finally
-            {
-                if (!_disposed)
-                    _readSemaphore.Release();
-            }
-
-            return output.ToString();
+            
+            // プロセスが終了したことを通知
+            ProcessExited?.Invoke(this, EventArgs.Empty);
         }
 
         public void Resize(int cols, int rows)
         {
             if (_hPC != IntPtr.Zero)
             {
-                _cols = cols;
-                _rows = rows;
+                Cols = cols;
+                Rows = rows;
                 var size = new COORD { X = (short)cols, Y = (short)rows };
                 ResizePseudoConsole(_hPC, size);
+                
+                // xterm.jsの場合、リサイズ後に追加の処理は不要
+                // xterm.js側でリフローを処理する
             }
+        }
+        
+        // フローコントロール（XON/XOFF）のサポート
+        private bool _isPaused = false;
+        private const char XON = '\x11';  // Ctrl+Q
+        private const char XOFF = '\x13'; // Ctrl+S
+        
+        public void Pause()
+        {
+            _isPaused = true;
+            // XOFFを送信して出力を一時停止
+            WriteAsync(XOFF.ToString()).Wait(100);
+        }
+        
+        public void Resume()
+        {
+            _isPaused = false;
+            // XONを送信して出力を再開
+            WriteAsync(XON.ToString()).Wait(100);
         }
 
         public void Dispose()
@@ -358,9 +502,40 @@ namespace TerminalHub.Services
             // まず破棄フラグを設定
             _disposed = true;
 
+            // 読み取りタスクをキャンセル
+            try
+            {
+                _readCancellationTokenSource?.Cancel();
+                _readTask?.Wait(1000); // 1秒待機
+            }
+            catch { }
+
+            // タイマーを停止
+            if (_enableBuffering && _flushTimer != null)
+            {
+                _flushTimer.Stop();
+                _flushTimer.Dispose();
+                _flushTimer = null;
+                
+                // 残りのバッファを同期的にフラッシュ
+                try
+                {
+                    if (_outputBuffer.Length > 0)
+                    {
+                        var data = _outputBuffer.ToString();
+                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                    }
+                }
+                catch { }
+            }
+            
             // ストリームを破棄
-            try { _writer?.Dispose(); } catch { }
-            try { _pipeOutStream?.Dispose(); } catch { }
+            _writer?.Dispose();
+            _pipeInStream?.Dispose();
+            _pipeOutStream?.Dispose();
+            
+            // セマフォを破棄
+            _outputSemaphore?.Dispose();
 
             // プロセスを終了
             if (_process != null && !_process.HasExited)
@@ -395,16 +570,14 @@ namespace TerminalHub.Services
                 _hPipeOut = IntPtr.Zero;
             }
 
-            try { _process?.Dispose(); } catch { }
-            
-            // 最後にセマフォを破棄
-            try { _readSemaphore?.Dispose(); } catch { }
+            _process?.Dispose();
+            _readCancellationTokenSource?.Dispose();
         }
 
         // P/Invoke定義
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, IntPtr lpPipeAttributes, uint nSize);
-
+        
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern int CreatePseudoConsole(COORD size, IntPtr hInput, IntPtr hOutput, uint dwFlags, out IntPtr phPC);
 
