@@ -322,6 +322,12 @@
         // 通知権限をリクエスト（削除 - 設定モーダルに移動）
         // await NotificationService.RequestBrowserNotificationPermissionAsync();
         
+        // OutputAnalyzerServiceのタイムアウトコールバックを設定
+        OutputAnalyzerService.SetTimeoutCallback(sessionId => 
+        {
+            InvokeAsync(() => OnSessionTimeout(sessionId));
+        });
+        
         // JavaScript interopはOnAfterRenderAsyncで実行
     }
 
@@ -478,6 +484,9 @@
                 currentSession.DosTerminalSession = new ConPtyWithBuffer(conPtySession, LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyWithBuffer>());
                 currentSession.DosTerminalSession.DataReceived += (data) => OnDosTerminalDataReceived(currentSession.SessionId, data);
                 currentSession.DosTerminalSession.Disconnected += () => OnDosTerminalExited(currentSession.SessionId);
+                
+                // ConPTYの初期化が完了するまで少し待つ
+                await Task.Delay(100);
             }
             
             // DOM要素の存在を確認
@@ -509,10 +518,48 @@
             {
                 // バッファ内容をデバッグ出力
                 Console.WriteLine($"[InitializeSingleDosTerminal] バッファ内容: '{bufferedOutput.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x1b", "\\x1b")}'");
-                Console.WriteLine($"[InitializeSingleDosTerminal] 最初の文字コード: {(int)bufferedOutput[0]}");
+                if (bufferedOutput.Length > 0)
+                {
+                    Console.WriteLine($"[InitializeSingleDosTerminal] 最初の文字コード: {(int)bufferedOutput[0]}");
+                }
                 
-                await singleDosTerminal.InvokeVoidAsync("write", bufferedOutput);
-                Console.WriteLine($"[InitializeSingleDosTerminal] 初期データ書き込み完了: {bufferedOutput.Length}文字");
+                // 初期の制御シーケンスをフィルタリング
+                var cleanedOutput = bufferedOutput;
+                
+                // ESC[K (行末までクリア) を除去
+                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
+                    cleanedOutput, 
+                    @"\x1b\[K", 
+                    ""
+                );
+                
+                // ESC[?25h (カーソル表示) を除去
+                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
+                    cleanedOutput,
+                    @"\x1b\[\?25h",
+                    ""
+                );
+                
+                // その他の一般的な初期制御シーケンスも除去
+                // ESC[...文字 の形式（数字、セミコロン、?を含む）
+                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
+                    cleanedOutput,
+                    @"\x1b\[[0-9;?]*[A-Za-z~]",
+                    ""
+                );
+                
+                // 先頭の空白も除去
+                cleanedOutput = cleanedOutput.TrimStart();
+                
+                if (cleanedOutput != bufferedOutput)
+                {
+                    Console.WriteLine($"[InitializeSingleDosTerminal] 制御シーケンスを除去しました");
+                    Console.WriteLine($"[InitializeSingleDosTerminal] 元: '{bufferedOutput.Replace("\x1b", "ESC")}'");
+                    Console.WriteLine($"[InitializeSingleDosTerminal] クリーン後: '{cleanedOutput.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x1b", "\\x1b")}'");
+                }
+                
+                await singleDosTerminal.InvokeVoidAsync("write", cleanedOutput);
+                Console.WriteLine($"[InitializeSingleDosTerminal] 初期データ書き込み完了: {cleanedOutput.Length}文字");
             }
             
             // フォーカスとリサイズ
@@ -1486,8 +1533,66 @@
     
     // テキスト履歴関連メソッド
     
-    
-    
+    private async Task OnSessionTimeout(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session != null)
+        {
+            var lastUpdateTime = session.LastProcessingUpdateTime;
+            if (!lastUpdateTime.HasValue)
+            {
+                return;
+            }
+
+            // ユーザー入力待ち状態の場合はタイムアウトしない
+            if (session.IsWaitingForUserInput)
+            {
+                // タイマーを再設定
+                OutputAnalyzerService.ResetSessionTimer(sessionId);
+                return;
+            }
+
+            var elapsedTime = (DateTime.Now - lastUpdateTime.Value).TotalSeconds;
+
+            if (elapsedTime >= 5)
+            {
+                // 5秒間更新がないため処理終了と判定
+                Console.WriteLine($"[Session Timeout] セッション {sessionId} で5秒間更新がないため処理終了と判定");
+
+                // ステータスを直接クリア（UpdateSessionProcessingStatusの処理完了ロジックを実行）
+                session.ProcessingStatus = null;
+                session.ProcessingStartTime = null;
+                session.ProcessingElapsedSeconds = null;
+                session.ProcessingTokens = null;
+                session.ProcessingDirection = null;
+                session.LastProcessingUpdateTime = null;
+                session.LastProcessingSeconds = null;
+                session.IsWaitingForUserInput = false;
+
+                if(activeSessionId != sessionId)
+                {
+                    session.HasNotificationPending = true;
+                }
+
+                // 処理完了の通知
+                if (!session.IsActive)
+                {
+                    await NotificationService.NotifyProcessingCompleteAsync(session, (int)elapsedTime)　;
+                }
+
+                // タイマーを停止
+                OutputAnalyzerService.StopSessionTimer(sessionId);
+                
+                // UIを更新
+                StateHasChanged();
+            }
+            else
+            {
+                // まだタイムアウトしていないので、タイマーを再設定
+                OutputAnalyzerService.ResetSessionTimer(sessionId);
+            }
+        }
+    }
 
     private void ShowSessionSettingsDialog(Guid sessionId)
     {

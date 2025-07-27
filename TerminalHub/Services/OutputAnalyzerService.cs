@@ -15,6 +15,7 @@ namespace TerminalHub.Services
         private readonly INotificationService _notificationService;
         private readonly IOutputAnalyzerFactory _analyzerFactory;
         private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
+        private Action<Guid>? _timeoutCallback;
         private bool _disposed;
 
         public OutputAnalyzerService(
@@ -235,8 +236,13 @@ namespace TerminalHub.Services
 
         private void CheckSessionTimeout(Guid sessionId)
         {
-            // タイムアウト処理はRoot.razor側でセッション情報を参照して実装する必要がある
-            // ここではタイマー管理のみを行う
+            _logger.LogDebug("CheckSessionTimeout called for session {SessionId}", sessionId);
+            _timeoutCallback?.Invoke(sessionId);
+        }
+
+        public void SetTimeoutCallback(Action<Guid> timeoutCallback)
+        {
+            _timeoutCallback = timeoutCallback;
         }
 
         public void Dispose()

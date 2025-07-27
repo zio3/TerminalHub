@@ -9,6 +9,7 @@ namespace TerminalHub.Services
         void AnalyzeOutput(string data, SessionInfo sessionInfo, Action<Guid, string?> updateStatus);
         void ResetSessionTimer(Guid sessionId);
         void StopSessionTimer(Guid sessionId);
+        void SetTimeoutCallback(Action<Guid> timeoutCallback);
         void Dispose();
     }
 }
