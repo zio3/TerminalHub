@@ -412,6 +412,13 @@
                             createdSession.Memo = sessionInfo.Memo;
                         }
                         
+                        // チェックされたスクリプトを復元
+                        if (sessionInfo.CheckedScripts != null && sessionInfo.CheckedScripts.Count > 0)
+                        {
+                            createdSession.CheckedScripts = new HashSet<string>(sessionInfo.CheckedScripts);
+                            Console.WriteLine($"[OnInitialized] Restored {sessionInfo.CheckedScripts.Count} checked scripts for session {sessionInfo.DisplayName}: {string.Join(", ", sessionInfo.CheckedScripts)}");
+                        }
+                        
                         // 親子関係を復元
                         if (sessionInfo.ParentSessionId.HasValue)
                         {
@@ -806,6 +813,7 @@
             
             // チェックされたスクリプトを復元
             checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
+            Console.WriteLine($"[SelectSession] Restored {checkedScripts.Count} checked scripts: {string.Join(", ", checkedScripts)}");
             
             StateHasChanged(); // UIを更新
         }
