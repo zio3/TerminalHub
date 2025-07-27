@@ -147,7 +147,7 @@
                                                         {
                                                             <li>
                                                                 <button class="dropdown-item @(runningScripts.Contains(scriptName) ? "disabled" : "")" 
-                                                                        @onclick="() => RunScriptFromTextInput(scriptName)"
+                                                                        @onclick="() => { Console.WriteLine($\"[UI] タスク実行ボタンクリック: {scriptName}\"); RunScriptFromTextInput(scriptName); }"
                                                                         disabled="@runningScripts.Contains(scriptName)">
                                                                     @if (runningScripts.Contains(scriptName))
                                                                     {
@@ -1049,6 +1049,8 @@
     [JSInvokable]
     public async Task SendInput(string sessionId, string data)
     {
+        Console.WriteLine($"[SendInput JSInvokable] 呼び出し - sessionId: {sessionId}, data長: {data?.Length ?? 0}");
+        
         // DOSターミナルからの入力を処理
         if (sessionId.StartsWith("dos-terminal-"))
         {
@@ -1191,30 +1193,52 @@
 
     private async Task SendInput()
     {
+        Console.WriteLine($"[SendInputボタン] 呼び出し - activeSessionId: {activeSessionId}, activeSession: {(activeSession != null ? "存在" : "null")}");
+        
         if (activeSession == null)
+        {
+            Console.WriteLine("[SendInputボタン] activeSessionがnullのため中断");
             return;
+        }
 
         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
         if (currentSession == null)
+        {
+            Console.WriteLine("[SendInputボタン] currentSessionが見つからないため中断");
             return;
+        }
 
         // テキストがある場合は送信
         if (!string.IsNullOrWhiteSpace(inputText))
         {
+            Console.WriteLine($"[SendInputボタン] テキスト送信: {inputText}");
+            
             // テキスト履歴に追加
             InputHistoryService.AddToHistory(inputText);
             
-            await activeSession.WriteAsync(inputText);
+            try
+            {
+                Console.WriteLine("[SendInputボタン] activeSession.WriteAsync呼び出し");
+                await activeSession.WriteAsync(inputText);
+                Console.WriteLine("[SendInputボタン] WriteAsync完了");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SendInputボタン] WriteAsyncエラー: {ex.GetType().Name} - {ex.Message}");
+                throw;
+            }
             
             // テキスト送信後、Enter送信前に0.2秒待機
             await Task.Delay(200);
         }
         
         // Enterキーを送信（空の場合でも送信）
+        Console.WriteLine("[SendInputボタン] Enterキー送信");
         await SendEnterKeyDirect();
         
         // 入力フィールドをクリア
         inputText = "";
+        Console.WriteLine("[SendInputボタン] 完了");
     }
 
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
@@ -1512,12 +1536,27 @@
 
     private async Task SendEnterKeyDirect()
     {
+        Console.WriteLine($"[SendEnterKeyDirect] 呼び出し - activeSession: {(activeSession != null ? "存在" : "null")}");
+        
         if (activeSession == null)
+        {
+            Console.WriteLine("[SendEnterKeyDirect] activeSessionがnullのため中断");
             return;
+        }
 
-        // 様々なEnterキーのパターンを試す
-        // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
-        await activeSession.WriteAsync("\r");
+        try
+        {
+            // 様々なEnterキーのパターンを試す
+            // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
+            Console.WriteLine("[SendEnterKeyDirect] Enterキー(\\r)送信");
+            await activeSession.WriteAsync("\r");
+            Console.WriteLine("[SendEnterKeyDirect] 送信完了");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SendEnterKeyDirect] エラー: {ex.GetType().Name} - {ex.Message}");
+            throw;
+        }
     }
 
     
@@ -1851,17 +1890,29 @@
     
     private async Task RunSelectedScript()
     {
-        if (string.IsNullOrEmpty(selectedScript) || activeSessionId == null) return;
+        Console.WriteLine($"[RunSelectedScript] 開始 - selectedScript: {selectedScript}, activeSessionId: {activeSessionId}");
+        
+        if (string.IsNullOrEmpty(selectedScript) || activeSessionId == null)
+        {
+            Console.WriteLine("[RunSelectedScript] selectedScriptまたはactiveSessionIdがnullのため中断");
+            return;
+        }
         
         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) return;
+        if (currentSession == null)
+        {
+            Console.WriteLine("[RunSelectedScript] currentSessionが見つからないため中断");
+            return;
+        }
         
         try
         {
+            Console.WriteLine($"[RunSelectedScript] スクリプト実行開始: {selectedScript}");
             runningScripts.Add(selectedScript);
             StateHasChanged();
             
             // 既存のConPTYセッションがあれば破棄
+            Console.WriteLine($"[RunSelectedScript] 既存のtaskRunnerSessionを破棄: {(taskRunnerSession != null ? "存在" : "null")}");
             taskRunnerSession?.Dispose();
             
             // npm run [script] コマンドを実行
@@ -1874,17 +1925,28 @@
             taskRunnerSession.ProcessExited += (sender, args) => OnTaskRunnerExited(selectedScript);
             
             // ターミナルをクリアして実行コマンドを表示
+            Console.WriteLine($"[RunSelectedScript] taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}");
             if (taskRunnerTerminal != null)
             {
+                Console.WriteLine("[RunSelectedScript] ターミナルをクリア");
                 await taskRunnerTerminal.InvokeVoidAsync("clear");
+                Console.WriteLine($"[RunSelectedScript] コマンドを表示: > {command}");
                 await taskRunnerTerminal.InvokeVoidAsync("write", $"> {command}\r\n");
                 
                 // コマンドを実行
+                Console.WriteLine($"[RunSelectedScript] ConPTYにコマンド送信: {command}");
                 await taskRunnerSession.WriteAsync($"{command}\r");
+                Console.WriteLine("[RunSelectedScript] コマンド送信完了");
+            }
+            else
+            {
+                Console.WriteLine("[RunSelectedScript] 警告: taskRunnerTerminalがnull");
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[RunSelectedScript] エラー発生: {ex.GetType().Name} - {ex.Message}");
+            Console.WriteLine($"[RunSelectedScript] スタックトレース: {ex.StackTrace}");
             runningScripts.Remove(selectedScript);
             toast?.ShowError($"スクリプト実行エラー: {ex.Message}");
             StateHasChanged();
