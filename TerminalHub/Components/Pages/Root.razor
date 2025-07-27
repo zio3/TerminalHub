@@ -79,7 +79,7 @@
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
-                    @if (currentSession != null && (currentSession.TerminalType == TerminalType.ClaudeCode || currentSession.TerminalType == TerminalType.GeminiCLI))
+                    @if (currentSession != null)
                     {
                         <div class="p-3 h-100 d-flex flex-column">
                             
@@ -849,9 +849,12 @@
 
     private string GetPlaceholderText(TerminalType terminalType)
     {
-        return terminalType == TerminalType.ClaudeCode 
-            ? "Claude Codeへのメッセージを入力..." 
-            : "Gemini CLIへのメッセージを入力...";
+        return terminalType switch
+        {
+            TerminalType.ClaudeCode => "Claude Codeへのメッセージを入力...",
+            TerminalType.GeminiCLI => "Gemini CLIへのメッセージを入力...",
+            _ => "コマンドを入力..."
+        };
     }
 
     private bool isEscapePressed = false;
