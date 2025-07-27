@@ -57,17 +57,21 @@ namespace TerminalHub.Services
                         // 処理中
                         if (result.ElapsedSeconds.HasValue)
                         {
-                            // 秒数の変化をチェック
+                            // 秒数とトークンの変化をチェック
                             var secondsStr = result.ElapsedSeconds.Value.ToString();
-                            if (sessionInfo.LastProcessingSeconds == secondsStr)
+                            var tokensStr = result.Tokens ?? "";
+                            
+                            if (sessionInfo.LastProcessingSeconds == secondsStr && 
+                                sessionInfo.LastProcessingTokens == tokensStr)
                             {
-                                // 秒数が変わらない場合はタイマーのリセットのみ
+                                // 秒数もトークンも変わらない場合はタイマーのリセットのみ
                                 sessionInfo.LastProcessingUpdateTime = DateTime.Now;
                                 ResetSessionTimer(sessionInfo.SessionId);
                                 return;
                             }
                             
                             sessionInfo.LastProcessingSeconds = secondsStr;
+                            sessionInfo.LastProcessingTokens = tokensStr;
                             
                             // GeminiCLIの場合はステータステキストも含める
                             if (!string.IsNullOrEmpty(result.StatusText))
@@ -167,6 +171,18 @@ namespace TerminalHub.Services
                     {
                         _logger.LogDebug("ProcessingElapsedSeconds is null for session {SessionId}, notification flag NOT set", session.SessionId);
                     }
+                    
+                    session.ProcessingStartTime = null;
+                    session.ProcessingElapsedSeconds = null;
+                    session.ProcessingTokens = null;
+                    session.ProcessingDirection = null;
+                    session.LastProcessingUpdateTime = null;
+                    session.LastProcessingSeconds = null;
+                    session.LastProcessingTokens = null;
+                    session.IsWaitingForUserInput = false;
+                    
+                    // セッションのタイマーを停止
+                    StopSessionTimer(session.SessionId);
                 }
                 
                 // UIを更新

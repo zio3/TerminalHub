@@ -117,7 +117,7 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (session.ConPtyBuffer != null)
+                                            @if (session.ConPtySession != null)
                                             {
                                                 <span class="badge bg-primary">有</span>
                                             }
@@ -148,12 +148,13 @@
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
     
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
         currentInstance = this;
         
         // JavaScript interopはOnAfterRenderAsyncで実行
+        return Task.CompletedTask;
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -443,9 +444,9 @@
             }
             
             var sessionInfo = SessionManager.GetSessionInfo(sessionId);
-            if (sessionInfo?.ConPtyBuffer == null)
+            if (sessionInfo?.ConPtySession == null)
             {
-                downloadResult = "バッファが利用できません";
+                downloadResult = "ConPtySessionが利用できません";
                 return;
             }
             
@@ -455,8 +456,8 @@
             string content;
             string filename;
             
-            // バッファ全体を取得
-            content = sessionInfo.ConPtyBuffer.GetBufferedOutput();
+            // ConPtySessionではバッファ取得機能はサポートされていません
+            content = "ConPtySessionではバッファ取得機能はサポートされていません";
             
             if (string.IsNullOrEmpty(content))
             {
@@ -468,7 +469,7 @@
                 Status = "Enabled",
                 BufferSize = content.Length,
                 LineCount = content.Split('\n').Length,
-                TerminalSize = sessionInfo.ConPtyBuffer.GetTerminalSize(),
+                TerminalSize = $"{sessionInfo.ConPtySession.Cols}x{sessionInfo.ConPtySession.Rows}",
                 SessionId = sessionId
             };
             

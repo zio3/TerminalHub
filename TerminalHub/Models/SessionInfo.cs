@@ -1,4 +1,5 @@
 using Microsoft.JSInterop;
+using TerminalHub.Services;
 
 namespace TerminalHub.Models
 {
@@ -51,7 +52,7 @@ namespace TerminalHub.Models
         public CircularLineBuffer OutputBuffer { get; set; } = new CircularLineBuffer(10000);
         
         [System.Text.Json.Serialization.JsonIgnore]
-        public ConPtyWithBuffer? ConPtyBuffer { get; set; }
+        public ConPtySession? ConPtySession { get; set; }
         
         [System.Text.Json.Serialization.JsonIgnore]
         public int LastKnownScrollPosition { get; set; } = 0;
@@ -63,11 +64,14 @@ namespace TerminalHub.Models
         public string? LastProcessingSeconds { get; set; }
         
         [System.Text.Json.Serialization.JsonIgnore]
+        public string? LastProcessingTokens { get; set; }
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput { get; set; }
         
         // DOSターミナル関連プロパティ
         [System.Text.Json.Serialization.JsonIgnore]
-        public ConPtyWithBuffer? DosTerminalSession { get; set; }
+        public ConPtySession? DosTerminalConPtySession { get; set; }
         
         // Git関連プロパティ
         [System.Text.Json.Serialization.JsonIgnore]

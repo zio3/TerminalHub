@@ -300,14 +300,14 @@
     private string? selectedScript = null;
     private HashSet<string> runningScripts = new HashSet<string>();
     private IJSObjectReference? taskRunnerTerminal;
-    private ConPtyWithBuffer? taskRunnerSession;
+    private ConPtySession? taskRunnerSession;
     
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
     
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
 
@@ -329,6 +329,7 @@
         });
         
         // JavaScript interopはOnAfterRenderAsyncで実行
+        return Task.CompletedTask;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -389,7 +390,7 @@
 
                     restoredSessionIds.Add(newSession.SessionId);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Failed to restore session
                 }
@@ -474,14 +475,15 @@
             
             
             // ConPTYセッションがなければ作成
-            if (currentSession.DosTerminalSession == null)
+            if (currentSession.DosTerminalConPtySession == null)
             {
                 var conPtyService = new ConPtyService(LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyService>());
                 var conPtySession = await conPtyService.CreateSessionAsync("cmd.exe", "", currentSession.FolderPath, 120, 30);
                 
-                currentSession.DosTerminalSession = new ConPtyWithBuffer(conPtySession, LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyWithBuffer>());
-                currentSession.DosTerminalSession.DataReceived += (data) => OnDosTerminalDataReceived(currentSession.SessionId, data);
-                currentSession.DosTerminalSession.Disconnected += () => OnDosTerminalExited(currentSession.SessionId);
+                currentSession.DosTerminalConPtySession = conPtySession;
+                conPtySession.Start();
+                conPtySession.DataReceived += (sender, args) => OnDosTerminalDataReceived(currentSession.SessionId, args.Data);
+                conPtySession.ProcessExited += (sender, args) => OnDosTerminalExited(currentSession.SessionId);
                 
                 // ConPTYの初期化が完了するまで少し待つ
                 await Task.Delay(100);
@@ -508,42 +510,7 @@
             
             currentDosTerminalSessionId = activeSessionId;
             
-            // バッファ内容を表示
-            var bufferedOutput = currentSession.DosTerminalSession.GetBufferedOutput();
-            if (!string.IsNullOrEmpty(bufferedOutput))
-            {
-                
-                // 初期の制御シーケンスをフィルタリング
-                var cleanedOutput = bufferedOutput;
-                
-                // ESC[K (行末までクリア) を除去
-                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
-                    cleanedOutput, 
-                    @"\x1b\[K", 
-                    ""
-                );
-                
-                // ESC[?25h (カーソル表示) を除去
-                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
-                    cleanedOutput,
-                    @"\x1b\[\?25h",
-                    ""
-                );
-                
-                // その他の一般的な初期制御シーケンスも除去
-                // ESC[...文字 の形式（数字、セミコロン、?を含む）
-                cleanedOutput = System.Text.RegularExpressions.Regex.Replace(
-                    cleanedOutput,
-                    @"\x1b\[[0-9;?]*[A-Za-z~]",
-                    ""
-                );
-                
-                // 先頭の空白も除去
-                cleanedOutput = cleanedOutput.TrimStart();
-                
-                
-                await singleDosTerminal.InvokeVoidAsync("write", cleanedOutput);
-            }
+            // リサイズは再接続時に自動的に送られるため、ここでは明示的に送らない
             
             // フォーカスとリサイズ
             await JSRuntime.InvokeVoidAsync("eval", $@"
@@ -620,8 +587,8 @@
                     await CleanupSingleDosTerminal();
                 }
                 
-                session.DosTerminalSession?.Dispose();
-                session.DosTerminalSession = null;
+                session.DosTerminalConPtySession?.Dispose();
+                session.DosTerminalConPtySession = null;
                 
                 // 再起動できるように通知
                 StateHasChanged();
@@ -647,7 +614,7 @@
             // ローカルストレージに保存
             await LocalStorageService.SaveSessionsAsync(sessions);
             
-            // 新しいセッションのConPtyWithBufferにイベントハンドラーを設定
+            // 新しいセッションのConPtySessionにイベントハンドラーを設定
             SetupSessionEventHandlers(sessionInfo);
 
             StateHasChanged();
@@ -709,7 +676,7 @@
         
         // セッション情報を取得して、初期化中の場合はUIを更新
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionInfo != null && sessionInfo.ConPtyBuffer == null)
+        if (sessionInfo != null && sessionInfo.ConPtySession == null)
         {
             Console.WriteLine($"[SelectSession] ConPtyがまだ初期化されていない - スピナー表示");
             // ConPtyがまだ初期化されていない場合
@@ -768,31 +735,14 @@
             await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
-        if (selectedSession?.ConPtyBuffer != null)
+        // ConPtyBufferのリサイズトリックは不要になったため削除
+
+
+        // ConPtySessionのイベントハンドラーを設定
+        if (selectedSession?.ConPtySession != null)
         {
-            await Task.Delay(100); // ターミナル初期化完了を待つ
-
-            // 現在のサイズを取得
-            var (currentCols, currentRows) = selectedSession.ConPtyBuffer.GetTerminalSize();
-
-            // 全バッファを取得するためのトリック
-            // 方法4: リサイズ + クリア + リサイズ
-            // リサイズ+クリアトリック開始
-
-            // 1. 1行増やす（全バッファ取得トリガー）
-            selectedSession.ConPtyBuffer.Resize(currentCols, currentRows - 1);
-
-            // リサイズ+クリアトリック完了
-        }
-
-
-        // ConPtyWithBufferのイベントハンドラーを設定
-        if (selectedSession?.ConPtyBuffer != null)
-        {
-            // ConPtyWithBufferイベントハンドラーを設定
-            
-            // 既存のイベントハンドラーをクリア
-            selectedSession.ConPtyBuffer.ClearEventHandlers();
+            // ConPtySessionイベントハンドラーを設定
+            // ※ ConPtySessionにはClearEventHandlersメソッドは必要ない
             
 
                         // イベントハンドラーを設定
@@ -802,7 +752,7 @@
         }
         else
         {
-            // ConPtyBufferが利用不可
+            // ConPtySessionが利用不可
         }
 
         // ターミナルを最下段にスクロール
@@ -910,7 +860,7 @@
                 else
                 {
                     //Console.WriteLine($"[ProcessReceivedData] 非アクティブセッション {sessionId} - バッファのみ更新 {DateTime.Now}");
-                    // 非アクティブセッションの場合はバッファリングはConPtyWithBufferが担当
+                    // 非アクティブセッションの場合もデータを処理
                     // ただし、出力解析は実行してステータスを更新
                     _ = InvokeAsync(() => 
                     {
@@ -923,7 +873,7 @@
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // ProcessReceivedData error
         }
@@ -975,7 +925,7 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
-        // ConPtyWithBufferのクリーンアップ
+        // ConPtySessionのクリーンアップ
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove != null)
         {
@@ -986,13 +936,13 @@
             }
             
             // DOS ConPTYセッションのクリーンアップ
-            sessionToRemove.DosTerminalSession?.Dispose();
-            sessionToRemove.DosTerminalSession = null;
+            sessionToRemove.DosTerminalConPtySession?.Dispose();
+            sessionToRemove.DosTerminalConPtySession = null;
             
-            // ConPtyWithBufferのクリーンアップ
-            if (sessionToRemove.ConPtyBuffer != null)
+            // ConPtySessionのクリーンアップ
+            if (sessionToRemove.ConPtySession != null)
             {
-                sessionToRemove.ConPtyBuffer.Dispose();
+                sessionToRemove.ConPtySession.Dispose();
             }
         }
         
@@ -1052,9 +1002,9 @@
             if (Guid.TryParse(guidStr, out var guid))
             {
                 var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (session?.DosTerminalSession != null)
+                if (session?.DosTerminalConPtySession != null)
                 {
-                    await session.DosTerminalSession.WriteAsync(data);
+                    await session.DosTerminalConPtySession.WriteAsync(data);
                 }
             }
         }
@@ -1079,9 +1029,9 @@
             if (Guid.TryParse(guidStr, out var guid))
             {
                 var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (session?.DosTerminalSession != null)
+                if (session?.DosTerminalConPtySession != null)
                 {
-                    session.DosTerminalSession.Resize(cols, rows);
+                    session.DosTerminalConPtySession.Resize(cols, rows);
                 }
             }
         }
@@ -1094,11 +1044,11 @@
                 // ConPtyにリサイズを通知
                 activeSession.Resize(cols, rows);
                 
-                // ConPtyWithBufferもリサイズを通知
+                // ConPtySessionもリサイズを通知
                 var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (selectedSession?.ConPtyBuffer != null)
+                if (selectedSession?.ConPtySession != null)
                 {
-                    selectedSession.ConPtyBuffer.Resize(cols, rows);
+                    selectedSession.ConPtySession.Resize(cols, rows);
                 }
                 
                 // リサイズ時のスナップショット再表示は削除
@@ -1494,7 +1444,7 @@
             
             return sessionInfo;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // CreateNewFolderSession error
             return null;
@@ -1549,6 +1499,7 @@
                 session.ProcessingDirection = null;
                 session.LastProcessingUpdateTime = null;
                 session.LastProcessingSeconds = null;
+                session.LastProcessingTokens = null;
                 session.IsWaitingForUserInput = false;
 
                 if(activeSessionId != sessionId)
@@ -1679,23 +1630,22 @@
     
     private void SetupSessionEventHandlers(SessionInfo sessionInfo)
     {
-        if (sessionInfo?.ConPtyBuffer == null)
+        if (sessionInfo?.ConPtySession == null)
         {
-            Console.WriteLine($"[SetupSessionEventHandlers] ConPtyBufferがnullのためスキップ: {sessionInfo?.SessionId}");
+            Console.WriteLine($"[SetupSessionEventHandlers] ConPtySessionがnullのためスキップ: {sessionInfo?.SessionId}");
             return;
         }
             
         Console.WriteLine($"[SetupSessionEventHandlers] イベントハンドラー設定: {sessionInfo.SessionId}");
         
-        // 既存のイベントハンドラーをクリア
-        sessionInfo.ConPtyBuffer.ClearEventHandlers();
+        // ConPtySessionはイベントハンドラーのクリアが不要
         
         // データ受信イベントハンドラー
-        sessionInfo.ConPtyBuffer.DataReceived += async (data) =>
+        sessionInfo.ConPtySession.DataReceived += async (sender, args) =>
         {
             try
             {
-                await ProcessReceivedData(sessionInfo.SessionId, data);
+                await ProcessReceivedData(sessionInfo.SessionId, args.Data);
             }
             catch (Exception ex)
             {
@@ -1704,9 +1654,9 @@
         };
         
         // 切断イベントハンドラー
-        sessionInfo.ConPtyBuffer.Disconnected += () =>
+        sessionInfo.ConPtySession.ProcessExited += (sender, args) =>
         {
-            Console.WriteLine($"[Disconnected] セッション切断検出: {sessionInfo.SessionId}");
+            Console.WriteLine($"[ProcessExited] セッション切断検出: {sessionInfo.SessionId}");
         };
     }
     
@@ -1818,9 +1768,10 @@
             var conPtyService = new ConPtyService(LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyService>());
             var conPtySession = await conPtyService.CreateSessionAsync("cmd.exe", "", currentSession.FolderPath, 120, 30);
             
-            taskRunnerSession = new ConPtyWithBuffer(conPtySession, LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyWithBuffer>());
-            taskRunnerSession.DataReceived += (data) => OnTaskRunnerDataReceived(data);
-            taskRunnerSession.Disconnected += () => OnTaskRunnerExited(selectedScript);
+            taskRunnerSession = conPtySession;
+            conPtySession.Start();
+            taskRunnerSession.DataReceived += (sender, args) => OnTaskRunnerDataReceived(args.Data);
+            taskRunnerSession.ProcessExited += (sender, args) => OnTaskRunnerExited(selectedScript);
             
             // ターミナルをクリアして実行コマンドを表示
             if (taskRunnerTerminal != null)
@@ -1914,7 +1865,7 @@
         // 全セッションのDOS ConPTYセッションのクリーンアップ
         foreach (var session in sessions)
         {
-            session.DosTerminalSession?.Dispose();
+            session.DosTerminalConPtySession?.Dispose();
         }
         
         // activeTerminalのDisposeを安全に処理
