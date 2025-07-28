@@ -811,6 +811,13 @@
         // ターミナルを初期化
         Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
         await InitializeTerminal(sessionId);
+        
+        // ターミナル準備中メッセージを表示
+        if (activeTerminal != null && selectedSession != null && selectedSession.IsInitializing)
+        {
+            var prepareMessage = "\x1b[90mターミナル準備中...\x1b[0m\r\n";
+            await TerminalService.WriteToTerminalAsync(activeTerminal, prepareMessage);
+        }
 
         // ConPtySessionのリサイズトリックでバッファ内容を再取得
         if (selectedSession?.ConPtySession != null)
