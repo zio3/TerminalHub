@@ -806,8 +806,20 @@
             await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
-        // ConPtyBufferのリサイズトリックは不要になったため削除
-
+        // ConPtySessionのリサイズトリックでバッファ内容を再取得
+        if (selectedSession?.ConPtySession != null)
+        {
+            await Task.Delay(100); // ターミナル初期化完了を待つ
+            
+            // 現在のサイズを取得
+            var currentCols = selectedSession.ConPtySession.Cols;
+            var currentRows = selectedSession.ConPtySession.Rows;
+            
+            // リサイズトリック：1行減らして元に戻す
+            selectedSession.ConPtySession.Resize(currentCols, currentRows - 1);
+            await Task.Delay(50);
+            selectedSession.ConPtySession.Resize(currentCols, currentRows);
+        }
 
         // ConPtySessionのイベントハンドラーを設定
         if (selectedSession?.ConPtySession != null)
