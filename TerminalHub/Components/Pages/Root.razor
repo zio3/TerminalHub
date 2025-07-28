@@ -823,22 +823,13 @@
         // ConPtySessionのイベントハンドラーを設定
         if (selectedSession?.ConPtySession != null)
         {
-            // ConPtySessionイベントハンドラーを設定
-            // ※ ConPtySessionにはClearEventHandlersメソッドは必要ない
-            
-
-                        // イベントハンドラーを設定
+            // イベントハンドラーを設定
             SetupSessionEventHandlers(selectedSession);
-            
-            // 切断時にタイマーをクリーンアップ
         }
         else
         {
             // ConPtySessionが利用不可
         }
-
-        // ターミナルを最下段にスクロール
-   //     await TerminalService.ScrollToBottomAsync(sessionId);
         
         // package.jsonの存在をチェック
         if (selectedSession != null)
