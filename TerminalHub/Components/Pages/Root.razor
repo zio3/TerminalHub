@@ -21,6 +21,7 @@
 @inject IInputHistoryService InputHistoryService
 @inject IPackageJsonService PackageJsonService
 @inject IConPtyService ConPtyService
+@inject ConPtyConnectionService ConPtyConnection
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -443,11 +444,8 @@
 
             sessions = SessionManager.GetAllSessions().ToList();
             
-            // すべてのセッションにイベントハンドラーを設定
-            foreach (var session in sessions)
-            {
-                SetupSessionEventHandlers(session);
-            }
+            // ConPtyConnectionServiceのイベントハンドラーを設定
+            SetupConPtyConnectionEventHandlers();
 
             // 保存されたアクティブセッションがあれば選択
             if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
@@ -685,8 +683,11 @@
             // ローカルストレージに保存
             await LocalStorageService.SaveSessionsAsync(sessions);
             
-            // 新しいセッションのConPtySessionにイベントハンドラーを設定
-            SetupSessionEventHandlers(sessionInfo);
+            // 新しいセッションをConPtyConnectionServiceに登録
+            if (sessionInfo.ConPtySession != null)
+            {
+                ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
+            }
 
             StateHasChanged();
 
@@ -809,21 +810,10 @@
         // ConPtyBufferのリサイズトリックは不要になったため削除
 
 
-        // ConPtySessionのイベントハンドラーを設定
+        // ConPtySessionをConPtyConnectionServiceに登録
         if (selectedSession?.ConPtySession != null)
         {
-            // ConPtySessionイベントハンドラーを設定
-            // ※ ConPtySessionにはClearEventHandlersメソッドは必要ない
-            
-
-                        // イベントハンドラーを設定
-            SetupSessionEventHandlers(selectedSession);
-            
-            // 切断時にタイマーをクリーンアップ
-        }
-        else
-        {
-            // ConPtySessionが利用不可
+            ConPtyConnection.SubscribeToSession(selectedSession.SessionId, selectedSession.ConPtySession);
         }
 
         // ターミナルを最下段にスクロール
@@ -1207,10 +1197,10 @@
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                 await TerminalService.RecreateTerminalAsync(sessionId, selectedSessionInfo!, activeSession);
 
-                // イベントハンドラーを設定
-                if (selectedSessionInfo != null)
+                // ConPtyConnectionServiceに再登録
+                if (selectedSessionInfo?.ConPtySession != null)
                 {
-                    SetupSessionEventHandlers(selectedSessionInfo);
+                    ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
                 toast?.ShowSuccess("ターミナルを再作成しました");
@@ -1769,31 +1759,14 @@
         }
     }
     
-    private void SetupSessionEventHandlers(SessionInfo sessionInfo)
+    private void SetupConPtyConnectionEventHandlers()
     {
-        if (sessionInfo?.ConPtySession == null)
-        {
-            Console.WriteLine($"[SetupSessionEventHandlers] ConPtySessionがnullのためスキップ: {sessionInfo?.SessionId}");
-            return;
-        }
-        
-        // 既にイベントハンドラーが設定済みの場合はスキップ
-        if (sessionInfo.EventHandlersSetup)
-        {
-            Console.WriteLine($"[SetupSessionEventHandlers] 既にイベントハンドラー設定済みのためスキップ: {sessionInfo.SessionId}");
-            return;
-        }
-            
-        Console.WriteLine($"[SetupSessionEventHandlers] イベントハンドラー設定: {sessionInfo.SessionId}");
-        
-        // ConPtySessionはイベントハンドラーのクリアが不要
-        
-        // データ受信イベントハンドラー
-        sessionInfo.ConPtySession.DataReceived += async (sender, args) =>
+        // ConPtyConnectionServiceのイベントハンドラーを設定
+        ConPtyConnection.DataReceived += async (sender, args) =>
         {
             try
             {
-                await ProcessReceivedData(sessionInfo.SessionId, args.Data);
+                await ProcessReceivedData(args.SessionId, args.Data);
             }
             catch (Exception ex)
             {
@@ -1801,14 +1774,12 @@
             }
         };
         
-        // 切断イベントハンドラー
-        sessionInfo.ConPtySession.ProcessExited += (sender, args) =>
+        ConPtyConnection.ProcessExited += (sender, args) =>
         {
-            Console.WriteLine($"[ProcessExited] セッション切断検出: {sessionInfo.SessionId}");
+            Console.WriteLine($"[ProcessExited] セッション切断検出: {args.SessionId}");
         };
         
-        // イベントハンドラー設定済みフラグを立てる
-        sessionInfo.EventHandlersSetup = true;
+        Console.WriteLine("[SetupConPtyConnectionEventHandlers] ConPtyConnectionServiceのイベントハンドラーを設定");
     }
     
     // タスクランナー関連メソッド
