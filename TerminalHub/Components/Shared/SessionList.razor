@@ -96,16 +96,7 @@
                                 </button>
                             }
                         </h6>
-                        @if (session.IsInitializing)
-                        {
-                            <div>
-                                <small class="text-info">
-                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                    初期化中...
-                                </small>
-                            </div>
-                        }
-                        else if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
+                        @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
                         {
                             <div>
                                 <small class="@(session.IsWaitingForUserInput ? "text-warning" : "text-primary")">

@@ -68,7 +68,6 @@ namespace TerminalHub.Services
         public string CurrentBranch { get; set; } = string.Empty;
         public bool HasUncommittedChanges { get; set; }
         public bool IsWorktree { get; set; }
-        public string? WorktreeMainPath { get; set; }
         public List<string> AvailableBranches { get; set; } = new();
     }
 

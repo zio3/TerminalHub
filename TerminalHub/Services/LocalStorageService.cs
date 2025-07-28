@@ -1,6 +1,7 @@
 using Microsoft.JSInterop;
 using System.Text.Json;
 using TerminalHub.Models;
+using Microsoft.Extensions.Logging;
 
 namespace TerminalHub.Services
 {
@@ -20,14 +21,16 @@ namespace TerminalHub.Services
     public class LocalStorageService : ILocalStorageService
     {
         private readonly IJSRuntime _jsRuntime;
+        private readonly ILogger<LocalStorageService> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
         private const string SessionsKey = "terminalHub_sessions";
         private const string ActiveSessionKey = "terminalHub_activeSession";
         private const string ExpandedStatesKey = "terminalHub_expandedStates";
 
-        public LocalStorageService(IJSRuntime jsRuntime)
+        public LocalStorageService(IJSRuntime jsRuntime, ILogger<LocalStorageService> logger)
         {
             _jsRuntime = jsRuntime;
+            _logger = logger;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -44,7 +47,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving sessions to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving sessions to localStorage");
             }
         }
 
@@ -63,7 +66,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading sessions from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading sessions from localStorage");
                 return new List<SessionInfo>();
             }
         }
@@ -83,7 +86,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving active session ID to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving active session ID to localStorage");
             }
         }
 
@@ -106,7 +109,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading active session ID from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading active session ID from localStorage");
                 return null;
             }
         }
@@ -120,7 +123,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error clearing localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error clearing localStorage");
             }
         }
         
@@ -136,7 +139,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading {key} from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading {Key} from localStorage", key);
                 return default;
             }
         }
@@ -150,7 +153,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving {key} to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving {Key} to localStorage", key);
             }
         }
 
@@ -163,7 +166,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving expanded states to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving expanded states to localStorage");
             }
         }
 
@@ -181,7 +184,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading expanded states from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading expanded states from localStorage");
                 return new Dictionary<Guid, bool>();
             }
         }
