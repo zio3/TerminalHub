@@ -926,7 +926,7 @@
                     // 出力解析の実行
                     _ = InvokeAsync(() => 
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
                             (id, status) => InvokeAsync(() => 
                             {
                                 StateHasChanged();
@@ -940,7 +940,7 @@
                     // ただし、出力解析は実行してステータスを更新
                     _ = InvokeAsync(() => 
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, 
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
                             (id, status) => InvokeAsync(() => 
                             {
                                 StateHasChanged();
