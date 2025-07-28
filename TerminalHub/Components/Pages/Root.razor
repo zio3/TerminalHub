@@ -1776,6 +1776,13 @@
             Console.WriteLine($"[SetupSessionEventHandlers] ConPtySessionがnullのためスキップ: {sessionInfo?.SessionId}");
             return;
         }
+        
+        // 既にイベントハンドラーが設定済みの場合はスキップ
+        if (sessionInfo.EventHandlersSetup)
+        {
+            Console.WriteLine($"[SetupSessionEventHandlers] 既にイベントハンドラー設定済みのためスキップ: {sessionInfo.SessionId}");
+            return;
+        }
             
         Console.WriteLine($"[SetupSessionEventHandlers] イベントハンドラー設定: {sessionInfo.SessionId}");
         
@@ -1799,6 +1806,9 @@
         {
             Console.WriteLine($"[ProcessExited] セッション切断検出: {sessionInfo.SessionId}");
         };
+        
+        // イベントハンドラー設定済みフラグを立てる
+        sessionInfo.EventHandlersSetup = true;
     }
     
     // タスクランナー関連メソッド

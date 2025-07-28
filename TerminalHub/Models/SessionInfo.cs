@@ -107,6 +107,9 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasReceivedFirstData { get; set; } // 最初のデータを受信したかどうか
         
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool EventHandlersSetup { get; set; } // イベントハンドラーが設定済みかどうか
+        
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))
