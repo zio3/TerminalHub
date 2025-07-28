@@ -812,15 +812,18 @@
         Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
         await InitializeTerminal(sessionId);
 
-        // ターミナルのリサイズを強制的に実行
-        if (activeTerminal != null)
-        {
-            await TerminalService.ResizeTerminalAsync(activeTerminal);
-        }
-
         // ConPtySessionのリサイズトリックでバッファ内容を再取得
         if (selectedSession?.ConPtySession != null)
         {
+            // リサイズ処理全体で不要なデータを破棄
+            selectedSession.ConPtySession.SuspendOutput();
+            
+            // ターミナルのリサイズを強制的に実行
+            if (activeTerminal != null)
+            {
+                await TerminalService.ResizeTerminalAsync(activeTerminal);
+            }
+            
             await Task.Delay(100); // ターミナル初期化完了を待つ
             
             // 現在のサイズを取得
@@ -830,7 +833,15 @@
             // リサイズトリック：1行減らして元に戻す
             selectedSession.ConPtySession.Resize(currentCols, currentRows - 1);
             await Task.Delay(50);
+            
+            // 2回目のリサイズから送出を再開（これが本来欲しいバッファ内容）
+            selectedSession.ConPtySession.ResumeOutput();
             selectedSession.ConPtySession.Resize(currentCols, currentRows);
+        }
+        else if (activeTerminal != null)
+        {
+            // ConPtySessionがない場合は通常のリサイズのみ
+            await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
         // ConPtySessionをConPtyConnectionServiceに登録
