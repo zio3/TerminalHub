@@ -70,15 +70,6 @@
                                           GeminiOptions="geminiOptions"
                                           DisableContinueOption="false" />
 
-                    <!-- バッファサイズ設定 -->
-                    <div class="mb-3">
-                        <label class="form-label">最大バッファサイズ</label>
-                        <input type="number" class="form-control" @bind="maxBufferSize" min="1000" max="1000000" />
-                        <small class="form-text text-muted">
-                            出力の最大保持行数（デフォルト: 10000）
-                        </small>
-                    </div>
-
                     <ErrorAlert @bind-ErrorMessage="errorMessage" />
                 }
                 else
@@ -120,7 +111,6 @@
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
-    private int maxBufferSize = 10000;
     private string errorMessage = "";
     private bool restartSession = true;
 
@@ -143,7 +133,6 @@
             // 現在の設定を読み込む
             displayName = sessionInfo.DisplayName ?? "";
             selectedType = sessionInfo.TerminalType;
-            maxBufferSize = sessionInfo.OutputBuffer.Capacity;
 
             // オプションを解析
             var options = sessionInfo.Options;
@@ -187,14 +176,6 @@
             // オプションを更新
             sessionInfo.Options = optionsSelector.GetOptions();
             
-            // バッファサイズを更新（新しいバッファを作成）
-            if (sessionInfo.OutputBuffer.Capacity != maxBufferSize)
-            {
-                var oldLines = sessionInfo.OutputBuffer.GetLines().ToList();
-                sessionInfo.OutputBuffer = new CircularLineBuffer(maxBufferSize);
-                sessionInfo.OutputBuffer.AddLines(oldLines);
-            }
-
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
             

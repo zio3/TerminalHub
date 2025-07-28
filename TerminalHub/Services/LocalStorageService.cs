@@ -13,6 +13,8 @@ namespace TerminalHub.Services
         Task ClearAsync();
         Task<T?> GetAsync<T>(string key);
         Task SetAsync<T>(string key, T value);
+        Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates);
+        Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync();
     }
 
     public class LocalStorageService : ILocalStorageService
@@ -21,6 +23,7 @@ namespace TerminalHub.Services
         private readonly JsonSerializerOptions _jsonOptions;
         private const string SessionsKey = "terminalHub_sessions";
         private const string ActiveSessionKey = "terminalHub_activeSession";
+        private const string ExpandedStatesKey = "terminalHub_expandedStates";
 
         public LocalStorageService(IJSRuntime jsRuntime)
         {
@@ -148,6 +151,38 @@ namespace TerminalHub.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error saving {key} to localStorage: {ex.Message}");
+            }
+        }
+
+        public async Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(expandedStates, _jsonOptions);
+                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ExpandedStatesKey, json);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving expanded states to localStorage: {ex.Message}");
+            }
+        }
+
+        public async Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync()
+        {
+            try
+            {
+                var json = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", ExpandedStatesKey);
+                if (string.IsNullOrEmpty(json))
+                {
+                    return new Dictionary<Guid, bool>();
+                }
+
+                return JsonSerializer.Deserialize<Dictionary<Guid, bool>>(json, _jsonOptions) ?? new Dictionary<Guid, bool>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading expanded states from localStorage: {ex.Message}");
+                return new Dictionary<Guid, bool>();
             }
         }
     }
