@@ -53,7 +53,7 @@
                                 {
                                     <button class="btn btn-sm btn-link text-decoration-none p-0 me-1"
                                             @onclick:stopPropagation="true"
-                                            @onclick="() => ToggleExpanded(session.SessionId)"
+                                            @onclick="async () => await ToggleExpanded(session.SessionId)"
                                             style="font-size: 0.8rem; line-height: 1;">
                                         <i class="bi @(session.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                                     </button>
@@ -227,6 +227,7 @@
     [Parameter] public EventCallback OnSettingsClick { get; set; }
     [Parameter] public EventCallback<Guid> OnCreateWorktree { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
+    [Parameter] public EventCallback<(Guid sessionId, bool isExpanded)> OnSessionExpandedChanged { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -329,13 +330,16 @@
         return Sessions.Any(s => s.ParentSessionId == session.SessionId);
     }
     
-    private void ToggleExpanded(Guid sessionId)
+    private async Task ToggleExpanded(Guid sessionId)
     {
         var session = Sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session != null)
         {
             session.IsExpanded = !session.IsExpanded;
             StateHasChanged();
+            
+            // 展開状態の変更を親コンポーネントに通知
+            await OnSessionExpandedChanged.InvokeAsync((sessionId, session.IsExpanded));
         }
     }
     

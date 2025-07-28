@@ -127,8 +127,7 @@ namespace TerminalHub.Services
                 FolderName = Path.GetFileName(folderPath),
                 DisplayName = sessionName,
                 TerminalType = terminalType,
-                Options = options,
-                OutputBuffer = new CircularLineBuffer(_configuration.GetValue<int>("SessionSettings:MaxBufferSize", 10000))
+                Options = options
             };
 
             // Git情報を非同期で取得してセッション情報に設定
@@ -453,7 +452,6 @@ namespace TerminalHub.Services
                         DisplayName = $"{parentSession.DisplayName} ({branchName})",
                         TerminalType = terminalType,
                         Options = options ?? new Dictionary<string, string>(),
-                        OutputBuffer = new CircularLineBuffer(parentSession.OutputBuffer.Capacity),
                         ParentSessionId = parentSessionId
                     };
 
@@ -513,7 +511,6 @@ namespace TerminalHub.Services
                     DisplayName = $"{parentSession.DisplayName} ({branchName})",
                     TerminalType = terminalType,
                     Options = options ?? new Dictionary<string, string>(),
-                    OutputBuffer = new CircularLineBuffer(parentSession.OutputBuffer.Capacity),
                     ParentSessionId = parentSessionId
                 };
 
@@ -565,7 +562,6 @@ namespace TerminalHub.Services
                     DisplayName = Path.GetFileName(folderPath),
                     TerminalType = terminalType,
                     Options = options ?? new Dictionary<string, string>(),
-                    OutputBuffer = new CircularLineBuffer(parentSession.OutputBuffer.Capacity),
                     ParentSessionId = parentSessionId
                 };
 

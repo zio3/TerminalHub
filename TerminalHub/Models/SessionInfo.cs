@@ -52,9 +52,6 @@ namespace TerminalHub.Models
         public bool HasNotificationPending { get; set; }
         
         [System.Text.Json.Serialization.JsonIgnore]
-        public CircularLineBuffer OutputBuffer { get; set; } = new CircularLineBuffer(10000);
-        
-        [System.Text.Json.Serialization.JsonIgnore]
         public ConPtySession? ConPtySession { get; set; }
         
         [System.Text.Json.Serialization.JsonIgnore]

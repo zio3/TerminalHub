@@ -21,6 +21,7 @@
 @inject IInputHistoryService InputHistoryService
 @inject IPackageJsonService PackageJsonService
 @inject IConPtyService ConPtyService
+@inject ConPtyConnectionService ConPtyConnection
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -61,7 +62,8 @@
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
                      OnSessionSettings="ShowSessionSettingsDialog"
-                     OnGitStatusRefresh="RefreshGitStatus" />
+                     OnGitStatusRefresh="RefreshGitStatus"
+                     OnSessionExpandedChanged="HandleSessionExpandedChanged" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -443,11 +445,18 @@
 
             sessions = SessionManager.GetAllSessions().ToList();
             
-            // すべてのセッションにイベントハンドラーを設定
+            // 保存された展開状態を読み込んで適用
+            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
             foreach (var session in sessions)
             {
-                SetupSessionEventHandlers(session);
+                if (!session.ParentSessionId.HasValue && expandedStates.ContainsKey(session.SessionId))
+                {
+                    session.IsExpanded = expandedStates[session.SessionId];
+                }
             }
+            
+            // ConPtyConnectionServiceのイベントハンドラーを設定
+            SetupConPtyConnectionEventHandlers();
 
             // 保存されたアクティブセッションがあれば選択
             if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
@@ -685,8 +694,11 @@
             // ローカルストレージに保存
             await LocalStorageService.SaveSessionsAsync(sessions);
             
-            // 新しいセッションのConPtySessionにイベントハンドラーを設定
-            SetupSessionEventHandlers(sessionInfo);
+            // 新しいセッションをConPtyConnectionServiceに登録
+            if (sessionInfo.ConPtySession != null)
+            {
+                ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
+            }
 
             StateHasChanged();
 
@@ -799,35 +811,51 @@
         // ターミナルを初期化
         Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
         await InitializeTerminal(sessionId);
-
-        // ターミナルのリサイズを強制的に実行
-        if (activeTerminal != null)
+        
+        // ターミナル準備中メッセージを表示
+        if (activeTerminal != null && selectedSession != null && selectedSession.IsInitializing)
         {
+            var prepareMessage = "\x1b[90mターミナル準備中...\x1b[0m\r\n";
+            await TerminalService.WriteToTerminalAsync(activeTerminal, prepareMessage);
+        }
+
+        // ConPtySessionのリサイズトリックでバッファ内容を再取得
+        if (selectedSession?.ConPtySession != null)
+        {
+            // リサイズ処理全体で不要なデータを破棄
+            selectedSession.ConPtySession.SuspendOutput();
+            
+            // ターミナルのリサイズを強制的に実行
+            if (activeTerminal != null)
+            {
+                await TerminalService.ResizeTerminalAsync(activeTerminal);
+            }
+            
+            await Task.Delay(100); // ターミナル初期化完了を待つ
+            
+            // 現在のサイズを取得
+            var currentCols = selectedSession.ConPtySession.Cols;
+            var currentRows = selectedSession.ConPtySession.Rows;
+            
+            // リサイズトリック：1行減らして元に戻す
+            selectedSession.ConPtySession.Resize(currentCols, currentRows - 1);
+            await Task.Delay(50);
+            
+            // 2回目のリサイズから送出を再開（これが本来欲しいバッファ内容）
+            selectedSession.ConPtySession.ResumeOutput();
+            selectedSession.ConPtySession.Resize(currentCols, currentRows);
+        }
+        else if (activeTerminal != null)
+        {
+            // ConPtySessionがない場合は通常のリサイズのみ
             await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
-        // ConPtyBufferのリサイズトリックは不要になったため削除
-
-
-        // ConPtySessionのイベントハンドラーを設定
+        // ConPtySessionをConPtyConnectionServiceに登録
         if (selectedSession?.ConPtySession != null)
         {
-            // ConPtySessionイベントハンドラーを設定
-            // ※ ConPtySessionにはClearEventHandlersメソッドは必要ない
-            
-
-                        // イベントハンドラーを設定
-            SetupSessionEventHandlers(selectedSession);
-            
-            // 切断時にタイマーをクリーンアップ
+            ConPtyConnection.SubscribeToSession(selectedSession.SessionId, selectedSession.ConPtySession);
         }
-        else
-        {
-            // ConPtySessionが利用不可
-        }
-
-        // ターミナルを最下段にスクロール
-   //     await TerminalService.ScrollToBottomAsync(sessionId);
         
         // package.jsonの存在をチェック
         if (selectedSession != null)
@@ -961,6 +989,21 @@
         editingMemoSessionId = sessionId;
         tempMemoText = currentMemo ?? "";
         StateHasChanged();
+    }
+    
+    private async Task HandleSessionExpandedChanged((Guid sessionId, bool isExpanded) args)
+    {
+        // 展開状態をLocalStorageに保存
+        await SaveExpandedStatesToLocalStorage();
+    }
+    
+    private async Task SaveExpandedStatesToLocalStorage()
+    {
+        var expandedStates = sessions
+            .Where(s => !s.ParentSessionId.HasValue) // 親セッションのみ
+            .ToDictionary(s => s.SessionId, s => s.IsExpanded);
+            
+        await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
     }
 
     private async Task SaveMemo(Guid sessionId)
@@ -1207,10 +1250,10 @@
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                 await TerminalService.RecreateTerminalAsync(sessionId, selectedSessionInfo!, activeSession);
 
-                // イベントハンドラーを設定
-                if (selectedSessionInfo != null)
+                // ConPtyConnectionServiceに再登録
+                if (selectedSessionInfo?.ConPtySession != null)
                 {
-                    SetupSessionEventHandlers(selectedSessionInfo);
+                    ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
                 toast?.ShowSuccess("ターミナルを再作成しました");
@@ -1657,6 +1700,9 @@
                 // タイマーを停止
                 OutputAnalyzerService.StopSessionTimer(sessionId);
                 
+                // Gitステータスを更新
+                await RefreshGitStatus(sessionId);
+                
                 // UIを更新
                 StateHasChanged();
             }
@@ -1769,24 +1815,14 @@
         }
     }
     
-    private void SetupSessionEventHandlers(SessionInfo sessionInfo)
+    private void SetupConPtyConnectionEventHandlers()
     {
-        if (sessionInfo?.ConPtySession == null)
-        {
-            Console.WriteLine($"[SetupSessionEventHandlers] ConPtySessionがnullのためスキップ: {sessionInfo?.SessionId}");
-            return;
-        }
-            
-        Console.WriteLine($"[SetupSessionEventHandlers] イベントハンドラー設定: {sessionInfo.SessionId}");
-        
-        // ConPtySessionはイベントハンドラーのクリアが不要
-        
-        // データ受信イベントハンドラー
-        sessionInfo.ConPtySession.DataReceived += async (sender, args) =>
+        // ConPtyConnectionServiceのイベントハンドラーを設定
+        ConPtyConnection.DataReceived += async (sender, args) =>
         {
             try
             {
-                await ProcessReceivedData(sessionInfo.SessionId, args.Data);
+                await ProcessReceivedData(args.SessionId, args.Data);
             }
             catch (Exception ex)
             {
@@ -1794,11 +1830,12 @@
             }
         };
         
-        // 切断イベントハンドラー
-        sessionInfo.ConPtySession.ProcessExited += (sender, args) =>
+        ConPtyConnection.ProcessExited += (sender, args) =>
         {
-            Console.WriteLine($"[ProcessExited] セッション切断検出: {sessionInfo.SessionId}");
+            Console.WriteLine($"[ProcessExited] セッション切断検出: {args.SessionId}");
         };
+        
+        Console.WriteLine("[SetupConPtyConnectionEventHandlers] ConPtyConnectionServiceのイベントハンドラーを設定");
     }
     
     // タスクランナー関連メソッド
