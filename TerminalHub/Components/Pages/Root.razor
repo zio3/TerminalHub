@@ -1683,6 +1683,9 @@
                 // タイマーを停止
                 OutputAnalyzerService.StopSessionTimer(sessionId);
                 
+                // Gitステータスを更新
+                await RefreshGitStatus(sessionId);
+                
                 // UIを更新
                 StateHasChanged();
             }
