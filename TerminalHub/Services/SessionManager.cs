@@ -9,7 +9,6 @@ namespace TerminalHub.Services
 {
     public interface ISessionManager
     {
-        Task<SessionInfo> CreateSessionAsync(string? folderPath = null);
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<bool> RemoveSessionAsync(Guid sessionId);
@@ -90,14 +89,6 @@ namespace TerminalHub.Services
             }
         }
 
-
-        public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
-        {
-            // 既存のメソッドは互換性のために残す
-            var basePath = _configuration.GetValue<string>("SessionSettings:BasePath") 
-                ?? @"C:\Users\info\source\repos\Experimental2025\ClaoudeCodeWebUi\bin\Debug\net9.0";
-            return await CreateSessionAsync(basePath, "", TerminalType.Terminal, new Dictionary<string, string>());
-        }
 
         public async Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
         {
