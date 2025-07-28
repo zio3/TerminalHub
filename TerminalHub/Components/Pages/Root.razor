@@ -61,7 +61,8 @@
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
                      OnSessionSettings="ShowSessionSettingsDialog"
-                     OnGitStatusRefresh="RefreshGitStatus" />
+                     OnGitStatusRefresh="RefreshGitStatus"
+                     OnSessionExpandedChanged="HandleSessionExpandedChanged" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -442,6 +443,16 @@
             }
 
             sessions = SessionManager.GetAllSessions().ToList();
+            
+            // 保存された展開状態を読み込んで適用
+            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
+            foreach (var session in sessions)
+            {
+                if (!session.ParentSessionId.HasValue && expandedStates.ContainsKey(session.SessionId))
+                {
+                    session.IsExpanded = expandedStates[session.SessionId];
+                }
+            }
             
             // すべてのセッションにイベントハンドラーを設定
             foreach (var session in sessions)
@@ -961,6 +972,21 @@
         editingMemoSessionId = sessionId;
         tempMemoText = currentMemo ?? "";
         StateHasChanged();
+    }
+    
+    private async Task HandleSessionExpandedChanged((Guid sessionId, bool isExpanded) args)
+    {
+        // 展開状態をLocalStorageに保存
+        await SaveExpandedStatesToLocalStorage();
+    }
+    
+    private async Task SaveExpandedStatesToLocalStorage()
+    {
+        var expandedStates = sessions
+            .Where(s => !s.ParentSessionId.HasValue) // 親セッションのみ
+            .ToDictionary(s => s.SessionId, s => s.IsExpanded);
+            
+        await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
     }
 
     private async Task SaveMemo(Guid sessionId)
