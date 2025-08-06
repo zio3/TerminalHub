@@ -282,7 +282,8 @@ namespace TerminalHub.Services
                 _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
                 
                 // StreamWriterを作成（XTerm向けにUTF-8、改行コードLF）
-                _writer = new StreamWriter(_pipeInStream, new UTF8Encoding(false))
+                // バッファサイズを65KBに増やして長い文字列の問題を解決
+                _writer = new StreamWriter(_pipeInStream, new UTF8Encoding(false), bufferSize: 65536)
                 {
                     AutoFlush = true,
                     NewLine = "\n"  // LF改行（Unix形式）
@@ -327,8 +328,18 @@ namespace TerminalHub.Services
         {
             if (_writer != null && !_disposed)
             {
-                await _writer.WriteAsync(input);
-                await _writer.FlushAsync();
+                // 265文字単位で分割して送信（こまめにFlushすることで問題を解決）
+                const int CHUNK_SIZE = 265;
+                
+                for (int i = 0; i < input.Length; i += CHUNK_SIZE)
+                {
+                    var chunk = i + CHUNK_SIZE < input.Length 
+                        ? input.Substring(i, CHUNK_SIZE)
+                        : input.Substring(i);
+                    
+                    await _writer.WriteAsync(chunk);
+                    await _writer.FlushAsync();
+                }
 
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
