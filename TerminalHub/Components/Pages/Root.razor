@@ -138,7 +138,6 @@
                                         <div>
                                             <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
                                         </div>
-                                        @* タスク実行ドロップダウンを一時的に無効化
                                         @if (checkedScripts.Count > 0 && npmScripts != null)
                                         {
                                             <div class="dropdown">
@@ -167,7 +166,6 @@
                                                 </ul>
                                             </div>
                                         }
-                                        *@
                                     </div>
                                     <div class="btn-group">
                                         <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
@@ -229,14 +227,12 @@
                                                          @onclick="() => SelectScript(script.Key)">
                                                         <div class="d-flex justify-content-between align-items-start mb-2">
                                                             <div class="d-flex align-items-start flex-grow-1">
-                                                                @* チェックボックスを一時的に無効化
                                                                 <input type="checkbox" 
                                                                        class="form-check-input me-2" 
                                                                        id="@($"script-check-{script.Key}")"
                                                                        checked="@checkedScripts.Contains(script.Key)"
                                                                        @onchange="() => ToggleScriptCheck(script.Key)"
                                                                        @onclick:stopPropagation="true" />
-                                                                *@
                                                                 <div class="flex-grow-1">
                                                                     <label for="@($"script-check-{script.Key}")" class="mb-0">
                                                                         <strong>@script.Key</strong>
@@ -2146,15 +2142,27 @@
     
     private async void OnTaskButtonClick(string scriptName)
     {
-        Console.WriteLine($"[UI] タスク実行ボタンクリック: {scriptName}");
-        await RunScriptFromTextInput(scriptName);
+        try
+        {
+            Console.WriteLine($"[UI] タスク実行ボタンクリック: {scriptName}");
+            await RunScriptFromTextInput(scriptName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OnTaskButtonClick] エラー: {ex.Message}");
+            toast?.ShowError($"タスク実行エラー: {ex.Message}");
+        }
     }
     
     private async Task RunScriptFromTextInput(string scriptName)
     {
         Console.WriteLine($"[RunScriptFromTextInput] 開始 - scriptName: {scriptName}, activeSessionId: {activeSessionId}");
         
-        if (activeSessionId == null) return;
+        if (activeSessionId == null) 
+        {
+            Console.WriteLine("[RunScriptFromTextInput] activeSessionIdがnullのため中断");
+            return;
+        }
         
         var sessionId = activeSessionId.Value; // 値をキャプチャ
         
@@ -2163,7 +2171,7 @@
         await SwitchBottomPanelTab(BottomPanelTab.TaskRunner);
         
         // DOM更新を待つ
-        await Task.Delay(200);
+        await Task.Delay(300); // 少し長めに待つ
         
         // セッションが変わっていないか確認
         if (activeSessionId != sessionId)
@@ -2172,10 +2180,27 @@
             return;
         }
         
+        // タスクランナーターミナルが初期化されているか確認
+        if (!TaskRunnerInitialized)
+        {
+            Console.WriteLine("[RunScriptFromTextInput] タスクランナーが初期化されていないため待機");
+            await Task.Delay(500);
+        }
+        
         // スクリプトを選択して実行
         Console.WriteLine($"[RunScriptFromTextInput] スクリプト実行: {scriptName}");
         selectedScript = scriptName;
-        await RunSelectedScript();
+        
+        try
+        {
+            await RunSelectedScript();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RunScriptFromTextInput] RunSelectedScriptエラー: {ex.Message}");
+            Console.WriteLine($"[RunScriptFromTextInput] スタックトレース: {ex.StackTrace}");
+            throw;
+        }
     }
     
     public async ValueTask DisposeAsync()
