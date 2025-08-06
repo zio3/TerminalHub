@@ -9,7 +9,6 @@ namespace TerminalHub.Services
 {
     public interface ISessionManager
     {
-        Task<SessionInfo> CreateSessionAsync(string? folderPath = null);
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<bool> RemoveSessionAsync(Guid sessionId);
@@ -23,6 +22,7 @@ namespace TerminalHub.Services
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
         Task<SessionInfo?> CreateWorktreeSessionWithExistingBranchAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
         Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false);
         Task<bool> RestartSessionAsync(Guid sessionId);
         // event EventHandler<string>? ActiveSessionChanged;
         
@@ -90,14 +90,6 @@ namespace TerminalHub.Services
             }
         }
 
-
-        public async Task<SessionInfo> CreateSessionAsync(string? folderPath = null)
-        {
-            // 既存のメソッドは互換性のために残す
-            var basePath = _configuration.GetValue<string>("SessionSettings:BasePath") 
-                ?? @"C:\Users\info\source\repos\Experimental2025\ClaoudeCodeWebUi\bin\Debug\net9.0";
-            return await CreateSessionAsync(basePath, "", TerminalType.Terminal, new Dictionary<string, string>());
-        }
 
         public async Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
         {
@@ -270,7 +262,7 @@ namespace TerminalHub.Services
             if (_sessions.TryGetValue(sessionId, out var existingSession))
             {
                 sessionInfo.LastAccessedAt = DateTime.Now;
-                Console.WriteLine($"[SessionManager] 既存セッションを再利用: {sessionId}");
+                _logger.LogDebug("既存セッションを再利用: SessionId={SessionId}", sessionId);
                 return existingSession;
             }
 
@@ -285,7 +277,7 @@ namespace TerminalHub.Services
                 if (_sessions.TryGetValue(sessionId, out existingSession))
                 {
                     sessionInfo.LastAccessedAt = DateTime.Now;
-                    Console.WriteLine($"[SessionManager] 既存セッションを再利用 (ダブルチェック): {sessionId}");
+                    _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
                     return existingSession;
                 }
 
@@ -295,11 +287,8 @@ namespace TerminalHub.Services
                 
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
                 
-                // 初期化開始を設定
-                sessionInfo.IsInitializing = true;
-                sessionInfo.HasReceivedFirstData = false;
                 
-                Console.WriteLine($"[SessionManager] ★★★ 新規セッション接続開始: {sessionId} ★★★");
+                _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
                 
@@ -312,18 +301,14 @@ namespace TerminalHub.Services
                 
                 sessionInfo.LastAccessedAt = DateTime.Now;
                 
-                // ConPty接続は完了したが、まだ初期化中（最初のデータ待ち）
-                // sessionInfo.IsInitializing は true のまま維持
                 
-                Console.WriteLine($"[SessionManager] ★★★ 新規セッション接続完了: {sessionId} ★★★");
+                _logger.LogInformation("新規セッション接続完了: SessionId={SessionId}", sessionId);
                 _logger.LogInformation($"ConPty session with buffer initialized on-demand: {sessionId}");
                 
                 return newSession;
             }
             catch (Exception ex)
             {
-                // 初期化失敗時もフラグをリセット
-                sessionInfo.IsInitializing = false;
                 _logger.LogError(ex, "Failed to initialize ConPty session on-demand for {SessionId}", sessionId);
                 throw;
             }
@@ -402,7 +387,6 @@ namespace TerminalHub.Services
                     sessionInfo.GitBranch = gitInfo.CurrentBranch;
                     sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
                     sessionInfo.IsWorktree = gitInfo.IsWorktree;
-                    sessionInfo.WorktreeMainPath = gitInfo.WorktreeMainPath;
 
                     _logger.LogDebug("Git情報を取得しました: {Path}, ブランチ: {Branch}, Worktree: {IsWorktree}", 
                         sessionInfo.FolderPath, gitInfo.CurrentBranch, gitInfo.IsWorktree);
@@ -602,6 +586,68 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false)
+        {
+            try
+            {
+                // セッション情報を取得
+                var sessionInfo = GetSessionInfo(sessionId);
+                if (sessionInfo == null)
+                {
+                    _logger.LogWarning("再作成するセッションが見つかりません: {SessionId}", sessionId);
+                    return null;
+                }
+
+                // 現在のセッションを取得して終了
+                if (_sessions.TryGetValue(sessionId, out var currentSession))
+                {
+                    currentSession.Dispose();
+                    _sessions.TryRemove(sessionId, out _);
+                    
+                    // ConPtySessionも破棄
+                    if (sessionInfo.ConPtySession != null)
+                    {
+                        sessionInfo.ConPtySession.Dispose();
+                        sessionInfo.ConPtySession = null;
+                        _logger.LogInformation("既存のConPtySessionを破棄しました: {SessionId}", sessionId);
+                    }
+                    
+                    // リソースのクリーンアップを待つ
+                    await Task.Delay(100);
+                }
+
+                // セッションの起動設定を準備
+                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+                // removeContinueOptionがtrueまたはHasContinueErrorOccurredフラグがtrueの場合、--continueオプションを除外
+                var options = sessionInfo.Options;
+                if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && options.ContainsKey("continue"))
+                {
+                    options = new Dictionary<string, string>(options);
+                    options.Remove("continue");
+                    _logger.LogInformation("--continueオプションを除外しました: {SessionId}", sessionId);
+                }
+
+                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+
+                // 新しいセッションを作成（Startは呼ばない）
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                _sessions[sessionId] = newSession;
+                
+                // ConPtySessionをSessionInfoに設定
+                sessionInfo.ConPtySession = newSession;
+                
+                _logger.LogInformation("新しいConPtySessionを作成しました（未起動）: {SessionId}", sessionId);
+                return newSession;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "セッション再作成でエラーが発生しました: {SessionId}", sessionId);
+                return null;
+            }
+        }
+
         public async Task<bool> RestartSessionAsync(Guid sessionId)
         {
             try
@@ -647,9 +693,6 @@ namespace TerminalHub.Services
 
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
 
-                // 再起動時も初期化中として扱う
-                sessionInfo.IsInitializing = true;
-                sessionInfo.HasReceivedFirstData = false;
                 
                 // 新しいセッションを作成
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);

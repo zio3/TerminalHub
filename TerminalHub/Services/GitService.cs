@@ -71,20 +71,6 @@ namespace TerminalHub.Services
                 // Worktreeかどうかをチェック
                 gitInfo.IsWorktree = await IsWorktreeAsync(path);
 
-                // Worktreeの場合、メインリポジトリのパスを取得
-                if (gitInfo.IsWorktree)
-                {
-                    var worktreeListResult = await ExecuteGitCommandAsync(path, "worktree list --porcelain");
-                    if (worktreeListResult.Success)
-                    {
-                        var lines = worktreeListResult.Output?.Split('\n') ?? Array.Empty<string>();
-                        var mainWorktree = lines.FirstOrDefault(l => l.StartsWith("worktree ") && !l.Contains("detached"));
-                        if (mainWorktree != null)
-                        {
-                            gitInfo.WorktreeMainPath = mainWorktree.Substring("worktree ".Length).Trim();
-                        }
-                    }
-                }
 
                 // 利用可能なブランチを取得
                 var branchResult = await ExecuteGitCommandAsync(path, "branch -a --format='%(refname:short)'");

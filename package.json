@@ -1,0 +1,23 @@
+{
+  "name": "terminalhub-work2",
+  "version": "1.0.0",
+  "description": "TerminalHub - Terminal session management application",
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File start-single.ps1",
+    "start:background": "powershell -ExecutionPolicy Bypass -File start.ps1",
+    "stop": "powershell -ExecutionPolicy Bypass -File stop.ps1",
+    "build": "dotnet build TerminalHub/TerminalHub.csproj",
+    "publish": "dotnet publish TerminalHub/TerminalHub.csproj",
+    "test": "dotnet test",
+    "clean": "dotnet clean TerminalHub/TerminalHub.csproj"
+  },
+  "keywords": [
+    "terminal",
+    "session",
+    "management",
+    "blazor",
+    "dotnet"
+  ],
+  "author": "",
+  "license": "ISC"
+}

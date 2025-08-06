@@ -21,6 +21,9 @@
 @inject IInputHistoryService InputHistoryService
 @inject IPackageJsonService PackageJsonService
 @inject IConPtyService ConPtyService
+@inject ConPtyConnectionService ConPtyConnection
+@inject ILogger<Root> Logger
+@inject ILoggerFactory LoggerFactory
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -61,7 +64,8 @@
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
                      OnSessionSettings="ShowSessionSettingsDialog"
-                     OnGitStatusRefresh="RefreshGitStatus" />
+                     OnGitStatusRefresh="RefreshGitStatus"
+                     OnSessionExpandedChanged="HandleSessionExpandedChanged" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -309,7 +313,7 @@
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
-    
+
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
@@ -329,7 +333,7 @@
     private bool subSessionParentSessionIsGitRepository = true;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
-    
+
     // タスクランナー関連
     private bool hasPackageJson = false;
     private Dictionary<string, string>? npmScripts = null;
@@ -339,11 +343,11 @@
     private IJSObjectReference? taskRunnerTerminal;
     private ConPtySession? taskRunnerSession;
     private bool TaskRunnerInitialized = false;
-    
+
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
-    
+
 
     protected override Task OnInitializedAsync()
     {
@@ -352,20 +356,20 @@
         // 開発モード設定を読み込み
         showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
         showDevWindow = Configuration.GetValue<bool>("DevelopmentMode:ShowDevWindowOnStartup", false);
-        
+
         // スナップショット設定を読み込み
         _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
         _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
-        
+
         // 通知権限をリクエスト（削除 - 設定モーダルに移動）
         // await NotificationService.RequestBrowserNotificationPermissionAsync();
-        
+
         // OutputAnalyzerServiceのタイムアウトコールバックを設定
         OutputAnalyzerService.SetTimeoutCallback(sessionId => 
         {
             InvokeAsync(() => OnSessionTimeout(sessionId));
         });
-        
+
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
     }
@@ -378,10 +382,10 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
             // 通知用のDotNetRefを設定
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
-            
+
             // テキスト履歴を読み込み
             await InputHistoryService.LoadHistoryAsync();
-            
+
             // ローカルストレージからセッション情報を復元
             var savedSessions = await LocalStorageService.LoadSessionsAsync();
             var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
@@ -416,20 +420,20 @@
                         {
                             createdSession.Memo = sessionInfo.Memo;
                         }
-                        
+
                         // チェックされたスクリプトを復元
                         if (sessionInfo.CheckedScripts != null && sessionInfo.CheckedScripts.Count > 0)
                         {
                             createdSession.CheckedScripts = new HashSet<string>(sessionInfo.CheckedScripts);
                             Console.WriteLine($"[OnInitialized] Restored {sessionInfo.CheckedScripts.Count} checked scripts for session {sessionInfo.DisplayName}: {string.Join(", ", sessionInfo.CheckedScripts)}");
                         }
-                        
+
                         // 親子関係を復元
                         if (sessionInfo.ParentSessionId.HasValue)
                         {
                             createdSession.ParentSessionId = sessionInfo.ParentSessionId;
                         }
-                        
+
                         await SessionManager.SaveSessionInfoAsync(createdSession);
                     }
 
@@ -442,19 +446,26 @@
             }
 
             sessions = SessionManager.GetAllSessions().ToList();
-            
-            // すべてのセッションにイベントハンドラーを設定
+
+            // 保存された展開状態を読み込んで適用
+            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
             foreach (var session in sessions)
             {
-                SetupSessionEventHandlers(session);
+                if (!session.ParentSessionId.HasValue && expandedStates.ContainsKey(session.SessionId))
+                {
+                    session.IsExpanded = expandedStates[session.SessionId];
+                }
             }
+
+            // ConPtyConnectionServiceのイベントハンドラーを設定
+            SetupConPtyConnectionEventHandlers();
 
             // 保存されたアクティブセッションがあれば選択
             if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
             {
                 await SelectSession(savedActiveId.Value);
             }
-            
+
             // UIを更新
             StateHasChanged();
         }
@@ -474,18 +485,18 @@
         showCreateDialog = true;
         await Task.CompletedTask; // 必要に応じて非同期処理を追加
     }
-    
+
     private void ShowSettings()
     {
         showSettingsDialog = true;
     }
-    
+
     private async Task SwitchBottomPanelTab(BottomPanelTab tab)
     {
         Console.WriteLine($"[SwitchBottomPanelTab] タブ切り替え: {bottomPanelTab} -> {tab}, activeSessionId={activeSessionId}");
         bottomPanelTab = tab;
         StateHasChanged();
-        
+
         if (tab == BottomPanelTab.DosTerminal && activeSessionId != null)
         {
             // DOSターミナルタブに切り替え - 常に新しいXTermを作成
@@ -499,7 +510,7 @@
             // タスクランナータブに切り替え
             Console.WriteLine($"[SwitchBottomPanelTab] タスクランナータブに切り替え - TaskRunnerInitialized: {TaskRunnerInitialized}");
             await CleanupSingleDosTerminal();
-            
+
             // 現在のセッションのpackage.jsonを確認
             var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
             if (currentSession != null)
@@ -508,7 +519,7 @@
                 Console.WriteLine($"[SwitchBottomPanelTab] TaskRunner - Session: {currentSession.DisplayName}, hasPackageJson: {hasPackageJson}");
                 // package.jsonの有無に関わらずタスクランナーを表示
                 await LoadNpmScripts();
-                
+
                 // 既に初期化済みの場合は再初期化しない
                 if (!TaskRunnerInitialized)
                 {
@@ -534,43 +545,43 @@
             await CleanupSingleDosTerminal();
         }
     }
-    
+
     private async Task InitializeSingleDosTerminal()
     {
         try
         {
             if (activeSessionId == null) return;
-            
+
             var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
             if (currentSession == null) return;
-            
-            
+
+
             // ConPTYセッションがなければ作成
             if (currentSession.DosTerminalConPtySession == null)
             {
-                var conPtyService = new ConPtyService(LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ConPtyService>());
+                var conPtyService = new ConPtyService(LoggerFactory.CreateLogger<ConPtyService>());
                 var conPtySession = await conPtyService.CreateSessionAsync("cmd.exe", "", currentSession.FolderPath, 120, 30);
-                
+
                 currentSession.DosTerminalConPtySession = conPtySession;
                 conPtySession.Start();
                 conPtySession.DataReceived += (sender, args) => OnDosTerminalDataReceived(currentSession.SessionId, args.Data);
                 conPtySession.ProcessExited += (sender, args) => OnDosTerminalExited(currentSession.SessionId);
-                
+
                 // ConPTYの初期化が完了するまで少し待つ
                 await Task.Delay(100);
             }
-            
+
             // DOM要素の存在を確認
             var elementExists = await JSRuntime.InvokeAsync<bool>("eval", @"
                 !!document.getElementById('dos-terminal-container')
             ");
-            
+
             if (!elementExists)
             {
                 StateHasChanged();
                 await Task.Delay(200); // DOM更新を待つ
             }
-            
+
             // 新しいXTermを作成
             singleDosTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
                 "terminalFunctions.createMultiSessionTerminal",
@@ -578,11 +589,11 @@
                 $"dos-terminal-{activeSessionId}",
                 dotNetRef
             );
-            
+
             currentDosTerminalSessionId = activeSessionId;
-            
+
             // リサイズは再接続時に自動的に送られるため、ここでは明示的に送らない
-            
+
             // フォーカスとリサイズ
             await JSRuntime.InvokeVoidAsync("eval", $@"
                 (function() {{
@@ -602,14 +613,14 @@
             toast?.ShowError($"DOSターミナルの初期化エラー: {ex.Message}");
         }
     }
-    
+
     private async Task CleanupSingleDosTerminal()
     {
         try
         {
             if (singleDosTerminal != null)
             {
-                
+
                 // JavaScriptで破棄
                 await JSRuntime.InvokeVoidAsync("eval", $@"
                     (function() {{
@@ -621,7 +632,7 @@
                         }}
                     }})()
                 ");
-                
+
                 await singleDosTerminal.DisposeAsync();
                 singleDosTerminal = null;
                 currentDosTerminalSessionId = null;
@@ -632,7 +643,7 @@
             Console.WriteLine($"[CleanupSingleDosTerminal] エラー: {ex.Message}");
         }
     }
-    
+
     private async void OnDosTerminalDataReceived(Guid sessionId, string data)
     {
         // アクティブなセッションのDOSターミナルデータのみ表示
@@ -644,7 +655,7 @@
             });
         }
     }
-    
+
     private void OnDosTerminalExited(Guid sessionId)
     {
         InvokeAsync(async () =>
@@ -657,10 +668,10 @@
                 {
                     await CleanupSingleDosTerminal();
                 }
-                
+
                 session.DosTerminalConPtySession?.Dispose();
                 session.DosTerminalConPtySession = null;
-                
+
                 // 再起動できるように通知
                 StateHasChanged();
             }
@@ -684,9 +695,12 @@
 
             // ローカルストレージに保存
             await LocalStorageService.SaveSessionsAsync(sessions);
-            
-            // 新しいセッションのConPtySessionにイベントハンドラーを設定
-            SetupSessionEventHandlers(sessionInfo);
+
+            // 新しいセッションをConPtyConnectionServiceに登録
+            if (sessionInfo.ConPtySession != null)
+            {
+                ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
+            }
 
             StateHasChanged();
 
@@ -711,11 +725,11 @@
 
     private async Task SelectSession(Guid sessionId)
     {
-        Console.WriteLine($"[SelectSession] 開始: sessionId={sessionId}");
-        
+        Logger.LogDebug("SelectSession開始: SessionId={SessionId}", sessionId);
+
         if (activeSessionId == sessionId)
         {
-            Console.WriteLine($"[SelectSession] 既にアクティブなセッション: {sessionId}");
+            Logger.LogDebug("既にアクティブなセッション: SessionId={SessionId}", sessionId);
             return;
         }
 
@@ -724,42 +738,33 @@
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
         {
-            Console.WriteLine($"[SelectSession] 既存のアクティブターミナルを破棄");
+            Logger.LogDebug("既存のアクティブターミナルを破棄");
             try
             {
                 await activeTerminal.DisposeAsync();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SelectSession] ターミナル破棄エラー: {ex.Message}");
+                Logger.LogWarning(ex, "ターミナル破棄エラー");
             }
             activeTerminal = null;
         }
 
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
-        Console.WriteLine($"[SelectSession] すべてのターミナルを非表示に");
+        Logger.LogDebug("すべてのターミナルを非表示に");
         await TerminalService.HideAllTerminalsAsync();
 
         // セッションをアクティブに
-        Console.WriteLine($"[SelectSession] SessionManagerでアクティブに設定");
+        Logger.LogDebug("SessionManagerでアクティブに設定: SessionId={SessionId}", sessionId);
         await SessionManager.SetActiveSessionAsync(sessionId);
         activeSessionId = sessionId;
-        
-        // セッション情報を取得して、初期化中の場合はUIを更新
-        var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionInfo != null && sessionInfo.ConPtySession == null)
-        {
-            Console.WriteLine($"[SelectSession] ConPtyがまだ初期化されていない - スピナー表示");
-            // ConPtyがまだ初期化されていない場合
-            sessionInfo.IsInitializing = true;
-            StateHasChanged(); // スピナーを表示するためにUIを更新
-        }
-        
+
+
         // 再起動後の新しいセッションを確実に取得
-        Console.WriteLine($"[SelectSession] SessionManager.GetSessionAsync呼び出し");
+        Logger.LogDebug("SessionManager.GetSessionAsync呼び出し: SessionId={SessionId}", sessionId);
         activeSession = await SessionManager.GetSessionAsync(sessionId);
-        Console.WriteLine($"[SelectSession] SessionManager.GetSession結果: {(activeSession != null ? "成功" : "失敗")}");
-        
+        Logger.LogDebug("SessionManager.GetSession結果: {Result}", activeSession != null ? "成功" : "失敗");
+
         // セッションが存在しない場合はエラー
         if (activeSession == null)
         {
@@ -767,10 +772,8 @@
             activeSessionId = null;
             return;
         }
-        
-        // ConPty接続は完了したが、まだXTermの初期表示待ち
-        // IsInitializingフラグは維持（最初のデータ受信時にリセット）
-        
+
+
         // 通知フラグをクリア
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (selectedSession != null && selectedSession.HasNotificationPending)
@@ -786,59 +789,76 @@
         await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
 
         // ターミナルdivが存在するか確認し、表示する
-        Console.WriteLine($"[SelectSession] ターミナルdivの存在確認");
+        Logger.LogDebug("ターミナルdivの存在確認: SessionId={SessionId}", sessionId);
         var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
-        Console.WriteLine($"[SelectSession] ターミナルdiv存在: {divExists}");
+        Logger.LogDebug("ターミナルdiv存在: {DivExists}", divExists);
         if (divExists)
         {
             // 新しいターミナルを表示
-            Console.WriteLine($"[SelectSession] ターミナルを表示");
+            Logger.LogDebug("ターミナルを表示: SessionId={SessionId}", sessionId);
             await TerminalService.ShowTerminalAsync(sessionId);
         }
 
         // ターミナルを初期化
-        Console.WriteLine($"[SelectSession] InitializeTerminal呼び出し");
+        Logger.LogDebug("InitializeTerminal呼び出し: SessionId={SessionId}", sessionId);
         await InitializeTerminal(sessionId);
 
-        // ターミナルのリサイズを強制的に実行
-        if (activeTerminal != null)
+
+        // ConPtySessionのリサイズトリックでバッファ内容を再取得
+        if (selectedSession?.ConPtySession != null)
         {
+            // リサイズ処理全体で不要なデータを破棄
+            selectedSession.ConPtySession.SuspendOutput();
+
+            // ターミナルのリサイズを強制的に実行
+            if (activeTerminal != null)
+            {
+                await TerminalService.ResizeTerminalAsync(activeTerminal);
+            }
+
+            await Task.Delay(100); // ターミナル初期化完了を待つ
+
+            // 現在のサイズを取得
+            var currentCols = selectedSession.ConPtySession.Cols;
+            var currentRows = selectedSession.ConPtySession.Rows;
+
+            // リサイズトリック：1行減らして元に戻す
+            selectedSession.ConPtySession.Resize(currentCols, currentRows - 1);
+            await Task.Delay(50);
+
+            // 2回目のリサイズから送出を再開（これが本来欲しいバッファ内容）
+            selectedSession.ConPtySession.ResumeOutput();
+            selectedSession.ConPtySession.Resize(currentCols, currentRows);
+        }
+        else if (activeTerminal != null)
+        {
+            // ConPtySessionがない場合は通常のリサイズのみ
             await TerminalService.ResizeTerminalAsync(activeTerminal);
         }
 
-        // ConPtyBufferのリサイズトリックは不要になったため削除
-
-
-        // ConPtySessionのイベントハンドラーを設定
-        if (selectedSession?.ConPtySession != null)
+        // ConPtySessionをConPtyConnectionServiceに登録
+        // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
+        var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
+        if (latestSessionInfo?.ConPtySession != null)
         {
-            // ConPtySessionイベントハンドラーを設定
-            // ※ ConPtySessionにはClearEventHandlersメソッドは必要ない
-            
-
-                        // イベントハンドラーを設定
-            SetupSessionEventHandlers(selectedSession);
-            
-            // 切断時にタイマーをクリーンアップ
+            Logger.LogDebug("ConPtyConnectionServiceに登録: SessionId={SessionId}", sessionId);
+            ConPtyConnection.SubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
         }
         else
         {
-            // ConPtySessionが利用不可
+            Logger.LogWarning("ConPtySessionが見つかりません: SessionId={SessionId}", sessionId);
         }
 
-        // ターミナルを最下段にスクロール
-   //     await TerminalService.ScrollToBottomAsync(sessionId);
-        
         // package.jsonの存在をチェック
         if (selectedSession != null)
         {
             hasPackageJson = await PackageJsonService.HasPackageJsonAsync(selectedSession.FolderPath);
-            Console.WriteLine($"[SelectSession] Session: {selectedSession.DisplayName}, Path: {selectedSession.FolderPath}, hasPackageJson: {hasPackageJson}");
-            
+            Logger.LogDebug("Session: {DisplayName}, Path: {FolderPath}, HasPackageJson: {HasPackageJson}", selectedSession.DisplayName, selectedSession.FolderPath, hasPackageJson);
+
             // チェックされたスクリプトを復元
             checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
-            Console.WriteLine($"[SelectSession] Restored {checkedScripts.Count} checked scripts: {string.Join(", ", checkedScripts)}");
-            
+            Logger.LogDebug("Restored {Count} checked scripts: {Scripts}", checkedScripts.Count, string.Join(", ", checkedScripts));
+
             StateHasChanged(); // UIを更新
         }
 
@@ -851,20 +871,20 @@
         {
             // エラーは無視
         }
-        
+
         // 現在のタブに応じてターミナルを再作成
         if (bottomPanelTab == BottomPanelTab.DosTerminal && selectedSession != null)
         {
-            Console.WriteLine($"[SelectSession] DOSターミナルタブが選択されているのでXTermを再作成");
-            
+            Logger.LogDebug("DOSターミナルタブが選択されているのでXTermを再作成");
+
             // 既存のDOSターミナルをクリーンアップして新しく作成
             await CleanupSingleDosTerminal();
             await InitializeSingleDosTerminal();
         }
         else if (bottomPanelTab == BottomPanelTab.TaskRunner && selectedSession != null)
         {
-            Console.WriteLine($"[SelectSession] タスクランナータブが選択されているのでnpm scriptsを読み込み");
-            
+            Logger.LogDebug("タスクランナータブが選択されているのでnpm scriptsを読み込み");
+
             // npm scriptsを読み込み
             await LoadNpmScripts();
             await InitializeTaskRunnerTerminal();
@@ -883,36 +903,21 @@
             var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
             if (sessionInfo != null)
             {
-                // 最初のデータ受信を検出
-                if (!sessionInfo.HasReceivedFirstData && !string.IsNullOrEmpty(data))
-                {
-                    Console.WriteLine($"[ProcessReceivedData] セッション {sessionId} の最初のデータ受信 (長さ: {data.Length})");
-                    sessionInfo.HasReceivedFirstData = true;
-                    
-                    // 初期化完了としてフラグをリセット
-                    if (sessionInfo.IsInitializing)
-                    {
-                        Console.WriteLine($"[ProcessReceivedData] 初期化完了 - スピナー非表示 {DateTime.Now}");
-                        sessionInfo.IsInitializing = false;
-                        // UIを更新してスピナーを非表示にする
-                        _ = InvokeAsync(StateHasChanged);
-                    }
-                }
                 // Claude Codeの場合、"No conversation found to continue"エラーをチェック
                 if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
-                    data.StartsWith("No conversation found to continue") &&
+                    data.Contains("No conversation found to continue") &&
                     sessionInfo.Options.ContainsKey("continue") &&
                     !sessionInfo.HasContinueErrorOccurred)
                 {
                     // Claude Continue Error detected
-                    
+
                     // フラグを設定して重複送信を防ぐ
                     sessionInfo.HasContinueErrorOccurred = true;
-                    
+
                     // セッション再起動のコマンドを送信
                     _ = InvokeAsync(async () =>
                     {
-                        await RestartSessionWithoutContinue(sessionId);
+                        await RecreateSessionWithoutContinue(sessionId);
                     });
                     return;
                 }
@@ -922,7 +927,7 @@
                 {
                     //Console.WriteLine($"[ProcessReceivedData] アクティブセッション - XTermにデータ送信 (長さ: {data.Length}) {DateTime.Now }");
                     await TerminalService.WriteToTerminalAsync(activeTerminal, data);
-                    
+
                     // 出力解析の実行
                     _ = InvokeAsync(() => 
                     {
@@ -961,6 +966,21 @@
         editingMemoSessionId = sessionId;
         tempMemoText = currentMemo ?? "";
         StateHasChanged();
+    }
+
+    private async Task HandleSessionExpandedChanged((Guid sessionId, bool isExpanded) args)
+    {
+        // 展開状態をLocalStorageに保存
+        await SaveExpandedStatesToLocalStorage();
+    }
+
+    private async Task SaveExpandedStatesToLocalStorage()
+    {
+        var expandedStates = sessions
+            .Where(s => !s.ParentSessionId.HasValue) // 親セッションのみ
+            .ToDictionary(s => s.SessionId, s => s.IsExpanded);
+
+        await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
     }
 
     private async Task SaveMemo(Guid sessionId)
@@ -1010,18 +1030,18 @@
             {
                 await CleanupSingleDosTerminal();
             }
-            
+
             // DOS ConPTYセッションのクリーンアップ
             sessionToRemove.DosTerminalConPtySession?.Dispose();
             sessionToRemove.DosTerminalConPtySession = null;
-            
+
             // ConPtySessionのクリーンアップ
             if (sessionToRemove.ConPtySession != null)
             {
                 sessionToRemove.ConPtySession.Dispose();
             }
         }
-        
+
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);
 
@@ -1072,7 +1092,7 @@
     public async Task SendInput(string sessionId, string data)
     {
         Console.WriteLine($"[SendInput JSInvokable] 呼び出し - sessionId: {sessionId}, data長: {data?.Length ?? 0}");
-        
+
         try
         {
             // タスクランナーターミナルからの入力を処理
@@ -1147,14 +1167,14 @@
             {
                 // ConPtyにリサイズを通知
                 activeSession.Resize(cols, rows);
-                
+
                 // ConPtySessionもリサイズを通知
                 var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
                 if (selectedSession?.ConPtySession != null)
                 {
                     selectedSession.ConPtySession.Resize(cols, rows);
                 }
-                
+
                 // リサイズ時のスナップショット再表示は削除
                 // ConPTYは自身でリフロー処理を行い、アプリケーションが再描画する
                 // 手動でクリア＆再描画すると、ConPTYの再描画と競合する可能性がある
@@ -1207,10 +1227,10 @@
                 var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                 await TerminalService.RecreateTerminalAsync(sessionId, selectedSessionInfo!, activeSession);
 
-                // イベントハンドラーを設定
-                if (selectedSessionInfo != null)
+                // ConPtyConnectionServiceに再登録
+                if (selectedSessionInfo?.ConPtySession != null)
                 {
-                    SetupSessionEventHandlers(selectedSessionInfo);
+                    ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
                 toast?.ShowSuccess("ターミナルを再作成しました");
@@ -1229,16 +1249,16 @@
 
 
 
-    
-    
 
-    
-    
+
+
+
+
 
     private async Task SendInput()
     {
         Console.WriteLine($"[SendInputボタン] 呼び出し - activeSessionId: {activeSessionId}, activeSession: {(activeSession != null ? "存在" : "null")}");
-        
+
         if (activeSession == null)
         {
             Console.WriteLine("[SendInputボタン] activeSessionがnullのため中断");
@@ -1256,10 +1276,10 @@
         if (!string.IsNullOrWhiteSpace(inputText))
         {
             Console.WriteLine($"[SendInputボタン] テキスト送信: {inputText}");
-            
+
             // テキスト履歴に追加
             InputHistoryService.AddToHistory(inputText);
-            
+
             try
             {
                 Console.WriteLine("[SendInputボタン] activeSession.WriteAsync呼び出し");
@@ -1271,15 +1291,15 @@
                 Console.WriteLine($"[SendInputボタン] WriteAsyncエラー: {ex.GetType().Name} - {ex.Message}");
                 throw;
             }
-            
+
             // テキスト送信後、Enter送信前に0.2秒待機
             await Task.Delay(200);
         }
-        
+
         // Enterキーを送信（空の場合でも送信）
         Console.WriteLine("[SendInputボタン] Enterキー送信");
         await SendEnterKeyDirect();
-        
+
         // 入力フィールドをクリア
         inputText = "";
         Console.WriteLine("[SendInputボタン] 完了");
@@ -1405,7 +1425,7 @@
         try
         {
             SessionInfo? newSession = null;
-            
+
             switch (result.OperationType)
             {
                 case SubSessionDialog.SubSessionType.CreateNew:
@@ -1423,7 +1443,7 @@
                             subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.AddExisting:
                     // 既存Worktree追加
                     if (!string.IsNullOrEmpty(result.WorktreePath))
@@ -1431,7 +1451,7 @@
                         newSession = await AddExistingWorktreeSession(subSessionParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.SamePath:
                     // 同じフォルダでセッション作成
                     if (!string.IsNullOrEmpty(subSessionParentSessionPath))
@@ -1440,7 +1460,7 @@
                             subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options);
                     }
                     break;
-                    
+
                 case SubSessionDialog.SubSessionType.NewFolder:
                     // 新しいフォルダでセッション作成
                     if (!string.IsNullOrEmpty(result.WorktreePath))
@@ -1450,18 +1470,18 @@
                     }
                     break;
             }
-            
+
             if (newSession != null)
             {
                 // セッション一覧を更新
                 sessions = SessionManager.GetAllSessions().ToList();
-                
+
                 // ローカルストレージに保存
                 await LocalStorageService.SaveSessionsAsync(sessions);
-                
+
                 // 新しいセッションを選択
                 await SelectSession(newSession.SessionId);
-                
+
                 string successMessage = result.OperationType switch
                 {
                     SubSessionDialog.SubSessionType.CreateNew => 
@@ -1474,7 +1494,7 @@
                         $"新しいフォルダ '{result.WorktreePath}' でセッションを作成しました",
                     _ => "セッションを作成しました"
                 };
-                
+
                 toast?.ShowSuccess(successMessage);
             }
             else
@@ -1495,7 +1515,7 @@
             subSessionParentSessionIsGitRepository = true;
         }
     }
-    
+
     private string GetSessionTypeName(TerminalType terminalType)
     {
         return terminalType switch
@@ -1506,7 +1526,7 @@
             _ => "セッション"
         };
     }
-    
+
     private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath, string branchName, TerminalType terminalType, Dictionary<string, string> options)
     {
         // 親セッション情報を取得
@@ -1516,7 +1536,7 @@
             // Parent session not found
             return null;
         }
-            
+
         // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
@@ -1524,17 +1544,17 @@
             terminalType,
             options
         );
-        
+
         // 親子関係を設定
         if (sessionInfo != null)
         {
             sessionInfo.ParentSessionId = parentSessionId;
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
         }
-        
+
         return sessionInfo;
     }
-    
+
     private async Task<SessionInfo?> CreateNewFolderSession(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string> options)
     {
         try
@@ -1546,13 +1566,13 @@
                 // Parent session not found
                 return null;
             }
-                
+
             // フォルダが存在しない場合は作成
             if (!Directory.Exists(folderPath))
             {
                 Directory.CreateDirectory(folderPath);
             }
-            
+
             // 新しいフォルダでセッション作成（統一された表示名を使用）
             var sessionInfo = await SessionManager.CreateSessionAsync(
                 folderPath,
@@ -1560,14 +1580,14 @@
                 terminalType,
                 options
             );
-            
+
             // 親子関係を設定
             if (sessionInfo != null)
             {
                 sessionInfo.ParentSessionId = parentSessionId;
                 await SessionManager.SaveSessionInfoAsync(sessionInfo);
             }
-            
+
             return sessionInfo;
         }
         catch (Exception)
@@ -1581,7 +1601,7 @@
     private async Task SendEnterKeyDirect()
     {
         Console.WriteLine($"[SendEnterKeyDirect] 呼び出し - activeSession: {(activeSession != null ? "存在" : "null")}");
-        
+
         if (activeSession == null)
         {
             Console.WriteLine("[SendEnterKeyDirect] activeSessionがnullのため中断");
@@ -1603,9 +1623,9 @@
         }
     }
 
-    
+
     // テキスト履歴関連メソッド
-    
+
     private async Task OnSessionTimeout(Guid sessionId)
     {
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
@@ -1656,7 +1676,10 @@
 
                 // タイマーを停止
                 OutputAnalyzerService.StopSessionTimer(sessionId);
-                
+
+                // Gitステータスを更新
+                await RefreshGitStatus(sessionId);
+
                 // UIを更新
                 StateHasChanged();
             }
@@ -1680,13 +1703,16 @@
         // セッション一覧を更新
         sessions = SessionManager.GetAllSessions().ToList();
         await LocalStorageService.SaveSessionsAsync(sessions);
-        
+
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
         if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)
         {
             var sessionId = settingsSessionId.Value;
-            
-            
+
+            // セッション設定による再起動時も既存の購読を解除
+            Logger.LogInformation("セッション設定による再起動のため購読を解除: SessionId={SessionId}", sessionId);
+            ConPtyConnection.UnsubscribeFromSession(sessionId);
+
             // 一旦nullにして再選択することで、ターミナルコンポーネントを再作成
             activeSessionId = null;
             activeSession = null;
@@ -1698,10 +1724,10 @@
         {
             StateHasChanged();
         }
-        
+
         toast?.ShowSuccess("セッション設定を保存しました");
     }
-    
+
     private async Task RefreshGitStatus(Guid sessionId)
     {
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
@@ -1714,14 +1740,14 @@
                 sessionInfo.GitBranch = gitInfo.CurrentBranch;
                 sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
                 sessionInfo.IsWorktree = gitInfo.IsWorktree;
-                
+
                 await LocalStorageService.SaveSessionsAsync(sessions);
                 StateHasChanged();
             }
         }
     }
 
-    private async Task RestartSessionWithoutContinue(Guid sessionId)
+    private async Task RecreateSessionWithoutContinue(Guid sessionId)
     {
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionInfo == null)
@@ -1732,14 +1758,28 @@
 
         try
         {
-            // Restarting session without --continue
-            
-            
-            // セッションを再起動（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
-            var success = await SessionManager.RestartSessionAsync(sessionId);
-            if (success)
-            {
-                // セッション一覧を更新
+            // Recreating session without --continue
+            Logger.LogInformation("セッション再作成開始: SessionId={SessionId}", sessionId);
+
+            // セッション再作成前に既存の購読を解除
+            ConPtyConnection.UnsubscribeFromSession(sessionId);
+
+            // セッションを再作成（HasContinueErrorOccurredフラグにより--continueは自動的に除外される）
+            var newSession = await SessionManager.RecreateSessionAsync(sessionId, removeContinueOption: true);
+            if (newSession != null)
+           {
+
+                // 新しいセッションを購読
+                Logger.LogInformation("新しいセッションを購読: SessionId={SessionId}", sessionId);
+                ConPtyConnection.SubscribeToSession(sessionId, newSession);
+                                // セッションを起動
+                newSession.Start();
+                newSession.Resize(
+                    Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols),
+                    Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows)
+                );
+                
+                // セッション一覧を更新（最新のConPtySession参照を含む）
                 sessions = SessionManager.GetAllSessions().ToList();
                 
                 // ローカルストレージに保存
@@ -1751,42 +1791,47 @@
                 StateHasChanged();
                 await Task.Delay(100); // UIの更新を待つ
                 
-                // 再起動後のセッションを選択
+                // 再作成後のセッションを選択
                 await SelectSession(sessionId);
                 
-                toast?.ShowInfo("--continueオプションなしでセッションを再起動しました");
+                toast?.ShowInfo("--continueオプションなしでセッションを再作成しました");
             }
             else
             {
-                // Session restart failed
-                toast?.ShowError("セッション再起動に失敗しました");
+                // Session recreation failed
+                toast?.ShowError("セッション再作成に失敗しました");
             }
         }
         catch (Exception ex)
         {
-            // RestartSessionWithoutContinue error
-            toast?.ShowError($"セッション再起動エラー: {ex.Message}");
+            // RecreateSessionWithoutContinue error
+            Logger.LogError(ex, "セッション再作成エラー: SessionId={SessionId}", sessionId);
+            toast?.ShowError($"セッション再作成エラー: {ex.Message}");
         }
     }
     
-    private void SetupSessionEventHandlers(SessionInfo sessionInfo)
+    // イベントハンドラーを保持するフィールド
+    private EventHandler<ConPtyDataReceivedEventArgs>? _dataReceivedHandler;
+    private EventHandler<ConPtyProcessExitedEventArgs>? _processExitedHandler;
+    
+    private void SetupConPtyConnectionEventHandlers()
     {
-        if (sessionInfo?.ConPtySession == null)
+        // 既存のハンドラーがあれば削除
+        if (_dataReceivedHandler != null)
         {
-            Console.WriteLine($"[SetupSessionEventHandlers] ConPtySessionがnullのためスキップ: {sessionInfo?.SessionId}");
-            return;
+            ConPtyConnection.DataReceived -= _dataReceivedHandler;
         }
-            
-        Console.WriteLine($"[SetupSessionEventHandlers] イベントハンドラー設定: {sessionInfo.SessionId}");
+        if (_processExitedHandler != null)
+        {
+            ConPtyConnection.ProcessExited -= _processExitedHandler;
+        }
         
-        // ConPtySessionはイベントハンドラーのクリアが不要
-        
-        // データ受信イベントハンドラー
-        sessionInfo.ConPtySession.DataReceived += async (sender, args) =>
+        // 新しいハンドラーを作成
+        _dataReceivedHandler = async (sender, args) =>
         {
             try
             {
-                await ProcessReceivedData(sessionInfo.SessionId, args.Data);
+                await ProcessReceivedData(args.SessionId, args.Data);
             }
             catch (Exception ex)
             {
@@ -1794,11 +1839,16 @@
             }
         };
         
-        // 切断イベントハンドラー
-        sessionInfo.ConPtySession.ProcessExited += (sender, args) =>
+        _processExitedHandler = (sender, args) =>
         {
-            Console.WriteLine($"[ProcessExited] セッション切断検出: {sessionInfo.SessionId}");
+            Console.WriteLine($"[ProcessExited] セッション切断検出: {args.SessionId}");
         };
+        
+        // ConPtyConnectionServiceのイベントハンドラーを設定
+        ConPtyConnection.DataReceived += _dataReceivedHandler;
+        ConPtyConnection.ProcessExited += _processExitedHandler;
+        
+        Console.WriteLine("[SetupConPtyConnectionEventHandlers] ConPtyConnectionServiceのイベントハンドラーを設定");
     }
     
     // タスクランナー関連メソッド
@@ -2130,6 +2180,18 @@
     
     public async ValueTask DisposeAsync()
     {
+        // ConPtyConnectionServiceのイベントハンドラーを削除
+        if (_dataReceivedHandler != null)
+        {
+            ConPtyConnection.DataReceived -= _dataReceivedHandler;
+            _dataReceivedHandler = null;
+        }
+        if (_processExitedHandler != null)
+        {
+            ConPtyConnection.ProcessExited -= _processExitedHandler;
+            _processExitedHandler = null;
+        }
+        
         // OutputAnalyzerServiceのクリーンアップ
         OutputAnalyzerService?.Dispose();
         

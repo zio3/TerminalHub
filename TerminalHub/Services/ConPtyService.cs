@@ -115,7 +115,7 @@ namespace TerminalHub.Services
                 };
                 _flushTimer.AutoReset = true;
             }
-            
+
             InitializeConPty(command, arguments, workingDirectory);
         }
         
@@ -319,18 +319,22 @@ namespace TerminalHub.Services
             }
         }
 
+        /// <summary>
+        /// ConPtyにデータを書き込みます（デフォルトで即時送信）
+        /// </summary>
+        /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
             if (_writer != null && !_disposed)
             {
                 await _writer.WriteAsync(input);
                 await _writer.FlushAsync();
-                
+
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
             }
         }
-        
+
         // バッファリング関連メソッド
         private async Task BufferOutput(string data)
         {
@@ -351,7 +355,12 @@ namespace TerminalHub.Services
                         {
                             var bufferedData = _outputBuffer.ToString();
                             _outputBuffer.Clear();
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
+                            
+                            // 出力が一時停止中の場合はデータを破棄
+                            if (!_isOutputSuspended)
+                            {
+                                DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
+                            }
                         }
                     }
                 }
@@ -382,8 +391,12 @@ namespace TerminalHub.Services
                         var data = _outputBuffer.ToString();
                         _outputBuffer.Clear();
                         
-                        // メインスレッドでイベントを発生
-                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                        // 出力が一時停止中の場合はデータを破棄
+                        if (!_isOutputSuspended)
+                        {
+                            // メインスレッドでイベントを発生
+                            DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                        }
                     }
                 }
                 finally
@@ -421,7 +434,12 @@ namespace TerminalHub.Services
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
                         var data = new string(charBuffer, 0, charsRead);
                         
-                        if (_enableBuffering)
+                        if (_isOutputSuspended)
+                        {
+                            // 出力が一時停止中の場合、データを破棄
+                            continue;
+                        }
+                        else if (_enableBuffering)
                         {
                             // バッファリングが有効な場合
                             await BufferOutput(data);
@@ -483,6 +501,9 @@ namespace TerminalHub.Services
         private const char XON = '\x11';  // Ctrl+Q
         private const char XOFF = '\x13'; // Ctrl+S
         
+        // データ送出制御
+        private bool _isOutputSuspended = false;
+        
         public void Pause()
         {
             _isPaused = true;
@@ -496,6 +517,29 @@ namespace TerminalHub.Services
             // XONを送信して出力を再開
             WriteAsync(XON.ToString()).Wait(100);
         }
+        
+        /// <summary>
+        /// データ送出を一時停止する
+        /// </summary>
+        public void SuspendOutput()
+        {
+            _isOutputSuspended = true;
+            _logger.LogDebug("Output suspended for session");
+        }
+        
+        /// <summary>
+        /// データ送出を再開する（停止中のデータは破棄済み）
+        /// </summary>
+        public void ResumeOutput()
+        {
+            _isOutputSuspended = false;
+            _logger.LogDebug("Output resumed for session");
+        }
+        
+        /// <summary>
+        /// 出力が一時停止中かどうかを取得する
+        /// </summary>
+        public bool IsOutputSuspended => _isOutputSuspended;
 
         public void Dispose()
         {
@@ -510,7 +554,10 @@ namespace TerminalHub.Services
                 _readCancellationTokenSource?.Cancel();
                 _readTask?.Wait(1000); // 1秒待機
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to wait for read task during disposal");
+            }
 
             // タイマーを停止
             if (_enableBuffering && _flushTimer != null)
@@ -528,7 +575,10 @@ namespace TerminalHub.Services
                         DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to flush remaining buffer during disposal");
+                }
             }
             
             // ストリームを破棄

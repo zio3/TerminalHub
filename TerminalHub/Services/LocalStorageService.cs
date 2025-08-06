@@ -1,6 +1,7 @@
 using Microsoft.JSInterop;
 using System.Text.Json;
 using TerminalHub.Models;
+using Microsoft.Extensions.Logging;
 
 namespace TerminalHub.Services
 {
@@ -13,18 +14,23 @@ namespace TerminalHub.Services
         Task ClearAsync();
         Task<T?> GetAsync<T>(string key);
         Task SetAsync<T>(string key, T value);
+        Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates);
+        Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync();
     }
 
     public class LocalStorageService : ILocalStorageService
     {
         private readonly IJSRuntime _jsRuntime;
+        private readonly ILogger<LocalStorageService> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
         private const string SessionsKey = "terminalHub_sessions";
         private const string ActiveSessionKey = "terminalHub_activeSession";
+        private const string ExpandedStatesKey = "terminalHub_expandedStates";
 
-        public LocalStorageService(IJSRuntime jsRuntime)
+        public LocalStorageService(IJSRuntime jsRuntime, ILogger<LocalStorageService> logger)
         {
             _jsRuntime = jsRuntime;
+            _logger = logger;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -41,7 +47,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving sessions to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving sessions to localStorage");
             }
         }
 
@@ -60,7 +66,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading sessions from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading sessions from localStorage");
                 return new List<SessionInfo>();
             }
         }
@@ -80,7 +86,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving active session ID to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving active session ID to localStorage");
             }
         }
 
@@ -103,7 +109,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading active session ID from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading active session ID from localStorage");
                 return null;
             }
         }
@@ -117,7 +123,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error clearing localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error clearing localStorage");
             }
         }
         
@@ -133,7 +139,7 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading {key} from localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error loading {Key} from localStorage", key);
                 return default;
             }
         }
@@ -147,7 +153,39 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving {key} to localStorage: {ex.Message}");
+                _logger.LogError(ex, "Error saving {Key} to localStorage", key);
+            }
+        }
+
+        public async Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(expandedStates, _jsonOptions);
+                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ExpandedStatesKey, json);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving expanded states to localStorage");
+            }
+        }
+
+        public async Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync()
+        {
+            try
+            {
+                var json = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", ExpandedStatesKey);
+                if (string.IsNullOrEmpty(json))
+                {
+                    return new Dictionary<Guid, bool>();
+                }
+
+                return JsonSerializer.Deserialize<Dictionary<Guid, bool>>(json, _jsonOptions) ?? new Dictionary<Guid, bool>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading expanded states from localStorage");
+                return new Dictionary<Guid, bool>();
             }
         }
     }
