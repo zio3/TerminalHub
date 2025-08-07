@@ -45,6 +45,14 @@ namespace TerminalHub.Services
                 var json = JsonSerializer.Serialize(sessions, _jsonOptions);
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", SessionsKey, json);
             }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving sessions to localStorage");
@@ -84,6 +92,14 @@ namespace TerminalHub.Services
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, sessionId.ToString());
                 }
             }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving active session ID to localStorage");
@@ -121,6 +137,14 @@ namespace TerminalHub.Services
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionsKey);
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", ActiveSessionKey);
             }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error clearing localStorage");
@@ -151,6 +175,14 @@ namespace TerminalHub.Services
                 var json = JsonSerializer.Serialize(value, _jsonOptions);
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", key, json);
             }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving {Key} to localStorage", key);
@@ -163,6 +195,14 @@ namespace TerminalHub.Services
             {
                 var json = JsonSerializer.Serialize(expandedStates, _jsonOptions);
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", ExpandedStatesKey, json);
+            }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
             }
             catch (Exception ex)
             {

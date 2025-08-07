@@ -2448,34 +2448,47 @@
     {
         try
         {
-            Console.WriteLine($"[CleanupTaskRunnerTerminal] クリーンアップ開始 - taskRunnerTerminal: {(taskRunnerTerminal != null ? "存在" : "null")}, TaskRunnerInitialized: {TaskRunnerInitialized}");
-            Console.WriteLine("[CleanupTaskRunnerTerminal] 呼び出し元のスタックトレース:");
-            Console.WriteLine(Environment.StackTrace);
-            
             if (taskRunnerTerminal != null)
             {
-                // JavaScript側で破棄
-                await JSRuntime.InvokeVoidAsync("eval", @"
-                    (function() {
-                        const terminalId = 'task-runner-terminal';
-                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                        if (termObj) {
-                            termObj.terminal.dispose();
-                            delete window.multiSessionTerminals[terminalId];
-                        }
-                    })()
-                ");
+                try
+                {
+                    // JavaScript側で破棄（JavaScript interopが利用可能な場合のみ）
+                    await JSRuntime.InvokeVoidAsync("eval", @"
+                        (function() {
+                            const terminalId = 'task-runner-terminal';
+                            const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
+                            if (termObj) {
+                                termObj.terminal.dispose();
+                                delete window.multiSessionTerminals[terminalId];
+                            }
+                        })()
+                    ");
+                }
+                catch (JSDisconnectedException)
+                {
+                    // JavaScript接続が切断されている場合は無視
+                }
+                catch (InvalidOperationException)
+                {
+                    // JavaScript interopが利用できない場合は無視
+                }
                 
-                await taskRunnerTerminal.DisposeAsync();
+                try
+                {
+                    await taskRunnerTerminal.DisposeAsync();
+                }
+                catch (JSDisconnectedException)
+                {
+                    // JavaScript接続が切断されている場合は無視
+                }
+                
                 taskRunnerTerminal = null;
                 TaskRunnerInitialized = false;
             }
-            
-            Console.WriteLine("[CleanupTaskRunnerTerminal] クリーンアップ完了 - taskRunnerTerminal=null, TaskRunnerInitialized=false");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Console.WriteLine($"[CleanupTaskRunnerTerminal] エラー: {ex.Message}");
+            // エラーは無視（Dispose時のエラーは致命的ではない）
         }
     }
     
