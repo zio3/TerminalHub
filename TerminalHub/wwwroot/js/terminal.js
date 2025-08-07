@@ -61,15 +61,29 @@ window.resizeObserverManager = new ResizeObserverManager();
 
 // URL検出の設定
 function setupUrlDetection(term) {
+    // WebLinksAddonが利用可能か確認
+    if (typeof WebLinksAddon !== 'undefined' && WebLinksAddon.WebLinksAddon) {
+        try {
+            // WebLinksAddonを作成（URLをクリック可能にする）
+            const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+            term.loadAddon(webLinksAddon);
+            console.log('[URL Detection] WebLinksAddon loaded successfully');
+        } catch (error) {
+            console.error('[URL Detection] Failed to load WebLinksAddon:', error);
+            // フォールバック: 手動実装を使用
+            setupUrlDetectionFallback(term);
+        }
+    } else {
+        console.warn('[URL Detection] WebLinksAddon not available, using fallback');
+        // フォールバック: 手動実装を使用
+        setupUrlDetectionFallback(term);
+    }
+}
+
+// WebLinksAddonが使用できない場合のフォールバック実装
+function setupUrlDetectionFallback(term) {
     // HTTP/HTTPSのURLパターン
     const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
-    
-    // デバッグ: APIの存在確認
-    console.log('[URL Detection] Available APIs:', {
-        registerLinkProvider: typeof term.registerLinkProvider,
-        registerLinkMatcher: typeof term.registerLinkMatcher,
-        registerDecoration: typeof term.registerDecoration
-    });
     
     // xterm.js v5用のregisterLinkProvider実装
     if (typeof term.registerLinkProvider === 'function') {
@@ -108,17 +122,20 @@ function setupUrlDetection(term) {
                         }
                     };
                     links.push(link);
-                    console.log('[URL Detection] Found link:', match[0], 'at line', bufferLineNumber + 1);
                 }
                 
-                callback(links);
+                callback(links.length > 0 ? links : undefined);
             }
         };
         
-        term.registerLinkProvider(linkProvider);
-        console.log('[URL Detection] URL検出機能を有効化しました（registerLinkProvider使用）');
+        try {
+            term.registerLinkProvider(linkProvider);
+            console.log('[URL Detection] Fallback: Successfully registered link provider');
+        } catch (error) {
+            console.error('[URL Detection] Fallback: Failed to register link provider:', error);
+        }
     } else {
-        console.error('[URL Detection] registerLinkProvider APIが利用できません');
+        console.warn('[URL Detection] Fallback: No suitable API found for URL detection');
     }
 }
 
@@ -338,6 +355,8 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
+                console.log(`[JS] onResize fired for ${sessionId}: ${size.cols}x${size.rows}`);
+                
                 // リサイズイベントをトラック
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 if (terminalInfo) {
@@ -348,17 +367,31 @@ window.terminalFunctions = {
                         // リサイズトリック検出
                     }
                 }
+                
+                // C#側にサイズ変更を通知
+                if (dotNetRef) {
+                    console.log(`[JS] Calling OnTerminalSizeChanged for ${sessionId}`);
+                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, size.cols, size.rows);
+                } else {
+                    console.log(`[JS] dotNetRef is null for ${sessionId}, cannot notify resize`);
+                }
+                
                 // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
             });
             
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
+                console.log(`[JS] ResizeObserver fired for ${sessionId}`);
                 if (fitAddon) {
                     fitAddon.fit();
                     // リサイズ処理
+                    console.log(`[JS] After fit: ${term.cols}x${term.rows}`);
                     
                     if (dotNetRef) {
+                        console.log(`[JS] ResizeObserver calling OnTerminalSizeChanged for ${sessionId}`);
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
+                    } else {
+                        console.log(`[JS] ResizeObserver: dotNetRef is null for ${sessionId}`);
                     }
                     
                     // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
@@ -406,6 +439,12 @@ window.terminalFunctions = {
             write: (data) => {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 
+                // terminalInfoが存在しない場合は単純にデータを書き込み
+                if (!terminalInfo) {
+                    term.write(data);
+                    return;
+                }
+                
                 // リサイズ直後の書き込みはカウント
                 if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
                     terminalInfo.resizeCount++;
@@ -447,7 +486,9 @@ window.terminalFunctions = {
                     
                     term.write(data);
                     
-                    terminalInfo.isFirstWrite = false;
+                    if (terminalInfo) {
+                        terminalInfo.isFirstWrite = false;
+                    }
                 }
             },
             clear: () => term.clear(),
