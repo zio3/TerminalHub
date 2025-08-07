@@ -38,6 +38,9 @@ builder.Services.AddScoped<IInputHistoryService, InputHistoryService>();
 // PackageJsonServiceを登録
 builder.Services.AddScoped<IPackageJsonService, PackageJsonService>();
 
+// TaskManagerServiceを登録
+builder.Services.AddScoped<ITaskManagerService, TaskManagerService>();
+
 // ConPtyConnectionServiceを登録（Circuit毎のインスタンス）
 builder.Services.AddScoped<ConPtyConnectionService>();
 

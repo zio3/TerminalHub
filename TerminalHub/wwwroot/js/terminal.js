@@ -338,6 +338,8 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
+                console.log(`[JS] onResize fired for ${sessionId}: ${size.cols}x${size.rows}`);
+                
                 // リサイズイベントをトラック
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 if (terminalInfo) {
@@ -348,17 +350,31 @@ window.terminalFunctions = {
                         // リサイズトリック検出
                     }
                 }
+                
+                // C#側にサイズ変更を通知
+                if (dotNetRef) {
+                    console.log(`[JS] Calling OnTerminalSizeChanged for ${sessionId}`);
+                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, size.cols, size.rows);
+                } else {
+                    console.log(`[JS] dotNetRef is null for ${sessionId}, cannot notify resize`);
+                }
+                
                 // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
             });
             
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
+                console.log(`[JS] ResizeObserver fired for ${sessionId}`);
                 if (fitAddon) {
                     fitAddon.fit();
                     // リサイズ処理
+                    console.log(`[JS] After fit: ${term.cols}x${term.rows}`);
                     
                     if (dotNetRef) {
+                        console.log(`[JS] ResizeObserver calling OnTerminalSizeChanged for ${sessionId}`);
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
+                    } else {
+                        console.log(`[JS] ResizeObserver: dotNetRef is null for ${sessionId}`);
                     }
                     
                     // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
@@ -406,6 +422,12 @@ window.terminalFunctions = {
             write: (data) => {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 
+                // terminalInfoが存在しない場合は単純にデータを書き込み
+                if (!terminalInfo) {
+                    term.write(data);
+                    return;
+                }
+                
                 // リサイズ直後の書き込みはカウント
                 if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
                     terminalInfo.resizeCount++;
@@ -447,7 +469,9 @@ window.terminalFunctions = {
                     
                     term.write(data);
                     
-                    terminalInfo.isFirstWrite = false;
+                    if (terminalInfo) {
+                        terminalInfo.isFirstWrite = false;
+                    }
                 }
             },
             clear: () => term.clear(),
