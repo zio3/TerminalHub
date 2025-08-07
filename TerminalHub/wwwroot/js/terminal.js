@@ -306,8 +306,10 @@ window.terminalFunctions = {
         
         const element = document.getElementById(terminalId);
         if (element) {
-            // 既存の内容をクリア（重要！）
-            element.innerHTML = '';
+            // 既存の内容をクリア（重要！）- より安全なDOM操作を使用
+            while (element.firstChild) {
+                element.removeChild(element.firstChild);
+            }
             
             term.open(element);
             
@@ -666,10 +668,12 @@ window.terminalFunctions = {
             console.log(`[JS] cleanupTerminal: ★★★ 警告: 削除対象のターミナルが存在しない sessionId=${sessionId}`);
         }
         
-        // ターミナルdiv内をクリア
+        // ターミナルdiv内をクリア - より安全なDOM操作を使用
         const terminalDiv = document.getElementById(`terminal-${sessionId}`);
         if (terminalDiv) {
-            terminalDiv.innerHTML = '';
+            while (terminalDiv.firstChild) {
+                terminalDiv.removeChild(terminalDiv.firstChild);
+            }
             // console.log(`[JS] ターミナルdiv terminal-${sessionId} をクリア`);
         }
     },
