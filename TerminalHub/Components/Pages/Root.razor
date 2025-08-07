@@ -146,27 +146,53 @@
                                                 <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                     <i class="bi bi-play-fill"></i> タスク実行 (@checkedScripts.Count)
                                                 </button>
-                                                <ul class="dropdown-menu">
+                                                <ul class="dropdown-menu" style="min-width: 300px;">
                                                     @foreach (var scriptName in checkedScripts.OrderBy(s => s))
                                                     {
                                                         @if (npmScripts.ContainsKey(scriptName))
                                                         {
-                                                            <li>
+                                                            <li class="px-2 py-1">
                                                                 @{
                                                                     var ts = GetTaskSessionByScriptName(scriptName);
                                                                     var isRunning = ts?.Status == TaskStatus.Running;
                                                                 }
-                                                                <button class="dropdown-item @(isRunning ? "disabled" : "")" 
-                                                                        @onclick="() => OnTaskButtonClick(scriptName)"
-                                                                        disabled="@isRunning">
-                                                                    @if (isRunning)
-                                                                    {
-                                                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                                                    }
-                                                                    <strong>@scriptName</strong>
-                                                                    <div class="small text-muted">@npmScripts[scriptName]</div>
-                                                                </button>
+                                                                <div class="d-flex align-items-center justify-content-between">
+                                                                    <div class="flex-grow-1 me-2">
+                                                                        <div class="fw-bold">@scriptName</div>
+                                                                        <div class="small text-muted text-truncate" style="max-width: 200px;">@npmScripts[scriptName]</div>
+                                                                    </div>
+                                                                    <div class="btn-group btn-group-sm">
+                                                                        @if (!isRunning)
+                                                                        {
+                                                                            <button class="btn btn-success" 
+                                                                                    @onclick="() => OnTaskButtonClick(scriptName)"
+                                                                                    @onclick:stopPropagation="true"
+                                                                                    title="実行">
+                                                                                <i class="bi bi-play-fill"></i>
+                                                                            </button>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <button class="btn btn-danger" 
+                                                                                    @onclick="() => StopTaskFromTextInput(scriptName)"
+                                                                                    @onclick:stopPropagation="true"
+                                                                                    title="停止">
+                                                                                <i class="bi bi-stop-fill"></i>
+                                                                            </button>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+                                                                @if (isRunning && ts?.StartTime.HasValue == true)
+                                                                {
+                                                                    <div class="small text-muted mt-1">
+                                                                        <i class="bi bi-clock"></i> @((DateTime.Now - ts.StartTime.Value).ToString(@"mm\:ss"))
+                                                                    </div>
+                                                                }
                                                             </li>
+                                                            @if (scriptName != checkedScripts.OrderBy(s => s).Last())
+                                                            {
+                                                                <li><hr class="dropdown-divider my-1"></li>
+                                                            }
                                                         }
                                                     }
                                                 </ul>
@@ -2889,9 +2915,28 @@
         }
     }
     
-    private async Task RunScriptFromTextInput(string scriptName)
+    private async void StopTaskFromTextInput(string scriptName)
     {
-        Console.WriteLine($"[RunScriptFromTextInput] 開始 - scriptName: {scriptName}, activeSessionId: {activeSessionId}");
+        try
+        {
+            var taskSession = GetTaskSessionByScriptName(scriptName);
+            if (taskSession != null)
+            {
+                await TaskManagerService.StopTaskAsync(taskSession.Id);
+                toast?.ShowSuccess($"{scriptName} を停止しました");
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[StopTaskFromTextInput] エラー: {ex.Message}");
+            toast?.ShowError($"タスク停止エラー: {ex.Message}");
+        }
+    }
+    
+    private async Task RunScriptFromTextInput(string scriptName, string additionalArgs = "")
+    {
+        Console.WriteLine($"[RunScriptFromTextInput] 開始 - scriptName: {scriptName}, additionalArgs: {additionalArgs}, activeSessionId: {activeSessionId}");
         
         if (activeSessionId == null) 
         {
@@ -2933,7 +2978,11 @@
             // npmコマンドを送信してタスクを開始（バックグラウンドで実行）
             if (!taskSession.IsCommandSent && taskSession.ConPtySession != null)
             {
-                var npmCommand = $"npm run {scriptName}\r";
+                // 追加引数がある場合はコマンドに追加
+                var npmCommand = string.IsNullOrWhiteSpace(additionalArgs) 
+                    ? $"npm run {scriptName}\r"
+                    : $"npm run {scriptName} -- {additionalArgs}\r";
+                    
                 await taskSession.ConPtySession.WriteAsync(npmCommand);
                 taskSession.IsCommandSent = true;
                 taskSession.Status = TaskStatus.Running;
@@ -2941,7 +2990,10 @@
                 Console.WriteLine($"[RunScriptFromTextInput] npmコマンドを送信: {npmCommand.Trim()}");
             }
             
-            toast?.ShowSuccess($"{scriptName} をバックグラウンドで実行開始しました");
+            var message = string.IsNullOrWhiteSpace(additionalArgs)
+                ? $"{scriptName} をバックグラウンドで実行開始しました"
+                : $"{scriptName} を引数 '{additionalArgs}' でバックグラウンド実行開始しました";
+            toast?.ShowSuccess(message);
             
             // タスクランナータブへの切り替えはしない（現在のタブのまま）
             // ユーザーが確認したい場合は手動でタスクランナータブに切り替える
@@ -2955,7 +3007,7 @@
             toast?.ShowError($"タスク実行エラー: {ex.Message}");
         }
     }
-    
+
     public async ValueTask DisposeAsync()
     {
         // ConPtyConnectionServiceのイベントハンドラーを削除
