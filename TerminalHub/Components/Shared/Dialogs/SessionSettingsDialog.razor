@@ -61,6 +61,15 @@
                         </small>
                     </div>
 
+                    <!-- メモ -->
+                    <div class="mb-3">
+                        <label class="form-label">メモ</label>
+                        <textarea class="form-control" @bind="memo" placeholder="セッションに関するメモ" rows="3"></textarea>
+                        <small class="form-text text-muted">
+                            このセッションに関する任意のメモを記入できます
+                        </small>
+                    </div>
+
                     <!-- ターミナルタイプとオプション -->
                     <SessionOptionsSelector @ref="optionsSelector"
                                           SelectedType="selectedType"
@@ -107,6 +116,7 @@
     private SessionOptionsSelector? optionsSelector;
     private SessionInfo? sessionInfo;
     private string displayName = "";
+    private string memo = "";
     private TerminalType selectedType = TerminalType.Terminal;
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
@@ -132,6 +142,7 @@
         {
             // 現在の設定を読み込む
             displayName = sessionInfo.DisplayName ?? "";
+            memo = sessionInfo.Memo ?? "";
             selectedType = sessionInfo.TerminalType;
 
             // オプションを解析
@@ -169,6 +180,9 @@
         {
             // 表示名を更新
             sessionInfo.DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
+            
+            // メモを更新
+            sessionInfo.Memo = string.IsNullOrWhiteSpace(memo) ? string.Empty : memo;
             
             // ターミナルタイプを更新
             sessionInfo.TerminalType = selectedType;

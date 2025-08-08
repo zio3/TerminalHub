@@ -54,15 +54,9 @@
         <SessionList Sessions=@sessions
                      ActiveSessionId=@activeSessionId
                      IsAddingSession=@isAddingSession
-                     EditingMemoSessionId=@editingMemoSessionId
-                     TempMemoText=@tempMemoText
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
                      OnSessionRemove="async (sessionId) => await RemoveSession(sessionId)"
-                     OnMemoInput="(text) => tempMemoText = text"
-                     OnMemoSave="SaveMemo"
-                     OnMemoKeyDown="HandleMemoKeyDown"
-                     OnMemoEdit="StartEditingMemo"
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
                      OnSessionSettings="ShowSessionSettingsDialog"
@@ -377,51 +371,6 @@
                                     
                                     <!-- タスク実行ターミナル (70%) -->
                                     <div style="width: 70%; padding-left: 1rem; border-left: 1px solid #dee2e6;">
-                                        @* デバッグボタン群（コメントアウト） 
-                                        <div class="mb-2 d-flex gap-2 flex-wrap">
-                                            <button class="btn btn-sm btn-outline-warning" @onclick="DebugRecreateXTerm" title="XTermを再作成">
-                                                <i class="bi bi-arrow-clockwise"></i> XTerm再作成
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="DebugRecreateConPty" title="ConPtyを再作成">
-                                                <i class="bi bi-arrow-repeat"></i> ConPty再作成
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-info" @onclick="DebugResizeTerminal" title="ターミナルをリサイズ">
-                                                <i class="bi bi-aspect-ratio"></i> リサイズ (120x30)
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-success" @onclick="DebugDownloadBuffer" title="バッファ内容をダウンロード">
-                                                <i class="bi bi-download"></i> バッファDL
-                                            </button>
-                                            @if (selectedScript != null)
-                                            {
-                                                <span class="badge bg-secondary align-self-center">選択: @selectedScript</span>
-                                                var currentTaskSession = GetTaskSessionByScriptName(selectedScript);
-                                                @if (currentTaskSession != null)
-                                                {
-                                                    <span class="@currentTaskSession.StatusCssClass align-self-center">@currentTaskSession.StatusText</span>
-                                                    @if (currentTaskSession.Duration != null)
-                                                    {
-                                                        <span class="badge bg-light text-dark align-self-center">@($"{currentTaskSession.Duration.Value.TotalSeconds:F1}秒")</span>
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-warning align-self-center">未実行</span>
-                                                }
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary align-self-center">タスク未選択</span>
-                                            }
-                                            @if (TaskRunnerInitialized)
-                                            {
-                                                <span class="badge bg-success align-self-center">XTerm: Init</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-warning align-self-center">XTerm: Not Init</span>
-                                            }
-                                        </div>
-                                        *@
                                         <div class="h-100" id="task-runner-terminal" style="background-color: #000; width: 100%; height: 100%;">
                                             <!-- タスクランナー用ターミナル -->
                                         </div>
@@ -461,8 +410,6 @@
     private IJSObjectReference? singleDosTerminal; // 単一のDOSターミナルXTermインスタンス
     private Guid? currentDosTerminalSessionId; // 現在DOSターミナルに接続しているセッションID
     private bool shouldPreventDefault = false;
-    private Guid? editingMemoSessionId = null;
-    private string tempMemoText = "";
     private bool showDevWindow = false;
     private bool showDevButton = false;
     private bool showSettingsDialog = false;
@@ -500,8 +447,7 @@
         _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
         _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
 
-        // 通知権限をリクエスト（削除 - 設定モーダルに移動）
-        // await NotificationService.RequestBrowserNotificationPermissionAsync();
+
 
         // OutputAnalyzerServiceのタイムアウトコールバックを設定
         OutputAnalyzerService.SetTimeoutCallback(sessionId => 
@@ -1093,12 +1039,6 @@
     }
 
 
-    private void StartEditingMemo(Guid sessionId, string currentMemo)
-    {
-        editingMemoSessionId = sessionId;
-        tempMemoText = currentMemo ?? "";
-        StateHasChanged();
-    }
 
     private async Task HandleSessionExpandedChanged((Guid sessionId, bool isExpanded) args)
     {
@@ -1115,30 +1055,6 @@
         await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
     }
 
-    private async Task SaveMemo(Guid sessionId)
-    {
-        if (editingMemoSessionId == sessionId)
-        {
-            await UpdateSessionMemo(sessionId, tempMemoText);
-            editingMemoSessionId = null;
-            tempMemoText = "";
-            StateHasChanged();
-        }
-    }
-
-    private async Task HandleMemoKeyDown(KeyboardEventArgs e, Guid sessionId)
-    {
-        if (e.Key == "Enter")
-        {
-            await SaveMemo(sessionId);
-        }
-        else if (e.Key == "Escape")
-        {
-            editingMemoSessionId = null;
-            tempMemoText = "";
-            StateHasChanged();
-        }
-    }
 
     private async Task UpdateSessionMemo(Guid sessionId, string memo)
     {
@@ -1153,10 +1069,18 @@
 
     private async Task RemoveSession(Guid sessionId)
     {
-        // ConPtySessionのクリーンアップ
+        // 削除確認
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove != null)
         {
+            var sessionName = sessionToRemove.DisplayName ?? Path.GetFileName(sessionToRemove.FolderPath) ?? "このセッション";
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"「{sessionName}」を削除しますか？");
+            if (!confirmed)
+            {
+                return;
+            }
+            
+            // ConPtySessionのクリーンアップ
             // 現在表示中のDOSターミナルを使用している場合はクリーンアップ
             if (currentDosTerminalSessionId == sessionId)
             {
@@ -2027,193 +1951,9 @@
     }
     
     // デバッグ用メソッド
-    private async Task DebugRecreateXTerm()
-    {
-        toast?.ShowInfo("XTermを再作成中...");
-        
-        try
-        {
-            // 既存のXTermを破棄
-            if (taskRunnerTerminal != null)
-            {
-                await JSRuntime.InvokeVoidAsync("eval", @"
-                    (function() {
-                        const terminalId = 'task-runner-terminal';
-                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                        if (termObj) {
-                            termObj.terminal.dispose();
-                            delete window.multiSessionTerminals[terminalId];
-                        }
-                    })()
-                ");
-                
-                await taskRunnerTerminal.DisposeAsync();
-                taskRunnerTerminal = null;
-                TaskRunnerInitialized = false;
-            }
-            
-            await Task.Delay(100);
-            
-            // 新しいXTermを作成
-            await InitializeTaskRunnerTerminal();
-            toast?.ShowSuccess("XTermを再作成しました");
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-        
-        StateHasChanged();
-    }
     
-    private async Task DebugRecreateConPty()
-    {
-        toast?.ShowInfo("タスクを再起動中...");
-        
-        try
-        {
-            if (string.IsNullOrEmpty(selectedScript))
-            {
-                toast?.ShowWarning("スクリプトを選択してください");
-                return;
-            }
-            
-            // 既存のタスクを停止
-            var taskSession = GetTaskSessionByScriptName(selectedScript);
-            if (taskSession != null)
-            {
-                await TaskManagerService.StopTaskAsync(taskSession.Id);
-            }
-            
-            // 新しいタスクを開始
-            var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-            if (currentSession != null)
-            {
-                TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-                var newTaskSession = await TaskManagerService.StartTaskAsync(selectedScript);
-                
-                if (newTaskSession != null)
-                {
-                    toast?.ShowSuccess("タスクを再起動しました");
-                    
-                    // ターミナルをクリアして出力バッファの内容を表示
-                    if (taskRunnerTerminal != null)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("clear");
-                        // OutputBufferのコピーを作成してからイテレーション（同時変更を防ぐ）
-                        var outputLines = newTaskSession.OutputBuffer.ToList();
-                        foreach (var line in outputLines)
-                        {
-                            await taskRunnerTerminal.InvokeVoidAsync("write", line);
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-        
-        StateHasChanged();
-    }
     
-    private async Task DebugResizeTerminal()
-    {
-        toast?.ShowInfo("ターミナルをリサイズ中...");
-        
-        try
-        {
-            if (TaskManagerService.ActiveSession != null)
-            {
-                // ConPtyのリサイズ
-                TaskManagerService.ResizeSession(TaskManagerService.ActiveSession.Id, 120, 30);
-                
-                // XTermのリサイズ
-                if (taskRunnerTerminal != null)
-                {
-                    await JSRuntime.InvokeVoidAsync("eval", @"
-                        (function() {
-                            const terminalId = 'task-runner-terminal';
-                            const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                            if (termObj && termObj.terminal) {
-                                termObj.terminal.resize(120, 30);
-                                console.log('[DEBUG] XTermリサイズ: 120x30');
-                            }
-                        })()
-                    ");
-                }
-                
-                toast?.ShowSuccess("ターミナルをリサイズしました (120x30)");
-            }
-            else
-            {
-                toast?.ShowWarning("アクティブなタスクセッションがありません");
-            }
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
     
-    private async Task DebugDownloadBuffer()
-    {
-        toast?.ShowInfo("バッファ内容を取得中...");
-        
-        try
-        {
-            if (taskRunnerTerminal != null)
-            {
-                // XTermからバッファ内容を取得
-                var bufferContent = await JSRuntime.InvokeAsync<string>("eval", @"
-                    (function() {
-                        const terminalId = 'task-runner-terminal';
-                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                        if (termObj && termObj.terminal) {
-                            const buffer = termObj.terminal.buffer.active;
-                            let content = '';
-                            for (let i = 0; i < buffer.length; i++) {
-                                const line = buffer.getLine(i);
-                                if (line) {
-                                    content += line.translateToString(true) + '\n';
-                                }
-                            }
-                            return content;
-                        }
-                        return 'Terminal not found';
-                    })()
-                ");
-                
-                // ダウンロード用のリンクを作成
-                var fileName = $"terminal_buffer_{selectedScript}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-                var bytes = System.Text.Encoding.UTF8.GetBytes(bufferContent);
-                var base64 = Convert.ToBase64String(bytes);
-                
-                await JSRuntime.InvokeVoidAsync("eval", $@"
-                    (function() {{
-                        const link = document.createElement('a');
-                        link.href = 'data:text/plain;base64,{base64}';
-                        link.download = '{fileName}';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }})()
-                ");
-                
-                toast?.ShowSuccess($"バッファをダウンロードしました: {fileName}");
-            }
-            else
-            {
-                toast?.ShowWarning("XTermが初期化されていません");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Buffer download failed");
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
     
     private async Task RecreateTaskRunnerTerminalForSelectedScript()
     {
