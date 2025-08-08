@@ -1,88 +1,118 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、Claude Code (claude.ai/code) がこのリポジトリで作業する際のガイダンスを提供します。
 
-## Build and Development Commands
+## 重要な指示
+- このプロジェクトの開発者は日本語を使用します
+- 応答は日本語で行ってください
+- コメントやコミットメッセージも日本語で記述してください
 
-### Build
+## ビルドと開発コマンド
+
+### ビルド
 ```bash
 dotnet build
 dotnet build TerminalHub/TerminalHub.csproj
 ```
 
-### Run
+### 実行
 ```powershell
-# Start with automatic browser launch (background)
+# バックグラウンドで起動（ブラウザ自動起動）
 ./start.ps1
 
-# Start in foreground mode
+# フォアグラウンドモードで起動  
 ./start.ps1 -Foreground
 
-# Start without browser
+# ブラウザを開かずに起動
 ./start.ps1 -NoBrowser
 
-# Stop the running server
+# サーバーを停止
 ./stop.ps1
+
+# シングルインスタンス起動
+./start-single.ps1
 ```
 
-### Clean
+### NPMスクリプト (package.json経由)
+```bash
+npm run start          # フォアグラウンドで起動（ブラウザ付き）
+npm run start:background  # バックグラウンドで起動
+npm run stop          # サーバーを停止
+npm run build         # プロジェクトをビルド
+npm run clean         # ビルド成果物をクリーン
+```
+
+### クリーン
 ```bash
 dotnet clean
 ```
 
-## Architecture Overview
+## アーキテクチャ概要
 
-TerminalHub is a Blazor Server application that provides a web-based terminal interface with support for multiple terminal sessions, including Windows ConPTY integration.
+TerminalHubは、Windows ConPTY統合により複数のターミナルセッションを提供するWebベースのターミナルインターフェースを実装したBlazor Serverアプリケーションです。
 
-### Core Components
+### コアコンポーネント
 
-1. **Terminal Management**
-   - `ConPtyService`: Windows ConPTY API wrapper for creating pseudo-console sessions
-   - `ConPtyWithBuffer`: Combines ConPTY session with circular buffer for output management
-   - `SessionManager`: Manages multiple terminal sessions, handles lazy initialization
-   - `TerminalService`: Abstracts JavaScript interop for XTerm.js terminal operations
+1. **ターミナル管理**
+   - `ConPtyService`: 擬似コンソールセッション用のWindows ConPTY APIラッパー
+   - `ConPtyConnectionService`: マルチブラウザ対応のためのCircuit毎のConPTY接続管理
+   - `SessionManager`: 遅延初期化による複数ターミナルセッション管理
+   - `TerminalService`: XTerm.js操作のためのJavaScript相互運用の抽象化
+   - `TaskManagerService`: タスクランナーセッションとnpmスクリプト実行の管理
 
-2. **Session Types**
-   - Regular Terminal Sessions
-   - Claude Code CLI Sessions (with special output analysis)
-   - Gemini CLI Sessions (with output analysis)
-   - DOS Command Sessions
-   - Task Runner Sessions (npm scripts)
+2. **セッションタイプ**
+   - 通常のターミナルセッション
+   - Claude Code CLIセッション（出力解析付き）
+   - Gemini CLIセッション（出力解析付き）  
+   - DOSコマンドセッション
+   - タスクランナーセッション（npmスクリプト）
 
-3. **UI Architecture**
-   - `Root.razor`: Main component (1300+ lines) that orchestrates the UI
-   - Session list on the left, terminal display on the right
-   - Bottom panel with tabs for different session types
-   - Real-time terminal output with XTerm.js
+3. **UIアーキテクチャ**
+   - `Root.razor`: UIを統括するメインコンポーネント（大幅にリファクタリングされ縮小）
+   - 左側にセッションリスト、右側にターミナル表示
+   - 異なるセッションタイプ用のタブ付き下部パネル
+   - XTerm.jsによるリアルタイムターミナル出力
+   - ターミナル内のクリック可能なURL用WebLinksAddon
 
-4. **Key Services**
-   - `OutputAnalyzerService`: Analyzes CLI output for Claude Code/Gemini, tracks processing status
-   - `InputHistoryService`: Manages command history with persistence
-   - `GitService`: Git operations including worktree management
-   - `PackageJsonService`: Reads npm scripts from package.json files
-   - `LocalStorageService`: Browser local storage persistence
-   - `NotificationService`: Cross-session notifications
+4. **主要サービス**
+   - `OutputAnalyzerService`: Claude Code/Gemini用CLI出力解析、処理状態追跡
+   - `InputHistoryService`: 永続化機能付きコマンド履歴管理
+   - `GitService`: worktree管理を含むGit操作
+   - `PackageJsonService`: package.jsonファイルからnpmスクリプトを読み取り
+   - `LocalStorageService`: エラーハンドリング付きブラウザローカルストレージ永続化
+   - `NotificationService`: クロスセッション通知
+   - `ConPtyConnectionService`: Circuit毎のイベント購読管理
 
-### Important Implementation Details
+### 重要な実装詳細
 
-1. **Lazy Session Initialization**: ConPTY sessions are only created when first accessed to improve performance
-2. **Circular Buffer**: Each session maintains a CircularLineBuffer for efficient output storage
-3. **XTerm.js Integration**: Terminal rendering uses XTerm.js with custom Windows-specific settings
-4. **Git Worktree Support**: Sessions can create git worktrees, placed as siblings to parent directory
-5. **Output Analysis**: Real-time parsing of Claude Code/Gemini CLI output to track token usage and processing time
+1. **遅延セッション初期化**: ConPTYセッションは最初のアクセス時にのみ作成
+2. **マルチブラウザ対応**: ConPtyConnectionServiceにより同一セッションへの複数ブラウザ接続が可能
+3. **XTerm.js統合**: Windows固有設定とWebLinksAddonによるターミナルレンダリング
+4. **Git Worktree対応**: セッションは親ディレクトリの兄弟としてgit worktreeを作成可能
+5. **出力解析**: Claude Code/Gemini CLI出力のトークン使用量と処理時間のリアルタイム解析
+6. **データチャンキング**: ConPTY WriteAsyncは切り捨て防止のため265文字でチャンクしてフラッシュ
 
-### JavaScript Files
-- `wwwroot/js/terminal.js`: XTerm.js initialization, terminal management, resize handling
-- `wwwroot/js/helpers.js`: Utility functions for DOM manipulation, local storage
+### JavaScriptファイル
+- `wwwroot/js/terminal.js`: XTerm.js初期化、ターミナル管理、リサイズ処理、WebLinksAddon
+- `wwwroot/js/helpers.js`: DOM操作、ローカルストレージ用ユーティリティ関数
 
-### Common Issues and Solutions
+### よくある問題と解決策
 
-1. **Terminal Display Issues**: Check `term.onData()` handler in terminal.js - may cause double character display
-2. **Build Errors with OutputAnalyzerService**: Ensure `activeSessionId` parameter is passed to `AnalyzeOutput` method
-3. **Worktree Path Issues**: SessionManager now strips trailing directory separators before creating worktrees
-4. **UTF-8 Decode Errors**: Fixed in ConPtySession.ReadAsync with proper buffer size calculation
+1. **ターミナル表示の問題**: terminal.jsの`term.onData()`ハンドラーを確認 - 文字の二重表示を引き起こす可能性
+2. **長い文字列の切り捨て**: ConPTY WriteAsyncは265文字でチャンクし明示的にフラッシュするよう修正済み
+3. **OutputAnalyzerServiceのビルドエラー**: `AnalyzeOutput`メソッドに`activeSessionId`パラメータが渡されているか確認
+4. **Worktreeパスの問題**: SessionManagerはworktree作成前に末尾のディレクトリ区切り文字を削除
+5. **UTF-8デコードエラー**: ConPtySession.ReadAsyncで適切なバッファサイズ計算により修正済み
+6. **JSDisconnectedException**: すべてのLocalStorageServiceメソッドにJavaScript相互運用エラー用のtry-catchを実装
 
-### Session Notification System
-- Sessions track processing completion with elapsed time and token count
-- Non-active sessions show notification bell when processing completes
-- Notification logic checks `activeSessionId` to determine if session is active
+### セッション通知システム
+- セッションは経過時間とトークン数で処理完了を追跡
+- 非アクティブセッションは処理完了時に通知ベルを表示
+- 通知ロジックは`activeSessionId`でセッションがアクティブか判定
+- ハングしたプロセス用のタイマーベースのタイムアウト検出（5秒）
+
+### タスクランナー統合
+- TaskManagerServiceがタスクセッションを独立して管理
+- タスク選択時の自動ターミナル接続
+- LocalStorage経由の永続的なタスク選択状態
+- package.jsonファイルからのnpmスクリプトサポート
