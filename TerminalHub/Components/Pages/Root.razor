@@ -132,7 +132,7 @@
                                 <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center gap-3">
                                         <div>
-                                            <kbd>Enter</kbd> で送信 | <kbd>Shift+Enter</kbd> で改行 | <kbd>Ctrl+↑↓</kbd> で履歴
+                                            <kbd>Enter</kbd> 送信 | <kbd>Shift+Enter</kbd> 改行 | <kbd>Ctrl+↑↓</kbd> 履歴
                                         </div>
                                         @if (checkedScripts.Count > 0 && npmScripts != null)
                                         {
@@ -1370,6 +1370,28 @@
             shouldPreventDefault = true;
             await SendInput();
             shouldPreventDefault = false;
+        }
+        // Ctrl+C: 強制中断
+        else if (e.Key == "c" && e.CtrlKey && !e.AltKey && !e.ShiftKey)
+        {
+            shouldPreventDefault = true;
+            await SendCtrlC();
+        }
+        // Escape: 中断
+        else if (e.Key == "Escape")
+        {
+            shouldPreventDefault = true;
+            await SendEscape();
+        }
+        // Alt+M: モード切替（ClaudeCodeモードのみ）
+        else if (e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey)
+        {
+            var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+            if (currentSession?.TerminalType == TerminalType.ClaudeCode)
+            {
+                shouldPreventDefault = true;
+                await SendModeSwitch();
+            }
         }
         // 履歴機能: 上矢印で前の履歴、下矢印で次の履歴
         else if (e.Key == "ArrowUp" && e.CtrlKey)
