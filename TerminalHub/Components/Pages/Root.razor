@@ -132,11 +132,7 @@
                                 <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center gap-3">
                                         <div>
-                                            <kbd>Enter</kbd> 送信 | <kbd>Shift+Enter</kbd> 改行 | <kbd>Ctrl+C</kbd> 中断 | <kbd>Esc</kbd> 中断 | <kbd>Ctrl+↑↓</kbd> 履歴
-                                            @if (currentSession.TerminalType == TerminalType.ClaudeCode)
-                                            {
-                                                <span> | <kbd>Alt+M</kbd> モード切替</span>
-                                            }
+                                            <kbd>Enter</kbd> 送信 | <kbd>Shift+Enter</kbd> 改行 | <kbd>Ctrl+↑↓</kbd> 履歴
                                         </div>
                                         @if (checkedScripts.Count > 0 && npmScripts != null)
                                         {
