@@ -5,8 +5,9 @@
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorage
 @inject ISessionManager SessionManager
+@inject ILogger<SessionCreateDialog> Logger
 
-<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
+<div class="modal fade @(IsVisible && !showCreateFolderDialog ? "show" : "")" tabindex="-1" style="@(IsVisible && !showCreateFolderDialog ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
         <div class="modal-content">
             <div class="modal-header">
@@ -71,8 +72,32 @@
     </div>
 </div>
 
-@if (IsVisible)
+@if (IsVisible && !showCreateFolderDialog)
 {
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* フォルダ作成確認ダイアログ *@
+@if (showCreateFolderDialog)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">フォルダの作成</h5>
+                </div>
+                <div class="modal-body">
+                    <p>指定されたフォルダが存在しません。</p>
+                    <p class="mb-2"><strong>@folderPath</strong></p>
+                    <p>このフォルダを作成しますか？</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelFolderCreation">キャンセル</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmFolderCreation">作成する</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal-backdrop fade show"></div>
 }
 
@@ -91,6 +116,8 @@
     private List<string> recentFolders = new();
     private const string RECENT_FOLDERS_KEY = "recentFolders";
     private const int MAX_RECENT_FOLDERS = 20;
+    private bool showCreateFolderDialog = false;
+    private bool pendingSessionCreation = false;
 
     public class SessionCreateResult
     {
@@ -177,6 +204,21 @@
 
     private async Task CreateSession()
     {
+        // フォルダが存在するかチェック
+        if (!Directory.Exists(folderPath))
+        {
+            // フォルダが存在しない場合は確認ダイアログを表示
+            showCreateFolderDialog = true;
+            pendingSessionCreation = true;
+            StateHasChanged();
+            return;
+        }
+
+        await ExecuteSessionCreation();
+    }
+
+    private async Task ExecuteSessionCreation()
+    {
         var result = new SessionCreateResult
         {
             FolderPath = folderPath,
@@ -189,6 +231,44 @@
 
         await OnSessionCreate.InvokeAsync(result);
         ResetForm();
+    }
+
+    private async Task ConfirmFolderCreation()
+    {
+        try
+        {
+            // フォルダを作成
+            Directory.CreateDirectory(folderPath);
+            Logger.LogInformation($"Created folder: {folderPath}");
+            
+            showCreateFolderDialog = false;
+            
+            // フォルダ作成成功後、セッション作成を続行
+            if (pendingSessionCreation)
+            {
+                pendingSessionCreation = false;
+                await ExecuteSessionCreation();
+            }
+            else
+            {
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, $"Failed to create folder: {folderPath}");
+            // エラーが発生した場合もダイアログを閉じる
+            showCreateFolderDialog = false;
+            pendingSessionCreation = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelFolderCreation()
+    {
+        showCreateFolderDialog = false;
+        pendingSessionCreation = false;
+        StateHasChanged();
     }
 
     private async Task Cancel()
@@ -220,6 +300,8 @@
         startupCommand = "";
         claudeCodeOptions = new();
         geminiOptions = new();
+        showCreateFolderDialog = false;
+        pendingSessionCreation = false;
     }
 
     private Task OnTerminalTypeChanged(TerminalType newType)

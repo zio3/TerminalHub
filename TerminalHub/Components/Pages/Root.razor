@@ -1073,8 +1073,8 @@
         var sessionToRemove = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRemove != null)
         {
-            var sessionName = sessionToRemove.DisplayName ?? Path.GetFileName(sessionToRemove.FolderPath) ?? "このセッション";
-            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"「{sessionName}」を削除しますか？");
+            var sessionName = sessionToRemove.GetDisplayName();
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」を削除しますか？");
             if (!confirmed)
             {
                 return;
