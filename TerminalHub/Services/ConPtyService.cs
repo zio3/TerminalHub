@@ -328,17 +328,19 @@ namespace TerminalHub.Services
         {
             if (_writer != null && !_disposed)
             {
-                // 265文字単位で分割して送信（こまめにFlushすることで問題を解決）
-                const int CHUNK_SIZE = 265;
+                // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
+                const int CHUNK_SIZE = 256;
                 
                 for (int i = 0; i < input.Length; i += CHUNK_SIZE)
                 {
                     var chunk = i + CHUNK_SIZE < input.Length 
                         ? input.Substring(i, CHUNK_SIZE)
                         : input.Substring(i);
-                    
+
+
                     await _writer.WriteAsync(chunk);
                     await _writer.FlushAsync();
+                    await Task.Delay(10);
                 }
 
                 // 統計情報を更新
