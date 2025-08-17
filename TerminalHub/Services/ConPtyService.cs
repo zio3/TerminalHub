@@ -338,6 +338,8 @@ namespace TerminalHub.Services
                         : input.Substring(i);
 
 
+                    Console.WriteLine($"WriteAndFlash:{chunk.Substring(0, 30)}");
+
                     await _writer.WriteAsync(chunk);
                     await _writer.FlushAsync();
                     await Task.Delay(10);
