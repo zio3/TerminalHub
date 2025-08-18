@@ -326,6 +326,7 @@ namespace TerminalHub.Services
         /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
+            Console.WriteLine();
             if (_writer != null && !_disposed)
             {
                 // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
@@ -337,12 +338,18 @@ namespace TerminalHub.Services
                         ? input.Substring(i, CHUNK_SIZE)
                         : input.Substring(i);
 
+                    try
+                    {
+                        Console.WriteLine($"WriteAndFlash:{chunk.Substring(0, 30)}");
+                    }
+                    catch
+                    {
 
-                    Console.WriteLine($"WriteAndFlash:{chunk.Substring(0, 30)}");
+                    }
 
-                    await _writer.WriteAsync(chunk);
+                        await _writer.WriteAsync(chunk);
                     await _writer.FlushAsync();
-                    await Task.Delay(10);
+                    await Task.Delay(50);
                 }
 
                 // 統計情報を更新
