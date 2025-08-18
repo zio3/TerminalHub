@@ -338,18 +338,9 @@ namespace TerminalHub.Services
                         ? input.Substring(i, CHUNK_SIZE)
                         : input.Substring(i);
 
-                    try
-                    {
-                        Console.WriteLine($"WriteAndFlash:{chunk.Substring(0, 30)}");
-                    }
-                    catch
-                    {
-
-                    }
-
-                        await _writer.WriteAsync(chunk);
+                    await _writer.WriteAsync(chunk);
                     await _writer.FlushAsync();
-                    await Task.Delay(50);
+                    await Task.Delay(20);
                 }
 
                 // 統計情報を更新
