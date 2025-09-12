@@ -20,6 +20,7 @@ namespace TerminalHub.Analyzers
         public string? Tokens { get; set; }
         public string? Direction { get; set; }
         public string? StatusText { get; set; }
+        public string? ProcessingText { get; set; }  // 新形式で処理中の内容
         public bool IsInterrupted { get; set; }
         public bool IsWaitingForUser { get; set; }
     }

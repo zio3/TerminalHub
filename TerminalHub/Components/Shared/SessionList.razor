@@ -111,7 +111,7 @@
                                     @if (!string.IsNullOrEmpty(session.ProcessingStatus))
                                     {
                                         <span>@session.ProcessingStatus</span>
-                                        @if (session.ProcessingElapsedSeconds.HasValue)
+                                        @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingDirection) || !string.IsNullOrEmpty(session.ProcessingTokens))
                                         {
                                             <span> · </span>
                                         }
@@ -119,14 +119,22 @@
                                     @if (session.ProcessingElapsedSeconds.HasValue)
                                     {
                                         <span>@(session.ProcessingElapsedSeconds)秒</span>
+                                        @if (!string.IsNullOrEmpty(session.ProcessingDirection) || !string.IsNullOrEmpty(session.ProcessingTokens))
+                                        {
+                                            <span> · </span>
+                                        }
                                     }
                                     @if (!string.IsNullOrEmpty(session.ProcessingDirection))
                                     {
-                                        <span> · @GetDirectionText(session.ProcessingDirection)</span>
+                                        <span>@GetDirectionText(session.ProcessingDirection)</span>
+                                        @if (!string.IsNullOrEmpty(session.ProcessingTokens))
+                                        {
+                                            <span> </span>
+                                        }
                                     }
                                     @if (!string.IsNullOrEmpty(session.ProcessingTokens))
                                     {
-                                        <span> @session.ProcessingTokens トークン</span>
+                                        <span>@session.ProcessingTokens トークン</span>
                                     }
                                 </small>
                             </div>

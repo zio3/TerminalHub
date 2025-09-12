@@ -57,6 +57,7 @@ namespace TerminalHub.Services
                         // 処理中
                         if (result.ElapsedSeconds.HasValue)
                         {
+                            // 旧形式: 秒数とトークンあり
                             // 秒数とトークンの変化をチェック
                             var secondsStr = result.ElapsedSeconds.Value.ToString();
                             var tokensStr = result.Tokens ?? "";
@@ -84,6 +85,11 @@ namespace TerminalHub.Services
                                 UpdateSessionProcessingStatus(sessionInfo, result.ElapsedSeconds.Value, 
                                     result.Tokens ?? "", result.Direction ?? "", activeSessionId, updateStatus);
                             }
+                        }
+                        else if (!string.IsNullOrEmpty(result.ProcessingText))
+                        {
+                            // 新形式: ProcessingTextのみ
+                            UpdateSessionProcessingStatus(sessionInfo, result.ProcessingText, activeSessionId, updateStatus);
                         }
                         else if (!string.IsNullOrEmpty(result.StatusText))
                         {
