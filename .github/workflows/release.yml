@@ -1,0 +1,66 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0 などのタグがプッシュされたときに実行
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Get version from tag
+        id: get_version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in installer script
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.VERSION }}"
+          $issPath = "installer/TerminalHub.iss"
+          $content = Get-Content $issPath -Raw
+          $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
+          Set-Content $issPath $content -NoNewline
+
+      - name: Publish application
+        run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # Inno Setupをダウンロード
+          $url = "https://jrsoftware.org/download.php/is.exe"
+          $output = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $output
+
+          # サイレントインストール
+          Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          # 出力ディレクトリを作成
+          New-Item -ItemType Directory -Path "installer/output" -Force | Out-Null
+
+          # Inno Setupでビルド
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer/TerminalHub.iss"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/output/*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -28,11 +28,25 @@
 </style>
 
 <div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
-    
-    <div class="mb-3">
+
+    <div class="mb-2">
         <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
             <i class="bi bi-plus-circle"></i> 新しいセッションを作成
         </button>
+    </div>
+
+    <div class="mb-2">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="セッションを検索..."
+                   @bind="filterText" @bind:event="oninput" />
+            @if (!string.IsNullOrEmpty(filterText))
+            {
+                <button class="btn btn-outline-secondary" type="button" @onclick="() => filterText = string.Empty">
+                    <i class="bi bi-x"></i>
+                </button>
+            }
+        </div>
     </div>
 
     <div class="list-group flex-grow-1" style="overflow-y: auto;">
@@ -191,7 +205,9 @@
     [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
     [Parameter] public Guid? ActiveSessionId { get; set; }
     [Parameter] public bool IsAddingSession { get; set; }
-    
+
+    private string filterText = string.Empty;
+
     [Parameter] public EventCallback OnAddSession { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSelect { get; set; }
     [Parameter] public Func<Guid, Task> OnGitStatusRefresh { get; set; } = _ => Task.CompletedTask;
@@ -231,9 +247,12 @@
     {
         var result = new List<List<SessionInfo>>();
         var processed = new HashSet<Guid>();
-        
+
+        // フィルターに一致するセッションを取得
+        var filteredSessions = GetFilteredSessions();
+
         // まず親セッションとその子セッションをグループ化
-        foreach (var session in Sessions.OrderBy(s => s.CreatedAt))
+        foreach (var session in filteredSessions.OrderBy(s => s.CreatedAt))
         {
             if (processed.Contains(session.SessionId))
                 continue;
@@ -245,15 +264,15 @@
             {
                 group.Add(session);
                 processed.Add(session.SessionId);
-                
+
                 // 親セッションが展開されている場合のみ子セッションを表示
                 if (session.IsExpanded)
                 {
                     // 子セッション（ParentSessionIdがこのセッションを指すもの）を探す
-                    var children = Sessions
+                    var children = filteredSessions
                         .Where(s => s.ParentSessionId == session.SessionId)
                         .OrderBy(s => s.CreatedAt);
-                        
+
                     foreach (var child in children)
                     {
                         group.Add(child);
@@ -265,7 +284,7 @@
                     // 折りたたまれている場合も子セッションを処理済みとしてマーク
                     var children = Sessions
                         .Where(s => s.ParentSessionId == session.SessionId);
-                        
+
                     foreach (var child in children)
                     {
                         processed.Add(child.SessionId);
@@ -318,5 +337,50 @@
     private int GetChildrenCount(SessionInfo session)
     {
         return Sessions.Count(s => s.ParentSessionId == session.SessionId);
+    }
+
+    private List<SessionInfo> GetFilteredSessions()
+    {
+        if (string.IsNullOrWhiteSpace(filterText))
+        {
+            return Sessions;
+        }
+
+        // 親セッションのみをフィルター対象にする
+        // 子セッションは親がフィルターに一致すれば表示される
+        var filter = filterText.Trim().ToLowerInvariant();
+        var matchingParentIds = new HashSet<Guid>();
+
+        // まず親セッションでフィルターに一致するものを探す
+        foreach (var session in Sessions.Where(s => !s.ParentSessionId.HasValue))
+        {
+            if (MatchesFilter(session, filter))
+            {
+                matchingParentIds.Add(session.SessionId);
+            }
+        }
+
+        // 一致した親セッションとその子セッションを返す
+        return Sessions.Where(s =>
+            matchingParentIds.Contains(s.SessionId) ||
+            (s.ParentSessionId.HasValue && matchingParentIds.Contains(s.ParentSessionId.Value))
+        ).ToList();
+    }
+
+    private bool MatchesFilter(SessionInfo session, string filter)
+    {
+        // セッション名で検索
+        if (session.GetDisplayName().ToLowerInvariant().Contains(filter))
+        {
+            return true;
+        }
+
+        // メモ（説明）で検索
+        if (!string.IsNullOrEmpty(session.Memo) && session.Memo.ToLowerInvariant().Contains(filter))
+        {
+            return true;
+        }
+
+        return false;
     }
 }
