@@ -4,6 +4,7 @@
 Option Explicit
 
 Dim WshShell, fso, appPath, chromePath, httpPort, httpsPort
+Dim maxWaitSeconds, waitInterval, totalWait, serverReady
 
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -11,6 +12,10 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 ' ポート設定
 httpPort = 5080
 httpsPort = 7198
+
+' 待機設定
+maxWaitSeconds = 30  ' 最大30秒待機
+waitInterval = 1000  ' 1秒ごとにチェック
 
 ' アプリケーションのパスを取得（このスクリプトと同じフォルダ）
 appPath = fso.GetParentFolderName(WScript.ScriptFullName)
@@ -31,8 +36,17 @@ WshShell.Environment("Process")("ASPNETCORE_URLS") = "https://localhost:" & http
 ' サーバーを非表示で起動 (0 = 非表示)
 WshShell.Run """" & appPath & "\TerminalHub.exe""", 0, False
 
-' サーバーの起動を待つ
-WScript.Sleep 3000
+' サーバーの起動を待つ（最大30秒）
+totalWait = 0
+serverReady = False
+
+Do While totalWait < (maxWaitSeconds * 1000) And Not serverReady
+    WScript.Sleep waitInterval
+    totalWait = totalWait + waitInterval
+
+    ' サーバーが起動したか確認
+    serverReady = IsServerReady("http://localhost:" & httpPort)
+Loop
 
 ' Chromeアプリモードで開く
 If chromePath <> "" Then
@@ -44,3 +58,22 @@ End If
 
 Set fso = Nothing
 Set WshShell = Nothing
+
+' サーバーが起動しているか確認する関数
+Function IsServerReady(url)
+    On Error Resume Next
+    Dim http
+    Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    http.setTimeouts 1000, 1000, 1000, 1000
+    http.Open "GET", url, False
+    http.Send
+
+    If Err.Number = 0 And http.Status >= 200 And http.Status < 500 Then
+        IsServerReady = True
+    Else
+        IsServerReady = False
+    End If
+
+    On Error GoTo 0
+    Set http = Nothing
+End Function
