@@ -3,15 +3,14 @@
 
 Option Explicit
 
-Dim WshShell, fso, appPath, chromePath, httpPort, httpsPort
+Dim WshShell, fso, appPath, chromePath, httpPort
 Dim maxWaitSeconds, waitInterval, totalWait, serverReady
 
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
-' ポート設定
+' ポート設定（HTTPのみ使用 - HTTPS証明書不要）
 httpPort = 5080
-httpsPort = 7198
 
 ' 待機設定
 maxWaitSeconds = 30  ' 最大30秒待機
@@ -31,8 +30,8 @@ ElseIf fso.FileExists(WshShell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Go
 End If
 
 ' サーバーを非表示で起動 (0 = 非表示)
-' コマンドライン引数でURLを指定
-WshShell.Run """" & appPath & "\TerminalHub.exe"" --urls ""https://localhost:" & httpsPort & ";http://localhost:" & httpPort & """", 0, False
+' コマンドライン引数でURLを指定（HTTPのみ - 証明書不要）
+WshShell.Run """" & appPath & "\TerminalHub.exe"" --urls ""http://localhost:" & httpPort & """", 0, False
 
 ' サーバーの起動を待つ（最大30秒）
 totalWait = 0
@@ -46,12 +45,12 @@ Do While totalWait < (maxWaitSeconds * 1000) And Not serverReady
     serverReady = IsServerReady("http://localhost:" & httpPort)
 Loop
 
-' Chromeアプリモードで開く
+' Chromeアプリモードで開く（HTTPで接続）
 If chromePath <> "" Then
-    WshShell.Run """" & chromePath & """ --app=https://localhost:" & httpsPort, 1, False
+    WshShell.Run """" & chromePath & """ --app=http://localhost:" & httpPort, 1, False
 Else
     ' Chromeが見つからない場合はデフォルトブラウザで開く
-    WshShell.Run "https://localhost:" & httpsPort, 1, False
+    WshShell.Run "http://localhost:" & httpPort, 1, False
 End If
 
 Set fso = Nothing
