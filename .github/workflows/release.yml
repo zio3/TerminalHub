@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # v1.0.0 などのタグがプッシュされたときに実行
 
+permissions:
+  contents: write  # リリース作成に必要
+
 jobs:
   build:
     runs-on: windows-latest
