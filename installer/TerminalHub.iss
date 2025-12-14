@@ -50,24 +50,20 @@ Name: "startmenuicon"; Description: "スタートメニューにショートカ�
 ; publishフォルダの全ファイルをインストール
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; ランチャースクリプト（非表示起動 + Chromeアプリモード）
-Source: "TerminalHub-Launcher.vbs"; DestDir: "{app}"; Flags: ignoreversion
-
-; バッチファイル（手動起動用に残しておく）
+; バッチファイル（メインランチャー）
 Source: "TerminalHub.bat"; DestDir: "{app}"; Flags: ignoreversion
-Source: "TerminalHub-App.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; スタートメニュー - VBSランチャーを使用（非表示起動）
-Name: "{group}\{#MyAppName}"; Filename: "{app}\TerminalHub-Launcher.vbs"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
+; スタートメニュー - バッチファイルを使用
+Name: "{group}\{#MyAppName}"; Filename: "{app}\TerminalHub.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 
-; デスクトップ - VBSランチャーを使用（非表示起動）
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\TerminalHub-Launcher.vbs"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; デスクトップ - バッチファイルを使用
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\TerminalHub.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; インストール後に起動するオプション - VBSランチャーを使用
-Filename: "{app}\TerminalHub-Launcher.vbs"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
+; インストール後に起動するオプション
+Filename: "{app}\TerminalHub.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // アンインストール時にプロセスが実行中かチェック
