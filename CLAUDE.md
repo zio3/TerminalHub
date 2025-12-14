@@ -17,29 +17,24 @@ dotnet build TerminalHub/TerminalHub.csproj
 
 ### 実行
 ```powershell
-# バックグラウンドで起動（ブラウザ自動起動）
-./start.ps1
+# 直接実行
+dotnet run --project TerminalHub/TerminalHub.csproj
 
-# フォアグラウンドモードで起動  
-./start.ps1 -Foreground
-
-# ブラウザを開かずに起動
-./start.ps1 -NoBrowser
-
-# サーバーを停止
-./stop.ps1
-
-# シングルインスタンス起動
-./start-single.ps1
+# npm経由で実行
+npm start
 ```
 
 ### NPMスクリプト (package.json経由)
 ```bash
-npm run start          # フォアグラウンドで起動（ブラウザ付き）
-npm run start:background  # バックグラウンドで起動
-npm run stop          # サーバーを停止
+npm start             # プロジェクトを起動
 npm run build         # プロジェクトをビルド
+npm run publish       # 自己完結型でpublish
 npm run clean         # ビルド成果物をクリーン
+```
+
+### インストーラーのビルド
+```bash
+./build-installer.bat   # Inno Setup 6 が必要
 ```
 
 ### クリーン

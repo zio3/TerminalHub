@@ -3,11 +3,9 @@
   "version": "1.0.0",
   "description": "TerminalHub - Terminal session management application",
   "scripts": {
-    "start": "powershell -ExecutionPolicy Bypass -File start-single.ps1",
-    "start:background": "powershell -ExecutionPolicy Bypass -File start.ps1",
-    "stop": "powershell -ExecutionPolicy Bypass -File stop.ps1",
+    "start": "dotnet run --project TerminalHub/TerminalHub.csproj",
     "build": "dotnet build TerminalHub/TerminalHub.csproj",
-    "publish": "dotnet publish TerminalHub/TerminalHub.csproj",
+    "publish": "dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish",
     "test": "dotnet test",
     "clean": "dotnet clean TerminalHub/TerminalHub.csproj"
   },

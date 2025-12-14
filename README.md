@@ -61,14 +61,11 @@ TerminalHubは、Webブラウザから複数のターミナルセッションを
 git clone https://github.com/zio3/TerminalHub.git
 cd TerminalHub
 
-# ビルド
-dotnet build
+# ビルド＆起動
+dotnet run --project TerminalHub/TerminalHub.csproj
 
-# 起動（バックグラウンド、ブラウザ自動起動）
-./start.ps1
-
-# または、フォアグラウンドで起動
-./start.ps1 -Foreground
+# または npm を使用
+npm start
 ```
 
 ## 使い方
@@ -102,7 +99,6 @@ TerminalHub/
 │       └── js/            # JavaScriptファイル
 ├── installer/             # インストーラー関連ファイル
 ├── .github/workflows/     # GitHub Actions（自動リリース）
-├── start.ps1              # 開発用起動スクリプト
 ├── build-installer.bat    # インストーラービルドスクリプト
 ├── package.json           # npm設定
 └── CLAUDE.md             # 開発者向けドキュメント
