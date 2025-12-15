@@ -1,0 +1,214 @@
+@using TerminalHub.Models
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
+    <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-archive me-2"></i>アーカイブ済みセッション</h5>
+                <button type="button" class="btn-close" @onclick="Close"></button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                @if (ArchivedSessions.Any())
+                {
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" placeholder="アーカイブを検索..."
+                                   @bind="searchText" @bind:event="oninput" />
+                            @if (!string.IsNullOrEmpty(searchText))
+                            {
+                                <button class="btn btn-outline-secondary" type="button" @onclick="() => searchText = string.Empty">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="list-group">
+                        @foreach (var session in GetFilteredArchivedSessions())
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">@session.GetDisplayName()</h6>
+                                        <small class="text-muted">
+                                            <i class="bi bi-folder me-1"></i>@session.FolderPath
+                                        </small>
+                                        @if (!string.IsNullOrEmpty(session.Memo))
+                                        {
+                                            <div class="small text-muted mt-1">
+                                                <i class="bi bi-sticky me-1"></i>@session.Memo
+                                            </div>
+                                        }
+                                        <div class="small text-muted mt-1">
+                                            <i class="bi bi-clock me-1"></i>アーカイブ日時: @(session.ArchivedAt?.ToString("yyyy/MM/dd HH:mm") ?? "不明")
+                                        </div>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-success" @onclick="() => RestoreSession(session.SessionId)" title="復帰">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" @onclick="() => ConfirmDelete(session)" title="完全に削除">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (!GetFilteredArchivedSessions().Any())
+                    {
+                        <div class="text-center text-muted py-3">
+                            <i class="bi bi-search"></i> 検索結果がありません
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-archive" style="font-size: 3rem;"></i>
+                        <p class="mt-3">アーカイブ済みのセッションはありません</p>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                @if (ArchivedSessions.Any())
+                {
+                    <button type="button" class="btn btn-outline-danger" @onclick="ConfirmDeleteAll">
+                        <i class="bi bi-trash me-1"></i>すべて削除
+                    </button>
+                }
+                <button type="button" class="btn btn-secondary" @onclick="Close">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (IsVisible)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* 削除確認ダイアログ *@
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">削除の確認</h5>
+                </div>
+                <div class="modal-body">
+                    @if (deleteAllMode)
+                    {
+                        <p>すべてのアーカイブ済みセッション（@ArchivedSessions.Count 件）を完全に削除しますか？</p>
+                    }
+                    else
+                    {
+                        <p>「@sessionToDelete?.GetDisplayName()」を完全に削除しますか？</p>
+                    }
+                    <p class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>この操作は取り消せません。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">キャンセル</button>
+                    <button type="button" class="btn btn-danger" @onclick="ExecuteDelete">削除する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index: 1055;"></div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public List<SessionInfo> ArchivedSessions { get; set; } = new();
+    [Parameter] public EventCallback<Guid> OnRestoreSession { get; set; }
+    [Parameter] public EventCallback<Guid> OnDeleteSession { get; set; }
+    [Parameter] public EventCallback OnDeleteAllSessions { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string searchText = string.Empty;
+    private bool showDeleteConfirm = false;
+    private bool deleteAllMode = false;
+    private SessionInfo? sessionToDelete = null;
+    private bool isMouseDownOnBackdrop = false;
+
+    private List<SessionInfo> GetFilteredArchivedSessions()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return ArchivedSessions.OrderByDescending(s => s.ArchivedAt).ToList();
+        }
+
+        var filter = searchText.Trim().ToLowerInvariant();
+        return ArchivedSessions
+            .Where(s => s.GetDisplayName().ToLowerInvariant().Contains(filter) ||
+                       (!string.IsNullOrEmpty(s.Memo) && s.Memo.ToLowerInvariant().Contains(filter)) ||
+                       (!string.IsNullOrEmpty(s.FolderPath) && s.FolderPath.ToLowerInvariant().Contains(filter)))
+            .OrderByDescending(s => s.ArchivedAt)
+            .ToList();
+    }
+
+    private async Task RestoreSession(Guid sessionId)
+    {
+        await OnRestoreSession.InvokeAsync(sessionId);
+    }
+
+    private void ConfirmDelete(SessionInfo session)
+    {
+        sessionToDelete = session;
+        deleteAllMode = false;
+        showDeleteConfirm = true;
+    }
+
+    private void ConfirmDeleteAll()
+    {
+        sessionToDelete = null;
+        deleteAllMode = true;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        deleteAllMode = false;
+        sessionToDelete = null;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        if (deleteAllMode)
+        {
+            await OnDeleteAllSessions.InvokeAsync();
+        }
+        else if (sessionToDelete != null)
+        {
+            await OnDeleteSession.InvokeAsync(sessionToDelete.SessionId);
+        }
+
+        showDeleteConfirm = false;
+        deleteAllMode = false;
+        sessionToDelete = null;
+    }
+
+    private async Task Close()
+    {
+        searchText = string.Empty;
+        await OnClose.InvokeAsync();
+    }
+
+    private void OnBackdropMouseDown()
+    {
+        isMouseDownOnBackdrop = true;
+    }
+
+    private void OnBackdropMouseUp()
+    {
+        if (isMouseDownOnBackdrop)
+        {
+            _ = Close();
+        }
+        isMouseDownOnBackdrop = false;
+    }
+}

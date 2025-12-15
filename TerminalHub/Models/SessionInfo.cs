@@ -29,7 +29,11 @@ namespace TerminalHub.Models
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
         public string Memo { get; set; } = string.Empty;
-        
+
+        // アーカイブ状態
+        public bool IsArchived { get; set; } = false;
+        public DateTime? ArchivedAt { get; set; }
+
         // チェックされたnpmスクリプト
         public HashSet<string> CheckedScripts { get; set; } = new HashSet<string>();
         

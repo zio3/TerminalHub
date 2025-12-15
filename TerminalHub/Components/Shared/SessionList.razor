@@ -46,6 +46,17 @@
                     <i class="bi bi-x"></i>
                 </button>
             }
+            <button class="btn btn-outline-secondary" type="button" @onclick="() => OnShowArchivedSessions.InvokeAsync()"
+                    title="アーカイブ済みセッション">
+                <i class="bi bi-archive"></i>
+                @{
+                    var archivedCount = Sessions.Count(s => s.IsArchived);
+                }
+                @if (archivedCount > 0)
+                {
+                    <span class="badge bg-secondary ms-1">@archivedCount</span>
+                }
+            </button>
         </div>
     </div>
 
@@ -216,6 +227,7 @@
     [Parameter] public EventCallback<Guid> OnCreateWorktree { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
     [Parameter] public EventCallback<(Guid sessionId, bool isExpanded)> OnSessionExpandedChanged { get; set; }
+    [Parameter] public EventCallback OnShowArchivedSessions { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -341,9 +353,12 @@
 
     private List<SessionInfo> GetFilteredSessions()
     {
+        // アーカイブされていないセッションのみを対象にする
+        var activeSessions = Sessions.Where(s => !s.IsArchived).ToList();
+
         if (string.IsNullOrWhiteSpace(filterText))
         {
-            return Sessions;
+            return activeSessions;
         }
 
         // 親セッションのみをフィルター対象にする
@@ -352,7 +367,7 @@
         var matchingParentIds = new HashSet<Guid>();
 
         // まず親セッションでフィルターに一致するものを探す
-        foreach (var session in Sessions.Where(s => !s.ParentSessionId.HasValue))
+        foreach (var session in activeSessions.Where(s => !s.ParentSessionId.HasValue))
         {
             if (MatchesFilter(session, filter))
             {
@@ -361,7 +376,7 @@
         }
 
         // 一致した親セッションとその子セッションを返す
-        return Sessions.Where(s =>
+        return activeSessions.Where(s =>
             matchingParentIds.Contains(s.SessionId) ||
             (s.ParentSessionId.HasValue && matchingParentIds.Contains(s.ParentSessionId.Value))
         ).ToList();

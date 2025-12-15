@@ -48,6 +48,12 @@
                        SessionId="@settingsSessionId"
                        OnSettingsSaved="OnSessionSettingsSaved"
                        OnCancel="() => showSessionSettingsDialog = false" />
+<ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
+                        ArchivedSessions="@GetArchivedSessions()"
+                        OnRestoreSession="RestoreArchivedSession"
+                        OnDeleteSession="DeleteArchivedSession"
+                        OnDeleteAllSessions="DeleteAllArchivedSessions"
+                        OnClose="() => showArchivedSessionsDialog = false" />
 
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -56,12 +62,13 @@
                      IsAddingSession=@isAddingSession
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
-                     OnSessionRemove="async (sessionId) => await RemoveSession(sessionId)"
+                     OnSessionRemove="async (sessionId) => await ArchiveSession(sessionId)"
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
                      OnSessionSettings="ShowSessionSettingsDialog"
                      OnGitStatusRefresh="RefreshGitStatus"
-                     OnSessionExpandedChanged="HandleSessionExpandedChanged" />
+                     OnSessionExpandedChanged="HandleSessionExpandedChanged"
+                     OnShowArchivedSessions="() => showArchivedSessionsDialog = true" />
 
         <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
@@ -424,6 +431,7 @@
     private bool subSessionParentSessionIsGitRepository = true;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
+    private bool showArchivedSessionsDialog = false;
 
     // タスクランナー関連
     private bool hasPackageJson = false;
@@ -1146,6 +1154,110 @@
             // 削除されたセッションがアクティブでない場合もUIを更新
             StateHasChanged();
         }
+    }
+
+    private async Task ArchiveSession(Guid sessionId)
+    {
+        var sessionToArchive = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (sessionToArchive == null) return;
+
+        var sessionName = sessionToArchive.GetDisplayName();
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」をアーカイブしますか？");
+        if (!confirmed) return;
+
+        // ConPtySessionのクリーンアップ（アーカイブ時もセッションは停止）
+        if (currentDosTerminalSessionId == sessionId)
+        {
+            await CleanupSingleDosTerminal();
+        }
+
+        sessionToArchive.DosTerminalConPtySession?.Dispose();
+        sessionToArchive.DosTerminalConPtySession = null;
+
+        if (sessionToArchive.ConPtySession != null)
+        {
+            sessionToArchive.ConPtySession.Dispose();
+            sessionToArchive.ConPtySession = null;
+        }
+
+        // セッションのタイマーを停止
+        OutputAnalyzerService.StopSessionTimer(sessionId);
+
+        // アクティブセッションの場合の追加処理
+        if (sessionId == activeSessionId)
+        {
+            if (activeTerminal != null)
+            {
+                await activeTerminal.DisposeAsync();
+                activeTerminal = null;
+            }
+        }
+
+        // アーカイブフラグを設定
+        sessionToArchive.IsArchived = true;
+        sessionToArchive.ArchivedAt = DateTime.Now;
+
+        // ローカルストレージを更新
+        await LocalStorageService.SaveSessionsAsync(sessions);
+
+        if (activeSessionId == sessionId)
+        {
+            activeSessionId = null;
+            activeSession = null;
+            await LocalStorageService.SaveActiveSessionIdAsync(null);
+
+            // アーカイブされていない他のセッションがあれば最初のものを選択
+            var activeSessionsList = sessions.Where(s => !s.IsArchived).ToList();
+            if (activeSessionsList.Any())
+            {
+                await SelectSession(activeSessionsList.First().SessionId);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreArchivedSession(Guid sessionId)
+    {
+        var sessionToRestore = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (sessionToRestore == null) return;
+
+        sessionToRestore.IsArchived = false;
+        sessionToRestore.ArchivedAt = null;
+
+        await LocalStorageService.SaveSessionsAsync(sessions);
+        StateHasChanged();
+    }
+
+    private async Task DeleteArchivedSession(Guid sessionId)
+    {
+        var sessionToDelete = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (sessionToDelete == null) return;
+
+        // SessionManagerから完全に削除
+        await SessionManager.RemoveSessionAsync(sessionId);
+        sessions = SessionManager.GetAllSessions().ToList();
+
+        await LocalStorageService.SaveSessionsAsync(sessions);
+        StateHasChanged();
+    }
+
+    private async Task DeleteAllArchivedSessions()
+    {
+        var archivedSessions = sessions.Where(s => s.IsArchived).ToList();
+        foreach (var session in archivedSessions)
+        {
+            await SessionManager.RemoveSessionAsync(session.SessionId);
+        }
+
+        sessions = SessionManager.GetAllSessions().ToList();
+        await LocalStorageService.SaveSessionsAsync(sessions);
+        StateHasChanged();
+    }
+
+    private List<SessionInfo> GetArchivedSessions()
+    {
+        return sessions.Where(s => s.IsArchived).ToList();
     }
 
     [JSInvokable]
