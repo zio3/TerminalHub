@@ -46,55 +46,26 @@ namespace TerminalHub.Services
 
                     if (result.IsInterrupted)
                     {
-                        // 処理が中断された
-                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus);
+                        // 処理が中断された（ユーザーが止めたので通知不要）
+                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus, skipNotification: true);
                     }
                     else if (result.IsProcessing)
                     {
                         // ユーザー入力待ち状態をセッションに設定
                         sessionInfo.IsWaitingForUserInput = result.IsWaitingForUser;
-                        
-                        // 処理中
-                        if (result.ElapsedSeconds.HasValue)
+
+                        // ステータステキストを決定
+                        var statusText = result.ProcessingText ?? result.StatusText;
+
+                        if (!string.IsNullOrEmpty(statusText))
                         {
-                            // 旧形式: 秒数とトークンあり
-                            // 秒数とトークンの変化をチェック
-                            var secondsStr = result.ElapsedSeconds.Value.ToString();
-                            var tokensStr = result.Tokens ?? "";
-                            
-                            if (sessionInfo.LastProcessingSeconds == secondsStr && 
-                                sessionInfo.LastProcessingTokens == tokensStr)
+                            // GeminiCLIの場合は経過秒数も設定
+                            if (result.ElapsedSeconds.HasValue)
                             {
-                                // 秒数もトークンも変わらない場合はタイマーのリセットのみ
-                                sessionInfo.LastProcessingUpdateTime = DateTime.Now;
-                                ResetSessionTimer(sessionInfo.SessionId);
-                                return;
+                                sessionInfo.ProcessingElapsedSeconds = result.ElapsedSeconds.Value;
                             }
-                            
-                            sessionInfo.LastProcessingSeconds = secondsStr;
-                            sessionInfo.LastProcessingTokens = tokensStr;
-                            
-                            // GeminiCLIの場合はステータステキストも含める
-                            if (!string.IsNullOrEmpty(result.StatusText))
-                            {
-                                UpdateSessionProcessingStatus(sessionInfo, result.StatusText, result.ElapsedSeconds.Value, 
-                                    result.Tokens ?? "", result.Direction ?? "", activeSessionId, updateStatus);
-                            }
-                            else
-                            {
-                                UpdateSessionProcessingStatus(sessionInfo, result.ElapsedSeconds.Value, 
-                                    result.Tokens ?? "", result.Direction ?? "", activeSessionId, updateStatus);
-                            }
-                        }
-                        else if (!string.IsNullOrEmpty(result.ProcessingText))
-                        {
-                            // 新形式: ProcessingTextのみ
-                            UpdateSessionProcessingStatus(sessionInfo, result.ProcessingText, activeSessionId, updateStatus);
-                        }
-                        else if (!string.IsNullOrEmpty(result.StatusText))
-                        {
-                            // ステータステキストのみの更新
-                            UpdateSessionProcessingStatus(sessionInfo, result.StatusText, activeSessionId, updateStatus);
+
+                            UpdateSessionProcessingStatus(sessionInfo, statusText, activeSessionId, updateStatus);
                         }
                     }
                     else
@@ -110,41 +81,59 @@ namespace TerminalHub.Services
             }
         }
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?> updateStatus)
+        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?> updateStatus, bool skipNotification = false)
         {
                 session.ProcessingStatus = statusText;
                 if (statusText != null)
                 {
+                    // 処理開始時（初回のみ）にWebhook通知を送信
+                    // ただし、セッション接続直後（1秒以内）は過去バッファの誤検出を防ぐためスキップ
+                    if (session.ProcessingStartTime == null && !skipNotification)
+                    {
+                        var isRecentConnection = session.LastConnectionTime.HasValue &&
+                            (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 1.0;
+
+                        if (!isRecentConnection)
+                        {
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await _notificationService.NotifyProcessingStartAsync(session);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "処理開始通知でエラー: {SessionId}", session.SessionId);
+                                }
+                            });
+                        }
+                        else
+                        {
+                            _logger.LogDebug("接続直後のため開始通知をスキップ: {SessionId}", session.SessionId);
+                        }
+                    }
+
                     session.ProcessingStartTime = DateTime.Now;
                     session.LastProcessingUpdateTime = DateTime.Now;
-                    
+
                     // セッションごとのタイマーをリセット
                     ResetSessionTimer(session.SessionId);
                 }
                 else
                 {
-                    _logger.LogDebug("Processing completed for session {SessionId}. ProcessingElapsedSeconds: {ElapsedSeconds}", 
-                        session.SessionId, session.ProcessingElapsedSeconds);
-                    
-                    // 処理完了時の通知（クリア前にチェック）
-                    var processingElapsedSeconds = session.ProcessingElapsedSeconds;
-                    
-                    // セッション情報をクリア
-                    session.ProcessingStartTime = null;
-                    session.ProcessingElapsedSeconds = null;
-                    session.ProcessingTokens = null;
-                    session.ProcessingDirection = null;
-                    session.LastProcessingUpdateTime = null;
-                    session.LastProcessingSeconds = null;
-                    session.IsWaitingForUserInput = false;
-                    
-                    // セッションのタイマーを停止
-                    StopSessionTimer(session.SessionId);
-                    
-                    // 通知処理（経過時間があった場合のみ）
-                    if (processingElapsedSeconds.HasValue)
+                    // 処理完了時の経過時間を計算（ProcessingElapsedSecondsがない場合はProcessingStartTimeから計算）
+                    int? elapsedSeconds = session.ProcessingElapsedSeconds;
+                    if (!elapsedSeconds.HasValue && session.ProcessingStartTime.HasValue)
                     {
-                       
+                        elapsedSeconds = (int)(DateTime.Now - session.ProcessingStartTime.Value).TotalSeconds;
+                    }
+
+                    _logger.LogDebug("Processing completed for session {SessionId}. ElapsedSeconds: {ElapsedSeconds}",
+                        session.SessionId, elapsedSeconds);
+
+                    // 通知処理（経過時間があり、スキップでない場合のみ）
+                    if (elapsedSeconds.HasValue && !skipNotification)
+                    {
                         // セッション情報をコピー（非同期処理で使用するため）
                         var sessionCopy = new SessionInfo
                         {
@@ -159,13 +148,12 @@ namespace TerminalHub.Services
                             Options = session.Options,
                             Memo = session.Memo
                         };
-                        var elapsedSecondsCopy = processingElapsedSeconds.Value;
-                        
-                        Task.Run(async () => 
+
+                        Task.Run(async () =>
                         {
                             try
                             {
-                                await _notificationService.NotifyProcessingCompleteAsync(sessionCopy, elapsedSecondsCopy);
+                                await _notificationService.NotifyProcessingCompleteAsync(sessionCopy, elapsedSeconds.Value);
                             }
                             catch (Exception ex)
                             {
@@ -173,64 +161,20 @@ namespace TerminalHub.Services
                             }
                         });
                     }
-                    else
+                    else if (skipNotification)
                     {
-                        _logger.LogDebug("ProcessingElapsedSeconds is null for session {SessionId}, notification flag NOT set", session.SessionId);
+                        _logger.LogDebug("Notification skipped (user interrupted) for session {SessionId}", session.SessionId);
                     }
-                    
+
+                    // セッション情報をクリア
                     session.ProcessingStartTime = null;
                     session.ProcessingElapsedSeconds = null;
-                    session.ProcessingTokens = null;
-                    session.ProcessingDirection = null;
                     session.LastProcessingUpdateTime = null;
-                    session.LastProcessingSeconds = null;
-                    session.LastProcessingTokens = null;
                     session.IsWaitingForUserInput = false;
-                    
+
                     // セッションのタイマーを停止
                     StopSessionTimer(session.SessionId);
                 }
-                
-                // UIを更新
-                updateStatus(session.SessionId, statusText);
-        }
-
-        private void UpdateSessionProcessingStatus(SessionInfo session, int elapsedSeconds, string tokens, string direction, Guid activeSessionId, Action<Guid, string?> updateStatus)
-        {
-                session.ProcessingElapsedSeconds = elapsedSeconds;
-                session.ProcessingTokens = tokens;
-                session.ProcessingDirection = direction;
-                
-                if (session.ProcessingStartTime == null)
-                {
-                    session.ProcessingStartTime = DateTime.Now;
-                }
-                
-                session.LastProcessingUpdateTime = DateTime.Now;
-                
-                // セッションごとのタイマーをリセット
-                ResetSessionTimer(session.SessionId);
-                
-                // UIを更新
-                updateStatus(session.SessionId, $"{elapsedSeconds}s");
-        }
-
-        private void UpdateSessionProcessingStatus(SessionInfo session, string statusText, int elapsedSeconds, string tokens, string direction, Guid activeSessionId, Action<Guid, string?> updateStatus)
-        {
-                session.ProcessingStatus = statusText;
-                session.ProcessingElapsedSeconds = elapsedSeconds;
-                session.ProcessingTokens = tokens;
-                session.ProcessingDirection = direction;
-                
-                if (session.ProcessingStartTime == null)
-                {
-                    session.ProcessingStartTime = DateTime.Now;
-                }
-                
-                session.LastProcessingUpdateTime = DateTime.Now;
-                
-                // セッションごとのタイマーをリセット
-                ResetSessionTimer(session.SessionId);
                 
                 // UIを更新
                 updateStatus(session.SessionId, statusText);

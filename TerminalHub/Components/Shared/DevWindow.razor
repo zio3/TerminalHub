@@ -52,7 +52,7 @@
                 <small class="text-muted">@notificationTestResult</small>
             </div>
             <hr />
-            <h5>バッファダウンロード</h5>
+            <h5>バッファキャプチャ</h5>
             <div class="mb-3">
                 <div class="mb-2">
                     <label class="form-label">セッション選択</label>
@@ -60,18 +60,43 @@
                         <option value="">-- セッションを選択 --</option>
                         @foreach (var session in GetAvailableSessions())
                         {
-                            <option value="@session.SessionId">@session.GetDisplayName()</option>
+                            var captureStatus = session.EnableBufferCapture ? " [キャプチャ中]" : "";
+                            var bufferSize = session.CapturedBufferSize > 0 ? $" ({FormatBytes(session.CapturedBufferSize)})" : "";
+                            <option value="@session.SessionId">@session.GetDisplayName()@captureStatus@bufferSize</option>
                         }
                     </select>
                 </div>
+                @if (GetSelectedSession() is SessionInfo selectedSession)
+                {
+                    <div class="mb-2">
+                        <span class="badge @(selectedSession.EnableBufferCapture ? "bg-success" : "bg-secondary") me-2">
+                            @(selectedSession.EnableBufferCapture ? "キャプチャ中" : "停止中")
+                        </span>
+                        @if (selectedSession.CapturedBufferSize > 0)
+                        {
+                            <span class="badge bg-info">@FormatBytes(selectedSession.CapturedBufferSize)</span>
+                        }
+                    </div>
+                }
+                <div class="btn-group mb-2">
+                    <button class="btn btn-success me-2" @onclick="StartCapture" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload) || GetSelectedSession()?.EnableBufferCapture == true)">
+                        <i class="bi bi-record-circle"></i> キャプチャ開始
+                    </button>
+                    <button class="btn btn-warning me-2" @onclick="StopCapture" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload) || GetSelectedSession()?.EnableBufferCapture != true)">
+                        <i class="bi bi-stop-circle"></i> キャプチャ停止
+                    </button>
+                    <button class="btn btn-danger" @onclick="ClearBuffer" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload) || GetSelectedSession()?.CapturedBufferSize == 0)">
+                        <i class="bi bi-trash"></i> クリア
+                    </button>
+                </div>
                 <div class="btn-group">
-                    <button class="btn btn-primary me-2" @onclick="DownloadBuffer" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload))">
+                    <button class="btn btn-primary" @onclick="DownloadBuffer" disabled="@(string.IsNullOrEmpty(selectedSessionForDownload) || GetSelectedSession()?.CapturedBufferSize == 0)">
                         <i class="bi bi-download"></i> バッファダウンロード
                     </button>
                 </div>
             </div>
             <div class="mb-3">
-                <h6>ダウンロード結果</h6>
+                <h6>結果</h6>
                 <small class="text-muted">@downloadResult</small>
             </div>
             <hr />
@@ -396,6 +421,62 @@
     {
         return SessionManager.GetAllSessions();
     }
+
+    private SessionInfo? GetSelectedSession()
+    {
+        if (string.IsNullOrEmpty(selectedSessionForDownload) || !Guid.TryParse(selectedSessionForDownload, out var sessionId))
+            return null;
+        return SessionManager.GetSessionInfo(sessionId);
+    }
+
+    private void StartCapture()
+    {
+        var session = GetSelectedSession();
+        if (session == null)
+        {
+            downloadResult = "セッションを選択してください";
+            return;
+        }
+
+        session.StartBufferCapture();
+        downloadResult = $"キャプチャを開始しました - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private void StopCapture()
+    {
+        var session = GetSelectedSession();
+        if (session == null)
+        {
+            downloadResult = "セッションを選択してください";
+            return;
+        }
+
+        session.StopBufferCapture();
+        downloadResult = $"キャプチャを停止しました（バッファは保持） - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private void ClearBuffer()
+    {
+        var session = GetSelectedSession();
+        if (session == null)
+        {
+            downloadResult = "セッションを選択してください";
+            return;
+        }
+
+        session.ClearCapturedBuffer();
+        downloadResult = $"バッファをクリアしました - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private string FormatBytes(int bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
     
     private async Task RefreshDiagnostics()
     {
@@ -437,49 +518,43 @@
     {
         try
         {
-            if (!Guid.TryParse(selectedSessionForDownload, out var sessionId))
+            var sessionInfo = GetSelectedSession();
+            if (sessionInfo == null)
             {
                 downloadResult = "セッションを選択してください";
                 return;
             }
-            
-            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
-            if (sessionInfo?.ConPtySession == null)
-            {
-                downloadResult = "ConPtySessionが利用できません";
-                return;
-            }
-            
+
             downloadResult = "バッファデータを取得中...";
             StateHasChanged();
-            
-            string content;
-            string filename;
-            
-            // ConPtySessionではバッファ取得機能はサポートされていません
-            content = "ConPtySessionではバッファ取得機能はサポートされていません";
-            
+
+            // キャプチャしたバッファを取得
+            var content = sessionInfo.GetCapturedBuffer();
+
             if (string.IsNullOrEmpty(content))
             {
-                content = "バッファが空です。";
+                downloadResult = "バッファが空です。キャプチャを開始してからセッションを操作してください。";
+                return;
             }
-            
+
             var bufferInfo = new
             {
-                Status = "Enabled",
+                Status = sessionInfo.EnableBufferCapture ? "キャプチャ中" : "停止中",
                 BufferSize = content.Length,
                 LineCount = content.Split('\n').Length,
-                TerminalSize = $"{sessionInfo.ConPtySession.Cols}x{sessionInfo.ConPtySession.Rows}",
-                SessionId = sessionId
+                CaptureStartTime = sessionInfo.BufferCaptureStartTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                SessionName = sessionInfo.GetDisplayName(),
+                SessionId = sessionInfo.SessionId
             };
-            
-            content = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n" + content;
-            filename = $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-            
+
+            var header = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n";
+            var fullContent = header + content;
+            var filename = $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+
             // ダウンロード実行
-            await DownloadFile(filename, content);
-            
-            downloadResult = $"ダウンロード完了: {filename} ({content.Length:N0} 文字)";
+            await DownloadFile(filename, fullContent);
+
+            downloadResult = $"ダウンロード完了: {filename} ({FormatBytes(content.Length)})";
         }
         catch (Exception ex)
         {

@@ -25,11 +25,21 @@
 
             @if (Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
             {
-                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")" 
-                       checked="@(SelectedType == TerminalType.GeminiCLI)" 
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.GeminiCLI)"
                        @onchange="() => OnTerminalTypeChanged(TerminalType.GeminiCLI)" autocomplete="off">
                 <label class="btn btn-outline-primary" for="@($"terminalType3{UniqueId}")">
                     <i class="bi bi-stars"></i> Gemini CLI
+                </label>
+            }
+
+            @if (Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType4{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.CodexCLI)"
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.CodexCLI)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType4{UniqueId}")">
+                    <i class="bi bi-braces"></i> Codex CLI
                 </label>
             }
         </div>
@@ -71,6 +81,121 @@
                 <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
                     サンドボックスモード (-s/--sandbox)
                 </label>
+                <div class="form-text text-muted small">
+                    <i class="bi bi-info-circle"></i> この機能を使用するには、Docker Desktopがインストールされている必要があります。
+                </div>
+            </div>
+            @if (!DisableContinueOption)
+            {
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.Continue" id="@($"geminiContinue{UniqueId}")">
+                    <label class="form-check-label" for="@($"geminiContinue{UniqueId}")">
+                        コンティニュー (--resume latest)
+                    </label>
+                </div>
+            }
+        </div>
+    }
+    else if (SelectedType == TerminalType.CodexCLI && Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
+    {
+        <div class="mb-3">
+            <label class="form-label">Codex CLI オプション</label>
+
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">実行モード</label>
+                <div class="btn-group d-flex" role="group">
+                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeAuto{UniqueId}")"
+                           checked="@(CodexOptions.Mode == "auto")"
+                           @onchange="() => SetCodexMode(CodexMode.Auto)" autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="@($"codexModeAuto{UniqueId}")" title="編集＋ビルド/テスト等を基本自動化">
+                        Auto (推奨)
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
+                           checked="@(CodexOptions.Mode == "standard")"
+                           @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="対話ベースで設定しながら使用">
+                        Standard
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
+                           checked="@(CodexOptions.Mode == "yolo")"
+                           @onchange="() => SetCodexMode(CodexMode.Yolo)" autocomplete="off">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="隔離環境（WSL/Docker/VM/CI）前提の全自動">
+                        YOLO (危険)
+                    </label>
+                </div>
+            </div>
+
+            @if (CodexOptions.Mode == "yolo")
+            {
+                <div class="alert alert-danger mt-2 py-2 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    <strong>警告:</strong> YOLOモードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。
+                </div>
+            }
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">サンドボックスモード</label>
+                <div class="btn-group d-flex" role="group">
+                    <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
+                           checked="@(CodexOptions.SandboxMode == "none")"
+                           @onchange="() => SetCodexSandboxMode(CodexSandbox.None)" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="サンドボックスなし">
+                        なし
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxReadOnly{UniqueId}")"
+                           checked="@(CodexOptions.SandboxMode == "read-only")"
+                           @onchange="() => SetCodexSandboxMode(CodexSandbox.ReadOnly)" autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="読み取り専用（最も安全）">
+                        読み取り専用
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxWorkspace{UniqueId}")"
+                           checked="@(CodexOptions.SandboxMode == "workspace-write")"
+                           @onchange="() => SetCodexSandboxMode(CodexSandbox.WorkspaceWrite)" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="ワークスペースのみ書き込み可">
+                        ワークスペース (推奨)
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxFull{UniqueId}")"
+                           checked="@(CodexOptions.SandboxMode == "danger-full-access")"
+                           @onchange="() => SetCodexSandboxMode(CodexSandbox.FullAccess)" autocomplete="off">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="フルアクセス（危険）">
+                        フルアクセス
+                    </label>
+                </div>
+                <div class="form-text small">外部通信やファイルアクセス範囲を制限</div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">承認ポリシー</label>
+                <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy">
+                    <option value="">未指定</option>
+                    <option value="untrusted">untrusted</option>
+                    <option value="on-request">on-request</option>
+                    <option value="on-failure">on-failure</option>
+                    <option value="never">never</option>
+                </select>
+                <div class="form-text small">操作の承認レベル</div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">ネットワークアクセス</label>
+                <select class="form-select form-select-sm" @bind="CodexOptions.NetworkAccess">
+                    <option value="">未指定</option>
+                    <option value="restricted">restricted</option>
+                    <option value="enabled">enabled</option>
+                </select>
+                <div class="form-text small">外部ネットワークの利用可否</div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">追加引数</label>
+                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.ExtraArgs"
+                       placeholder="例: --model gpt-4.1 --approval-policy on-request" />
+                <div class="form-text small">そのままCodex CLIに渡します</div>
             </div>
         </div>
     }
@@ -90,6 +215,7 @@
     [Parameter] public EventCallback<string> StartupCommandChanged { get; set; }
     [Parameter] public ClaudeCodeOptions ClaudeOptions { get; set; } = new();
     [Parameter] public GeminiOptionsData GeminiOptions { get; set; } = new();
+    [Parameter] public CodexOptionsData CodexOptions { get; set; } = new();
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
@@ -98,6 +224,32 @@
     {
         SelectedType = newType;
         await SelectedTypeChanged.InvokeAsync(newType);
+    }
+
+    private enum CodexMode { Auto, Standard, Yolo }
+    private enum CodexSandbox { None, ReadOnly, WorkspaceWrite, FullAccess }
+
+    private void SetCodexMode(CodexMode mode)
+    {
+        CodexOptions.Mode = mode switch
+        {
+            CodexMode.Auto => "auto",
+            CodexMode.Standard => "standard",
+            CodexMode.Yolo => "yolo",
+            _ => "auto"
+        };
+    }
+
+    private void SetCodexSandboxMode(CodexSandbox mode)
+    {
+        CodexOptions.SandboxMode = mode switch
+        {
+            CodexSandbox.None => "none",
+            CodexSandbox.ReadOnly => "read-only",
+            CodexSandbox.WorkspaceWrite => "workspace-write",
+            CodexSandbox.FullAccess => "danger-full-access",
+            _ => "workspace-write"
+        };
     }
 
     public Dictionary<string, string> GetOptions()
@@ -133,6 +285,30 @@
                 {
                     options["sandbox"] = "true";
                 }
+                if (GeminiOptions.Continue && !DisableContinueOption)
+                {
+                    options["continue"] = "true";
+                }
+                break;
+
+            case TerminalType.CodexCLI:
+                options["mode"] = CodexOptions.Mode;
+                if (CodexOptions.SandboxMode != "none")
+                {
+                    options["sandbox-mode"] = CodexOptions.SandboxMode;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.ApprovalPolicy))
+                {
+                    options["approval-policy"] = CodexOptions.ApprovalPolicy;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.NetworkAccess))
+                {
+                    options["network-access"] = CodexOptions.NetworkAccess;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.ExtraArgs))
+                {
+                    options["extra-args"] = CodexOptions.ExtraArgs.Trim();
+                }
                 break;
         }
 
@@ -149,5 +325,15 @@
     {
         public bool YoloMode { get; set; }
         public bool SandboxMode { get; set; }
+        public bool Continue { get; set; } = true;
+    }
+
+    public class CodexOptionsData
+    {
+        public string Mode { get; set; } = "auto"; // auto, standard, yolo
+        public string SandboxMode { get; set; } = "workspace-write"; // none, read-only, workspace-write, danger-full-access
+        public string ApprovalPolicy { get; set; } = "";
+        public string NetworkAccess { get; set; } = "";
+        public string ExtraArgs { get; set; } = "";
     }
 }

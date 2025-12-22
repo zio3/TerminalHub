@@ -78,6 +78,13 @@ namespace TerminalHub.Services
                         : $"/k gemini {geminiArgs}";
                     return ("cmd.exe", geminiArgsString);
 
+                case TerminalType.CodexCLI:
+                    var codexArgs = TerminalConstants.BuildCodexArgs(options);
+                    var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
+                        ? "/k codex"
+                        : $"/k codex {codexArgs}";
+                    return ("cmd.exe", codexArgsString);
+
                 default:
                     if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
                     {
@@ -160,6 +167,7 @@ namespace TerminalHub.Services
                 {
                     TerminalType.ClaudeCode => $"Claude Codeの起動に失敗しました。Claude Codeがインストールされているか確認してください。",
                     TerminalType.GeminiCLI => $"Gemini CLIの起動に失敗しました。Gemini CLIがインストールされているか確認してください。",
+                    TerminalType.CodexCLI => $"Codex CLIの起動に失敗しました。Codex CLIがインストールされているか確認してください。",
                     _ => $"ターミナルの起動に失敗しました。"
                 };
                 
@@ -563,6 +571,7 @@ namespace TerminalHub.Services
                 {
                     TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
                     TerminalType.GeminiCLI => $"{sessionInfo.FolderName} (Gemini)",
+                    TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
                     _ => sessionInfo.FolderName
                 };
 

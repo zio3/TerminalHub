@@ -1,5 +1,6 @@
 using Microsoft.JSInterop;
 using TerminalHub.Services;
+using System.Text;
 
 namespace TerminalHub.Models
 {
@@ -7,7 +8,8 @@ namespace TerminalHub.Models
     {
         Terminal,
         ClaudeCode,
-        GeminiCLI
+        GeminiCLI,
+        CodexCLI
     }
 
     public enum BottomPanelTab
@@ -42,36 +44,30 @@ namespace TerminalHub.Models
         
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? ProcessingStartTime { get; set; }
-        
+
         [System.Text.Json.Serialization.JsonIgnore]
         public int? ProcessingElapsedSeconds { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string? ProcessingTokens { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string? ProcessingDirection { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool HasNotificationPending { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public ConPtySession? ConPtySession { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public int LastKnownScrollPosition { get; set; } = 0;
-        
+
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? LastProcessingUpdateTime { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string? LastProcessingSeconds { get; set; }
-        
-        [System.Text.Json.Serialization.JsonIgnore]
-        public string? LastProcessingTokens { get; set; }
-        
+
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasNotificationPending { get; set; }
+
+        /// <summary>
+        /// 最後にセッションに接続した時刻（過去バッファの誤検出防止用）
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastConnectionTime { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public ConPtySession? ConPtySession { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int LastKnownScrollPosition { get; set; } = 0;
         
         // DOSターミナル関連プロパティ
         [System.Text.Json.Serialization.JsonIgnore]
@@ -98,7 +94,68 @@ namespace TerminalHub.Models
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
-        
+
+        // バッファキャプチャ機能（デバッグ用、再起動時にリセット）
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool EnableBufferCapture { get; set; } = false;
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public StringBuilder? CapturedBuffer { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? BufferCaptureStartTime { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int CapturedBufferSize => CapturedBuffer?.Length ?? 0;
+
+        private const int MaxBufferCaptureSize = 1024 * 1024; // 1MB上限
+
+        public void StartBufferCapture()
+        {
+            EnableBufferCapture = true;
+            CapturedBuffer = new StringBuilder();
+            BufferCaptureStartTime = DateTime.Now;
+        }
+
+        public void StopBufferCapture()
+        {
+            EnableBufferCapture = false;
+        }
+
+        public void ClearCapturedBuffer()
+        {
+            CapturedBuffer?.Clear();
+            CapturedBuffer = null;
+            BufferCaptureStartTime = null;
+            EnableBufferCapture = false;
+        }
+
+        public void AppendToBuffer(string data)
+        {
+            if (!EnableBufferCapture || CapturedBuffer == null) return;
+
+            // 上限チェック
+            if (CapturedBuffer.Length + data.Length > MaxBufferCaptureSize)
+            {
+                // 古いデータを削除して新しいデータを追加
+                var overflow = CapturedBuffer.Length + data.Length - MaxBufferCaptureSize;
+                if (overflow < CapturedBuffer.Length)
+                {
+                    CapturedBuffer.Remove(0, overflow);
+                }
+                else
+                {
+                    CapturedBuffer.Clear();
+                }
+            }
+            CapturedBuffer.Append(data);
+        }
+
+        public string GetCapturedBuffer()
+        {
+            return CapturedBuffer?.ToString() ?? string.Empty;
+        }
+
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))

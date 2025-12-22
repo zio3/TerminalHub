@@ -7,8 +7,9 @@ namespace TerminalHub.Analyzers
     {
         // Gemini CLIの処理パターン
         // 例: "⠧ Identifying the File Path (esc to cancel, 7s)"
+        // 例: "⠙ Defining Current Status (esc to cancel, 1m 39s)"
         private static readonly Regex ProcessingPattern = new Regex(
-            @"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*(.+?)\s*\(esc to cancel,\s*(\d+)s\)",
+            @"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*(.+?)\s*\(esc to cancel,",
             RegexOptions.Compiled);
 
         // 処理完了パターン（推定）
@@ -81,11 +82,10 @@ namespace TerminalHub.Analyzers
 
             // 処理中パターンをチェック
             var processingMatch = ProcessingPattern.Match(cleanedData);
-            if (processingMatch.Success && processingMatch.Groups.Count >= 3)
+            if (processingMatch.Success)
             {
                 result.IsProcessing = true;
-                result.StatusText = processingMatch.Groups[1].Value; // 実行中のタスク名
-                result.ElapsedSeconds = int.TryParse(processingMatch.Groups[2].Value, out var seconds) ? seconds : (int?)null;
+                result.StatusText = processingMatch.Groups[1].Value.Trim();
                 return true;
             }
 

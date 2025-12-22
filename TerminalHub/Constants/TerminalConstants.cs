@@ -60,17 +60,65 @@ namespace TerminalHub.Constants
         public static string BuildGeminiArgs(Dictionary<string, string> options)
         {
             var args = new List<string>();
-            
+
             if (options.ContainsKey("yolo") && options["yolo"] == "true")
             {
                 args.Add("-y");
             }
-            
+
             if (options.ContainsKey("sandbox") && options["sandbox"] == "true")
             {
                 args.Add("-s");
             }
             
+            if (options.ContainsKey("continue") && options["continue"] == "true")
+            {
+                args.Add("--resume latest");
+            }
+
+            return string.Join(" ", args);
+        }
+
+        public static string BuildCodexArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+
+            // 実行モード: auto, standard, yolo
+            if (options.TryGetValue("mode", out var mode))
+            {
+                switch (mode)
+                {
+                    case "auto":
+                        args.Add("--full-auto");
+                        break;
+                    case "yolo":
+                        args.Add("--yolo");
+                        break;
+                    // standard はオプションなし
+                }
+            }
+
+            // サンドボックスモード: read-only, workspace-write, danger-full-access
+            if (options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode))
+            {
+                args.Add($"--sandbox {sandboxMode}");
+            }
+
+            if (options.TryGetValue("approval-policy", out var approvalPolicy) && !string.IsNullOrEmpty(approvalPolicy))
+            {
+                args.Add($"--approval-policy {approvalPolicy}");
+            }
+
+            if (options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
+            {
+                args.Add($"--network-access {networkAccess}");
+            }
+
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
+            {
+                args.Add(extraArgs.Trim());
+            }
+
             return string.Join(" ", args);
         }
     }

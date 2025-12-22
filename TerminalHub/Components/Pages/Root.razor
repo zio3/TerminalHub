@@ -127,8 +127,8 @@
                             {
                                 <div class="p-3 h-100 d-flex flex-column">
                                     <div class="flex-grow-1 d-flex flex-column">
-                                        <textarea id="inputText" 
-                                          class="form-control flex-grow-1" 
+                                        <textarea id="inputText"
+                                          class="form-control flex-grow-1"
                                           data-input-area
                                           @bind="inputText"
                                           @bind:event="oninput"
@@ -442,6 +442,10 @@
     private bool TaskRunnerInitialized = false;
     private TaskSession? currentTaskSession => TaskManagerService.ActiveSession;
 
+    // TaskManagerServiceイベントハンドラー
+    private EventHandler<string>? _taskDataReceivedHandler;
+    private EventHandler<TaskSession>? _taskSessionUpdatedHandler;
+
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
@@ -468,22 +472,35 @@
         });
 
         // TaskManagerServiceのイベントハンドラーを設定
-        TaskManagerService.SessionDataReceived += (sender, data) =>
+        _taskDataReceivedHandler = (sender, data) =>
         {
             InvokeAsync(async () =>
             {
                 // アクティブセッションがターミナル接続されている場合のみ表示
                 if (taskRunnerTerminal != null && TaskManagerService.ActiveSession?.IsTerminalConnected == true)
                 {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", data);
+                    try
+                    {
+                        await taskRunnerTerminal.InvokeVoidAsync("write", data);
+                    }
+                    catch (JSDisconnectedException)
+                    {
+                        // 回路が切断されている場合は無視
+                    }
+                    catch (Exception)
+                    {
+                        // その他のエラーも無視
+                    }
                 }
             });
         };
+        TaskManagerService.SessionDataReceived += _taskDataReceivedHandler;
 
-        TaskManagerService.SessionUpdated += (sender, taskSession) =>
+        _taskSessionUpdatedHandler = (sender, taskSession) =>
         {
             InvokeAsync(() => StateHasChanged());
         };
+        TaskManagerService.SessionUpdated += _taskSessionUpdatedHandler;
 
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
@@ -494,9 +511,20 @@
         if (firstRender)
         {
             // キーボードショートカットを登録
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
-            // 通知用のDotNetRefを設定
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
+                // 通知用のDotNetRefを設定
+                await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
+            }
+            catch (JSDisconnectedException)
+            {
+                // 回路が切断されている場合は無視
+            }
+            catch (Exception)
+            {
+                // その他のエラーも無視
+            }
 
             // テキスト履歴を読み込み
             await InputHistoryService.LoadHistoryAsync();
@@ -507,8 +535,18 @@
 
             // 保存されたセッション情報をSessionManagerに復元
             var restoredSessionIds = new HashSet<Guid>();
+            var archivedSessions = new List<SessionInfo>();
+
             foreach (var sessionInfo in savedSessions)
             {
+                // アーカイブされたセッションはターミナルプロセスを起動しない
+                if (sessionInfo.IsArchived)
+                {
+                    archivedSessions.Add(sessionInfo);
+                    restoredSessionIds.Add(sessionInfo.SessionId);
+                    continue;
+                }
+
                 // 重複チェック（ホットリロード対策）
                 var existingSession = SessionManager.GetSessionInfo(sessionInfo.SessionId);
                 if (existingSession != null)
@@ -559,7 +597,9 @@
                 }
             }
 
+            // アクティブなセッションとアーカイブされたセッションをマージ
             sessions = SessionManager.GetAllSessions().ToList();
+            sessions.AddRange(archivedSessions);
 
             // 保存された展開状態を読み込んで適用
             var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
@@ -805,6 +845,7 @@
             // 新しいセッションをConPtyConnectionServiceに登録
             if (sessionInfo.ConPtySession != null)
             {
+                sessionInfo.LastConnectionTime = DateTime.Now;
                 ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
             }
 
@@ -901,6 +942,9 @@
         // ConPtySessionのリサイズトリックでバッファ内容を再取得
         if (selectedSession?.ConPtySession != null)
         {
+            // 過去バッファの誤検出を防ぐため、接続時刻を記録
+            selectedSession.LastConnectionTime = DateTime.Now;
+
             // リサイズ処理全体で不要なデータを破棄
             selectedSession.ConPtySession.SuspendOutput();
 
@@ -935,6 +979,7 @@
         var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
         if (latestSessionInfo?.ConPtySession != null)
         {
+            latestSessionInfo.LastConnectionTime = DateTime.Now;
             ConPtyConnection.SubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
         }
         else
@@ -995,6 +1040,9 @@
             var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
             if (sessionInfo != null)
             {
+                // バッファキャプチャが有効な場合は追記
+                sessionInfo.AppendToBuffer(data);
+
                 // Claude Codeの場合、"No conversation found to continue"エラーをチェック
                 if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
                     data.Contains("No conversation found to continue") &&
@@ -1086,7 +1134,19 @@
         if (sessionToRemove != null)
         {
             var sessionName = sessionToRemove.GetDisplayName();
-            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」を削除しますか？");
+            bool confirmed;
+            try
+            {
+                confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」を削除しますか？");
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+            catch (Exception)
+            {
+                return;
+            }
             if (!confirmed)
             {
                 return;
@@ -1162,7 +1222,19 @@
         if (sessionToArchive == null) return;
 
         var sessionName = sessionToArchive.GetDisplayName();
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」をアーカイブしますか？");
+        bool confirmed;
+        try
+        {
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」をアーカイブしますか？");
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            return;
+        }
         if (!confirmed) return;
 
         // ConPtySessionのクリーンアップ（アーカイブ時もセッションは停止）
@@ -1222,11 +1294,47 @@
         var sessionToRestore = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToRestore == null) return;
 
-        sessionToRestore.IsArchived = false;
-        sessionToRestore.ArchivedAt = null;
+        try
+        {
+            // SessionManagerにセッションを再作成（ターミナルプロセスを起動）
+            var newSession = await SessionManager.CreateSessionAsync(
+                sessionToRestore.SessionId,
+                sessionToRestore.FolderPath,
+                sessionToRestore.DisplayName ?? "",
+                sessionToRestore.TerminalType,
+                sessionToRestore.Options);
 
-        await LocalStorageService.SaveSessionsAsync(sessions);
-        StateHasChanged();
+            // メモ情報と親子関係を復元
+            var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
+            if (createdSession != null)
+            {
+                if (!string.IsNullOrEmpty(sessionToRestore.Memo))
+                {
+                    createdSession.Memo = sessionToRestore.Memo;
+                }
+                if (sessionToRestore.CheckedScripts != null && sessionToRestore.CheckedScripts.Count > 0)
+                {
+                    createdSession.CheckedScripts = new HashSet<string>(sessionToRestore.CheckedScripts);
+                }
+                if (sessionToRestore.ParentSessionId.HasValue)
+                {
+                    createdSession.ParentSessionId = sessionToRestore.ParentSessionId;
+                }
+                await SessionManager.SaveSessionInfoAsync(createdSession);
+            }
+
+            // sessionsリストからアーカイブされたセッションを削除し、新しいセッションを追加
+            sessions.Remove(sessionToRestore);
+            var activeSessionsList = SessionManager.GetAllSessions().ToList();
+            sessions = activeSessionsList.Concat(sessions.Where(s => s.IsArchived)).ToList();
+
+            await LocalStorageService.SaveSessionsAsync(sessions);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "アーカイブセッションの復元に失敗しました: {SessionId}", sessionId);
+        }
     }
 
     private async Task DeleteArchivedSession(Guid sessionId)
@@ -1234,9 +1342,8 @@
         var sessionToDelete = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (sessionToDelete == null) return;
 
-        // SessionManagerから完全に削除
-        await SessionManager.RemoveSessionAsync(sessionId);
-        sessions = SessionManager.GetAllSessions().ToList();
+        // sessionsリストから削除（アーカイブされたセッションはSessionManagerに登録されていない）
+        sessions.Remove(sessionToDelete);
 
         await LocalStorageService.SaveSessionsAsync(sessions);
         StateHasChanged();
@@ -1244,11 +1351,8 @@
 
     private async Task DeleteAllArchivedSessions()
     {
-        var archivedSessions = sessions.Where(s => s.IsArchived).ToList();
-        foreach (var session in archivedSessions)
-        {
-            await SessionManager.RemoveSessionAsync(session.SessionId);
-        }
+        // アーカイブされたセッションをsessionsリストから削除
+        sessions = sessions.Where(s => !s.IsArchived).ToList();
 
         sessions = SessionManager.GetAllSessions().ToList();
         await LocalStorageService.SaveSessionsAsync(sessions);
@@ -1412,6 +1516,7 @@
                 // ConPtyConnectionServiceに再登録
                 if (selectedSessionInfo?.ConPtySession != null)
                 {
+                    selectedSessionInfo.LastConnectionTime = DateTime.Now;
                     ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
@@ -1427,11 +1532,6 @@
             toast?.ShowError($"ターミナル再作成エラー: {ex.Message}");
         }
     }
-
-
-
-
-
 
 
 
@@ -1841,28 +1941,27 @@
             if (elapsedTime >= 5)
             {
                 // 5秒間更新がないため処理終了と判定
+                // ProcessingStartTimeから実際の経過時間を計算
+                int actualElapsedSeconds = 0;
+                if (session.ProcessingStartTime.HasValue)
+                {
+                    actualElapsedSeconds = (int)(DateTime.Now - session.ProcessingStartTime.Value).TotalSeconds;
+                }
 
-                // ステータスを直接クリア（UpdateSessionProcessingStatusの処理完了ロジックを実行）
+                // ステータスをクリア
                 session.ProcessingStatus = null;
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
-                session.ProcessingTokens = null;
-                session.ProcessingDirection = null;
                 session.LastProcessingUpdateTime = null;
-                session.LastProcessingSeconds = null;
-                session.LastProcessingTokens = null;
                 session.IsWaitingForUserInput = false;
 
-                if(activeSessionId != sessionId)
+                if (activeSessionId != sessionId)
                 {
                     session.HasNotificationPending = true;
                 }
 
-                // 処理完了の通知
-                if (!session.IsActive)
-                {
-                    await NotificationService.NotifyProcessingCompleteAsync(session, (int)elapsedTime)　;
-                }
+                // 処理完了の通知（アクティブセッションでも通知する）
+                await NotificationService.NotifyProcessingCompleteAsync(session, actualElapsedSeconds);
 
                 // タイマーを停止
                 OutputAnalyzerService.StopSessionTimer(sessionId);
@@ -1956,8 +2055,12 @@
             var newSession = await SessionManager.RecreateSessionAsync(sessionId, removeContinueOption: true);
             if (newSession != null)
            {
-
                 // 新しいセッションを購読
+                var targetSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+                if (targetSession != null)
+                {
+                    targetSession.LastConnectionTime = DateTime.Now;
+                }
                 ConPtyConnection.SubscribeToSession(sessionId, newSession);
                                 // セッションを起動
                 newSession.Start();
@@ -2807,6 +2910,18 @@
         // タスクランナーターミナルのクリーンアップ
         await CleanupTaskRunnerTerminal();
         
+        // TaskManagerServiceのイベントハンドラーを削除
+        if (_taskDataReceivedHandler != null)
+        {
+            TaskManagerService.SessionDataReceived -= _taskDataReceivedHandler;
+            _taskDataReceivedHandler = null;
+        }
+        if (_taskSessionUpdatedHandler != null)
+        {
+            TaskManagerService.SessionUpdated -= _taskSessionUpdatedHandler;
+            _taskSessionUpdatedHandler = null;
+        }
+
         // TaskManagerServiceのクリーンアップ
         await TaskManagerService.StopAllTasksAsync();
         TaskManagerService.Dispose();

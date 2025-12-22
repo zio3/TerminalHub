@@ -249,10 +249,41 @@
 
     private async Task LoadSettings()
     {
-        thresholdSeconds = Configuration.GetValue<int>("NotificationSettings:ProcessingTimeThresholdSeconds", 60);
-        webHookEnabled = Configuration.GetValue<bool>("NotificationSettings:WebHookSettings:Enabled", false);
-        webHookUrl = Configuration.GetValue<string>("NotificationSettings:WebHookSettings:Url") ?? "";
-        await Task.CompletedTask;
+        try
+        {
+            // LocalStorageから設定を読み込み
+            var settings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSettings");
+            if (settings.HasValue)
+            {
+                var s = settings.Value;
+                if (s.TryGetProperty("notifications", out var notifications))
+                {
+                    if (notifications.TryGetProperty("processingTimeThresholdSeconds", out var threshold))
+                    {
+                        thresholdSeconds = threshold.GetInt32();
+                    }
+                }
+                if (s.TryGetProperty("webhook", out var webhook))
+                {
+                    if (webhook.TryGetProperty("enabled", out var enabled))
+                    {
+                        webHookEnabled = enabled.GetBoolean();
+                    }
+                    if (webhook.TryGetProperty("url", out var url))
+                    {
+                        webHookUrl = url.GetString() ?? "";
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"設定読み込みエラー: {ex.Message}");
+            // デフォルト値を使用
+            thresholdSeconds = 5;
+            webHookEnabled = false;
+            webHookUrl = "";
+        }
     }
     
     private async Task CheckNotificationPermission()
@@ -310,21 +341,23 @@
                 saveSuccess = false;
                 return;
             }
-            
+
             if (webHookEnabled && string.IsNullOrWhiteSpace(webHookUrl))
             {
                 saveMessage = "WebHook URLを入力してください";
                 saveSuccess = false;
                 return;
             }
-            
-            // TODO: 実際の設定保存処理を実装
-            // 現在はappsettings.jsonに直接保存できないため、
-            // 実装時はLocalStorageやサーバー側のAPIを使用する必要があります
-            
-            saveMessage = "設定を保存しました（注：再起動すると元に戻ります）";
+
+            // LocalStorageに設定を保存
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateNotificationSettings",
+                true, thresholdSeconds);
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateWebhookSettings",
+                webHookEnabled, webHookUrl, null);
+
+            saveMessage = "設定を保存しました";
             saveSuccess = true;
-            
+
             // 3秒後にメッセージを消す
             _ = Task.Run(async () =>
             {
@@ -341,7 +374,6 @@
             saveMessage = $"保存エラー: {ex.Message}";
             saveSuccess = false;
         }
-        await Task.CompletedTask;
     }
     
     private string GetNotificationBadgeClass()

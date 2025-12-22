@@ -77,6 +77,7 @@
                                           @bind-StartupCommand="startupCommand"
                                           ClaudeOptions="claudeOptions"
                                           GeminiOptions="geminiOptions"
+                                          CodexOptions="codexOptions"
                                           DisableContinueOption="false" />
 
                     <ErrorAlert @bind-ErrorMessage="errorMessage" />
@@ -121,6 +122,7 @@
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
+    private SessionOptionsSelector.CodexOptionsData codexOptions = new();
     private string errorMessage = "";
     private bool restartSession = true;
 
@@ -166,6 +168,17 @@
                 {
                     YoloMode = options.ContainsKey("yolo") && options["yolo"] == "true",
                     SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true"
+                };
+            }
+            else if (selectedType == TerminalType.CodexCLI)
+            {
+                codexOptions = new SessionOptionsSelector.CodexOptionsData
+                {
+                    Mode = options.ContainsKey("mode") ? options["mode"] : "auto",
+                    SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "workspace-write",
+                    ApprovalPolicy = options.ContainsKey("approval-policy") ? options["approval-policy"] : "",
+                    NetworkAccess = options.ContainsKey("network-access") ? options["network-access"] : "",
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }
         }

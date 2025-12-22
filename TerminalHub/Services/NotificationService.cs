@@ -3,12 +3,17 @@ using Microsoft.JSInterop;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
 {
     public class NotificationService : INotificationService
     {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IJSRuntime _jsRuntime;
@@ -88,64 +93,7 @@ namespace TerminalHub.Services
 
         private async Task SendWebHookNotificationAsync(SessionInfo session, int elapsedSeconds, WebhookSettings webhookSettings)
         {
-            try
-            {
-                var url = webhookSettings.Url;
-                if (string.IsNullOrEmpty(url))
-                {
-                    _logger.LogWarning("WebHook URLが設定されていません");
-                    return;
-                }
-
-                var httpClient = _httpClientFactory.CreateClient();
-
-                // ヘッダーを設定（Content-Type以外）
-                if (webhookSettings.Headers != null)
-                {
-                    foreach (var header in webhookSettings.Headers)
-                    {
-                        // Content-Typeは後でStringContentで設定されるためスキップ
-                        if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                        {
-                            httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
-                        }
-                    }
-                }
-
-                // ペイロードを作成
-                var payload = new
-                {
-                    sessionId = session?.SessionId ?? Guid.Empty,
-                    sessionName = session?.GetDisplayName() ?? "不明なセッション",
-                    terminalType = session?.TerminalType.ToString() ?? "Unknown",
-                    elapsedSeconds = elapsedSeconds,
-                    elapsedMinutes = Math.Round(elapsedSeconds / 60.0, 2),
-                    timestamp = DateTime.UtcNow,
-                    folderPath = session?.FolderPath ?? ""
-                };
-
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                _logger.LogInformation($"WebHook送信中: {url}");
-                _logger.LogInformation($"ペイロード: {json}");
-                
-                var response = await httpClient.PostAsync(url, content);
-                
-                if (!response.IsSuccessStatusCode)
-                {
-                    var responseBody = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"WebHook呼び出しが失敗しました: {response.StatusCode}, Body: {responseBody}");
-                }
-                else
-                {
-                    _logger.LogInformation($"WebHook呼び出しが成功しました: {url} - Status: {response.StatusCode}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "WebHook通知の送信に失敗しました");
-            }
+            await SendWebHookEventAsync(session, "complete", elapsedSeconds, webhookSettings);
         }
 
         public async Task<bool> RequestBrowserNotificationPermissionAsync()
@@ -168,9 +116,9 @@ namespace TerminalHub.Services
             {
                 var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getNotificationSettings");
                 if (settingsObj == null) return null;
-                
+
                 var settingsJson = JsonSerializer.Serialize(settingsObj);
-                return JsonSerializer.Deserialize<NotificationSettings>(settingsJson);
+                return JsonSerializer.Deserialize<NotificationSettings>(settingsJson, JsonOptions);
             }
             catch (Exception ex)
             {
@@ -185,14 +133,84 @@ namespace TerminalHub.Services
             {
                 var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getWebhookSettings");
                 if (settingsObj == null) return null;
-                
+
                 var settingsJson = JsonSerializer.Serialize(settingsObj);
-                return JsonSerializer.Deserialize<WebhookSettings>(settingsJson);
+                return JsonSerializer.Deserialize<WebhookSettings>(settingsJson, JsonOptions);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Webhook設定の取得に失敗しました");
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// タスク開始時にWebhook通知を送信
+        /// </summary>
+        public async Task NotifyProcessingStartAsync(SessionInfo session)
+        {
+            var webhookSettings = await GetWebhookSettingsAsync();
+
+            if (webhookSettings?.Enabled != true || string.IsNullOrEmpty(webhookSettings.Url))
+            {
+                return;
+            }
+
+            await SendWebHookEventAsync(session, "start", null, webhookSettings);
+        }
+
+        private async Task SendWebHookEventAsync(SessionInfo session, string eventType, int? elapsedSeconds, WebhookSettings webhookSettings)
+        {
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+
+                // ヘッダーを設定
+                if (webhookSettings.Headers != null)
+                {
+                    foreach (var header in webhookSettings.Headers)
+                    {
+                        if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                        {
+                            httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
+                        }
+                    }
+                }
+
+                // ペイロードを作成
+                var payload = new
+                {
+                    eventType = eventType,  // "start" or "complete"
+                    sessionId = session?.SessionId ?? Guid.Empty,
+                    sessionName = session?.GetDisplayName() ?? "不明なセッション",
+                    terminalType = session?.TerminalType.ToString() ?? "Unknown",
+                    elapsedSeconds = elapsedSeconds,
+                    elapsedMinutes = elapsedSeconds.HasValue ? Math.Round(elapsedSeconds.Value / 60.0, 2) : (double?)null,
+                    timestamp = DateTime.UtcNow,
+                    folderPath = session?.FolderPath ?? ""
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                _logger.LogInformation($"WebHook送信中 ({eventType}): {webhookSettings.Url}");
+                _logger.LogDebug($"ペイロード: {json}");
+
+                var response = await httpClient.PostAsync(webhookSettings.Url, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync();
+                    _logger.LogError($"WebHook呼び出しが失敗しました: {response.StatusCode}, Body: {responseBody}");
+                }
+                else
+                {
+                    _logger.LogInformation($"WebHook呼び出しが成功しました ({eventType}): {webhookSettings.Url}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"WebHook通知の送信に失敗しました ({eventType})");
             }
         }
     }

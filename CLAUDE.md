@@ -111,3 +111,48 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
 - タスク選択時の自動ターミナル接続
 - LocalStorage経由の永続的なタスク選択状態
 - package.jsonファイルからのnpmスクリプトサポート
+
+### Webhook通知
+
+設定画面（通知タブ）からWebhook通知を有効にできます。設定はLocalStorageに保存されます。
+
+#### 設定方法
+1. 設定ダイアログを開く
+2. 「通知」タブを選択
+3. 「WebHook通知を有効にする」をオン
+4. URLを入力して保存
+
+#### Webhookペイロード仕様
+
+タスク開始・完了時に、設定されたURLにPOSTリクエストが送信されます。
+
+```json
+{
+  "eventType": "start" | "complete",
+  "sessionId": "guid",
+  "sessionName": "セッション名",
+  "terminalType": "ClaudeCode" | "GeminiCLI" | "CodexCLI" | "Terminal",
+  "elapsedSeconds": null | 123,
+  "elapsedMinutes": null | 2.05,
+  "timestamp": "2025-01-01T00:00:00Z",
+  "folderPath": "C:\\path\\to\\folder"
+}
+```
+
+| フィールド | 型 | 説明 |
+|-----------|------|------|
+| `eventType` | string | `"start"`: 処理開始, `"complete"`: 処理完了 |
+| `sessionId` | string | セッションのGUID |
+| `sessionName` | string | セッションの表示名 |
+| `terminalType` | string | ターミナルの種類 |
+| `elapsedSeconds` | int? | 処理時間（秒）※startでは`null` |
+| `elapsedMinutes` | float? | 処理時間（分）※startでは`null` |
+| `timestamp` | string | イベント発生時刻（UTC） |
+| `folderPath` | string | セッションの作業ディレクトリ |
+
+#### 通知タイミング
+- **start**: CLI（Claude Code/Gemini/Codex）が処理を開始した時
+- **complete**: 処理が完了した時（閾値秒数を超えた場合のみ）
+
+#### カスタムヘッダー
+現在はContent-Type: application/jsonが固定で送信されます。追加のカスタムヘッダーはLocalStorageから設定可能です（UI未実装）。
