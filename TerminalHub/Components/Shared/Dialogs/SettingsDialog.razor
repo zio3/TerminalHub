@@ -42,10 +42,17 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @(activeTab == "export" ? "active" : "")" 
-                                    type="button" 
+                            <button class="nav-link @(activeTab == "export" ? "active" : "")"
+                                    type="button"
                                     @onclick="@(() => activeTab = "export")">
                                 <i class="bi bi-download me-1"></i>エクスポート/インポート
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "special" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "special")">
+                                <i class="bi bi-wrench me-1"></i>特殊
                             </button>
                         </li>
                     </ul>
@@ -119,12 +126,12 @@
                         {
                             <div class="tab-pane fade show active">
                                 <h6 class="mb-3">データのエクスポート/インポート</h6>
-                                
+
                                 <!-- エクスポート -->
                                 <div class="mb-4">
                                     <h6 class="mb-2">エクスポート</h6>
                                     <p class="text-muted small">選択したカテゴリのデータをJSONファイルとしてダウンロードします。</p>
-                                    
+
                                     <div class="mb-3">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" @bind="exportCategories.notifications" id="exportNotifications">
@@ -151,23 +158,23 @@
                                             </label>
                                         </div>
                                     </div>
-                                    
+
                                     <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(!HasExportSelection)">
                                         <i class="bi bi-download me-1"></i>エクスポート
                                     </button>
                                 </div>
-                                
+
                                 <hr />
-                                
+
                                 <!-- インポート -->
                                 <div>
                                     <h6 class="mb-2">インポート</h6>
                                     <p class="text-muted small">JSONファイルを選択して設定をインポートします。</p>
-                                    
+
                                     <div class="mb-3">
                                         <InputFile OnChange="@LoadImportFile" accept=".json" class="form-control" />
                                     </div>
-                                    
+
                                     @if (importPreview != null)
                                     {
                                         <div class="alert alert-info">
@@ -181,11 +188,45 @@
                                                 }
                                             </small>
                                         </div>
-                                        
+
                                         <button class="btn btn-warning btn-sm" @onclick="ImportSettings">
                                             <i class="bi bi-upload me-1"></i>インポート実行
                                         </button>
                                     }
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "special")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">特殊設定</h6>
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">Claude Code モード切替キー</h6>
+                                    <p class="text-muted small">Claude Codeでモード切替に使用するキーボードショートカットを選択します。</p>
+
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="claudeModeSwitchKey"
+                                                   id="keyAltM" value="altM" checked="@(claudeModeSwitchKey == "altM")"
+                                                   @onchange="@(() => claudeModeSwitchKey = "altM")">
+                                            <label class="form-check-label" for="keyAltM">
+                                                <kbd>Alt+M</kbd> <span class="text-muted">（デフォルト）</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="claudeModeSwitchKey"
+                                                   id="keyShiftTab" value="shiftTab" checked="@(claudeModeSwitchKey == "shiftTab")"
+                                                   @onchange="@(() => claudeModeSwitchKey = "shiftTab")">
+                                            <label class="form-check-label" for="keyShiftTab">
+                                                <kbd>Shift+Tab</kbd>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        環境によってはAlt+Mが他の機能と競合する場合があります。その場合はShift+Tabをお試しください。
+                                    </p>
                                 </div>
                             </div>
                         }
@@ -221,6 +262,7 @@
     private string saveMessage = "";
     private bool saveSuccess = false;
     private string activeTab = "notifications";
+    private string claudeModeSwitchKey = "altM";
     
     // エクスポート/インポート用
     private class ExportCategories
@@ -274,6 +316,13 @@
                         webHookUrl = url.GetString() ?? "";
                     }
                 }
+                if (s.TryGetProperty("special", out var special))
+                {
+                    if (special.TryGetProperty("claudeModeSwitchKey", out var key))
+                    {
+                        claudeModeSwitchKey = key.GetString() ?? "altM";
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -283,6 +332,7 @@
             thresholdSeconds = 5;
             webHookEnabled = false;
             webHookUrl = "";
+            claudeModeSwitchKey = "altM";
         }
     }
     
@@ -354,6 +404,8 @@
                 true, thresholdSeconds);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateWebhookSettings",
                 webHookEnabled, webHookUrl, null);
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
+                claudeModeSwitchKey);
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;

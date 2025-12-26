@@ -238,6 +238,9 @@ window.terminalHubHelpers = {
                 headers: {
                     "Content-Type": "application/json"
                 }
+            },
+            special: {
+                claudeModeSwitchKey: "altM"
             }
         };
     },
@@ -280,5 +283,19 @@ window.terminalHubHelpers = {
     
     getWebhookSettings: function() {
         return this.getSettings().webhook;
+    },
+
+    updateSpecialSettings: function(claudeModeSwitchKey) {
+        const settings = this.getSettings();
+        if (!settings.special) {
+            settings.special = {};
+        }
+        settings.special.claudeModeSwitchKey = claudeModeSwitchKey;
+        this.saveSettings(settings);
+    },
+
+    getSpecialSettings: function() {
+        const settings = this.getSettings();
+        return settings.special || { claudeModeSwitchKey: "altM" };
     }
 };

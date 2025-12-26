@@ -219,11 +219,11 @@
                                         </button>
                                         @if (currentSession.TerminalType == TerminalType.ClaudeCode)
                                         {
-                                            <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")" 
-                                                    @onclick="SendModeSwitch" 
-                                                    title="モード切替 (Alt+M)"
+                                            <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")"
+                                                    @onclick="SendModeSwitch"
+                                                    title="@(claudeModeSwitchKey == "shiftTab" ? "モード切替 (Shift+Tab)" : "モード切替 (Alt+M)")"
                                                     style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
-                                                <i class="bi bi-arrow-repeat"></i> Alt+M
+                                                <i class="bi bi-arrow-repeat"></i> @(claudeModeSwitchKey == "shiftTab" ? "Shift+Tab" : "Alt+M")
                                             </button>
                                         }
                                         @if (showDevButton)
@@ -528,6 +528,20 @@
 
             // テキスト履歴を読み込み
             await InputHistoryService.LoadHistoryAsync();
+
+            // 特殊設定を読み込み
+            try
+            {
+                var specialSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSpecialSettings");
+                if (specialSettings.HasValue && specialSettings.Value.TryGetProperty("claudeModeSwitchKey", out var key))
+                {
+                    claudeModeSwitchKey = key.GetString() ?? "altM";
+                }
+            }
+            catch
+            {
+                // エラー時はデフォルト値を使用
+            }
 
             // ローカルストレージからセッション情報を復元
             var savedSessions = await LocalStorageService.LoadSessionsAsync();
@@ -1599,8 +1613,9 @@
             shouldPreventDefault = true;
             await SendEscape();
         }
-        // Alt+M: モード切替（ClaudeCodeモードのみ）
-        else if (e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey)
+        // モード切替（ClaudeCodeモードのみ）- Alt+M または Shift+Tab（設定による）
+        else if ((claudeModeSwitchKey == "altM" && e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey) ||
+                 (claudeModeSwitchKey == "shiftTab" && e.Key == "Tab" && e.ShiftKey && !e.CtrlKey && !e.AltKey))
         {
             var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
             if (currentSession?.TerminalType == TerminalType.ClaudeCode)
@@ -1644,6 +1659,7 @@
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
     private bool isCtrlCPressed = false;
+    private string claudeModeSwitchKey = "altM";
 
     private async Task SendCtrlC()
     {
