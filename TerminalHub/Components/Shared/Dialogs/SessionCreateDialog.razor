@@ -115,6 +115,7 @@
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
     private List<string> recentFolders = new();
     private const string RECENT_FOLDERS_KEY = "recentFolders";
+    private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
     private const int MAX_RECENT_FOLDERS = 20;
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
@@ -137,7 +138,36 @@
         if (firstRender)
         {
             await LoadRecentFolders();
+            await LoadLastSelectedTerminalType();
             StateHasChanged();
+        }
+    }
+
+    private async Task LoadLastSelectedTerminalType()
+    {
+        try
+        {
+            var savedType = await LocalStorage.GetAsync<int?>(LAST_TERMINAL_TYPE_KEY);
+            if (savedType.HasValue && Enum.IsDefined(typeof(TerminalType), savedType.Value))
+            {
+                selectedType = (TerminalType)savedType.Value;
+            }
+        }
+        catch
+        {
+            // エラーが発生してもデフォルト値を使用
+        }
+    }
+
+    private async Task SaveLastSelectedTerminalType(TerminalType type)
+    {
+        try
+        {
+            await LocalStorage.SetAsync(LAST_TERMINAL_TYPE_KEY, (int)type);
+        }
+        catch
+        {
+            // エラーが発生しても継続
         }
     }
 
@@ -296,7 +326,7 @@
     private void ResetForm()
     {
         folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        selectedType = TerminalType.Terminal;
+        // selectedType は保持する（最後に選択したタイプを継続）
         startupCommand = "";
         claudeCodeOptions = new();
         geminiOptions = new();
@@ -304,10 +334,10 @@
         pendingSessionCreation = false;
     }
 
-    private Task OnTerminalTypeChanged(TerminalType newType)
+    private async Task OnTerminalTypeChanged(TerminalType newType)
     {
         selectedType = newType;
-        return Task.CompletedTask;
+        await SaveLastSelectedTerminalType(newType);
     }
 
 }

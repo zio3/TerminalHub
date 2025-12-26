@@ -42,18 +42,23 @@ namespace TerminalHub.Constants
         public static string BuildClaudeCodeArgs(Dictionary<string, string> options)
         {
             var args = new List<string>();
-            
-            
+
+
             if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
             {
                 args.Add("--dangerously-skip-permissions");
             }
-            
+
             if (options.ContainsKey("continue") && options["continue"] == "true")
             {
                 args.Add("--continue");
             }
-            
+
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
+            {
+                args.Add(extraArgs.Trim());
+            }
+
             return string.Join(" ", args);
         }
 
@@ -70,10 +75,15 @@ namespace TerminalHub.Constants
             {
                 args.Add("-s");
             }
-            
+
             if (options.ContainsKey("continue") && options["continue"] == "true")
             {
                 args.Add("--resume latest");
+            }
+
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
+            {
+                args.Add(extraArgs.Trim());
             }
 
             return string.Join(" ", args);

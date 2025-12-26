@@ -159,7 +159,8 @@
                 claudeOptions = new SessionOptionsSelector.ClaudeCodeOptions
                 {
                     BypassMode = options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true",
-                    Continue = options.ContainsKey("continue") && options["continue"] == "true"
+                    Continue = options.ContainsKey("continue") && options["continue"] == "true",
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }
             else if (selectedType == TerminalType.GeminiCLI)
@@ -167,7 +168,8 @@
                 geminiOptions = new SessionOptionsSelector.GeminiOptionsData
                 {
                     YoloMode = options.ContainsKey("yolo") && options["yolo"] == "true",
-                    SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true"
+                    SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true",
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }
             else if (selectedType == TerminalType.CodexCLI)
