@@ -1,8 +1,11 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.JSInterop
+@using System.Diagnostics
+@using System.IO
 @inject ISessionManager SessionManager
 @inject IJSRuntime JSRuntime
+@inject ILogger<SessionSettingsDialog> Logger
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: rgba(0, 0, 0, 0.5);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -27,10 +30,15 @@
                                 <small class="text-muted">フォルダ:</small><br/>
                                 <div class="d-flex align-items-start">
                                     <code class="flex-grow-1 me-2 text-break" style="word-wrap: break-word; overflow-wrap: break-word;">@sessionInfo.FolderPath</code>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" 
-                                            @onclick="() => CopyToClipboard(sessionInfo.FolderPath)" 
+                                    <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                            @onclick="() => CopyToClipboard(sessionInfo.FolderPath)"
                                             title="フォルダパスをコピー">
                                         <i class="bi bi-clipboard"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0 ms-1"
+                                            @onclick="() => OpenFolder(sessionInfo.FolderPath)"
+                                            title="フォルダを開く">
+                                        <i class="bi bi-folder2-open"></i>
                                     </button>
                                 </div>
                             </div>
@@ -254,6 +262,21 @@
             {
                 // コピーに失敗した場合は何もしない
             }
+        }
+    }
+
+    private void OpenFolder(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Process.Start("explorer.exe", path);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "フォルダを開けませんでした: {Path}", path);
         }
     }
 
