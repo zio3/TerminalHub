@@ -19,6 +19,20 @@ namespace TerminalHub.Models
         TaskRunner
     }
 
+    public enum BottomPanelTabType
+    {
+        TextInput,
+        DosTerminal
+    }
+
+    public class BottomPanelTabInfo
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public BottomPanelTabType Type { get; set; }
+        public string DisplayName { get; set; } = "";
+        public bool IsDefault { get; set; } = false;
+    }
+
     public class SessionInfo
     {
         public Guid SessionId { get; set; } = Guid.NewGuid();

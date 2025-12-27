@@ -2,6 +2,7 @@
 @page "/"
 @using TerminalHub.Components.Shared
 @using TerminalHub.Components.Shared.Dialogs
+@using TerminalHub.Components.Shared.BottomPanels
 @using TerminalHub.Constants
 @using TerminalHub.Models
 @using TerminalHub.Services
@@ -93,162 +94,80 @@
                     {
                         <!-- タブヘッダー -->
                         <ul class="nav nav-tabs px-3 pt-2" style="flex-shrink: 0;">
-                            <li class="nav-item">
-                                <a class="nav-link @(bottomPanelTab == BottomPanelTab.TextInput ? "active" : "")" 
-                                   href="#" 
-                                   @onclick:preventDefault="true"
-                                   @onclick="() => bottomPanelTab = BottomPanelTab.TextInput">
-                                    <i class="bi bi-chat-left-text"></i> テキスト入力
+                            @foreach (var tab in bottomPanelTabs)
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link @(activeBottomPanelTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
+                                       href="#"
+                                       @onclick:preventDefault="true"
+                                       @onclick="async () => await SelectBottomPanelTab(tab.Id)">
+                                        <i class="bi @GetBottomPanelTabIcon(tab.Type)"></i>
+                                        <span>@tab.DisplayName</span>
+                                        @if (!tab.IsDefault)
+                                        {
+                                            <button type="button" class="btn-close btn-close-white ms-1" style="font-size: 0.6rem; opacity: 0.7;"
+                                                    @onclick:preventDefault="true"
+                                                    @onclick:stopPropagation="true"
+                                                    @onclick="async () => await RemoveBottomPanelTab(tab.Id)"
+                                                    title="タブを閉じる">
+                                            </button>
+                                        }
+                                    </a>
+                                </li>
+                            }
+                            <!-- タブ追加ドロップダウン -->
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" @onclick:preventDefault="true">
+                                    <i class="bi bi-plus-lg"></i>
                                 </a>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="#" @onclick:preventDefault="true"
+                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.TextInput)">
+                                            <i class="bi bi-chat-left-text me-2"></i>テキスト入力を追加
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#" @onclick:preventDefault="true"
+                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.DosTerminal)">
+                                            <i class="bi bi-terminal me-2"></i>DOSターミナルを追加
+                                        </a>
+                                    </li>
+                                </ul>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link @(bottomPanelTab == BottomPanelTab.DosTerminal ? "active" : "")" 
-                                   href="#" 
-                                   @onclick:preventDefault="true"
-                                   @onclick="async () => await SwitchBottomPanelTab(BottomPanelTab.DosTerminal)">
-                                    <i class="bi bi-terminal"></i> DOSターミナル
-                                </a>
-                            </li>
-                            @* タスクランナータブは一時的に非表示
-                            <li class="nav-item">
-                                <a class="nav-link @(bottomPanelTab == BottomPanelTab.TaskRunner ? "active" : "")"
-                                   href="#"
-                                   @onclick:preventDefault="true"
-                                   @onclick="async () => await SwitchBottomPanelTab(BottomPanelTab.TaskRunner)">
-                                    <i class="bi bi-play-circle"></i> タスクランナー
-                                </a>
-                            </li>
-                            *@
                         </ul>
                         
                         <!-- タブコンテンツ -->
                         <div class="flex-grow-1" style="overflow-y: auto;">
-                            @if (bottomPanelTab == BottomPanelTab.TextInput)
-                            {
-                                <div class="p-3 h-100 d-flex flex-column">
-                                    <div class="flex-grow-1 d-flex flex-column">
-                                        <textarea id="inputText"
-                                          class="form-control flex-grow-1"
-                                          data-input-area
-                                          @bind="inputText"
-                                          @bind:event="oninput"
-                                          @onkeydown="OnTextAreaKeyDown"
-                                          @onkeydown:preventDefault="@shouldPreventDefault"
-                                          placeholder="@(GetPlaceholderText(currentSession.TerminalType))"
-                                          style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
-                                </textarea>
-                                
-                                <div class="mt-2 d-flex justify-content-between align-items-center">
-                                    <div class="d-flex align-items-center gap-3">
-                                        <div>
-                                            <kbd>Enter</kbd> 送信 | <kbd>Shift+Enter</kbd> 改行 | <kbd>Ctrl+↑↓</kbd> 履歴
-                                        </div>
-                                        @* タスク実行ドロップダウンは一時的に非表示
-                                        @if (checkedScripts.Count > 0 && npmScripts != null)
-                                        {
-                                            <div class="dropdown">
-                                                <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                    <i class="bi bi-play-fill"></i> タスク実行 (@checkedScripts.Count)
-                                                </button>
-                                                <ul class="dropdown-menu" style="min-width: 300px;">
-                                                    @foreach (var scriptName in checkedScripts.OrderBy(s => s))
-                                                    {
-                                                        @if (npmScripts.ContainsKey(scriptName))
-                                                        {
-                                                            <li class="px-2 py-1">
-                                                                @{
-                                                                    var ts = GetTaskSessionByScriptName(scriptName);
-                                                                    var isRunning = ts?.Status == TaskStatus.Running;
-                                                                }
-                                                                <div class="d-flex align-items-center justify-content-between">
-                                                                    <div class="flex-grow-1 me-2">
-                                                                        <div class="fw-bold">@scriptName</div>
-                                                                        <div class="small text-muted text-truncate" style="max-width: 200px;">@npmScripts[scriptName]</div>
-                                                                    </div>
-                                                                    <div class="btn-group btn-group-sm">
-                                                                        @if (!isRunning)
-                                                                        {
-                                                                            <button class="btn btn-success"
-                                                                                    @onclick="() => OnTaskButtonClick(scriptName)"
-                                                                                    @onclick:stopPropagation="true"
-                                                                                    title="実行">
-                                                                                <i class="bi bi-play-fill"></i>
-                                                                            </button>
-                                                                        }
-                                                                        else
-                                                                        {
-                                                                            <button class="btn btn-danger"
-                                                                                    @onclick="() => StopTaskFromTextInput(scriptName)"
-                                                                                    @onclick:stopPropagation="true"
-                                                                                    title="停止">
-                                                                                <i class="bi bi-stop-fill"></i>
-                                                                            </button>
-                                                                        }
-                                                                    </div>
-                                                                </div>
-                                                                @if (isRunning && ts?.StartTime.HasValue == true)
-                                                                {
-                                                                    <div class="small text-muted mt-1">
-                                                                        <i class="bi bi-clock"></i> @((DateTime.Now - ts.StartTime.Value).ToString(@"mm\:ss"))
-                                                                    </div>
-                                                                }
-                                                            </li>
-                                                            @if (scriptName != checkedScripts.OrderBy(s => s).Last())
-                                                            {
-                                                                <li><hr class="dropdown-divider my-1"></li>
-                                                            }
-                                                        }
-                                                    }
-                                                </ul>
-                                            </div>
-                                        }
-                                        *@
-                                    </div>
-                                    <div class="btn-group">
-                                        <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")" 
-                                                @onclick="SendCtrlC" 
-                                                title="強制中断 (Ctrl+C)"
-                                                style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
-                                            <i class="bi bi-x-octagon"></i> Ctrl+C
-                                        </button>
-                                        <button class="btn btn-secondary @(isEscapePressed ? "active" : "")" 
-                                                @onclick="SendEscape" 
-                                                title="中断 (Esc)"
-                                                style="@(isEscapePressed ? "transform: scale(0.95);" : "")">
-                                            <i class="bi bi-stop-circle"></i> Esc
-                                        </button>
-                                        @if (currentSession.TerminalType == TerminalType.ClaudeCode)
-                                        {
-                                            <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")"
-                                                    @onclick="SendModeSwitch"
-                                                    title="@(claudeModeSwitchKey == "shiftTab" ? "モード切替 (Shift+Tab)" : "モード切替 (Alt+M)")"
-                                                    style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
-                                                <i class="bi bi-arrow-repeat"></i> @(claudeModeSwitchKey == "shiftTab" ? "Shift+Tab" : "Alt+M")
-                                            </button>
-                                        }
-                                        @if (showDevButton)
-                                        {
-                                            <button class="btn btn-secondary" 
-                                                    @onclick="() => showDevWindow = !showDevWindow" 
-                                                    title="開発ツール">
-                                                <i class="bi bi-code-square"></i> Dev
-                                            </button>
-                                        }
-                                        <button class="btn btn-primary" @onclick="SendInput">
-                                            <i class="bi bi-send"></i> 送信
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            @{
+                                var activeTab = bottomPanelTabs.FirstOrDefault(t => t.Id == activeBottomPanelTabId);
                             }
-                            else if (bottomPanelTab == BottomPanelTab.DosTerminal)
+                            @if (activeTab != null)
                             {
-                                <div class="h-100" id="dos-terminal-container" style="background-color: #000; width: 100%; height: 100%;">
-                                    <!-- 単一のDOSターミナル -->
-                                </div>
+                                @if (activeTab.Type == BottomPanelTabType.TextInput)
+                                {
+                                    <TextInputPanel PanelId="@activeTab.Id"
+                                                    TerminalType="@currentSession.TerminalType"
+                                                    ClaudeModeSwitchKey="@claudeModeSwitchKey"
+                                                    ShowDevButton="@showDevButton"
+                                                    PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
+                                                    Text="@GetTextInputPanelText(activeTab.Id)"
+                                                    TextChanged="@(text => SetTextInputPanelText(activeTab.Id, text))"
+                                                    OnSendInput="HandleTextInputSend"
+                                                    OnCtrlC="SendCtrlC"
+                                                    OnEscape="SendEscape"
+                                                    OnModeSwitch="SendModeSwitch"
+                                                    OnDevToggle="() => showDevWindow = !showDevWindow" />
+                                }
+                                else if (activeTab.Type == BottomPanelTabType.DosTerminal)
+                                {
+                                    <DosTerminalPanel @ref="currentDosTerminalPanelRef"
+                                                      PanelId="@activeTab.Id"
+                                                      WorkingDirectory="@currentSession.FolderPath"
+                                                      DotNetRef="@dotNetRef" />
+                                }
                             }
-                            else if (bottomPanelTab == BottomPanelTab.TaskRunner)
+                            @if (bottomPanelTab == BottomPanelTab.TaskRunner)
                             {
                                 <div class="h-100 p-3 d-flex">
                                     <!-- npm scripts一覧 (30%) -->
@@ -417,9 +336,16 @@
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
-    private BottomPanelTab bottomPanelTab = BottomPanelTab.TextInput; // デフォルトはテキスト入力タブ
+    private BottomPanelTab bottomPanelTab = BottomPanelTab.TextInput; // デフォルトはテキスト入力タブ（互換性維持）
     private IJSObjectReference? singleDosTerminal; // 単一のDOSターミナルXTermインスタンス
     private Guid? currentDosTerminalSessionId; // 現在DOSターミナルに接続しているセッションID
+
+    // 動的下部パネルタブ
+    private List<BottomPanelTabInfo> bottomPanelTabs = new();
+    private string activeBottomPanelTabId = "default-text";
+    private Dictionary<string, DosTerminalPanel> dosTerminalPanelRefs = new();
+    private DosTerminalPanel? currentDosTerminalPanelRef;
+    private Dictionary<string, string> textInputPanelTexts = new();
     private bool shouldPreventDefault = false;
     private bool showDevWindow = false;
     private bool showDevButton = false;
@@ -543,6 +469,9 @@
                 // エラー時はデフォルト値を使用
             }
 
+            // 下部パネルタブを初期化
+            await InitializeBottomPanelTabs();
+
             // ローカルストレージからセッション情報を復元
             var savedSessions = await LocalStorageService.LoadSessionsAsync();
             var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
@@ -637,6 +566,9 @@
             // UIを更新
             StateHasChanged();
         }
+
+        // DOSターミナルパネルの参照を保存
+        StoreDosTerminalPanelRef();
     }
 
     [JSInvokable]
@@ -837,6 +769,161 @@
             }
         });
     }
+
+    #region 下部パネルタブ管理
+
+    private async Task InitializeBottomPanelTabs()
+    {
+        // デフォルトタブを設定
+        bottomPanelTabs = new List<BottomPanelTabInfo>
+        {
+            new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true },
+            new() { Id = "default-dos", Type = BottomPanelTabType.DosTerminal, DisplayName = "DOSターミナル", IsDefault = true }
+        };
+
+        // LocalStorageから追加タブを復元
+        try
+        {
+            var savedTabs = await LocalStorageService.GetAsync<List<BottomPanelTabInfo>>("bottomPanelTabs");
+            if (savedTabs != null)
+            {
+                bottomPanelTabs.AddRange(savedTabs.Where(t => !t.IsDefault));
+            }
+
+            var savedActiveId = await LocalStorageService.GetAsync<string>("activeBottomPanelTabId");
+            if (!string.IsNullOrEmpty(savedActiveId) && bottomPanelTabs.Any(t => t.Id == savedActiveId))
+            {
+                activeBottomPanelTabId = savedActiveId;
+            }
+        }
+        catch
+        {
+            // エラー時はデフォルト値を使用
+        }
+    }
+
+    private async Task SaveBottomPanelTabs()
+    {
+        try
+        {
+            // デフォルト以外のタブのみ保存
+            var tabsToSave = bottomPanelTabs.Where(t => !t.IsDefault).ToList();
+            await LocalStorageService.SetAsync("bottomPanelTabs", tabsToSave);
+            await LocalStorageService.SetAsync("activeBottomPanelTabId", activeBottomPanelTabId);
+        }
+        catch
+        {
+            // エラーは無視
+        }
+    }
+
+    private async Task AddBottomPanelTab(BottomPanelTabType type)
+    {
+        var count = bottomPanelTabs.Count(t => t.Type == type);
+        var displayName = type == BottomPanelTabType.TextInput
+            ? $"テキスト入力({count + 1})"
+            : $"DOSターミナル({count + 1})";
+
+        var newTab = new BottomPanelTabInfo
+        {
+            Id = Guid.NewGuid().ToString(),
+            Type = type,
+            DisplayName = displayName,
+            IsDefault = false
+        };
+
+        bottomPanelTabs.Add(newTab);
+        activeBottomPanelTabId = newTab.Id;
+
+        await SaveBottomPanelTabs();
+        StateHasChanged();
+    }
+
+    private async Task RemoveBottomPanelTab(string tabId)
+    {
+        var tab = bottomPanelTabs.FirstOrDefault(t => t.Id == tabId);
+        if (tab == null || tab.IsDefault) return;
+
+        // DOSターミナルパネルの破棄
+        if (tab.Type == BottomPanelTabType.DosTerminal && dosTerminalPanelRefs.TryGetValue(tabId, out var panel))
+        {
+            await panel.DisposeAsync();
+            dosTerminalPanelRefs.Remove(tabId);
+        }
+
+        bottomPanelTabs.Remove(tab);
+
+        // アクティブタブが削除された場合は最初のタブを選択
+        if (activeBottomPanelTabId == tabId)
+        {
+            activeBottomPanelTabId = bottomPanelTabs.FirstOrDefault()?.Id ?? "default-text";
+        }
+
+        await SaveBottomPanelTabs();
+        StateHasChanged();
+    }
+
+    private async Task SelectBottomPanelTab(string tabId)
+    {
+        activeBottomPanelTabId = tabId;
+        await SaveBottomPanelTabs();
+    }
+
+    private string GetBottomPanelTabIcon(BottomPanelTabType type)
+    {
+        return type == BottomPanelTabType.TextInput ? "bi-chat-left-text" : "bi-terminal";
+    }
+
+    private string GetTextInputPanelText(string panelId)
+    {
+        return textInputPanelTexts.TryGetValue(panelId, out var text) ? text : "";
+    }
+
+    private void SetTextInputPanelText(string panelId, string text)
+    {
+        textInputPanelTexts[panelId] = text;
+    }
+
+    private async Task HandleTextInputSend(string text)
+    {
+        if (activeSession == null) return;
+
+        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
+        if (currentSession == null) return;
+
+        // テキストがある場合は送信
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            try
+            {
+                await activeSession.WriteAsync(text);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+
+            // テキスト送信後、Enter送信前に0.2秒待機
+            await Task.Delay(200);
+        }
+
+        // Enterキーを送信（空の場合でも送信）
+        await SendEnterKeyDirect();
+    }
+
+    private void StoreDosTerminalPanelRef()
+    {
+        if (currentDosTerminalPanelRef != null)
+        {
+            var activeTab = bottomPanelTabs.FirstOrDefault(t => t.Id == activeBottomPanelTabId);
+            if (activeTab != null && activeTab.Type == BottomPanelTabType.DosTerminal)
+            {
+                dosTerminalPanelRefs[activeTab.Id] = currentDosTerminalPanelRef;
+            }
+        }
+    }
+
+    #endregion
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
     {

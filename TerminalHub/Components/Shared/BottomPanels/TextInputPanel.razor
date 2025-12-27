@@ -1,0 +1,190 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@inject IInputHistoryService InputHistoryService
+
+<div class="p-3 h-100 d-flex flex-column">
+    <div class="flex-grow-1 d-flex flex-column">
+        <textarea id="@($"inputText-{PanelId}")"
+                  class="form-control flex-grow-1"
+                  data-input-area
+                  @bind="inputText"
+                  @bind:event="oninput"
+                  @onkeydown="OnTextAreaKeyDown"
+                  @onkeydown:preventDefault="@shouldPreventDefault"
+                  placeholder="@PlaceholderText"
+                  style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
+        </textarea>
+
+        <div class="mt-2 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <div>
+                    <kbd>Enter</kbd> 送信 | <kbd>Shift+Enter</kbd> 改行 | <kbd>Ctrl+↑↓</kbd> 履歴
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")"
+                        @onclick="OnCtrlCClick"
+                        title="強制中断 (Ctrl+C)"
+                        style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
+                    <i class="bi bi-x-octagon"></i> Ctrl+C
+                </button>
+                <button class="btn btn-secondary @(isEscapePressed ? "active" : "")"
+                        @onclick="OnEscapeClick"
+                        title="中断 (Esc)"
+                        style="@(isEscapePressed ? "transform: scale(0.95);" : "")">
+                    <i class="bi bi-stop-circle"></i> Esc
+                </button>
+                @if (TerminalType == TerminalType.ClaudeCode)
+                {
+                    <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")"
+                            @onclick="OnModeSwitchClick"
+                            title="@(ClaudeModeSwitchKey == "shiftTab" ? "モード切替 (Shift+Tab)" : "モード切替 (Alt+M)")"
+                            style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
+                        <i class="bi bi-arrow-repeat"></i> @(ClaudeModeSwitchKey == "shiftTab" ? "Shift+Tab" : "Alt+M")
+                    </button>
+                }
+                @if (ShowDevButton)
+                {
+                    <button class="btn btn-secondary"
+                            @onclick="OnDevButtonClick"
+                            title="開発ツール">
+                        <i class="bi bi-code-square"></i> Dev
+                    </button>
+                }
+                <button class="btn btn-primary" @onclick="OnSendClick">
+                    <i class="bi bi-send"></i> 送信
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string PanelId { get; set; } = "";
+    [Parameter] public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
+    [Parameter] public string ClaudeModeSwitchKey { get; set; } = "altM";
+    [Parameter] public bool ShowDevButton { get; set; } = false;
+    [Parameter] public string PlaceholderText { get; set; } = "コマンドを入力...";
+
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public EventCallback<string> TextChanged { get; set; }
+
+    [Parameter] public EventCallback<string> OnSendInput { get; set; }
+    [Parameter] public EventCallback OnCtrlC { get; set; }
+    [Parameter] public EventCallback OnEscape { get; set; }
+    [Parameter] public EventCallback OnModeSwitch { get; set; }
+    [Parameter] public EventCallback OnDevToggle { get; set; }
+
+    private string inputText
+    {
+        get => Text;
+        set
+        {
+            if (Text != value)
+            {
+                Text = value;
+                TextChanged.InvokeAsync(value);
+            }
+        }
+    }
+    private bool shouldPreventDefault = false;
+    private bool isCtrlCPressed = false;
+    private bool isEscapePressed = false;
+    private bool isModeSwitchPressed = false;
+
+    private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
+    {
+        // Enter で送信（Shiftキーが押されていない場合）
+        if (e.Key == "Enter" && !e.ShiftKey && !e.CtrlKey && !e.AltKey)
+        {
+            shouldPreventDefault = true;
+            await SendInput();
+            shouldPreventDefault = false;
+        }
+        // Ctrl+C: 強制中断
+        else if (e.Key == "c" && e.CtrlKey && !e.AltKey && !e.ShiftKey)
+        {
+            shouldPreventDefault = true;
+            await OnCtrlCClick();
+        }
+        // Escape: 中断
+        else if (e.Key == "Escape")
+        {
+            shouldPreventDefault = true;
+            await OnEscapeClick();
+        }
+        // モード切替（ClaudeCodeモードのみ）- Alt+M または Shift+Tab（設定による）
+        else if ((ClaudeModeSwitchKey == "altM" && e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey) ||
+                 (ClaudeModeSwitchKey == "shiftTab" && e.Key == "Tab" && e.ShiftKey && !e.CtrlKey && !e.AltKey))
+        {
+            if (TerminalType == TerminalType.ClaudeCode)
+            {
+                shouldPreventDefault = true;
+                await OnModeSwitchClick();
+            }
+        }
+        // 履歴機能: 上矢印で前の履歴、下矢印で次の履歴
+        else if (e.Key == "ArrowUp" && e.CtrlKey)
+        {
+            shouldPreventDefault = true;
+            var historyText = InputHistoryService.NavigateHistory(-1);
+            if (historyText != null)
+                inputText = historyText;
+        }
+        else if (e.Key == "ArrowDown" && e.CtrlKey)
+        {
+            shouldPreventDefault = true;
+            var historyText = InputHistoryService.NavigateHistory(1);
+            if (historyText != null)
+                inputText = historyText;
+        }
+        else
+        {
+            shouldPreventDefault = false;
+        }
+    }
+
+    private async Task SendInput()
+    {
+        if (!string.IsNullOrEmpty(inputText))
+        {
+            InputHistoryService.AddToHistory(inputText);
+        }
+        await OnSendInput.InvokeAsync(inputText);
+        inputText = "";
+    }
+
+    private async Task OnSendClick()
+    {
+        await SendInput();
+    }
+
+    private async Task OnCtrlCClick()
+    {
+        isCtrlCPressed = true;
+        await OnCtrlC.InvokeAsync();
+        await Task.Delay(100);
+        isCtrlCPressed = false;
+    }
+
+    private async Task OnEscapeClick()
+    {
+        isEscapePressed = true;
+        await OnEscape.InvokeAsync();
+        await Task.Delay(100);
+        isEscapePressed = false;
+    }
+
+    private async Task OnModeSwitchClick()
+    {
+        isModeSwitchPressed = true;
+        await OnModeSwitch.InvokeAsync();
+        await Task.Delay(100);
+        isModeSwitchPressed = false;
+    }
+
+    private async Task OnDevButtonClick()
+    {
+        await OnDevToggle.InvokeAsync();
+    }
+}

@@ -1,0 +1,164 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@inject ILoggerFactory LoggerFactory
+@inject ILogger<DosTerminalPanel> Logger
+@implements IAsyncDisposable
+
+<div class="h-100" id="@ContainerId" style="background-color: #000; width: 100%; height: 100%;">
+    <!-- DOSターミナル -->
+</div>
+
+@code {
+    [Parameter] public string PanelId { get; set; } = "";
+    [Parameter] public string WorkingDirectory { get; set; } = "";
+    [Parameter] public object? DotNetRef { get; set; }
+
+    private ConPtySession? dosSession;
+    private IJSObjectReference? terminal;
+    private bool isInitialized = false;
+
+    private string ContainerId => $"dos-terminal-panel-{PanelId}";
+    private string TerminalId => $"dos-term-{PanelId}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isInitialized)
+        {
+            await InitializeTerminal();
+        }
+    }
+
+    private async Task InitializeTerminal()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(WorkingDirectory))
+            {
+                WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            }
+
+            // ConPTYセッション作成
+            var conPtyService = new ConPtyService(LoggerFactory.CreateLogger<ConPtyService>());
+            dosSession = await conPtyService.CreateSessionAsync("cmd.exe", "", WorkingDirectory, 120, 30);
+
+            dosSession.DataReceived += OnDataReceived;
+            dosSession.ProcessExited += OnProcessExited;
+            dosSession.Start();
+
+            // ConPTYの初期化が完了するまで少し待つ
+            await Task.Delay(100);
+
+            // DOM要素の存在を確認
+            var elementExists = await JSRuntime.InvokeAsync<bool>("eval", $@"
+                !!document.getElementById('{ContainerId}')
+            ");
+
+            if (!elementExists)
+            {
+                await Task.Delay(200);
+            }
+
+            // XTermを作成
+            terminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "terminalFunctions.createMultiSessionTerminal",
+                ContainerId,
+                TerminalId,
+                DotNetRef
+            );
+
+            // フォーカスとリサイズ
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                (function() {{
+                    const termObj = window.multiSessionTerminals && window.multiSessionTerminals['{TerminalId}'];
+                    if (termObj && termObj.terminal) {{
+                        termObj.terminal.focus();
+                        if (termObj.fitAddon) {{
+                            termObj.fitAddon.fit();
+                        }}
+                    }}
+                }})()
+            ");
+
+            isInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "DOSターミナルパネルの初期化エラー: {PanelId}", PanelId);
+        }
+    }
+
+    private async void OnDataReceived(object? sender, DataReceivedEventArgs args)
+    {
+        try
+        {
+            if (terminal != null)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await terminal.InvokeVoidAsync("write", args.Data);
+                });
+            }
+        }
+        catch (Exception)
+        {
+            // Ignore write errors
+        }
+    }
+
+    private void OnProcessExited(object? sender, EventArgs args)
+    {
+        Logger.LogInformation("DOSターミナルプロセスが終了しました: {PanelId}", PanelId);
+    }
+
+    public async Task WriteInput(string data)
+    {
+        if (dosSession != null)
+        {
+            await dosSession.WriteAsync(data);
+        }
+    }
+
+    public void SendResize(int cols, int rows)
+    {
+        dosSession?.Resize(cols, rows);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            // XTermの破棄
+            if (terminal != null)
+            {
+                await JSRuntime.InvokeVoidAsync("eval", $@"
+                    (function() {{
+                        const terminalId = '{TerminalId}';
+                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
+                        if (termObj) {{
+                            termObj.terminal.dispose();
+                            delete window.multiSessionTerminals[terminalId];
+                        }}
+                    }})()
+                ");
+
+                await terminal.DisposeAsync();
+                terminal = null;
+            }
+
+            // ConPTYセッションの破棄
+            if (dosSession != null)
+            {
+                dosSession.DataReceived -= OnDataReceived;
+                dosSession.ProcessExited -= OnProcessExited;
+                dosSession.Dispose();
+                dosSession = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "DOSターミナルパネルの破棄エラー: {PanelId}", PanelId);
+        }
+    }
+}
