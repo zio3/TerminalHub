@@ -76,7 +76,16 @@
                             <label class="form-label mb-0">ブラウザ通知</label>
                             <span class="badge @GetNotificationBadgeClass()">@notificationStatus</span>
                         </div>
-                        @if (notificationStatus == "未許可")
+                        @if (notificationStatus == "許可")
+                        {
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" @bind="browserNotificationEnabled" id="browserNotificationSwitch">
+                                <label class="form-check-label" for="browserNotificationSwitch">
+                                    ブラウザ通知を有効にする
+                                </label>
+                            </div>
+                        }
+                        else if (notificationStatus == "未許可")
                         {
                             <button class="btn btn-primary btn-sm" @onclick="RequestNotificationPermission">
                                 <i class="bi bi-bell me-1"></i>通知を許可する
@@ -257,6 +266,7 @@
 
     private string notificationStatus = "確認中...";
     private int thresholdSeconds = 60;
+    private bool browserNotificationEnabled = true;
     private bool webHookEnabled = false;
     private string webHookUrl = "";
     private string saveMessage = "";
@@ -300,6 +310,10 @@
                 var s = settings.Value;
                 if (s.TryGetProperty("notifications", out var notifications))
                 {
+                    if (notifications.TryGetProperty("enableBrowserNotifications", out var enabled))
+                    {
+                        browserNotificationEnabled = enabled.GetBoolean();
+                    }
                     if (notifications.TryGetProperty("processingTimeThresholdSeconds", out var threshold))
                     {
                         thresholdSeconds = threshold.GetInt32();
@@ -401,7 +415,7 @@
 
             // LocalStorageに設定を保存
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateNotificationSettings",
-                true, thresholdSeconds);
+                browserNotificationEnabled, thresholdSeconds);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateWebhookSettings",
                 webHookEnabled, webHookUrl, null);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
