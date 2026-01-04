@@ -376,6 +376,9 @@
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
 
+    // SessionManagerイベントハンドラー
+    private EventHandler? _sessionsChangedHandler;
+
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
@@ -439,6 +442,13 @@
         };
         HookNotificationService.OnHookNotification += _hookNotificationHandler;
 
+        // SessionManagerのセッション変更イベントを購読
+        _sessionsChangedHandler = (sender, args) =>
+        {
+            InvokeAsync(() => OnSessionsChanged());
+        };
+        SessionManager.OnSessionsChanged += _sessionsChangedHandler;
+
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
     }
@@ -483,82 +493,77 @@
             // 下部パネルタブを初期化
             await InitializeBottomPanelTabs();
 
-            // ローカルストレージからセッション情報を復元
-            var savedSessions = await LocalStorageService.LoadSessionsAsync();
-            var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
-
-            // 保存されたセッション情報をSessionManagerに復元
-            var restoredSessionIds = new HashSet<Guid>();
-            var archivedSessions = new List<SessionInfo>();
-
-            // Phase 1: 全セッションを高速に作成（Git情報はスキップ）
+            // SessionManagerにセッションが存在するかチェック
+            // 存在する場合は他のブラウザが既に起動しているため、LocalStorageからの読み込みはスキップ
             var sessionsToPopulateGitInfo = new List<Guid>();
 
-            foreach (var sessionInfo in savedSessions)
+            if (!SessionManager.HasSessions())
             {
-                // アーカイブされたセッションはターミナルプロセスを起動しない
-                if (sessionInfo.IsArchived)
-                {
-                    archivedSessions.Add(sessionInfo);
-                    restoredSessionIds.Add(sessionInfo.SessionId);
-                    continue;
-                }
+                // SessionManagerが空の場合のみLocalStorageから復元
+                var savedSessions = await LocalStorageService.LoadSessionsAsync();
 
-                // 重複チェック（ホットリロード対策）
-                var existingSession = SessionManager.GetSessionInfo(sessionInfo.SessionId);
-                if (existingSession != null)
+                foreach (var sessionInfo in savedSessions)
                 {
-                    restoredSessionIds.Add(sessionInfo.SessionId);
-                    continue;
-                }
-
-                // セッションを再作成（Git情報はスキップして高速化）
-                try
-                {
-                    var newSession = await SessionManager.CreateSessionAsync(
-                        sessionInfo.SessionId,
-                        sessionInfo.FolderPath,
-                        sessionInfo.DisplayName ?? "",
-                        sessionInfo.TerminalType,
-                        sessionInfo.Options,
-                        skipGitInfo: true);  // Git情報をスキップ
-
-                    // メモ情報と親子関係を復元
-                    var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
-                    if (createdSession != null)
+                    // アーカイブされたセッションはSessionManagerに直接追加
+                    if (sessionInfo.IsArchived)
                     {
-                        if (!string.IsNullOrEmpty(sessionInfo.Memo))
-                        {
-                            createdSession.Memo = sessionInfo.Memo;
-                        }
-
-                        // チェックされたスクリプトを復元
-                        if (sessionInfo.CheckedScripts != null && sessionInfo.CheckedScripts.Count > 0)
-                        {
-                            createdSession.CheckedScripts = new HashSet<string>(sessionInfo.CheckedScripts);
-                        }
-
-                        // 親子関係を復元
-                        if (sessionInfo.ParentSessionId.HasValue)
-                        {
-                            createdSession.ParentSessionId = sessionInfo.ParentSessionId;
-                        }
-
-                        await SessionManager.SaveSessionInfoAsync(createdSession);
+                        SessionManager.AddArchivedSession(sessionInfo);
+                        continue;
                     }
 
-                    restoredSessionIds.Add(newSession.SessionId);
-                    sessionsToPopulateGitInfo.Add(newSession.SessionId);
-                }
-                catch (Exception)
-                {
-                    // Failed to restore session
+                    // 重複チェック（ホットリロード対策）
+                    var existingSession = SessionManager.GetSessionInfo(sessionInfo.SessionId);
+                    if (existingSession != null)
+                    {
+                        continue;
+                    }
+
+                    // セッションを再作成（Git情報はスキップして高速化）
+                    try
+                    {
+                        var newSession = await SessionManager.CreateSessionAsync(
+                            sessionInfo.SessionId,
+                            sessionInfo.FolderPath,
+                            sessionInfo.DisplayName ?? "",
+                            sessionInfo.TerminalType,
+                            sessionInfo.Options,
+                            skipGitInfo: true);  // Git情報をスキップ
+
+                        // メモ情報と親子関係を復元
+                        var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
+                        if (createdSession != null)
+                        {
+                            if (!string.IsNullOrEmpty(sessionInfo.Memo))
+                            {
+                                createdSession.Memo = sessionInfo.Memo;
+                            }
+
+                            // チェックされたスクリプトを復元
+                            if (sessionInfo.CheckedScripts != null && sessionInfo.CheckedScripts.Count > 0)
+                            {
+                                createdSession.CheckedScripts = new HashSet<string>(sessionInfo.CheckedScripts);
+                            }
+
+                            // 親子関係を復元
+                            if (sessionInfo.ParentSessionId.HasValue)
+                            {
+                                createdSession.ParentSessionId = sessionInfo.ParentSessionId;
+                            }
+
+                            await SessionManager.SaveSessionInfoAsync(createdSession);
+                        }
+
+                        sessionsToPopulateGitInfo.Add(newSession.SessionId);
+                    }
+                    catch (Exception)
+                    {
+                        // Failed to restore session
+                    }
                 }
             }
 
-            // アクティブなセッションとアーカイブされたセッションをマージ
+            // SessionManagerから全セッションを取得（アーカイブ含む）
             sessions = SessionManager.GetAllSessions().ToList();
-            sessions.AddRange(archivedSessions);
 
             // 保存された展開状態を読み込んで適用
             var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
@@ -574,6 +579,7 @@
             SetupConPtyConnectionEventHandlers();
 
             // 保存されたアクティブセッションがあれば選択
+            var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
             if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
             {
                 await SelectSession(savedActiveId.Value);
@@ -1372,19 +1378,10 @@
         }
         if (!confirmed) return;
 
-        // ConPtySessionのクリーンアップ（アーカイブ時もセッションは停止）
+        // DOSターミナルのクリーンアップ
         if (currentDosTerminalSessionId == sessionId)
         {
             await CleanupSingleDosTerminal();
-        }
-
-        sessionToArchive.DosTerminalConPtySession?.Dispose();
-        sessionToArchive.DosTerminalConPtySession = null;
-
-        if (sessionToArchive.ConPtySession != null)
-        {
-            sessionToArchive.ConPtySession.Dispose();
-            sessionToArchive.ConPtySession = null;
         }
 
         // セッションのタイマーを停止
@@ -1400,11 +1397,11 @@
             }
         }
 
-        // アーカイブフラグを設定
-        sessionToArchive.IsArchived = true;
-        sessionToArchive.ArchivedAt = DateTime.Now;
+        // SessionManagerでアーカイブ処理（ConPtySessionの破棄含む）
+        SessionManager.ArchiveSession(sessionId);
 
-        // ローカルストレージを更新
+        // ローカルストレージを更新（再起動時の復元用）
+        sessions = SessionManager.GetAllSessions().ToList();
         await LocalStorageService.SaveSessionsAsync(sessions);
 
         if (activeSessionId == sessionId)
@@ -1414,7 +1411,7 @@
             await LocalStorageService.SaveActiveSessionIdAsync(null);
 
             // アーカイブされていない他のセッションがあれば最初のものを選択
-            var activeSessionsList = sessions.Where(s => !s.IsArchived).ToList();
+            var activeSessionsList = SessionManager.GetActiveSessions().ToList();
             if (activeSessionsList.Any())
             {
                 await SelectSession(activeSessionsList.First().SessionId);
@@ -1426,43 +1423,20 @@
 
     private async Task RestoreArchivedSession(Guid sessionId)
     {
-        var sessionToRestore = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionToRestore == null) return;
-
         try
         {
-            // SessionManagerにセッションを再作成（ターミナルプロセスを起動）
-            var newSession = await SessionManager.CreateSessionAsync(
-                sessionToRestore.SessionId,
-                sessionToRestore.FolderPath,
-                sessionToRestore.DisplayName ?? "",
-                sessionToRestore.TerminalType,
-                sessionToRestore.Options);
-
-            // メモ情報と親子関係を復元
-            var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
-            if (createdSession != null)
+            // SessionManagerでアーカイブから復元
+            var restoredSession = await SessionManager.RestoreArchivedSessionAsync(sessionId);
+            if (restoredSession == null)
             {
-                if (!string.IsNullOrEmpty(sessionToRestore.Memo))
-                {
-                    createdSession.Memo = sessionToRestore.Memo;
-                }
-                if (sessionToRestore.CheckedScripts != null && sessionToRestore.CheckedScripts.Count > 0)
-                {
-                    createdSession.CheckedScripts = new HashSet<string>(sessionToRestore.CheckedScripts);
-                }
-                if (sessionToRestore.ParentSessionId.HasValue)
-                {
-                    createdSession.ParentSessionId = sessionToRestore.ParentSessionId;
-                }
-                await SessionManager.SaveSessionInfoAsync(createdSession);
+                Logger.LogWarning("アーカイブセッションの復元に失敗しました: {SessionId}", sessionId);
+                return;
             }
 
-            // sessionsリストからアーカイブされたセッションを削除し、新しいセッションを追加
-            sessions.Remove(sessionToRestore);
-            var activeSessionsList = SessionManager.GetAllSessions().ToList();
-            sessions = activeSessionsList.Concat(sessions.Where(s => s.IsArchived)).ToList();
+            // SessionManagerから最新のセッションリストを取得
+            sessions = SessionManager.GetAllSessions().ToList();
 
+            // ローカルストレージを更新
             await LocalStorageService.SaveSessionsAsync(sessions);
             StateHasChanged();
         }
@@ -1474,11 +1448,11 @@
 
     private async Task DeleteArchivedSession(Guid sessionId)
     {
-        var sessionToDelete = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionToDelete == null) return;
+        // SessionManagerから完全削除
+        SessionManager.DeleteSession(sessionId);
 
-        // sessionsリストから削除（アーカイブされたセッションはSessionManagerに登録されていない）
-        sessions.Remove(sessionToDelete);
+        // SessionManagerから最新のセッションリストを取得
+        sessions = SessionManager.GetAllSessions().ToList();
 
         await LocalStorageService.SaveSessionsAsync(sessions);
         StateHasChanged();
@@ -1486,17 +1460,23 @@
 
     private async Task DeleteAllArchivedSessions()
     {
-        // アーカイブされたセッションをsessionsリストから削除
-        sessions = sessions.Where(s => !s.IsArchived).ToList();
+        // アーカイブされた全セッションを削除
+        var archivedSessions = SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
+        foreach (var session in archivedSessions)
+        {
+            SessionManager.DeleteSession(session.SessionId);
+        }
 
+        // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
+
         await LocalStorageService.SaveSessionsAsync(sessions);
         StateHasChanged();
     }
 
     private List<SessionInfo> GetArchivedSessions()
     {
-        return sessions.Where(s => s.IsArchived).ToList();
+        return SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
     }
 
     [JSInvokable]
@@ -2115,6 +2095,16 @@
                 OutputAnalyzerService.ResetSessionTimer(sessionId);
             }
         }
+    }
+
+    /// <summary>
+    /// SessionManagerからセッション変更通知を受け取ったときの処理
+    /// </summary>
+    private void OnSessionsChanged()
+    {
+        // SessionManagerから最新のセッションリストを取得
+        sessions = SessionManager.GetAllSessions().ToList();
+        StateHasChanged();
     }
 
     private async Task OnHookNotification(HookNotification notification)
@@ -3113,6 +3103,13 @@
         {
             HookNotificationService.OnHookNotification -= _hookNotificationHandler;
             _hookNotificationHandler = null;
+        }
+
+        // SessionManagerのイベントハンドラーを削除
+        if (_sessionsChangedHandler != null)
+        {
+            SessionManager.OnSessionsChanged -= _sessionsChangedHandler;
+            _sessionsChangedHandler = null;
         }
 
         // TaskManagerServiceのクリーンアップ

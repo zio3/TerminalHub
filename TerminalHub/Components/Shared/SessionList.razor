@@ -296,7 +296,8 @@
     
     private bool HasChildren(SessionInfo session)
     {
-        return Sessions.Any(s => s.ParentSessionId == session.SessionId);
+        // アーカイブされていない子セッションのみを判定
+        return Sessions.Any(s => s.ParentSessionId == session.SessionId && !s.IsArchived);
     }
     
     private async Task ToggleExpanded(Guid sessionId)
@@ -314,7 +315,8 @@
     
     private int GetChildrenCount(SessionInfo session)
     {
-        return Sessions.Count(s => s.ParentSessionId == session.SessionId);
+        // アーカイブされていない子セッションのみをカウント
+        return Sessions.Count(s => s.ParentSessionId == session.SessionId && !s.IsArchived);
     }
 
     private List<SessionInfo> GetFilteredSessions()

@@ -11,6 +11,11 @@ namespace TerminalHub.Services
 {
     public interface ISessionManager
     {
+        /// <summary>
+        /// セッションが変更されたときに発火するイベント（追加・削除・アーカイブなど）
+        /// </summary>
+        event EventHandler? OnSessionsChanged;
+
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options, bool skipGitInfo = false);
 
@@ -20,7 +25,17 @@ namespace TerminalHub.Services
         Task PopulateGitInfoForSessionAsync(Guid sessionId);
         Task<bool> RemoveSessionAsync(Guid sessionId);
         Task<ConPtySession?> GetSessionAsync(Guid sessionId);
+
+        /// <summary>
+        /// 全セッションを取得（アーカイブ含む）
+        /// </summary>
         IEnumerable<SessionInfo> GetAllSessions();
+
+        /// <summary>
+        /// アクティブなセッションのみ取得（アーカイブ除外）
+        /// </summary>
+        IEnumerable<SessionInfo> GetActiveSessions();
+
         SessionInfo? GetSessionInfo(Guid sessionId);
         Task<bool> SetActiveSessionAsync(Guid sessionId);
         Guid? GetActiveSessionId();
@@ -31,8 +46,31 @@ namespace TerminalHub.Services
         Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
         Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false);
         Task<bool> RestartSessionAsync(Guid sessionId);
-        // event EventHandler<string>? ActiveSessionChanged;
-        
+
+        /// <summary>
+        /// セッションが存在するかどうか
+        /// </summary>
+        bool HasSessions();
+
+        /// <summary>
+        /// アーカイブセッションを追加（LocalStorageからの復元用）
+        /// </summary>
+        void AddArchivedSession(SessionInfo sessionInfo);
+
+        /// <summary>
+        /// セッションをアーカイブ
+        /// </summary>
+        void ArchiveSession(Guid sessionId);
+
+        /// <summary>
+        /// アーカイブからセッションを復元
+        /// </summary>
+        Task<SessionInfo?> RestoreArchivedSessionAsync(Guid sessionId);
+
+        /// <summary>
+        /// セッションを完全削除（アーカイブ含む）
+        /// </summary>
+        void DeleteSession(Guid sessionId);
     }
 
     public class SessionManager : ISessionManager, IDisposable
@@ -48,6 +86,11 @@ namespace TerminalHub.Services
         private readonly IServer? _server;
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
+
+        /// <summary>
+        /// セッションが変更されたときに発火するイベント
+        /// </summary>
+        public event EventHandler? OnSessionsChanged;
         private readonly int _maxSessions;
 
         // public event EventHandler<string>? ActiveSessionChanged;
@@ -197,6 +240,8 @@ namespace TerminalHub.Services
                 _initializationLocks[sessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
                 _logger.LogInformation($"Session info created successfully: {sessionInfo.SessionId} ({terminalType})");
+
+                NotifySessionsChanged();
                 return sessionInfo;
             }
             catch (DirectoryNotFoundException)
@@ -306,6 +351,11 @@ namespace TerminalHub.Services
                 _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
             }
 
+            if (removed)
+            {
+                NotifySessionsChanged();
+            }
+
             return Task.FromResult(removed);
         }
 
@@ -397,6 +447,11 @@ namespace TerminalHub.Services
         public IEnumerable<SessionInfo> GetAllSessions()
         {
             return _sessionInfos.Values.OrderBy(s => s.CreatedAt);
+        }
+
+        public IEnumerable<SessionInfo> GetActiveSessions()
+        {
+            return _sessionInfos.Values.Where(s => !s.IsArchived).OrderBy(s => s.CreatedAt);
         }
 
         public SessionInfo? GetSessionInfo(Guid sessionId)
@@ -801,6 +856,163 @@ namespace TerminalHub.Services
             {
                 _logger.LogError(ex, "セッション再起動でエラーが発生しました: {SessionId}", sessionId);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// セッションが存在するかどうか
+        /// </summary>
+        public bool HasSessions()
+        {
+            return !_sessionInfos.IsEmpty;
+        }
+
+        /// <summary>
+        /// アーカイブセッションを追加（LocalStorageからの復元用）
+        /// </summary>
+        public void AddArchivedSession(SessionInfo sessionInfo)
+        {
+            if (sessionInfo == null) return;
+
+            // アーカイブフラグを確認
+            if (!sessionInfo.IsArchived)
+            {
+                sessionInfo.IsArchived = true;
+                sessionInfo.ArchivedAt = DateTime.Now;
+            }
+
+            _sessionInfos[sessionInfo.SessionId] = sessionInfo;
+            _logger.LogInformation("アーカイブセッションを追加しました: {SessionId}", sessionInfo.SessionId);
+
+            NotifySessionsChanged();
+        }
+
+        /// <summary>
+        /// セッションをアーカイブ
+        /// </summary>
+        public void ArchiveSession(Guid sessionId)
+        {
+            if (!_sessionInfos.TryGetValue(sessionId, out var sessionInfo))
+            {
+                _logger.LogWarning("アーカイブするセッションが見つかりません: {SessionId}", sessionId);
+                return;
+            }
+
+            // ConPtyセッションを破棄
+            if (_sessions.TryRemove(sessionId, out var conPtySession))
+            {
+                conPtySession.Dispose();
+            }
+
+            if (sessionInfo.ConPtySession != null)
+            {
+                sessionInfo.ConPtySession.Dispose();
+                sessionInfo.ConPtySession = null;
+            }
+
+            if (sessionInfo.DosTerminalConPtySession != null)
+            {
+                sessionInfo.DosTerminalConPtySession.Dispose();
+                sessionInfo.DosTerminalConPtySession = null;
+            }
+
+            // 初期化ロックを削除
+            if (_initializationLocks.TryRemove(sessionId, out var initLock))
+            {
+                initLock.Dispose();
+            }
+
+            // アーカイブフラグを設定
+            sessionInfo.IsArchived = true;
+            sessionInfo.ArchivedAt = DateTime.Now;
+
+            _logger.LogInformation("セッションをアーカイブしました: {SessionId}", sessionId);
+
+            NotifySessionsChanged();
+        }
+
+        /// <summary>
+        /// アーカイブからセッションを復元
+        /// </summary>
+        public async Task<SessionInfo?> RestoreArchivedSessionAsync(Guid sessionId)
+        {
+            if (!_sessionInfos.TryGetValue(sessionId, out var archivedSession))
+            {
+                _logger.LogWarning("復元するセッションが見つかりません: {SessionId}", sessionId);
+                return null;
+            }
+
+            if (!archivedSession.IsArchived)
+            {
+                _logger.LogWarning("セッションはアーカイブされていません: {SessionId}", sessionId);
+                return archivedSession;
+            }
+
+            // フォルダが存在するか確認
+            if (!Directory.Exists(archivedSession.FolderPath))
+            {
+                _logger.LogWarning("セッションのフォルダが存在しません: {FolderPath}", archivedSession.FolderPath);
+                return null;
+            }
+
+            // アーカイブフラグをクリア
+            archivedSession.IsArchived = false;
+            archivedSession.ArchivedAt = null;
+
+            // 初期化ロックを作成
+            _initializationLocks[sessionId] = new SemaphoreSlim(1, 1);
+
+            // Git情報を更新
+            await PopulateGitInfoForSessionAsync(sessionId);
+
+            _logger.LogInformation("セッションを復元しました: {SessionId}", sessionId);
+
+            NotifySessionsChanged();
+
+            return archivedSession;
+        }
+
+        /// <summary>
+        /// セッションを完全削除（アーカイブ含む）
+        /// </summary>
+        public void DeleteSession(Guid sessionId)
+        {
+            // ConPtyセッションが存在する場合は削除
+            if (_sessions.TryRemove(sessionId, out var session))
+            {
+                session.Dispose();
+            }
+
+            // SessionInfoを削除
+            if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
+            {
+                sessionInfo.ConPtySession?.Dispose();
+                sessionInfo.DosTerminalConPtySession?.Dispose();
+            }
+
+            // 初期化ロックを削除
+            if (_initializationLocks.TryRemove(sessionId, out var initLock))
+            {
+                initLock.Dispose();
+            }
+
+            _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
+
+            NotifySessionsChanged();
+        }
+
+        /// <summary>
+        /// セッション変更イベントを発火
+        /// </summary>
+        private void NotifySessionsChanged()
+        {
+            try
+            {
+                OnSessionsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "セッション変更イベントの発火中にエラーが発生しました");
             }
         }
 
