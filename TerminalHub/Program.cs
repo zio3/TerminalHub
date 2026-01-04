@@ -16,6 +16,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// SignalRのメッセージサイズ制限を増加（デフォルト32KBでは不足）
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+});
+
 // ConPtyService（Windows専用）
 builder.Services.AddSingleton<IConPtyService, ConPtyService>();
 
@@ -73,8 +79,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
-
+// HTTPSリダイレクトは無効化（ローカル環境での使用を想定）
+// app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 

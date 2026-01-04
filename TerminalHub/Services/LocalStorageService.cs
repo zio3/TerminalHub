@@ -63,18 +63,24 @@ namespace TerminalHub.Services
         {
             try
             {
+                _logger.LogInformation("LoadSessionsAsync: 開始");
                 var json = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", SessionsKey);
+                _logger.LogInformation("LoadSessionsAsync: LocalStorageから取得完了, length={Length}", json?.Length ?? 0);
+
                 if (string.IsNullOrEmpty(json))
                 {
+                    _logger.LogInformation("LoadSessionsAsync: データなし");
                     return new List<SessionInfo>();
                 }
 
+                _logger.LogInformation("LoadSessionsAsync: デシリアライズ開始");
                 var sessions = JsonSerializer.Deserialize<List<SessionInfo>>(json, _jsonOptions);
+                _logger.LogInformation("LoadSessionsAsync: デシリアライズ完了, count={Count}", sessions?.Count ?? 0);
                 return sessions ?? new List<SessionInfo>();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading sessions from localStorage");
+                _logger.LogError(ex, "LoadSessionsAsync: エラー発生");
                 return new List<SessionInfo>();
             }
         }
