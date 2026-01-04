@@ -7,6 +7,12 @@
 .dotnet-process.json
 .portconfig.json
 
+# Windows null device file (誤って作成されたファイル)
+nul
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # User-specific files
 *.rsuser
 *.suo
