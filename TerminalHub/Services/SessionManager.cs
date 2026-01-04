@@ -3,6 +3,8 @@ using TerminalHub.Constants;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using TerminalHub.Components.Shared;
 
 namespace TerminalHub.Services
@@ -10,7 +12,12 @@ namespace TerminalHub.Services
     public interface ISessionManager
     {
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
-        Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
+        Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options, bool skipGitInfo = false);
+
+        /// <summary>
+        /// セッションのGit情報を非同期で取得する
+        /// </summary>
+        Task PopulateGitInfoForSessionAsync(Guid sessionId);
         Task<bool> RemoveSessionAsync(Guid sessionId);
         Task<ConPtySession?> GetSessionAsync(Guid sessionId);
         IEnumerable<SessionInfo> GetAllSessions();
@@ -38,20 +45,57 @@ namespace TerminalHub.Services
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
         private readonly IClaudeHookService? _claudeHookService;
+        private readonly IServer? _server;
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
 
         // public event EventHandler<string>? ActiveSessionChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IServer? server = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
             _configuration = configuration;
             _gitService = gitService;
             _claudeHookService = claudeHookService;
+            _server = server;
             _maxSessions = _configuration.GetValue<int>("SessionSettings:MaxSessions", TerminalConstants.DefaultMaxSessions);
+        }
+
+        /// <summary>
+        /// サーバーのポート番号を取得する
+        /// </summary>
+        private int GetServerPort()
+        {
+            const int defaultPort = 5081;
+
+            if (_server == null)
+            {
+                _logger.LogWarning("IServer が利用できません。デフォルトポート {Port} を使用します", defaultPort);
+                return defaultPort;
+            }
+
+            var addressesFeature = _server.Features.Get<IServerAddressesFeature>();
+            if (addressesFeature == null || !addressesFeature.Addresses.Any())
+            {
+                _logger.LogWarning("サーバーアドレスが取得できません。デフォルトポート {Port} を使用します", defaultPort);
+                return defaultPort;
+            }
+
+            // 最初のアドレスからポートを取得（http://localhost:5081 形式）
+            var address = addressesFeature.Addresses.First();
+            try
+            {
+                var uri = new Uri(address);
+                _logger.LogDebug("サーバーポートを取得: {Port} (from {Address})", uri.Port, address);
+                return uri.Port;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "アドレスからポートを解析できません: {Address}。デフォルトポート {Port} を使用します", address, defaultPort);
+                return defaultPort;
+            }
         }
         
         private string GetClaudeCmdPath()
@@ -102,10 +146,10 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
         {
-            return await CreateSessionAsync(Guid.NewGuid(), folderPath, sessionName, terminalType, options);
+            return await CreateSessionAsync(Guid.NewGuid(), folderPath, sessionName, terminalType, options, skipGitInfo: false);
         }
 
-        public async Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options)
+        public async Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options, bool skipGitInfo = false)
         {
             try
             {
@@ -140,22 +184,13 @@ namespace TerminalHub.Services
                 Options = options
             };
 
-            // Git情報を非同期で取得してセッション情報に設定
-            await PopulateGitInfoAsync(sessionInfo);
-
-            // ClaudeCode セッションの場合は hook 設定をセットアップ
-            if (terminalType == TerminalType.ClaudeCode && _claudeHookService != null)
+            // Git情報を非同期で取得してセッション情報に設定（skipGitInfo が false の場合のみ）
+            if (!skipGitInfo)
             {
-                try
-                {
-                    await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, folderPath);
-                    _logger.LogInformation("Hook 設定をセットアップ: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Hook 設定のセットアップに失敗しましたが、セッション作成は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                }
+                await PopulateGitInfoAsync(sessionInfo);
             }
+
+            // Note: ClaudeCode の hook 設定は GetSessionAsync で遅延セットアップされる
 
                 // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
@@ -305,13 +340,30 @@ namespace TerminalHub.Services
                     return existingSession;
                 }
 
+                // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
+                    !sessionInfo.HookConfigured &&
+                    _claudeHookService != null)
+                {
+                    try
+                    {
+                        var port = GetServerPort();
+                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                        sessionInfo.HookConfigured = true;
+                        _logger.LogInformation("Hook 設定をセットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Hook 設定のセットアップに失敗しましたが、セッション起動は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                    }
+                }
+
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-                
+
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
-                
-                
+
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
                 _sessions[sessionId] = newSession;
@@ -412,7 +464,7 @@ namespace TerminalHub.Services
                     sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
                     sessionInfo.IsWorktree = gitInfo.IsWorktree;
 
-                    _logger.LogDebug("Git情報を取得しました: {Path}, ブランチ: {Branch}, Worktree: {IsWorktree}", 
+                    _logger.LogDebug("Git情報を取得しました: {Path}, ブランチ: {Branch}, Worktree: {IsWorktree}",
                         sessionInfo.FolderPath, gitInfo.CurrentBranch, gitInfo.IsWorktree);
                 }
                 else
@@ -425,6 +477,18 @@ namespace TerminalHub.Services
             {
                 _logger.LogWarning(ex, "Git情報の取得に失敗しました: {Path}", sessionInfo.FolderPath);
                 sessionInfo.IsGitRepository = false;
+            }
+        }
+
+        /// <summary>
+        /// セッションのGit情報を非同期で取得する（公開メソッド）
+        /// </summary>
+        public async Task PopulateGitInfoForSessionAsync(Guid sessionId)
+        {
+            var sessionInfo = GetSessionInfo(sessionId);
+            if (sessionInfo != null)
+            {
+                await PopulateGitInfoAsync(sessionInfo);
             }
         }
 

@@ -244,7 +244,7 @@ window.terminalHubHelpers = {
                 events: {
                     stop: true,
                     userPromptSubmit: true,
-                    permissionRequest: true
+                    notification: true
                 }
             },
             special: {
@@ -307,7 +307,7 @@ window.terminalHubHelpers = {
         return settings.special || { claudeModeSwitchKey: "altM" };
     },
 
-    updateClaudeHookSettings: function(enabled, eventStop, eventUserPromptSubmit, eventPermissionRequest) {
+    updateClaudeHookSettings: function(enabled, eventStop, eventUserPromptSubmit, eventNotification) {
         const settings = this.getSettings();
         if (!settings.claudeHook) {
             settings.claudeHook = { enabled: true, events: {} };
@@ -316,7 +316,7 @@ window.terminalHubHelpers = {
         settings.claudeHook.events = {
             stop: eventStop,
             userPromptSubmit: eventUserPromptSubmit,
-            permissionRequest: eventPermissionRequest
+            notification: eventNotification
         };
         this.saveSettings(settings);
     },
@@ -328,7 +328,7 @@ window.terminalHubHelpers = {
             events: {
                 stop: true,
                 userPromptSubmit: true,
-                permissionRequest: true
+                notification: true
             }
         };
     }

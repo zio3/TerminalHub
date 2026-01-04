@@ -105,6 +105,9 @@ namespace TerminalHub.Models
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HookConfigured { get; set; } // Claude Code hook 設定済みかどうか
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態

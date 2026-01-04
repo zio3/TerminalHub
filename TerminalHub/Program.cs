@@ -55,6 +55,9 @@ builder.Services.AddScoped<ConPtyConnectionService>();
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 
+// WebhookSettingsServiceを登録（Singleton - ファイルベース）
+builder.Services.AddSingleton<IWebhookSettingsService, WebhookSettingsService>();
+
 // HookNotificationServiceを登録
 builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();
 
@@ -122,21 +125,42 @@ static async Task<int> RunNotifyModeAsync(string[] args)
 
     try
     {
-        using var client = new HttpClient();
+        using var handler = new HttpClientHandler
+        {
+            // 自己署名証明書を許可（ローカル開発用）
+            ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+        };
+        using var client = new HttpClient(handler);
         client.Timeout = TimeSpan.FromSeconds(5);
 
         var json = JsonSerializer.Serialize(notification);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-        var response = await client.PostAsync($"http://localhost:{port}/api/hook", content);
+        // まず HTTP を試す
+        try
+        {
+            var response = await client.PostAsync($"http://localhost:{port}/api/hook", content);
+            if (response.IsSuccessStatusCode)
+            {
+                return 0;
+            }
+        }
+        catch
+        {
+            // HTTP 失敗時は HTTPS を試す
+        }
 
-        if (response.IsSuccessStatusCode)
+        // HTTPS を試す
+        content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var httpsResponse = await client.PostAsync($"https://localhost:{port}/api/hook", content);
+
+        if (httpsResponse.IsSuccessStatusCode)
         {
             return 0;
         }
         else
         {
-            Console.Error.WriteLine($"Failed to send notification: {response.StatusCode}");
+            Console.Error.WriteLine($"Failed to send notification: {httpsResponse.StatusCode}");
             return 1;
         }
     }

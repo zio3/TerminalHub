@@ -88,7 +88,9 @@ namespace TerminalHub.Services
                 {
                     // 処理開始時（初回のみ）にWebhook通知を送信
                     // ただし、セッション接続直後（1秒以内）は過去バッファの誤検出を防ぐためスキップ
-                    if (session.ProcessingStartTime == null && !skipNotification)
+                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    if (session.ProcessingStartTime == null && !skipNotification &&
+                        session.TerminalType != TerminalType.ClaudeCode)
                     {
                         var isRecentConnection = session.LastConnectionTime.HasValue &&
                             (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 1.0;
@@ -132,7 +134,9 @@ namespace TerminalHub.Services
                         session.SessionId, elapsedSeconds);
 
                     // 通知処理（経過時間があり、スキップでない場合のみ）
-                    if (elapsedSeconds.HasValue && !skipNotification)
+                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    if (elapsedSeconds.HasValue && !skipNotification &&
+                        session.TerminalType != TerminalType.ClaudeCode)
                     {
                         // セッション情報をコピー（非同期処理で使用するため）
                         var sessionCopy = new SessionInfo

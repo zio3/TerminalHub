@@ -5,6 +5,7 @@
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
+@inject IWebhookSettingsService WebhookSettingsService
 
 @if (IsVisible)
 {
@@ -157,9 +158,9 @@
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventPermissionRequest" id="hookEventPermissionRequest">
-                                <label class="form-check-label" for="hookEventPermissionRequest">
-                                    PermissionRequest（権限要求時）
+                                <input class="form-check-input" type="checkbox" @bind="hookEventNotification" id="hookEventNotification">
+                                <label class="form-check-label" for="hookEventNotification">
+                                    Notification（通知発生時）
                                 </label>
                             </div>
                         </div>
@@ -314,7 +315,7 @@
     private bool claudeHookEnabled = true;
     private bool hookEventStop = true;
     private bool hookEventUserPromptSubmit = true;
-    private bool hookEventPermissionRequest = true;
+    private bool hookEventNotification = true;
     private string saveMessage = "";
     private bool saveSuccess = false;
     private string activeTab = "notifications";
@@ -392,9 +393,9 @@
                         {
                             hookEventUserPromptSubmit = userPrompt.GetBoolean();
                         }
-                        if (events.TryGetProperty("permissionRequest", out var permReq))
+                        if (events.TryGetProperty("notification", out var notif))
                         {
-                            hookEventPermissionRequest = permReq.GetBoolean();
+                            hookEventNotification = notif.GetBoolean();
                         }
                     }
                 }
@@ -487,9 +488,16 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateWebhookSettings",
                 webHookEnabled, webHookUrl, null);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateClaudeHookSettings",
-                claudeHookEnabled, hookEventStop, hookEventUserPromptSubmit, hookEventPermissionRequest);
+                claudeHookEnabled, hookEventStop, hookEventUserPromptSubmit, hookEventNotification);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
                 claudeModeSwitchKey);
+
+            // サーバー側のWebhook設定も保存（Hook通知用）
+            WebhookSettingsService.SaveSettings(new WebhookSettings
+            {
+                Enabled = webHookEnabled,
+                Url = webHookUrl ?? ""
+            });
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;

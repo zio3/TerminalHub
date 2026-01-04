@@ -9,8 +9,8 @@ public enum HookEventType
     Stop,
     /// <summary>ユーザーがプロンプトを送信</summary>
     UserPromptSubmit,
-    /// <summary>権限要求が発生</summary>
-    PermissionRequest
+    /// <summary>通知発生</summary>
+    Notification
 }
 
 /// <summary>
@@ -34,7 +34,7 @@ public class HookNotification
         {
             "stop" => HookEventType.Stop,
             "userpromptsubmit" => HookEventType.UserPromptSubmit,
-            "permissionrequest" => HookEventType.PermissionRequest,
+            "notification" => HookEventType.Notification,
             _ => null
         };
     }

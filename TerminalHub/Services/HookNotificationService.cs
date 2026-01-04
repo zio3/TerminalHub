@@ -39,15 +39,18 @@ public class HookNotificationService : IHookNotificationService
 {
     private readonly ILogger<HookNotificationService> _logger;
     private readonly ISessionManager _sessionManager;
+    private readonly IWebhookSettingsService _webhookSettingsService;
 
     public event EventHandler<HookNotificationEventArgs>? OnHookNotification;
 
     public HookNotificationService(
         ILogger<HookNotificationService> logger,
-        ISessionManager sessionManager)
+        ISessionManager sessionManager,
+        IWebhookSettingsService webhookSettingsService)
     {
         _logger = logger;
         _sessionManager = sessionManager;
+        _webhookSettingsService = webhookSettingsService;
     }
 
     public async Task HandleHookNotificationAsync(HookNotification notification)
@@ -87,30 +90,77 @@ public class HookNotificationService : IHookNotificationService
                 await HandleUserPromptSubmitEventAsync(session, notification);
                 break;
 
-            case HookEventType.PermissionRequest:
-                await HandlePermissionRequestEventAsync(session, notification);
+            case HookEventType.Notification:
+                await HandleNotificationEventAsync(session, notification);
                 break;
         }
     }
 
-    private Task HandleStopEventAsync(SessionInfo session, HookNotification notification)
+    private async Task HandleStopEventAsync(SessionInfo session, HookNotification notification)
     {
         _logger.LogInformation("Stop イベント処理: Session={SessionName}", session.GetDisplayName());
-        // 処理完了通知（NotificationService と連携予定）
-        return Task.CompletedTask;
+
+        // 処理時間を計算
+        var elapsedSeconds = 0;
+        if (session.ProcessingStartTime.HasValue)
+        {
+            elapsedSeconds = (int)(DateTime.Now - session.ProcessingStartTime.Value).TotalSeconds;
+        }
+
+        // Webhook通知を送信
+        try
+        {
+            await _webhookSettingsService.SendWebhookAsync(
+                "complete",
+                session.SessionId,
+                session.GetDisplayName(),
+                session.TerminalType.ToString(),
+                elapsedSeconds,
+                session.FolderPath);
+            _logger.LogInformation("処理完了通知を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
+                session.GetDisplayName(), elapsedSeconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "処理完了通知の送信に失敗: Session={SessionName}", session.GetDisplayName());
+        }
+
+        // 処理状態をリセット
+        session.ProcessingStartTime = null;
+        session.ProcessingStatus = null;
     }
 
-    private Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
+    private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
         _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
-        // ユーザー入力待ち通知
-        return Task.CompletedTask;
+
+        // 処理開始を記録
+        session.ProcessingStartTime = DateTime.Now;
+        session.ProcessingStatus = "処理中";
+
+        // Webhook通知を送信
+        try
+        {
+            await _webhookSettingsService.SendWebhookAsync(
+                "start",
+                session.SessionId,
+                session.GetDisplayName(),
+                session.TerminalType.ToString(),
+                null,
+                session.FolderPath);
+            _logger.LogInformation("処理開始通知を送信: Session={SessionName}", session.GetDisplayName());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "処理開始通知の送信に失敗: Session={SessionName}", session.GetDisplayName());
+        }
     }
 
-    private Task HandlePermissionRequestEventAsync(SessionInfo session, HookNotification notification)
+    private Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
     {
-        _logger.LogInformation("PermissionRequest イベント処理: Session={SessionName}", session.GetDisplayName());
-        // 権限要求通知
+        _logger.LogInformation("Notification イベント処理: Session={SessionName}", session.GetDisplayName());
+        // Notification イベントは Claude Code が通知を表示した時に発火
+        // 必要に応じて追加の処理を実装
         return Task.CompletedTask;
     }
 }

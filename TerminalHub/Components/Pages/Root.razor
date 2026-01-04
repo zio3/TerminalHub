@@ -27,6 +27,7 @@
 @inject ConPtyConnectionService ConPtyConnection
 @inject ILogger<Root> Logger
 @inject ILoggerFactory LoggerFactory
+@inject IHookNotificationService HookNotificationService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -372,6 +373,9 @@
     private EventHandler<string>? _taskDataReceivedHandler;
     private EventHandler<TaskSession>? _taskSessionUpdatedHandler;
 
+    // HookNotificationServiceイベントハンドラー
+    private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
+
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
     private int _recreateSnapshotLines = 100;
@@ -428,6 +432,13 @@
         };
         TaskManagerService.SessionUpdated += _taskSessionUpdatedHandler;
 
+        // HookNotificationServiceのイベントハンドラーを設定
+        _hookNotificationHandler = (sender, args) =>
+        {
+            InvokeAsync(() => OnHookNotification(args.Notification));
+        };
+        HookNotificationService.OnHookNotification += _hookNotificationHandler;
+
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
     }
@@ -480,6 +491,9 @@
             var restoredSessionIds = new HashSet<Guid>();
             var archivedSessions = new List<SessionInfo>();
 
+            // Phase 1: 全セッションを高速に作成（Git情報はスキップ）
+            var sessionsToPopulateGitInfo = new List<Guid>();
+
             foreach (var sessionInfo in savedSessions)
             {
                 // アーカイブされたセッションはターミナルプロセスを起動しない
@@ -498,7 +512,7 @@
                     continue;
                 }
 
-                // セッションを再作成（ターミナルプロセスの起動）- 元のSessionIDを使用
+                // セッションを再作成（Git情報はスキップして高速化）
                 try
                 {
                     var newSession = await SessionManager.CreateSessionAsync(
@@ -506,7 +520,8 @@
                         sessionInfo.FolderPath,
                         sessionInfo.DisplayName ?? "",
                         sessionInfo.TerminalType,
-                        sessionInfo.Options);
+                        sessionInfo.Options,
+                        skipGitInfo: true);  // Git情報をスキップ
 
                     // メモ情報と親子関係を復元
                     var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
@@ -533,6 +548,7 @@
                     }
 
                     restoredSessionIds.Add(newSession.SessionId);
+                    sessionsToPopulateGitInfo.Add(newSession.SessionId);
                 }
                 catch (Exception)
                 {
@@ -563,8 +579,26 @@
                 await SelectSession(savedActiveId.Value);
             }
 
-            // UIを更新
+            // UIを更新（セッション一覧を先に表示）
             StateHasChanged();
+
+            // Phase 2: バックグラウンドでGit情報を取得（UIを先に表示した後）
+            if (sessionsToPopulateGitInfo.Count > 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    // 並列でGit情報を取得
+                    var tasks = sessionsToPopulateGitInfo.Select(async sessionId =>
+                    {
+                        await SessionManager.PopulateGitInfoForSessionAsync(sessionId);
+                    });
+
+                    await Task.WhenAll(tasks);
+
+                    // Git情報取得完了後にUIを更新
+                    await InvokeAsync(StateHasChanged);
+                });
+            }
         }
 
         // DOSターミナルパネルの参照を保存
@@ -2083,6 +2117,55 @@
         }
     }
 
+    private async Task OnHookNotification(HookNotification notification)
+    {
+        var eventType = notification.GetEventType();
+        if (eventType == null) return;
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == notification.SessionId);
+        if (session == null) return;
+
+        switch (eventType)
+        {
+            case HookEventType.Stop:
+                // ステータスをクリア
+                session.ProcessingStatus = null;
+                session.ProcessingStartTime = null;
+                session.ProcessingElapsedSeconds = null;
+                session.LastProcessingUpdateTime = null;
+                session.IsWaitingForUserInput = false;
+
+                // 非アクティブセッションの場合は通知マークを表示
+                if (activeSessionId != notification.SessionId)
+                {
+                    session.HasNotificationPending = true;
+                }
+
+                // タイマーを停止
+                OutputAnalyzerService.StopSessionTimer(notification.SessionId);
+
+                // Gitステータスを更新
+                await RefreshGitStatus(notification.SessionId);
+
+                // UIを更新
+                StateHasChanged();
+                break;
+
+            case HookEventType.UserPromptSubmit:
+                // 処理開始を記録（既にHookNotificationServiceで設定されているが念のため）
+                session.ProcessingStartTime = DateTime.Now;
+                session.ProcessingStatus = "処理中";
+                session.LastProcessingUpdateTime = DateTime.Now;
+
+                // タイマーを開始
+                OutputAnalyzerService.ResetSessionTimer(notification.SessionId);
+
+                // UIを更新
+                StateHasChanged();
+                break;
+        }
+    }
+
     private void ShowSessionSettingsDialog(Guid sessionId)
     {
         settingsSessionId = sessionId;
@@ -3023,6 +3106,13 @@
         {
             TaskManagerService.SessionUpdated -= _taskSessionUpdatedHandler;
             _taskSessionUpdatedHandler = null;
+        }
+
+        // HookNotificationServiceのイベントハンドラーを削除
+        if (_hookNotificationHandler != null)
+        {
+            HookNotificationService.OnHookNotification -= _hookNotificationHandler;
+            _hookNotificationHandler = null;
         }
 
         // TaskManagerServiceのクリーンアップ
