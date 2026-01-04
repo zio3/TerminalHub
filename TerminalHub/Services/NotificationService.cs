@@ -163,7 +163,8 @@ namespace TerminalHub.Services
         {
             try
             {
-                var httpClient = _httpClientFactory.CreateClient();
+                using var httpClient = _httpClientFactory.CreateClient();
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
 
                 // ヘッダーを設定
                 if (webhookSettings.Headers != null)
@@ -191,12 +192,12 @@ namespace TerminalHub.Services
                 };
 
                 var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 _logger.LogInformation($"WebHook送信中 ({eventType}): {webhookSettings.Url}");
                 _logger.LogDebug($"ペイロード: {json}");
 
-                var response = await httpClient.PostAsync(webhookSettings.Url, content);
+                using var response = await httpClient.PostAsync(webhookSettings.Url, content);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -207,6 +208,14 @@ namespace TerminalHub.Services
                 {
                     _logger.LogInformation($"WebHook呼び出しが成功しました ({eventType}): {webhookSettings.Url}");
                 }
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, $"WebHook通知のネットワークエラー ({eventType})");
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, $"WebHook通知がタイムアウトしました ({eventType})");
             }
             catch (Exception ex)
             {

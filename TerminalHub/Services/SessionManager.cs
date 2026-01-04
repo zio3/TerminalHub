@@ -323,14 +323,14 @@ namespace TerminalHub.Services
         public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
             bool removed = false;
-            
+
             // ConPtyセッションが存在する場合は削除
             if (_sessions.TryRemove(sessionId, out var session))
             {
                 session.Dispose();
                 removed = true;
             }
-            
+
             // SessionInfoを削除（ConPtySessionも破棄）
             if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
             {
@@ -338,20 +338,23 @@ namespace TerminalHub.Services
                 sessionInfo.ConPtySession?.Dispose();
                 removed = true;
             }
-            
+
             // 初期化ロックを削除
             if (_initializationLocks.TryRemove(sessionId, out var initLock))
             {
                 initLock.Dispose();
             }
 
-            if (removed && _activeSessionId == sessionId)
-            {
-                _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
-            }
-
+            // _activeSessionIdへのアクセスはロックで保護
             if (removed)
             {
+                lock (_lockObject)
+                {
+                    if (_activeSessionId == sessionId)
+                    {
+                        _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
+                    }
+                }
                 NotifySessionsChanged();
             }
 

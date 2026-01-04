@@ -15,6 +15,7 @@ namespace TerminalHub.Services
         private readonly INotificationService _notificationService;
         private readonly IOutputAnalyzerFactory _analyzerFactory;
         private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
+        private readonly object _timerLock = new();
         private Action<Guid>? _timeoutCallback;
         private bool _disposed;
 
@@ -30,6 +31,12 @@ namespace TerminalHub.Services
 
         public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?> updateStatus)
         {
+            if (sessionInfo == null)
+            {
+                _logger.LogWarning("AnalyzeOutput called with null sessionInfo");
+                return;
+            }
+
             try
             {
                 // ターミナルタイプに応じた解析器を取得
@@ -186,26 +193,36 @@ namespace TerminalHub.Services
 
         public void ResetSessionTimer(Guid sessionId)
         {
-            // 既存のタイマーを停止
-            StopSessionTimer(sessionId);
-            
-            // 新しいタイマーを作成
-            var timer = new Timer(
-                (state) => CheckSessionTimeout(sessionId),
-                null,
-                TimeSpan.FromSeconds(5),
-                Timeout.InfiniteTimeSpan
-            );
-            
-            _sessionProcessingTimers[sessionId] = timer;
+            lock (_timerLock)
+            {
+                // 既存のタイマーを停止
+                if (_sessionProcessingTimers.TryGetValue(sessionId, out var existingTimer))
+                {
+                    existingTimer?.Dispose();
+                    _sessionProcessingTimers.Remove(sessionId);
+                }
+
+                // 新しいタイマーを作成
+                var timer = new Timer(
+                    (state) => CheckSessionTimeout(sessionId),
+                    null,
+                    TimeSpan.FromSeconds(5),
+                    Timeout.InfiniteTimeSpan
+                );
+
+                _sessionProcessingTimers[sessionId] = timer;
+            }
         }
 
         public void StopSessionTimer(Guid sessionId)
         {
-            if (_sessionProcessingTimers.TryGetValue(sessionId, out var timer))
+            lock (_timerLock)
             {
-                timer?.Dispose();
-                _sessionProcessingTimers.Remove(sessionId);
+                if (_sessionProcessingTimers.TryGetValue(sessionId, out var timer))
+                {
+                    timer?.Dispose();
+                    _sessionProcessingTimers.Remove(sessionId);
+                }
             }
         }
 
@@ -223,15 +240,18 @@ namespace TerminalHub.Services
         public void Dispose()
         {
             if (_disposed) return;
-            
+
             _disposed = true;
-            
-            // すべてのタイマーを停止
-            foreach (var timer in _sessionProcessingTimers.Values)
+
+            lock (_timerLock)
             {
-                timer?.Dispose();
+                // すべてのタイマーを停止
+                foreach (var timer in _sessionProcessingTimers.Values)
+                {
+                    timer?.Dispose();
+                }
+                _sessionProcessingTimers.Clear();
             }
-            _sessionProcessingTimers.Clear();
         }
     }
 }

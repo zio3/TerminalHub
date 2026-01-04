@@ -37,13 +37,6 @@ namespace TerminalHub.Services
             if (_disposed)
                 throw new ObjectDisposedException(nameof(ConPtyConnectionService));
 
-            // 既に購読済みの場合はスキップ
-            if (_subscriptions.ContainsKey(sessionId))
-            {
-                _logger.LogDebug($"Session {sessionId} is already subscribed");
-                return;
-            }
-
             _logger.LogInformation($"Subscribing to session {sessionId}");
 
             // イベントハンドラーを作成
@@ -71,11 +64,7 @@ namespace TerminalHub.Services
                 }
             };
 
-            // イベントハンドラーを登録
-            conPtySession.DataReceived += dataHandler;
-            conPtySession.ProcessExited += exitHandler;
-
-            // 購読情報を保存
+            // 購読情報を保存（TryAddの結果で既存チェック）
             var subscription = new ConPtySessionSubscription(
                 sessionId,
                 conPtySession,
@@ -83,7 +72,17 @@ namespace TerminalHub.Services
                 exitHandler
             );
 
-            _subscriptions.TryAdd(sessionId, subscription);
+            if (!_subscriptions.TryAdd(sessionId, subscription))
+            {
+                // 既に購読済みの場合はスキップ
+                _logger.LogDebug($"Session {sessionId} is already subscribed");
+                return;
+            }
+
+            // イベントハンドラーを登録（TryAdd成功後のみ）
+            conPtySession.DataReceived += dataHandler;
+            conPtySession.ProcessExited += exitHandler;
+
             _logger.LogInformation($"Successfully subscribed to session {sessionId}");
         }
 
