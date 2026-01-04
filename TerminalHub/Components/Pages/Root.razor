@@ -1841,19 +1841,9 @@
             switch (result.OperationType)
             {
                 case SubSessionDialog.SubSessionType.CreateNew:
-                    // 新規Worktree作成
-                    if (result.UseExistingBranch)
-                    {
-                        // 既存ブランチでWorktree作成
-                        newSession = await SessionManager.CreateWorktreeSessionWithExistingBranchAsync(
-                            subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
-                    }
-                    else
-                    {
-                        // 新規ブランチでWorktree作成
-                        newSession = await SessionManager.CreateWorktreeSessionAsync(
-                            subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
-                    }
+                    // Worktree作成（新規・既存ブランチ共通）
+                    newSession = await SessionManager.CreateWorktreeSessionAsync(
+                        subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
                     break;
 
                 case SubSessionDialog.SubSessionType.AddExisting:

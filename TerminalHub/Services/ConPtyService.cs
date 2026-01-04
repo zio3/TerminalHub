@@ -44,13 +44,6 @@ namespace TerminalHub.Services
         {
             return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
         }
-        
-        // xterm.js用の推奨設定でセッションを作成
-        public Task<ConPtySession> CreateXTermJsSessionAsync(string command, string? arguments = null, string? workingDirectory = null, int cols = 80, int rows = 24)
-        {
-            // xterm.jsではクライアント側でサイズを管理するため、引数で受け取る
-            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
-        }
     }
 
     public class ConPtySession : IDisposable
@@ -507,30 +500,9 @@ namespace TerminalHub.Services
             }
         }
         
-        // フローコントロール（XON/XOFF）のサポート
-        #pragma warning disable CS0414 // フィールドは割り当てられていますが、その値は使用されていません
-        private bool _isPaused = false;
-        #pragma warning restore CS0414
-        private const char XON = '\x11';  // Ctrl+Q
-        private const char XOFF = '\x13'; // Ctrl+S
-        
         // データ送出制御
         private bool _isOutputSuspended = false;
-        
-        public void Pause()
-        {
-            _isPaused = true;
-            // XOFFを送信して出力を一時停止
-            WriteAsync(XOFF.ToString()).Wait(100);
-        }
-        
-        public void Resume()
-        {
-            _isPaused = false;
-            // XONを送信して出力を再開
-            WriteAsync(XON.ToString()).Wait(100);
-        }
-        
+
         /// <summary>
         /// データ送出を一時停止する
         /// </summary>
