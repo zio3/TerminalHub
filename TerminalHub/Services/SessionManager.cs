@@ -37,18 +37,20 @@ namespace TerminalHub.Services
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
+        private readonly IClaudeHookService? _claudeHookService;
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
         private readonly int _maxSessions;
 
         // public event EventHandler<string>? ActiveSessionChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
             _configuration = configuration;
             _gitService = gitService;
+            _claudeHookService = claudeHookService;
             _maxSessions = _configuration.GetValue<int>("SessionSettings:MaxSessions", TerminalConstants.DefaultMaxSessions);
         }
         
@@ -140,6 +142,20 @@ namespace TerminalHub.Services
 
             // Git情報を非同期で取得してセッション情報に設定
             await PopulateGitInfoAsync(sessionInfo);
+
+            // ClaudeCode セッションの場合は hook 設定をセットアップ
+            if (terminalType == TerminalType.ClaudeCode && _claudeHookService != null)
+            {
+                try
+                {
+                    await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, folderPath);
+                    _logger.LogInformation("Hook 設定をセットアップ: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Hook 設定のセットアップに失敗しましたが、セッション作成は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+            }
 
                 // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
