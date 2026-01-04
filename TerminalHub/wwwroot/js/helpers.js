@@ -239,6 +239,14 @@ window.terminalHubHelpers = {
                     "Content-Type": "application/json"
                 }
             },
+            claudeHook: {
+                enabled: true,
+                events: {
+                    stop: true,
+                    userPromptSubmit: true,
+                    permissionRequest: true
+                }
+            },
             special: {
                 claudeModeSwitchKey: "altM"
             }
@@ -297,5 +305,31 @@ window.terminalHubHelpers = {
     getSpecialSettings: function() {
         const settings = this.getSettings();
         return settings.special || { claudeModeSwitchKey: "altM" };
+    },
+
+    updateClaudeHookSettings: function(enabled, eventStop, eventUserPromptSubmit, eventPermissionRequest) {
+        const settings = this.getSettings();
+        if (!settings.claudeHook) {
+            settings.claudeHook = { enabled: true, events: {} };
+        }
+        settings.claudeHook.enabled = enabled;
+        settings.claudeHook.events = {
+            stop: eventStop,
+            userPromptSubmit: eventUserPromptSubmit,
+            permissionRequest: eventPermissionRequest
+        };
+        this.saveSettings(settings);
+    },
+
+    getClaudeHookSettings: function() {
+        const settings = this.getSettings();
+        return settings.claudeHook || {
+            enabled: true,
+            events: {
+                stop: true,
+                userPromptSubmit: true,
+                permissionRequest: true
+            }
+        };
     }
 };

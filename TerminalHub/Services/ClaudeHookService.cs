@@ -5,6 +5,16 @@ using Microsoft.Extensions.Logging;
 namespace TerminalHub.Services;
 
 /// <summary>
+/// Hook イベント設定
+/// </summary>
+public class HookEventSettings
+{
+    public bool Stop { get; set; } = true;
+    public bool UserPromptSubmit { get; set; } = true;
+    public bool PermissionRequest { get; set; } = true;
+}
+
+/// <summary>
 /// Claude Code の hook 設定を管理するサービス
 /// </summary>
 public interface IClaudeHookService
@@ -12,7 +22,7 @@ public interface IClaudeHookService
     /// <summary>
     /// セッション用の hook 設定をセットアップする
     /// </summary>
-    Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081);
+    Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null);
 
     /// <summary>
     /// TerminalHub.exe のパスを取得する
@@ -27,10 +37,6 @@ public class ClaudeHookService : IClaudeHookService
 {
     private readonly ILogger<ClaudeHookService> _logger;
     private const string SettingsFileName = ".claude/settings.local.json";
-    private const string TerminalHubMarker = "TerminalHub";
-
-    // 設定する hook イベント
-    private static readonly string[] HookEvents = { "Stop", "UserPromptSubmit", "PermissionRequest" };
 
     public ClaudeHookService(ILogger<ClaudeHookService> logger)
     {
@@ -53,8 +59,11 @@ public class ClaudeHookService : IClaudeHookService
         return exePath;
     }
 
-    public async Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081)
+    public async Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null)
     {
+        // デフォルト設定を使用
+        eventSettings ??= new HookEventSettings();
+
         try
         {
             var settingsPath = Path.Combine(folderPath, SettingsFileName);
@@ -89,8 +98,13 @@ public class ClaudeHookService : IClaudeHookService
 
             var exePath = GetExecutablePath();
 
-            // 各イベントに hook を追加
-            foreach (var eventName in HookEvents)
+            // 有効なイベントのみ hook を追加
+            var enabledEvents = new List<string>();
+            if (eventSettings.Stop) enabledEvents.Add("Stop");
+            if (eventSettings.UserPromptSubmit) enabledEvents.Add("UserPromptSubmit");
+            if (eventSettings.PermissionRequest) enabledEvents.Add("PermissionRequest");
+
+            foreach (var eventName in enabledEvents)
             {
                 var hookCommand = BuildHookCommand(exePath, eventName, sessionId, port);
                 AddOrUpdateHook(hooks, eventName, hookCommand);
