@@ -775,6 +775,21 @@ namespace TerminalHub.Services
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
 
+                // ClaudeCode セッションの場合、Hook 設定を再セットアップ（既存エントリをクリーンアップ）
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && _claudeHookService != null)
+                {
+                    try
+                    {
+                        var port = GetServerPort();
+                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                        _logger.LogInformation("Hook 設定を再セットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Hook 設定の再セットアップに失敗しましたが、セッション再作成は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                    }
+                }
+
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
@@ -807,6 +822,21 @@ namespace TerminalHub.Services
                 }
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
+
+                // ClaudeCode セッションの場合、Hook 設定を再セットアップ（既存エントリをクリーンアップ）
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && _claudeHookService != null)
+                {
+                    try
+                    {
+                        var port = GetServerPort();
+                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                        _logger.LogInformation("Hook 設定を再セットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Hook 設定の再セットアップに失敗しましたが、セッション再起動は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                    }
+                }
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
