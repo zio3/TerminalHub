@@ -143,38 +143,49 @@ public class ClaudeHookService : IClaudeHookService
             hooks[eventName] = hookArray;
         }
 
-        // 既存の TerminalHub hook エントリを探す
-        int terminalHubEntryIndex = -1;
+        // 既存の TerminalHub hook エントリをすべて探して削除
+        // 両方の形式をチェック：直接形式と入れ子形式
+        var indicesToRemove = new List<int>();
         for (int i = 0; i < hookArray.Count; i++)
         {
-            if (hookArray[i] is JsonObject entryObj && entryObj["hooks"] is JsonArray entryHooks)
+            if (hookArray[i] is JsonObject entryObj)
             {
-                // hooks 配列内に TerminalHub のコマンドがあるか確認
-                for (int j = 0; j < entryHooks.Count; j++)
+                // 形式1: 直接形式 {"type": "command", "command": "..."}
+                var directCmd = entryObj["command"]?.GetValue<string>() ?? "";
+                if (directCmd.Contains("--notify") && directCmd.Contains("--session"))
                 {
-                    if (entryHooks[j] is JsonObject hookObj)
+                    indicesToRemove.Add(i);
+                    continue;
+                }
+
+                // 形式2: 入れ子形式 {"hooks": [{"type": "command", "command": "..."}]}
+                if (entryObj["hooks"] is JsonArray entryHooks)
+                {
+                    for (int j = 0; j < entryHooks.Count; j++)
                     {
-                        var cmd = hookObj["command"]?.GetValue<string>() ?? "";
-                        if (cmd.Contains("--notify") && cmd.Contains("--session"))
+                        if (entryHooks[j] is JsonObject hookObj)
                         {
-                            terminalHubEntryIndex = i;
-                            break;
+                            var nestedCmd = hookObj["command"]?.GetValue<string>() ?? "";
+                            if (nestedCmd.Contains("--notify") && nestedCmd.Contains("--session"))
+                            {
+                                indicesToRemove.Add(i);
+                                break;
+                            }
                         }
                     }
                 }
             }
-            if (terminalHubEntryIndex >= 0) break;
         }
 
-        // 既存の TerminalHub エントリを削除
-        if (terminalHubEntryIndex >= 0)
+        // インデックスを降順でソートして削除（後ろから削除しないとインデックスがずれる）
+        foreach (var index in indicesToRemove.OrderByDescending(i => i))
         {
-            hookArray.RemoveAt(terminalHubEntryIndex);
+            hookArray.RemoveAt(index);
         }
 
-        // 新しいフォーマットで hook を追加
+        // 入れ子形式で hook を追加（Claude Code の新仕様に準拠）
         // 形式: {"hooks": [{"type": "command", "command": "..."}]}
-        // matcher フィールドは省略可能（マッチャーを使用しないイベントの場合）
+        // matcher は省略可能（すべてのイベントにマッチ）
         var newHookEntry = new JsonObject
         {
             ["hooks"] = new JsonArray
