@@ -63,12 +63,6 @@ namespace TerminalHub.Services
         {
             try
             {
-                _logger.LogInformation($"[Notification Debug] SendBrowserNotificationAsync開始");
-                _logger.LogInformation($"[Notification Debug] SessionId: {session?.SessionId}");
-                _logger.LogInformation($"[Notification Debug] DisplayName: {session?.DisplayName}");
-                _logger.LogInformation($"[Notification Debug] FolderPath: {session?.FolderPath}");
-                _logger.LogInformation($"[Notification Debug] CreatedAt: {session?.CreatedAt}");
-                
                 var minutes = elapsedSeconds / 60;
                 var seconds = elapsedSeconds % 60;
                 var timeText = minutes > 0 ? $"{minutes}分{seconds}秒" : $"{seconds}秒";
@@ -78,16 +72,13 @@ namespace TerminalHub.Services
                 var body = $"{displayName} - 処理時間: {timeText}";
                 var tag = session?.SessionId.ToString() ?? Guid.NewGuid().ToString();
 
-                _logger.LogInformation($"[Notification Debug] 通知内容 - Title: {title}, Body: {body}, Tag: {tag}");
-                
+                _logger.LogDebug("ブラウザ通知送信: SessionId={SessionId}, Body={Body}", session?.SessionId, body);
+
                 await _jsRuntime.InvokeVoidAsync("terminalHubHelpers.showNotification", title, body, tag);
-                
-                _logger.LogInformation($"[Notification Debug] ブラウザ通知送信完了");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "ブラウザ通知の送信に失敗しました");
-                _logger.LogError($"[Notification Debug] エラー詳細: {ex.ToString()}");
             }
         }
 
@@ -166,15 +157,23 @@ namespace TerminalHub.Services
                 using var httpClient = _httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(10);
 
-                // ヘッダーを設定
+                // ヘッダーを設定（重複時は上書きせず警告ログ）
                 if (webhookSettings.Headers != null)
                 {
                     foreach (var header in webhookSettings.Headers)
                     {
-                        if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                        if (header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
                         {
-                            httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
+                            continue; // Content-Type は StringContent で設定されるためスキップ
                         }
+
+                        if (httpClient.DefaultRequestHeaders.Contains(header.Key))
+                        {
+                            _logger.LogDebug("ヘッダー '{HeaderKey}' は既に存在するためスキップ", header.Key);
+                            continue;
+                        }
+
+                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
                     }
                 }
 

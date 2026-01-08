@@ -347,7 +347,6 @@
     private Dictionary<string, DosTerminalPanel> dosTerminalPanelRefs = new();
     private DosTerminalPanel? currentDosTerminalPanelRef;
     private Dictionary<string, string> textInputPanelTexts = new();
-    private bool shouldPreventDefault = false;
     private bool showDevWindow = false;
     private bool showDevButton = false;
     private bool showSettingsDialog = false;
@@ -378,6 +377,9 @@
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
+
+    // DOSターミナルイベントハンドラー（セッションごと）
+    private readonly Dictionary<Guid, (EventHandler<DataReceivedEventArgs> DataReceived, EventHandler ProcessExited)> _dosTerminalHandlers = new();
 
     // スナップショット設定
     private int _defaultSnapshotLines = 50;
@@ -697,8 +699,19 @@
 
                 currentSession.DosTerminalConPtySession = conPtySession;
                 conPtySession.Start();
-                conPtySession.DataReceived += (sender, args) => OnDosTerminalDataReceived(currentSession.SessionId, args.Data);
-                conPtySession.ProcessExited += (sender, args) => OnDosTerminalExited(currentSession.SessionId);
+
+                // ハンドラーを作成して登録（後で解除可能にする）
+                var sessionId = currentSession.SessionId;
+                var dataReceivedHandler = new EventHandler<DataReceivedEventArgs>((sender, args) =>
+                    OnDosTerminalDataReceived(sessionId, args.Data));
+                var processExitedHandler = new EventHandler((sender, args) =>
+                    OnDosTerminalExited(sessionId));
+
+                conPtySession.DataReceived += dataReceivedHandler;
+                conPtySession.ProcessExited += processExitedHandler;
+
+                // 辞書に保存（クリーンアップ時に使用）
+                _dosTerminalHandlers[sessionId] = (dataReceivedHandler, processExitedHandler);
 
                 // ConPTYの初期化が完了するまで少し待つ
                 await Task.Delay(100);
@@ -801,6 +814,9 @@
                     await CleanupSingleDosTerminal();
                 }
 
+                // イベントハンドラーを解除してから破棄
+                CleanupDosTerminalHandlers(sessionId, session.DosTerminalConPtySession);
+
                 session.DosTerminalConPtySession?.Dispose();
                 session.DosTerminalConPtySession = null;
 
@@ -808,6 +824,22 @@
                 StateHasChanged();
             }
         });
+    }
+
+    /// <summary>
+    /// DOSターミナルのイベントハンドラーを解除
+    /// </summary>
+    private void CleanupDosTerminalHandlers(Guid sessionId, ConPtySession? conPtySession)
+    {
+        if (_dosTerminalHandlers.TryGetValue(sessionId, out var handlers))
+        {
+            if (conPtySession != null)
+            {
+                conPtySession.DataReceived -= handlers.DataReceived;
+                conPtySession.ProcessExited -= handlers.ProcessExited;
+            }
+            _dosTerminalHandlers.Remove(sessionId);
+        }
     }
 
     #region 下部パネルタブ管理
@@ -1300,7 +1332,8 @@
                 await CleanupSingleDosTerminal();
             }
 
-            // DOS ConPTYセッションのクリーンアップ
+            // DOS ConPTYセッションのクリーンアップ（ハンドラー解除後に破棄）
+            CleanupDosTerminalHandlers(sessionId, sessionToRemove.DosTerminalConPtySession);
             sessionToRemove.DosTerminalConPtySession?.Dispose();
             sessionToRemove.DosTerminalConPtySession = null;
 
@@ -1496,7 +1529,7 @@
                 {
                 }
             }
-            // DOSターミナルからの入力を処理
+            // DOSターミナルからの入力を処理（singleDosTerminal用）
             else if (sessionId.StartsWith("dos-terminal-"))
             {
                 var guidStr = sessionId.Replace("dos-terminal-", "");
@@ -1507,6 +1540,15 @@
                     {
                         await session.DosTerminalConPtySession.WriteAsync(data ?? string.Empty);
                     }
+                }
+            }
+            // DosTerminalPanelからの入力を処理
+            else if (sessionId.StartsWith("dos-term-"))
+            {
+                var panelId = sessionId.Replace("dos-term-", "");
+                if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
+                {
+                    await dosPanel.WriteInput(data ?? string.Empty);
                 }
             }
             else
@@ -1528,7 +1570,7 @@
     [JSInvokable]
     public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
     {
-        // DOSターミナルのサイズ変更を処理
+        // DOSターミナルのサイズ変更を処理（singleDosTerminal用）
         if (sessionId.StartsWith("dos-terminal-"))
         {
             var guidStr = sessionId.Replace("dos-terminal-", "");
@@ -1539,6 +1581,15 @@
                 {
                     session.DosTerminalConPtySession.Resize(cols, rows);
                 }
+            }
+        }
+        // DosTerminalPanelのサイズ変更を処理
+        else if (sessionId.StartsWith("dos-term-"))
+        {
+            var panelId = sessionId.Replace("dos-term-", "");
+            if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
+            {
+                dosPanel.SendResize(cols, rows);
             }
         }
         // タスクランナーターミナルのサイズ変更を処理
@@ -1698,20 +1749,16 @@
         // Enter で送信（Shiftキーが押されていない場合）
         if (e.Key == "Enter" && !e.ShiftKey)
         {
-            shouldPreventDefault = true;
             await SendInput();
-            shouldPreventDefault = false;
         }
         // Ctrl+C: 強制中断
         else if (e.Key == "c" && e.CtrlKey && !e.AltKey && !e.ShiftKey)
         {
-            shouldPreventDefault = true;
             await SendCtrlC();
         }
         // Escape: 中断
         else if (e.Key == "Escape")
         {
-            shouldPreventDefault = true;
             await SendEscape();
         }
         // モード切替（ClaudeCodeモードのみ）- Alt+M または Shift+Tab（設定による）
@@ -1721,28 +1768,21 @@
             var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
             if (currentSession?.TerminalType == TerminalType.ClaudeCode)
             {
-                shouldPreventDefault = true;
                 await SendModeSwitch();
             }
         }
         // 履歴機能: 上矢印で前の履歴、下矢印で次の履歴
         else if (e.Key == "ArrowUp" && e.CtrlKey)
         {
-            shouldPreventDefault = true;
             var historyText = InputHistoryService.NavigateHistory(-1);
             if (historyText != null)
                 inputText = historyText;
         }
         else if (e.Key == "ArrowDown" && e.CtrlKey)
         {
-            shouldPreventDefault = true;
             var historyText = InputHistoryService.NavigateHistory(1);
             if (historyText != null)
                 inputText = historyText;
-        }
-        else
-        {
-            shouldPreventDefault = false;
         }
         // Shift+Enter は通常の改行動作（何もしない）
     }
@@ -1757,9 +1797,6 @@
         };
     }
 
-    private bool isEscapePressed = false;
-    private bool isModeSwitchPressed = false;
-    private bool isCtrlCPressed = false;
     private string claudeModeSwitchKey = "altM";
 
     private async Task SendCtrlC()
@@ -1767,15 +1804,8 @@
         if (activeSession == null)
             return;
 
-        // ボタンの押下状態を表示
-        isCtrlCPressed = true;
-
         // Ctrl+Cを送信（\x03 はCtrl+Cの制御文字）
         await activeSession.WriteAsync("\x03");
-
-        // 押下状態を解除
-        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
-        isCtrlCPressed = false;
     }
 
     private async Task SendEscape()
@@ -1783,15 +1813,8 @@
         if (activeSession == null)
             return;
 
-        // ボタンの押下状態を表示
-        isEscapePressed = true;
-
         // Escキーを送信（\x1B はESCのエスケープシーケンス）
         await activeSession.WriteAsync("\x1B");
-
-        // 押下状態を解除
-        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
-        isEscapePressed = false;
     }
 
     private async Task SendModeSwitch()
@@ -1799,15 +1822,8 @@
         if (activeSession == null)
             return;
 
-        // ボタンの押下状態を表示
-        isModeSwitchPressed = true;
-
         // Alt+M を送信（\x1B はESC、m はM）
         await activeSession.WriteAsync("\x1Bm");
-
-        // 押下状態を解除
-        await Task.Delay(TerminalConstants.ButtonPressAnimationDelay);
-        isModeSwitchPressed = false;
     }
 
 
@@ -2297,8 +2313,9 @@
         
         _processExitedHandler = (sender, args) =>
         {
+            Logger.LogDebug("ConPty process exited: SessionId={SessionId}", args.SessionId);
         };
-        
+
         // ConPtyConnectionServiceのイベントハンドラーを設定
         ConPtyConnection.DataReceived += _dataReceivedHandler;
         ConPtyConnection.ProcessExited += _processExitedHandler;
@@ -3106,9 +3123,10 @@
         await TaskManagerService.StopAllTasksAsync();
         TaskManagerService.Dispose();
         
-        // 全セッションのDOS ConPTYセッションのクリーンアップ
+        // 全セッションのDOS ConPTYセッションのクリーンアップ（ハンドラー解除後に破棄）
         foreach (var session in sessions)
         {
+            CleanupDosTerminalHandlers(session.SessionId, session.DosTerminalConPtySession);
             session.DosTerminalConPtySession?.Dispose();
         }
         

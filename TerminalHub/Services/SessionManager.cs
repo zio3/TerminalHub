@@ -92,8 +92,6 @@ namespace TerminalHub.Services
         public event EventHandler? OnSessionsChanged;
         private readonly int _maxSessions;
 
-        // public event EventHandler<string>? ActiveSessionChanged;
-
         public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IServer? server = null)
         {
             _conPtyService = conPtyService;
@@ -393,22 +391,7 @@ namespace TerminalHub.Services
                 }
 
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
-                    !sessionInfo.HookConfigured &&
-                    _claudeHookService != null)
-                {
-                    try
-                    {
-                        var port = GetServerPort();
-                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
-                        sessionInfo.HookConfigured = true;
-                        _logger.LogInformation("Hook 設定をセットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Hook 設定のセットアップに失敗しましたが、セッション起動は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                    }
-                }
+                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -463,17 +446,13 @@ namespace TerminalHub.Services
 
         public Task<bool> SetActiveSessionAsync(Guid sessionId)
         {
-            // Console.WriteLine($"[SessionManager] SetActiveSessionAsync開始: sessionId={sessionId}");
             lock (_lockObject)
             {
-                // Console.WriteLine($"[SessionManager] ロック取得");
                 if (_sessionInfos.ContainsKey(sessionId))
                 {
-                    // Console.WriteLine($"[SessionManager] セッション存在確認OK");
                     if (_activeSessionId.HasValue && _sessionInfos.TryGetValue(_activeSessionId.Value, out var oldActive))
                     {
                         oldActive.IsActive = false;
-                        // Console.WriteLine($"[SessionManager] 前のアクティブセッション({_activeSessionId})を非アクティブ化");
                     }
 
                     _activeSessionId = sessionId;
@@ -481,16 +460,10 @@ namespace TerminalHub.Services
                     {
                         newActive.IsActive = true;
                         newActive.LastAccessedAt = DateTime.Now;
-                        // Console.WriteLine($"[SessionManager] 新しいセッション({sessionId})をアクティブ化");
                     }
 
-                    // イベントを削除してシンプルにする
-                    // Console.WriteLine($"[SessionManager] ActiveSessionChangedイベント発火");
-                    // ActiveSessionChanged?.Invoke(this, sessionId);
-                    // Console.WriteLine($"[SessionManager] SetActiveSessionAsync完了: true");
                     return Task.FromResult(true);
                 }
-                // Console.WriteLine($"[SessionManager] セッションが見つかりません: {sessionId}");
                 return Task.FromResult(false);
             }
         }
@@ -748,6 +721,35 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// ClaudeCode セッションの Hook 設定をセットアップする共通処理
+        /// </summary>
+        /// <param name="sessionInfo">セッション情報</param>
+        /// <param name="isResetup">再セットアップかどうか（true: 常に実行、false: HookConfigured が false の場合のみ実行）</param>
+        private async Task SetupClaudeHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
+        {
+            if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
+                return;
+
+            // 初回セットアップの場合は既に設定済みならスキップ
+            if (!isResetup && sessionInfo.HookConfigured)
+                return;
+
+            try
+            {
+                var port = GetServerPort();
+                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                sessionInfo.HookConfigured = true;
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogInformation($"Hook 設定を{action}: SessionId={{SessionId}}, Port={{Port}}", sessionInfo.SessionId, port);
+            }
+            catch (Exception ex)
+            {
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogWarning(ex, $"Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
+            }
+        }
+
+        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
@@ -775,20 +777,8 @@ namespace TerminalHub.Services
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ（既存エントリをクリーンアップ）
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && _claudeHookService != null)
-                {
-                    try
-                    {
-                        var port = GetServerPort();
-                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
-                        _logger.LogInformation("Hook 設定を再セットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Hook 設定の再セットアップに失敗しましたが、セッション再作成は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                    }
-                }
+                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
+                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -823,20 +813,8 @@ namespace TerminalHub.Services
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ（既存エントリをクリーンアップ）
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && _claudeHookService != null)
-                {
-                    try
-                    {
-                        var port = GetServerPort();
-                        await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
-                        _logger.LogInformation("Hook 設定を再セットアップ: SessionId={SessionId}, Port={Port}", sessionInfo.SessionId, port);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Hook 設定の再セットアップに失敗しましたが、セッション再起動は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                    }
-                }
+                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
+                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -1024,14 +1002,15 @@ namespace TerminalHub.Services
                 session.Dispose();
             }
             _sessions.Clear();
-            
-            // ConPtySessionも破棄
+
+            // ConPtySession と DosTerminalConPtySession を破棄
             foreach (var sessionInfo in _sessionInfos.Values)
             {
                 sessionInfo.ConPtySession?.Dispose();
+                sessionInfo.DosTerminalConPtySession?.Dispose();
             }
             _sessionInfos.Clear();
-            
+
             foreach (var initLock in _initializationLocks.Values)
             {
                 initLock.Dispose();

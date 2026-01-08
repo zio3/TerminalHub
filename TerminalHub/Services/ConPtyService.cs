@@ -56,7 +56,7 @@ namespace TerminalHub.Services
         private FileStream? _pipeInStream;
         private FileStream? _pipeOutStream;
         private StreamWriter? _writer;
-        private bool _disposed;
+        private volatile bool _disposed;
         private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
         private Task? _readTask;
         private CancellationTokenSource? _readCancellationTokenSource;
@@ -131,24 +131,14 @@ namespace TerminalHub.Services
             _readCancellationTokenSource = new CancellationTokenSource();
             _readTask = Task.Run(() => ReadPipeAsync(_readCancellationTokenSource.Token));
         }
-        
-        // xterm.jsを使用する場合、このメソッドは不要
-        // private void SendXTermInitSequences()
-        // {
-        //     // xterm.jsが自動的にエスケープシーケンスを処理するため、
-        //     // ConPTY側での初期化シーケンス送信は不要
-        // }
-        
+
         private IntPtr CreateEnvironmentBlock()
         {
             // xterm.js用の環境変数を設定
             var envVars = new Dictionary<string, string>
             {
-                ["TERM"] = "xterm-256color",          // xterm.jsは256色をサポート
-                ["COLORTERM"] = "truecolor",           // xterm.jsは24ビットカラーをサポート
-                // 行数と列数はConPTYが管理するため設定不要
-                // ["LINES"] = Rows.ToString(),
-                // ["COLUMNS"] = Cols.ToString(),
+                ["TERM"] = "xterm-256color",
+                ["COLORTERM"] = "truecolor",
             };
             
             // 既存の環境変数を取得してマージ
@@ -319,7 +309,6 @@ namespace TerminalHub.Services
         /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
-            Console.WriteLine();
             if (_writer != null && !_disposed)
             {
                 // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）

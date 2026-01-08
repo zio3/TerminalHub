@@ -17,7 +17,7 @@ namespace TerminalHub.Services
         private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
         private readonly object _timerLock = new();
         private Action<Guid>? _timeoutCallback;
-        private bool _disposed;
+        private volatile bool _disposed;
 
         public OutputAnalyzerService(
             ILogger<OutputAnalyzerService> logger,
@@ -228,6 +228,10 @@ namespace TerminalHub.Services
 
         private void CheckSessionTimeout(Guid sessionId)
         {
+            // Dispose後はコールバックを呼び出さない
+            if (_disposed)
+                return;
+
             _logger.LogDebug("CheckSessionTimeout called for session {SessionId}", sessionId);
             _timeoutCallback?.Invoke(sessionId);
         }
