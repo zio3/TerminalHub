@@ -331,5 +331,19 @@ window.terminalHubHelpers = {
                 notification: true
             }
         };
+    },
+
+    updateSessionSettings: function(sortMode) {
+        const settings = this.getSettings();
+        if (!settings.sessions) {
+            settings.sessions = {};
+        }
+        settings.sessions.sortMode = sortMode;
+        this.saveSettings(settings);
+    },
+
+    getSessionSettings: function() {
+        const settings = this.getSettings();
+        return settings.sessions || { sortMode: "createdAt" };
     }
 };

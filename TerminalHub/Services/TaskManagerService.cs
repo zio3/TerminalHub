@@ -30,10 +30,13 @@ namespace TerminalHub.Services
         private readonly IConPtyService _conPtyService;
         private readonly IPackageJsonService _packageJsonService;
         private readonly ILogger<TaskManagerService> _logger;
-        
+
         private Dictionary<string, string> _availableScripts = new();
         private readonly List<TaskSession> _sessions = new();
         private TaskSession? _activeSession;
+
+        // イベントハンドラーを追跡（解除用）
+        private readonly Dictionary<string, (EventHandler<DataReceivedEventArgs> DataReceived, EventHandler ProcessExited)> _sessionHandlers = new();
         
         public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
         public List<TaskSession> Sessions => _sessions;
@@ -129,36 +132,43 @@ namespace TerminalHub.Services
                     ConPtySession = conPtySession
                 };
                 
-                // データ受信イベントを設定
-                conPtySession.DataReceived += (sender, e) =>
+                // データ受信イベントハンドラーを作成
+                var dataReceivedHandler = new EventHandler<DataReceivedEventArgs>((sender, e) =>
                 {
                     taskSession.OutputBuffer.Add(e.Data);
-                    
+
                     // バッファサイズを制限（最大10000行）
                     if (taskSession.OutputBuffer.Count > 10000)
                     {
                         taskSession.OutputBuffer.RemoveRange(0, 1000);
                     }
-                    
+
                     // アクティブセッションの場合、UIに通知
                     if (_activeSession?.Id == taskSession.Id)
                     {
                         SessionDataReceived?.Invoke(this, e.Data);
                     }
-                };
-                
-                // プロセス終了イベントを設定
-                conPtySession.ProcessExited += (sender, e) =>
+                });
+
+                // プロセス終了イベントハンドラーを作成
+                var processExitedHandler = new EventHandler((sender, e) =>
                 {
                     taskSession.EndTime = DateTime.Now;
                     // ConPtySessionはExitCodeを提供しないため、完了として扱う
                     taskSession.Status = TaskStatus.Completed;
-                    
-                    _logger.LogInformation("タスク終了: {Script} (ステータス: {Status})", 
+
+                    _logger.LogInformation("タスク終了: {Script} (ステータス: {Status})",
                         scriptName, taskSession.Status);
                     SessionUpdated?.Invoke(this, taskSession);
-                };
-                
+                });
+
+                // イベントを登録
+                conPtySession.DataReceived += dataReceivedHandler;
+                conPtySession.ProcessExited += processExitedHandler;
+
+                // ハンドラーを保存（後で解除するため）
+                _sessionHandlers[taskSession.Id] = (dataReceivedHandler, processExitedHandler);
+
                 // ConPtySessionを開始（ただしコマンドはまだ送信しない）
                 conPtySession.Start();
                 
@@ -186,31 +196,50 @@ namespace TerminalHub.Services
             if (session?.ConPtySession != null)
             {
                 _logger.LogInformation("タスク停止: {Script} (状態: {Status})", session.ScriptName, session.Status);
-                
+
                 // Runningの場合はCtrl+Cを送信
                 if (session.Status == TaskStatus.Running)
                 {
                     // Ctrl+C を送信して正常終了を試みる
                     await session.ConPtySession.WriteAsync("\x03");
-                    
+
                     // 少し待つ
                     await Task.Delay(1000);
                 }
-                
+
+                // イベントハンドラーを解除
+                CleanupSessionHandlers(sessionId, session.ConPtySession);
+
                 // ConPtySessionを終了
                 if (!session.ConPtySession.HasExited)
                 {
                     session.ConPtySession.Dispose();
                 }
-                
+
                 session.Status = TaskStatus.Stopped;
                 session.EndTime = DateTime.Now;
                 session.ConPtySession = null; // 参照をクリア
                 SessionUpdated?.Invoke(this, session);
-                
+
                 // セッションをリストから削除（再実行可能にするため）
                 _sessions.Remove(session);
                 _logger.LogInformation("セッションをリストから削除: {Script}", session.ScriptName);
+            }
+        }
+
+        /// <summary>
+        /// セッションのイベントハンドラーを解除
+        /// </summary>
+        private void CleanupSessionHandlers(string sessionId, ConPtySession? conPtySession)
+        {
+            if (_sessionHandlers.TryGetValue(sessionId, out var handlers))
+            {
+                if (conPtySession != null)
+                {
+                    conPtySession.DataReceived -= handlers.DataReceived;
+                    conPtySession.ProcessExited -= handlers.ProcessExited;
+                }
+                _sessionHandlers.Remove(sessionId);
             }
         }
         
@@ -265,9 +294,12 @@ namespace TerminalHub.Services
         {
             foreach (var session in _sessions)
             {
+                // イベントハンドラーを解除してから破棄
+                CleanupSessionHandlers(session.Id, session.ConPtySession);
                 session.ConPtySession?.Dispose();
             }
             _sessions.Clear();
+            _sessionHandlers.Clear();
         }
     }
 }

@@ -370,7 +370,6 @@ namespace TerminalHub.Services
             // 既にConPtyセッションが存在する場合はそれを返す
             if (_sessions.TryGetValue(sessionId, out var existingSession))
             {
-                sessionInfo.LastAccessedAt = DateTime.Now;
                 _logger.LogDebug("既存セッションを再利用: SessionId={SessionId}", sessionId);
                 return existingSession;
             }
@@ -385,7 +384,6 @@ namespace TerminalHub.Services
                 // ダブルチェックロッキング
                 if (_sessions.TryGetValue(sessionId, out existingSession))
                 {
-                    sessionInfo.LastAccessedAt = DateTime.Now;
                     _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
                     return existingSession;
                 }
@@ -409,10 +407,7 @@ namespace TerminalHub.Services
                 newSession.Start();
                 // 初期サイズを設定
                 newSession.Resize(cols, rows);
-                
-                sessionInfo.LastAccessedAt = DateTime.Now;
-                
-                
+
                 _logger.LogInformation("新規セッション接続完了: SessionId={SessionId}", sessionId);
                 _logger.LogInformation($"ConPty session with buffer initialized on-demand: {sessionId}");
                 
@@ -459,7 +454,6 @@ namespace TerminalHub.Services
                     if (_sessionInfos.TryGetValue(sessionId, out var newActive))
                     {
                         newActive.IsActive = true;
-                        newActive.LastAccessedAt = DateTime.Now;
                     }
 
                     return Task.FromResult(true);
@@ -754,7 +748,7 @@ namespace TerminalHub.Services
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
         {
-            var options = sessionInfo.Options;
+            var options = sessionInfo.Options ?? new Dictionary<string, string>();
             if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && options.ContainsKey("continue"))
             {
                 options = new Dictionary<string, string>(options);

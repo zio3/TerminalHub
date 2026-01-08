@@ -171,7 +171,32 @@
                         {
                             <div class="tab-pane fade show active">
                                 <h6 class="mb-3">セッション設定</h6>
-                                <p class="text-muted">セッション管理に関する設定（今後追加予定）</p>
+
+                                <div class="mb-4">
+                                    <label class="form-label">セッション一覧の並び順</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="sessionSortMode"
+                                               id="sortByCreatedAt" value="createdAt" checked="@(sessionSortMode == "createdAt")"
+                                               @onchange="@(() => sessionSortMode = "createdAt")">
+                                        <label class="form-check-label" for="sortByCreatedAt">
+                                            <i class="bi bi-calendar-plus me-1"></i>作成日時順
+                                            <span class="text-muted small">（デフォルト）</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="sessionSortMode"
+                                               id="sortByLastAccessed" value="lastAccessed" checked="@(sessionSortMode == "lastAccessed")"
+                                               @onchange="@(() => sessionSortMode = "lastAccessed")">
+                                        <label class="form-check-label" for="sortByLastAccessed">
+                                            <i class="bi bi-clock-history me-1"></i>最終利用日時順
+                                            <span class="text-muted small">（最近使用したセッションが上に表示）</span>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        「最終利用日時順」では、子セッション（Worktree）の利用も親セッションの順序に反映されます。
+                                    </p>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "export")
@@ -320,6 +345,9 @@
     private bool saveSuccess = false;
     private string activeTab = "notifications";
     private string claudeModeSwitchKey = "altM";
+    private string sessionSortMode = "createdAt";
+
+    [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     
     // エクスポート/インポート用
     private class ExportCategories
@@ -406,6 +434,13 @@
                         claudeModeSwitchKey = key.GetString() ?? "altM";
                     }
                 }
+                if (s.TryGetProperty("sessions", out var sessionsSettings))
+                {
+                    if (sessionsSettings.TryGetProperty("sortMode", out var sortMode))
+                    {
+                        sessionSortMode = sortMode.GetString() ?? "createdAt";
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -416,6 +451,7 @@
             webHookEnabled = false;
             webHookUrl = "";
             claudeModeSwitchKey = "altM";
+            sessionSortMode = "createdAt";
         }
     }
     
@@ -491,6 +527,8 @@
                 claudeHookEnabled, hookEventStop, hookEventUserPromptSubmit, hookEventNotification);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
                 claudeModeSwitchKey);
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSessionSettings",
+                sessionSortMode);
 
             // サーバー側のWebhook設定も保存（Hook通知用）
             WebhookSettingsService.SaveSettings(new WebhookSettings
@@ -498,6 +536,9 @@
                 Enabled = webHookEnabled,
                 Url = webHookUrl ?? ""
             });
+
+            // セッションソートモードの変更を通知
+            await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;

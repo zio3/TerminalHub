@@ -177,6 +177,9 @@ namespace TerminalHub.Services
                         _logger.LogDebug("Notification skipped (user interrupted) for session {SessionId}", session.SessionId);
                     }
 
+                    // 最終利用時刻を更新（ソート用）
+                    session.LastAccessedAt = DateTime.Now;
+
                     // セッション情報をクリア
                     session.ProcessingStartTime = null;
                     session.ProcessingElapsedSeconds = null;

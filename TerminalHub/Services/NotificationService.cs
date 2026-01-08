@@ -154,7 +154,8 @@ namespace TerminalHub.Services
         {
             try
             {
-                using var httpClient = _httpClientFactory.CreateClient();
+                // IHttpClientFactory から取得した HttpClient は Dispose 不要（ファクトリーが管理）
+                var httpClient = _httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(10);
 
                 // ヘッダーを設定（重複時は上書きせず警告ログ）

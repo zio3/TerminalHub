@@ -118,6 +118,7 @@ public class WebhookSettingsService : IWebhookSettingsService
 
         try
         {
+            // IHttpClientFactory から取得した HttpClient は Dispose 不要（ファクトリーが管理）
             var httpClient = _httpClientFactory.CreateClient();
 
             // ヘッダーを設定
@@ -127,7 +128,7 @@ public class WebhookSettingsService : IWebhookSettingsService
                 {
                     if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
                     {
-                        httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
+                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
                     }
                 }
             }
@@ -146,11 +147,11 @@ public class WebhookSettingsService : IWebhookSettingsService
             };
 
             var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
             _logger.LogDebug("Webhook送信: {Url}, Event={Event}", settings.Url, eventType);
 
-            var response = await httpClient.PostAsync(settings.Url, content);
+            using var response = await httpClient.PostAsync(settings.Url, content);
 
             if (response.IsSuccessStatusCode)
             {

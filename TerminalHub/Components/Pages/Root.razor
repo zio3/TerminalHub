@@ -38,7 +38,8 @@
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
 <DevWindow @bind-IsVisible="showDevWindow" />
-<SettingsDialog @bind-IsVisible="showSettingsDialog" />
+<SettingsDialog @bind-IsVisible="showSettingsDialog"
+                OnSessionSortModeChanged="HandleSessionSortModeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -62,6 +63,7 @@
         <SessionList Sessions=@sessions
                      ActiveSessionId=@activeSessionId
                      IsAddingSession=@isAddingSession
+                     SortMode=@sessionSortMode
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
                      OnSessionRemove="async (sessionId) => await ArchiveSession(sessionId)"
@@ -330,6 +332,7 @@
     private List<SessionInfo> sessions = new();
     private Guid? activeSessionId;
     private bool isAddingSession = false;
+    private string sessionSortMode = "createdAt"; // セッション一覧のソートモード
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
@@ -492,6 +495,20 @@
                 // エラー時はデフォルト値を使用
             }
 
+            // セッション設定を読み込み
+            try
+            {
+                var sessionSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSessionSettings");
+                if (sessionSettings.HasValue && sessionSettings.Value.TryGetProperty("sortMode", out var sortMode))
+                {
+                    sessionSortMode = sortMode.GetString() ?? "createdAt";
+                }
+            }
+            catch
+            {
+                // エラー時はデフォルト値を使用
+            }
+
             // 下部パネルタブを初期化
             await InitializeBottomPanelTabs();
 
@@ -535,6 +552,10 @@
                         var createdSession = SessionManager.GetSessionInfo(newSession.SessionId);
                         if (createdSession != null)
                         {
+                            // 作成日時と最終利用日時を復元
+                            createdSession.CreatedAt = sessionInfo.CreatedAt;
+                            createdSession.LastAccessedAt = sessionInfo.LastAccessedAt;
+
                             if (!string.IsNullOrEmpty(sessionInfo.Memo))
                             {
                                 createdSession.Memo = sessionInfo.Memo;
@@ -631,6 +652,12 @@
     private void ShowSettings()
     {
         showSettingsDialog = true;
+    }
+
+    private void HandleSessionSortModeChanged(string sortMode)
+    {
+        sessionSortMode = sortMode;
+        StateHasChanged();
     }
 
     private async Task SwitchBottomPanelTab(BottomPanelTab tab)
@@ -969,6 +996,17 @@
             try
             {
                 await activeSession.WriteAsync(text);
+
+                // 最終利用時刻を更新（ソート用）
+                if (activeSessionId.HasValue)
+                {
+                    var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
+                    if (sessionInfo != null)
+                    {
+                        sessionInfo.LastAccessedAt = DateTime.Now;
+                        StateHasChanged(); // セッションリストのソート順を更新
+                    }
+                }
             }
             catch (Exception)
             {
@@ -1727,6 +1765,17 @@
             try
             {
                 await activeSession.WriteAsync(inputText);
+
+                // 最終利用時刻を更新（ソート用）
+                if (activeSessionId.HasValue)
+                {
+                    var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
+                    if (sessionInfo != null)
+                    {
+                        sessionInfo.LastAccessedAt = DateTime.Now;
+                        StateHasChanged(); // セッションリストのソート順を更新
+                    }
+                }
             }
             catch (Exception)
             {

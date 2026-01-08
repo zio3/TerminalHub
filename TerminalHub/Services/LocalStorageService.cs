@@ -228,6 +228,16 @@ namespace TerminalHub.Services
 
                 return JsonSerializer.Deserialize<Dictionary<Guid, bool>>(json, _jsonOptions) ?? new Dictionary<Guid, bool>();
             }
+            catch (InvalidOperationException)
+            {
+                // JavaScript interopが利用できない場合は無視（プリレンダリング中など）
+                return new Dictionary<Guid, bool>();
+            }
+            catch (JSDisconnectedException)
+            {
+                // JavaScript接続が切断されている場合は無視
+                return new Dictionary<Guid, bool>();
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error loading expanded states from localStorage");

@@ -192,6 +192,7 @@
     [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
     [Parameter] public Guid? ActiveSessionId { get; set; }
     [Parameter] public bool IsAddingSession { get; set; }
+    [Parameter] public string SortMode { get; set; } = "createdAt"; // "createdAt" or "lastAccessed"
 
     private string filterText = string.Empty;
 
@@ -229,59 +230,78 @@
         // フィルターに一致するセッションを取得
         var filteredSessions = GetFilteredSessions();
 
-        // まず親セッションとその子セッションをグループ化
-        foreach (var session in filteredSessions.OrderBy(s => s.CreatedAt))
+        // 親セッションのみ抽出
+        var parentSessions = filteredSessions.Where(s => !s.ParentSessionId.HasValue).ToList();
+
+        // 親が存在しない子セッション（孤児）も追加
+        var orphanSessions = filteredSessions
+            .Where(s => s.ParentSessionId.HasValue && !Sessions.Any(p => p.SessionId == s.ParentSessionId))
+            .ToList();
+
+        // ソート用のキーを計算（lastAccessedの場合は子セッションの最終アクセス日時も考慮）
+        IOrderedEnumerable<SessionInfo> sortedParents;
+        if (SortMode == "lastAccessed")
+        {
+            // 親セッションごとに、自分と子セッションの最大LastAccessedAtを計算
+            sortedParents = parentSessions.OrderByDescending(parent =>
+            {
+                var children = Sessions.Where(s => s.ParentSessionId == parent.SessionId);
+                var allDates = children.Select(c => c.LastAccessedAt).Append(parent.LastAccessedAt);
+                return allDates.Max();
+            });
+        }
+        else
+        {
+            // 作成日時順（従来の動作）
+            sortedParents = parentSessions.OrderBy(s => s.CreatedAt);
+        }
+
+        // 親セッションとその子セッションをグループ化
+        foreach (var session in sortedParents)
         {
             if (processed.Contains(session.SessionId))
                 continue;
-                
+
             var group = new List<SessionInfo>();
-            
-            // ParentSessionIdを持たない場合は親セッション
-            if (!session.ParentSessionId.HasValue)
+            group.Add(session);
+            processed.Add(session.SessionId);
+
+            // 子セッションは常に作成日時順
+            var sortedChildren = filteredSessions
+                .Where(s => s.ParentSessionId == session.SessionId)
+                .OrderBy(s => s.CreatedAt);
+
+            // 親セッションが展開されている場合のみ子セッションを表示
+            if (session.IsExpanded)
             {
-                group.Add(session);
-                processed.Add(session.SessionId);
-
-                // 親セッションが展開されている場合のみ子セッションを表示
-                if (session.IsExpanded)
+                foreach (var child in sortedChildren)
                 {
-                    // 子セッション（ParentSessionIdがこのセッションを指すもの）を探す
-                    var children = filteredSessions
-                        .Where(s => s.ParentSessionId == session.SessionId)
-                        .OrderBy(s => s.CreatedAt);
-
-                    foreach (var child in children)
-                    {
-                        group.Add(child);
-                        processed.Add(child.SessionId);
-                    }
-                }
-                else
-                {
-                    // 折りたたまれている場合も子セッションを処理済みとしてマーク
-                    var children = Sessions
-                        .Where(s => s.ParentSessionId == session.SessionId);
-
-                    foreach (var child in children)
-                    {
-                        processed.Add(child.SessionId);
-                    }
+                    group.Add(child);
+                    processed.Add(child.SessionId);
                 }
             }
-            // 親が存在しない子セッションの場合（親が削除された場合など）
-            else if (!Sessions.Any(s => s.SessionId == session.ParentSessionId))
+            else
             {
-                group.Add(session);
-                processed.Add(session.SessionId);
+                // 折りたたまれている場合も子セッションを処理済みとしてマーク
+                foreach (var child in Sessions.Where(s => s.ParentSessionId == session.SessionId))
+                {
+                    processed.Add(child.SessionId);
+                }
             }
-            
-            if (group.Any())
+
+            result.Add(group);
+        }
+
+        // 孤児セッションを追加
+        foreach (var orphan in orphanSessions)
+        {
+            if (!processed.Contains(orphan.SessionId))
             {
-                result.Add(group);
+                result.Add(new List<SessionInfo> { orphan });
+                processed.Add(orphan.SessionId);
             }
         }
-        
+
         return result;
     }
     
