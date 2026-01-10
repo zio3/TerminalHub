@@ -8,10 +8,6 @@ namespace TerminalHub.Constants
         public const int MinCols = 80;
         public const int MinRows = 24;
         
-        // バッファサイズ
-        public const int DefaultBufferSize = 4096;
-        public const int MaxBufferSize = 65536;
-        
         // タイミング（ミリ秒）
         public const int ResizeDelay = 20;           // リサイズ後の待機（最小値）
         public const int DomUpdateDelay = 50;         // DOM更新待機
@@ -25,7 +21,6 @@ namespace TerminalHub.Constants
         public const int ProcThreadAttributePseudoConsole = 0x00020016;
         
         // セッション
-        public const int DefaultMaxSessions = 25; // 20セッション + 余裕
         public const int SessionIdDisplayLength = 8;
         
         // ファイルパス

@@ -90,7 +90,6 @@ namespace TerminalHub.Services
         /// セッションが変更されたときに発火するイベント
         /// </summary>
         public event EventHandler? OnSessionsChanged;
-        private readonly int _maxSessions;
 
         public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IServer? server = null)
         {
@@ -100,7 +99,6 @@ namespace TerminalHub.Services
             _gitService = gitService;
             _claudeHookService = claudeHookService;
             _server = server;
-            _maxSessions = _configuration.GetValue<int>("SessionSettings:MaxSessions", TerminalConstants.DefaultMaxSessions);
         }
 
         /// <summary>
@@ -193,14 +191,7 @@ namespace TerminalHub.Services
         {
             try
             {
-                // セッション数の上限チェック
-                if (_sessions.Count >= _maxSessions)
-                {
-                    _logger.LogWarning($"Maximum session count reached: {_maxSessions}");
-                    throw new InvalidOperationException($"最大セッション数（{_maxSessions}）に達しています。");
-                }
-            
-            // フォルダパスが指定されていない場合はデフォルトを使用
+                // フォルダパスが指定されていない場合はデフォルトを使用
             if (string.IsNullOrWhiteSpace(folderPath))
             {
                 folderPath = _configuration.GetValue<string>("SessionSettings:BasePath") 
@@ -244,11 +235,6 @@ namespace TerminalHub.Services
             catch (DirectoryNotFoundException)
             {
                 // フォルダが存在しないエラーはそのまま再スロー
-                throw;
-            }
-            catch (InvalidOperationException)
-            {
-                // セッション数上限エラーはそのまま再スロー
                 throw;
             }
             catch (Exception ex)
