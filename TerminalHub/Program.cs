@@ -40,6 +40,9 @@ builder.Services.AddSingleton<IGitService, GitService>();
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
 
+// SessionTimerServiceを登録（Singleton: セッションタイマーを一元管理）
+builder.Services.AddSingleton<ISessionTimerService, SessionTimerService>();
+
 // TerminalServiceを登録
 builder.Services.AddScoped<ITerminalService, TerminalService>();
 

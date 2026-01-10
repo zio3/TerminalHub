@@ -40,17 +40,20 @@ public class HookNotificationService : IHookNotificationService
     private readonly ILogger<HookNotificationService> _logger;
     private readonly ISessionManager _sessionManager;
     private readonly IWebhookSettingsService _webhookSettingsService;
+    private readonly ISessionTimerService _sessionTimerService;
 
     public event EventHandler<HookNotificationEventArgs>? OnHookNotification;
 
     public HookNotificationService(
         ILogger<HookNotificationService> logger,
         ISessionManager sessionManager,
-        IWebhookSettingsService webhookSettingsService)
+        IWebhookSettingsService webhookSettingsService,
+        ISessionTimerService sessionTimerService)
     {
         _logger = logger;
         _sessionManager = sessionManager;
         _webhookSettingsService = webhookSettingsService;
+        _sessionTimerService = sessionTimerService;
     }
 
     public async Task HandleHookNotificationAsync(HookNotification notification)
@@ -76,10 +79,7 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
-        // イベントを発火
-        OnHookNotification?.Invoke(this, new HookNotificationEventArgs(notification));
-
-        // イベント種類に応じた処理
+        // イベント種類に応じた処理（ステータス更新を先に実行）
         switch (eventType)
         {
             case HookEventType.Stop:
@@ -94,11 +94,17 @@ public class HookNotificationService : IHookNotificationService
                 await HandleNotificationEventAsync(session, notification);
                 break;
         }
+
+        // イベントを発火（ステータス更新後にUIを更新させる）
+        OnHookNotification?.Invoke(this, new HookNotificationEventArgs(notification));
     }
 
     private async Task HandleStopEventAsync(SessionInfo session, HookNotification notification)
     {
         _logger.LogInformation("Stop イベント処理: Session={SessionName}", session.GetDisplayName());
+
+        // タイムアウトタイマーを停止（SessionTimeoutを防ぐ）
+        _sessionTimerService.StopSessionTimer(session.SessionId);
 
         // 処理時間を計算
         var elapsedSeconds = 0;
@@ -125,9 +131,20 @@ public class HookNotificationService : IHookNotificationService
             _logger.LogWarning(ex, "処理完了通知の送信に失敗: Session={SessionName}", session.GetDisplayName());
         }
 
-        // 処理状態をリセット
+        // 最終利用時刻を更新（ソート用）
+        _logger.LogInformation("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
+        session.LastAccessedAt = DateTime.Now;
+
+        // 処理状態を完全にリセット（SessionTimeoutと同じ項目をクリア）
+        _logger.LogInformation(
+            "[ステータスクリア] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+            session.GetDisplayName(),
+            session.ProcessingStatus ?? "(なし)");
         session.ProcessingStartTime = null;
         session.ProcessingStatus = null;
+        session.ProcessingElapsedSeconds = null;
+        session.LastProcessingUpdateTime = null;
+        session.IsWaitingForUserInput = false;
     }
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
@@ -135,6 +152,9 @@ public class HookNotificationService : IHookNotificationService
         _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
 
         // 処理開始を記録
+        _logger.LogInformation(
+            "[ステータス設定] きっかけ: HookNotificationService(UserPromptSubmit イベント), セッション: {SessionName}, ステータス: 処理中",
+            session.GetDisplayName());
         session.ProcessingStartTime = DateTime.Now;
         session.ProcessingStatus = "処理中";
 

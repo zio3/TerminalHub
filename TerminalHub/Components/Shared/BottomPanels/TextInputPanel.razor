@@ -43,14 +43,6 @@
                         <i class="bi bi-arrow-repeat"></i> @(ClaudeModeSwitchKey == "shiftTab" ? "Shift+Tab" : "Alt+M")
                     </button>
                 }
-                @if (ShowDevButton)
-                {
-                    <button class="btn btn-secondary"
-                            @onclick="OnDevButtonClick"
-                            title="開発ツール">
-                        <i class="bi bi-code-square"></i> Dev
-                    </button>
-                }
                 <button class="btn btn-primary" @onclick="OnSendClick">
                     <i class="bi bi-send"></i> 送信
                 </button>
@@ -63,7 +55,6 @@
     [Parameter] public string PanelId { get; set; } = "";
     [Parameter] public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public string ClaudeModeSwitchKey { get; set; } = "altM";
-    [Parameter] public bool ShowDevButton { get; set; } = false;
     [Parameter] public string PlaceholderText { get; set; } = "コマンドを入力...";
 
     [Parameter] public string Text { get; set; } = "";
@@ -73,7 +64,6 @@
     [Parameter] public EventCallback OnCtrlC { get; set; }
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }
-    [Parameter] public EventCallback OnDevToggle { get; set; }
 
     private string inputText
     {
@@ -181,10 +171,5 @@
         await OnModeSwitch.InvokeAsync();
         await Task.Delay(100);
         isModeSwitchPressed = false;
-    }
-
-    private async Task OnDevButtonClick()
-    {
-        await OnDevToggle.InvokeAsync();
     }
 }

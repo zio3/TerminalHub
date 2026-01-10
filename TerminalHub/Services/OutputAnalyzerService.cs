@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TerminalHub.Models;
@@ -9,24 +6,23 @@ using TerminalHub.Analyzers;
 
 namespace TerminalHub.Services
 {
-    public class OutputAnalyzerService : IOutputAnalyzerService, IDisposable
+    public class OutputAnalyzerService : IOutputAnalyzerService
     {
         private readonly ILogger<OutputAnalyzerService> _logger;
         private readonly INotificationService _notificationService;
         private readonly IOutputAnalyzerFactory _analyzerFactory;
-        private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
-        private readonly object _timerLock = new();
-        private Action<Guid>? _timeoutCallback;
-        private volatile bool _disposed;
+        private readonly ISessionTimerService _sessionTimerService;
 
         public OutputAnalyzerService(
             ILogger<OutputAnalyzerService> logger,
             INotificationService notificationService,
-            IOutputAnalyzerFactory analyzerFactory)
+            IOutputAnalyzerFactory analyzerFactory,
+            ISessionTimerService sessionTimerService)
         {
             _logger = logger;
             _notificationService = notificationService;
             _analyzerFactory = analyzerFactory;
+            _sessionTimerService = sessionTimerService;
         }
 
         public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?> updateStatus)
@@ -125,7 +121,7 @@ namespace TerminalHub.Services
                     session.ProcessingStartTime = DateTime.Now;
                     session.LastProcessingUpdateTime = DateTime.Now;
 
-                    // セッションごとのタイマーをリセット
+                    // セッションごとのタイマーをリセット（ISessionTimerServiceに委譲）
                     ResetSessionTimer(session.SessionId);
                 }
                 else
@@ -178,6 +174,7 @@ namespace TerminalHub.Services
                     }
 
                     // 最終利用時刻を更新（ソート用）
+                    _logger.LogInformation("[LastAccessedAt更新] きっかけ: OutputAnalyzerService(処理完了検出), セッション: {SessionName}", session.GetDisplayName());
                     session.LastAccessedAt = DateTime.Now;
 
                     // セッション情報をクリア
@@ -186,79 +183,27 @@ namespace TerminalHub.Services
                     session.LastProcessingUpdateTime = null;
                     session.IsWaitingForUserInput = false;
 
-                    // セッションのタイマーを停止
+                    // セッションのタイマーを停止（ISessionTimerServiceに委譲）
                     StopSessionTimer(session.SessionId);
                 }
-                
+
                 // UIを更新
                 updateStatus(session.SessionId, statusText);
         }
 
         public void ResetSessionTimer(Guid sessionId)
         {
-            lock (_timerLock)
-            {
-                // 既存のタイマーを停止
-                if (_sessionProcessingTimers.TryGetValue(sessionId, out var existingTimer))
-                {
-                    existingTimer?.Dispose();
-                    _sessionProcessingTimers.Remove(sessionId);
-                }
-
-                // 新しいタイマーを作成
-                var timer = new Timer(
-                    (state) => CheckSessionTimeout(sessionId),
-                    null,
-                    TimeSpan.FromSeconds(5),
-                    Timeout.InfiniteTimeSpan
-                );
-
-                _sessionProcessingTimers[sessionId] = timer;
-            }
+            _sessionTimerService.ResetSessionTimer(sessionId);
         }
 
         public void StopSessionTimer(Guid sessionId)
         {
-            lock (_timerLock)
-            {
-                if (_sessionProcessingTimers.TryGetValue(sessionId, out var timer))
-                {
-                    timer?.Dispose();
-                    _sessionProcessingTimers.Remove(sessionId);
-                }
-            }
-        }
-
-        private void CheckSessionTimeout(Guid sessionId)
-        {
-            // Dispose後はコールバックを呼び出さない
-            if (_disposed)
-                return;
-
-            _logger.LogDebug("CheckSessionTimeout called for session {SessionId}", sessionId);
-            _timeoutCallback?.Invoke(sessionId);
+            _sessionTimerService.StopSessionTimer(sessionId);
         }
 
         public void SetTimeoutCallback(Action<Guid> timeoutCallback)
         {
-            _timeoutCallback = timeoutCallback;
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            _disposed = true;
-
-            lock (_timerLock)
-            {
-                // すべてのタイマーを停止
-                foreach (var timer in _sessionProcessingTimers.Values)
-                {
-                    timer?.Dispose();
-                }
-                _sessionProcessingTimers.Clear();
-            }
+            _sessionTimerService.SetTimeoutCallback(timeoutCallback);
         }
     }
 }

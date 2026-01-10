@@ -37,7 +37,6 @@
 <SessionCreateDialog IsVisible="showCreateDialog" 
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
-<DevWindow @bind-IsVisible="showDevWindow" />
 <SettingsDialog @bind-IsVisible="showSettingsDialog"
                 OnSessionSortModeChanged="HandleSessionSortModeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
@@ -152,15 +151,13 @@
                                     <TextInputPanel PanelId="@activeTab.Id"
                                                     TerminalType="@currentSession.TerminalType"
                                                     ClaudeModeSwitchKey="@claudeModeSwitchKey"
-                                                    ShowDevButton="@showDevButton"
                                                     PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
                                                     Text="@GetTextInputPanelText(activeTab.Id)"
                                                     TextChanged="@(text => SetTextInputPanelText(activeTab.Id, text))"
                                                     OnSendInput="HandleTextInputSend"
                                                     OnCtrlC="SendCtrlC"
                                                     OnEscape="SendEscape"
-                                                    OnModeSwitch="SendModeSwitch"
-                                                    OnDevToggle="() => showDevWindow = !showDevWindow" />
+                                                    OnModeSwitch="SendModeSwitch" />
                                 }
                                 else if (activeTab.Type == BottomPanelTabType.DosTerminal)
                                 {
@@ -350,8 +347,6 @@
     private Dictionary<string, DosTerminalPanel> dosTerminalPanelRefs = new();
     private DosTerminalPanel? currentDosTerminalPanelRef;
     private Dictionary<string, string> textInputPanelTexts = new();
-    private bool showDevWindow = false;
-    private bool showDevButton = false;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
@@ -393,10 +388,6 @@
     {
         dotNetRef = DotNetObjectReference.Create(this);
 
-        // 開発モード設定を読み込み
-        showDevButton = Configuration.GetValue<bool>("DevelopmentMode:ShowDevButton", false);
-        showDevWindow = Configuration.GetValue<bool>("DevelopmentMode:ShowDevWindowOnStartup", false);
-
         // スナップショット設定を読み込み
         _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
         _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
@@ -404,9 +395,9 @@
 
 
         // OutputAnalyzerServiceのタイムアウトコールバックを設定
-        OutputAnalyzerService.SetTimeoutCallback(sessionId => 
+        OutputAnalyzerService.SetTimeoutCallback(sessionId =>
         {
-            InvokeAsync(() => OnSessionTimeout(sessionId));
+            _ = InvokeAsync(async () => await OnSessionTimeout(sessionId));
         });
 
         // TaskManagerServiceのイベントハンドラーを設定
@@ -443,7 +434,7 @@
         // HookNotificationServiceのイベントハンドラーを設定
         _hookNotificationHandler = (sender, args) =>
         {
-            InvokeAsync(() => OnHookNotification(args.Notification));
+            _ = InvokeAsync(async () => await OnHookNotification(args.Notification));
         };
         HookNotificationService.OnHookNotification += _hookNotificationHandler;
 
@@ -1003,6 +994,7 @@
                     var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
                     if (sessionInfo != null)
                     {
+                        Logger.LogInformation("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                         sessionInfo.LastAccessedAt = DateTime.Now;
                         StateHasChanged(); // セッションリストのソート順を更新
                     }
@@ -1129,6 +1121,7 @@
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (selectedSession != null && selectedSession.HasNotificationPending)
         {
+            Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession.GetDisplayName());
             selectedSession.HasNotificationPending = false;
         }
 
@@ -1772,6 +1765,7 @@
                     var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
                     if (sessionInfo != null)
                     {
+                        Logger.LogInformation("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                         sessionInfo.LastAccessedAt = DateTime.Now;
                         StateHasChanged(); // セッションリストのソート順を更新
                     }
@@ -2094,6 +2088,13 @@
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session != null)
         {
+            // すでにステータスがクリアされている場合はスキップ（Hook通知で先にクリアされた場合）
+            if (session.ProcessingStatus == null)
+            {
+                Logger.LogDebug("OnSessionTimeout: ステータスが既にクリア済みのためスキップ: {SessionId}", sessionId);
+                return;
+            }
+
             var lastUpdateTime = session.LastProcessingUpdateTime;
             if (!lastUpdateTime.HasValue)
             {
@@ -2121,6 +2122,10 @@
                 }
 
                 // ステータスをクリア
+                Logger.LogInformation(
+                    "[ステータスクリア] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+                    session.GetDisplayName(),
+                    session.ProcessingStatus ?? "(なし)");
                 session.ProcessingStatus = null;
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
@@ -2129,6 +2134,7 @@
 
                 if (activeSessionId != sessionId)
                 {
+                    Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
                     session.HasNotificationPending = true;
                 }
 
@@ -2170,10 +2176,20 @@
         var session = sessions.FirstOrDefault(s => s.SessionId == notification.SessionId);
         if (session == null) return;
 
+        Logger.LogInformation(
+            "[OnHookNotification] イベント: {EventType}, セッション: {SessionName}, 現在のステータス: {Status}",
+            eventType,
+            session.GetDisplayName(),
+            session.ProcessingStatus ?? "(なし)");
+
         switch (eventType)
         {
             case HookEventType.Stop:
-                // ステータスをクリア
+                // ステータスをクリア（Root.razorのsessionsリスト内のオブジェクトをクリア）
+                Logger.LogInformation(
+                    "[ステータスクリア] きっかけ: OnHookNotification(Stop), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+                    session.GetDisplayName(),
+                    session.ProcessingStatus ?? "(なし)");
                 session.ProcessingStatus = null;
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
@@ -2183,6 +2199,7 @@
                 // 非アクティブセッションの場合は通知マークを表示
                 if (activeSessionId != notification.SessionId)
                 {
+                    Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
                     session.HasNotificationPending = true;
                 }
 
@@ -3117,10 +3134,7 @@
             ConPtyConnection.ProcessExited -= _processExitedHandler;
             _processExitedHandler = null;
         }
-        
-        // OutputAnalyzerServiceのクリーンアップ
-        OutputAnalyzerService?.Dispose();
-        
+
         // JavaScript interopを安全に処理
         try
         {
@@ -3202,7 +3216,6 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.cleanupKeyboardShortcuts");
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.cleanupDevWindowDrag");
         }
         catch (JSDisconnectedException)
         {

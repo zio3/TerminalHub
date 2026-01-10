@@ -10,6 +10,5 @@ namespace TerminalHub.Services
         void ResetSessionTimer(Guid sessionId);
         void StopSessionTimer(Guid sessionId);
         void SetTimeoutCallback(Action<Guid> timeoutCallback);
-        void Dispose();
     }
 }

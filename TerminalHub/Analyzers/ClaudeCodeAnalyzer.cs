@@ -9,14 +9,18 @@ namespace TerminalHub.Analyzers
         // 例: ✶ Spellbinding… (esc to interrupt)
         //     ✢ Actualizing… (esc to interrupt · thinking)
         //     ✢ Pondering… (esc to interrupt · thought for 3s)
+        //     * Honking… (ctrl+c to interrupt · 39s · ↓ 941 tokens · thought for 16s)
+        //     · Jitterbugging… (ctrl+c to interrupt)
         // アニメーション記号: ✶ ✽ ✻ ✼ ✴ ✵ ✷ ✸ ✹ ✢ · ⋆ * 等
         private static readonly Regex ProcessingPattern = new Regex(
-            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\(esc to interrupt(?:\s*·\s*[^)]+)?\)",
+            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\((?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?\)",
             RegexOptions.Compiled);
 
         // 中断パターン
+        // 旧: [Request interrupted by user]
+        // 新: Interrupted · What should Claude do instead?
         private static readonly Regex InterruptedPattern = new Regex(
-            @"\[Request interrupted by user\]",
+            @"\[Request interrupted by user\]|Interrupted\s*·\s*What should Claude do",
             RegexOptions.Compiled);
 
         public bool TryAnalyze(string data, out AnalysisResult result)

@@ -94,31 +94,7 @@ window.terminalHubHelpers = {
             console.log(`[修復] JS側のターミナル情報が見つかりません`);
         }
     },
-    
-    // DevWindow drag handling
-    setupDevWindowDrag: function(dotNetRef) {
-        window.devWindowMouseMove = function(e) {
-            DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseMove', e.clientX, e.clientY);
-        };
-        window.devWindowMouseUp = function() {
-            DotNet.invokeMethodAsync('TerminalHub', 'OnDevWindowMouseUp');
-        };
-        
-        document.addEventListener('mousemove', window.devWindowMouseMove);
-        document.addEventListener('mouseup', window.devWindowMouseUp);
-    },
-    
-    cleanupDevWindowDrag: function() {
-        if (window.devWindowMouseMove) {
-            document.removeEventListener('mousemove', window.devWindowMouseMove);
-            window.devWindowMouseMove = null;
-        }
-        if (window.devWindowMouseUp) {
-            document.removeEventListener('mouseup', window.devWindowMouseUp);
-            window.devWindowMouseUp = null;
-        }
-    },
-    
+
     // Keyboard shortcuts
     setupKeyboardShortcuts: function(dotNetRef) {
         window.terminalHubKeyHandler = function(e) {
@@ -191,7 +167,7 @@ window.terminalHubHelpers = {
             console.log("This browser does not support desktop notification");
             return;
         }
-        
+
         if (Notification.permission === "granted") {
             const notification = new Notification(title, {
                 body: body,
@@ -199,13 +175,13 @@ window.terminalHubHelpers = {
                 tag: tag,
                 requireInteraction: true // 通知を自動的に閉じない
             });
-            
+
             // 通知をクリックしたときの処理
             notification.onclick = function(event) {
                 event.preventDefault();
                 window.focus(); // ブラウザウィンドウをフォーカス
                 notification.close();
-                
+
                 // Blazorのメソッドを呼び出してセッションを選択
                 if (window.terminalHubDotNetRef) {
                     window.terminalHubDotNetRef.invokeMethodAsync('OnNotificationClick', tag);
@@ -213,7 +189,83 @@ window.terminalHubHelpers = {
             };
         }
     },
-    
+
+    openNotificationSettings: function() {
+        // ブラウザの通知設定を開く案内
+        // 直接設定画面を開くことはできないため、ユーザーに案内を表示
+        const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+        const isEdge = /Edg/.test(navigator.userAgent);
+        const isFirefox = /Firefox/.test(navigator.userAgent);
+
+        let message = "通知許可を解除するには：\n\n";
+
+        if (isChrome || isEdge) {
+            message += "1. アドレスバー左側の鍵アイコン（🔒）をクリック\n";
+            message += "2.「サイトの設定」をクリック\n";
+            message += "3.「通知」を「ブロック」に変更";
+        } else if (isFirefox) {
+            message += "1. アドレスバー左側の鍵アイコン（🔒）をクリック\n";
+            message += "2.「通知」の権限を「ブロック」に変更";
+        } else {
+            message += "アドレスバー左側のサイト情報アイコンをクリックして、\n通知の設定を変更してください。";
+        }
+
+        alert(message);
+    },
+
+    // ターミナル診断用関数
+    scrollAllTerminalsToBottom: function() {
+        const activeTerminals = window.multiSessionTerminals;
+        if (activeTerminals) {
+            Object.keys(activeTerminals).forEach(sessionId => {
+                if (activeTerminals[sessionId] && activeTerminals[sessionId].terminal) {
+                    activeTerminals[sessionId].terminal.scrollToBottom();
+                }
+            });
+        }
+    },
+
+    scrollAllTerminalsToTop: function() {
+        const activeTerminals = window.multiSessionTerminals;
+        if (activeTerminals) {
+            Object.keys(activeTerminals).forEach(sessionId => {
+                if (activeTerminals[sessionId] && activeTerminals[sessionId].terminal) {
+                    activeTerminals[sessionId].terminal.scrollToTop();
+                }
+            });
+        }
+    },
+
+    getAllTerminalScrollPositions: function() {
+        const activeTerminals = window.multiSessionTerminals;
+        const positions = {};
+        if (activeTerminals) {
+            Object.keys(activeTerminals).forEach(sessionId => {
+                const term = activeTerminals[sessionId]?.terminal;
+                if (term && term.buffer && term.buffer.active) {
+                    positions[sessionId] = {
+                        viewportY: term.buffer.active.viewportY,
+                        baseY: term.buffer.active.baseY,
+                        length: term.buffer.active.length
+                    };
+                }
+            });
+        }
+        return positions;
+    },
+
+    downloadBase64File: function(base64, filename, mimeType) {
+        try {
+            const link = document.createElement('a');
+            link.href = `data:${mimeType};charset=utf-8;base64,${base64}`;
+            link.download = filename;
+            link.click();
+        } catch (e) {
+            console.error('downloadBase64File error:', e);
+            throw e;
+        }
+    },
+
     // Store DotNetRef for notification callback
     setDotNetRef: function(dotNetRef) {
         window.terminalHubDotNetRef = dotNetRef;
@@ -345,5 +397,19 @@ window.terminalHubHelpers = {
     getSessionSettings: function() {
         const settings = this.getSettings();
         return settings.sessions || { sortMode: "createdAt" };
+    },
+
+    updateDevToolsSettings: function(enabled) {
+        const settings = this.getSettings();
+        if (!settings.devTools) {
+            settings.devTools = {};
+        }
+        settings.devTools.enabled = enabled;
+        this.saveSettings(settings);
+    },
+
+    getDevToolsSettings: function() {
+        const settings = this.getSettings();
+        return settings.devTools || { enabled: false };
     }
 };

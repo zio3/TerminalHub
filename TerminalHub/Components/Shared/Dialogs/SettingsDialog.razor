@@ -1,11 +1,13 @@
 @namespace TerminalHub.Components.Shared.Dialogs
 @using TerminalHub.Services
+@using TerminalHub.Models
 @using Microsoft.Extensions.Configuration
 @inject INotificationService NotificationService
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject IWebhookSettingsService WebhookSettingsService
+@inject ISessionManager SessionManager
 
 @if (IsVisible)
 {
@@ -56,6 +58,30 @@
                                 <i class="bi bi-wrench me-1"></i>特殊
                             </button>
                         </li>
+                        @if (devToolsEnabled)
+                        {
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @(activeTab == "devDiagnose" ? "active" : "")"
+                                        type="button"
+                                        @onclick="@(() => activeTab = "devDiagnose")">
+                                    <i class="bi bi-bug me-1"></i>診断
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @(activeTab == "devBuffer" ? "active" : "")"
+                                        type="button"
+                                        @onclick="@(() => activeTab = "devBuffer")">
+                                    <i class="bi bi-hdd me-1"></i>バッファ
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @(activeTab == "devNotify" ? "active" : "")"
+                                        type="button"
+                                        @onclick="@(() => activeTab = "devNotify")">
+                                    <i class="bi bi-bell-fill me-1"></i>通知テスト
+                                </button>
+                            </li>
+                        }
                     </ul>
                     
                     <!-- タブコンテンツ -->
@@ -77,7 +103,7 @@
                             <label class="form-label mb-0">ブラウザ通知</label>
                             <span class="badge @GetNotificationBadgeClass()">@notificationStatus</span>
                         </div>
-                        @if (notificationStatus == "許可")
+                        @if (notificationStatus == "許可済み")
                         {
                             <div class="form-check form-switch mb-2">
                                 <input class="form-check-input" type="checkbox" @bind="browserNotificationEnabled" id="browserNotificationSwitch">
@@ -85,6 +111,12 @@
                                     ブラウザ通知を有効にする
                                 </label>
                             </div>
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="OpenBrowserNotificationSettings">
+                                <i class="bi bi-gear me-1"></i>通知許可を解除
+                            </button>
+                            <p class="text-muted small mt-2 mb-0">
+                                ブラウザの設定画面で通知許可を解除できます。
+                            </p>
                         }
                         else if (notificationStatus == "未許可")
                         {
@@ -305,6 +337,174 @@
                                         環境によってはAlt+Mが他の機能と競合する場合があります。その場合はShift+Tabをお試しください。
                                     </p>
                                 </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">開発ツール</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
+                                        <label class="form-check-label" for="devToolsSwitch">
+                                            開発ツールを有効にする
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        有効にすると、診断・バッファ・通知テストのタブが表示されます。
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "devDiagnose")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">診断情報</h6>
+
+                                <div class="mb-3">
+                                    <button class="btn btn-info btn-sm me-2" @onclick="RefreshDiagnostics">
+                                        <i class="bi bi-arrow-clockwise me-1"></i>診断情報を更新
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" @onclick="RunJSDiagnostics">
+                                        <i class="bi bi-bug me-1"></i>JS診断実行
+                                    </button>
+                                </div>
+
+                                <div class="mb-3">
+                                    <h6>セッション一覧</h6>
+                                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                        <table class="table table-sm table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>名前</th>
+                                                    <th>状態</th>
+                                                    <th>ConPTY</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var session in diagnosticSessions)
+                                                {
+                                                    <tr>
+                                                        <td class="text-truncate" style="max-width: 150px;">@session.GetDisplayName()</td>
+                                                        <td>
+                                                            <span class="badge @(session.IsActive ? "bg-success" : "bg-secondary")">
+                                                                @(session.IsActive ? "Active" : "Inactive")
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge @(session.ConPtySession != null ? "bg-primary" : "bg-warning")">
+                                                                @(session.ConPtySession != null ? "有" : "無")
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <h6>ターミナル情報</h6>
+                                    <p class="mb-1">JavaScript側ターミナル数: <span class="badge bg-info">@jsTerminalCount</span></p>
+                                </div>
+
+                                <hr />
+
+                                <h6 class="mb-3">ターミナル制御テスト</h6>
+                                <div class="mb-3">
+                                    <button class="btn btn-primary btn-sm me-2" @onclick="ScrollToBottom">
+                                        <i class="bi bi-arrow-down me-1"></i>最下部へ
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm me-2" @onclick="ScrollToTop">
+                                        <i class="bi bi-arrow-up me-1"></i>最上部へ
+                                    </button>
+                                    <button class="btn btn-info btn-sm" @onclick="GetScrollPosition">
+                                        <i class="bi bi-info-circle me-1"></i>位置取得
+                                    </button>
+                                </div>
+                                <div class="mb-3">
+                                    <small class="text-muted">@scrollInfo</small>
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "devBuffer")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">バッファキャプチャ</h6>
+
+                                <div class="mb-3">
+                                    <label class="form-label">セッション選択</label>
+                                    <select class="form-select" @bind="selectedSessionForBuffer">
+                                        <option value="">-- セッションを選択 --</option>
+                                        @foreach (var session in GetAvailableSessions())
+                                        {
+                                            var captureStatus = session.EnableBufferCapture ? " [キャプチャ中]" : "";
+                                            var bufferSize = session.CapturedBufferSize > 0 ? $" ({FormatBytes(session.CapturedBufferSize)})" : "";
+                                            <option value="@session.SessionId">@session.GetDisplayName()@captureStatus@bufferSize</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                @if (GetSelectedBufferSession() is SessionInfo selectedSession)
+                                {
+                                    <div class="mb-3">
+                                        <span class="badge @(selectedSession.EnableBufferCapture ? "bg-success" : "bg-secondary") me-2">
+                                            @(selectedSession.EnableBufferCapture ? "キャプチャ中" : "停止中")
+                                        </span>
+                                        @if (selectedSession.CapturedBufferSize > 0)
+                                        {
+                                            <span class="badge bg-info">@FormatBytes(selectedSession.CapturedBufferSize)</span>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="mb-3">
+                                    <div class="btn-group me-2">
+                                        <button class="btn btn-success btn-sm" @onclick="StartCapture"
+                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.EnableBufferCapture == true)">
+                                            <i class="bi bi-record-circle me-1"></i>開始
+                                        </button>
+                                        <button class="btn btn-warning btn-sm" @onclick="StopCapture"
+                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.EnableBufferCapture != true)">
+                                            <i class="bi bi-stop-circle me-1"></i>停止
+                                        </button>
+                                        <button class="btn btn-danger btn-sm" @onclick="ClearBuffer"
+                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.CapturedBufferSize == 0)">
+                                            <i class="bi bi-trash me-1"></i>クリア
+                                        </button>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm" @onclick="DownloadBuffer"
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.CapturedBufferSize == 0)">
+                                        <i class="bi bi-download me-1"></i>ダウンロード
+                                    </button>
+                                </div>
+
+                                <div class="mb-3">
+                                    <small class="text-muted">@bufferResult</small>
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "devNotify")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">通知テスト</h6>
+
+                                <div class="mb-3">
+                                    <label class="form-label">テスト用経過時間（秒）</label>
+                                    <input type="number" class="form-control" @bind="testElapsedSeconds" min="1" max="300" style="max-width: 150px;" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <button class="btn btn-warning btn-sm me-2" @onclick="TestBrowserNotification">
+                                        <i class="bi bi-bell me-1"></i>ブラウザ通知テスト
+                                    </button>
+                                    <button class="btn btn-success btn-sm" @onclick="TestWebHookNotification">
+                                        <i class="bi bi-send me-1"></i>WebHook通知テスト
+                                    </button>
+                                </div>
+
+                                <div class="mb-3">
+                                    <small class="text-muted">@notificationTestResult</small>
+                                </div>
                             </div>
                         }
                     </div>
@@ -346,6 +546,16 @@
     private string activeTab = "notifications";
     private string claudeModeSwitchKey = "altM";
     private string sessionSortMode = "createdAt";
+
+    // 開発ツール関連
+    private bool devToolsEnabled = false;
+    private List<SessionInfo> diagnosticSessions = new();
+    private int jsTerminalCount = 0;
+    private string scrollInfo = "スクロール位置情報が表示されます";
+    private string selectedSessionForBuffer = "";
+    private string bufferResult = "";
+    private int testElapsedSeconds = 10;
+    private string notificationTestResult = "テスト結果がここに表示されます";
 
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     
@@ -441,6 +651,13 @@
                         sessionSortMode = sortMode.GetString() ?? "createdAt";
                     }
                 }
+                if (s.TryGetProperty("devTools", out var devTools))
+                {
+                    if (devTools.TryGetProperty("enabled", out var enabled))
+                    {
+                        devToolsEnabled = enabled.GetBoolean();
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -452,6 +669,7 @@
             webHookUrl = "";
             claudeModeSwitchKey = "altM";
             sessionSortMode = "createdAt";
+            devToolsEnabled = false;
         }
     }
     
@@ -480,7 +698,7 @@
         {
             var granted = await NotificationService.RequestBrowserNotificationPermissionAsync();
             await CheckNotificationPermission();
-            
+
             if (granted)
             {
                 saveMessage = "通知が許可されました";
@@ -498,7 +716,20 @@
             saveSuccess = false;
         }
     }
-    
+
+    private async Task OpenBrowserNotificationSettings()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.openNotificationSettings");
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"エラー: {ex.Message}";
+            saveSuccess = false;
+        }
+    }
+
     private async Task SaveSettings()
     {
         try
@@ -529,6 +760,8 @@
                 claudeModeSwitchKey);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSessionSettings",
                 sessionSortMode);
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateDevToolsSettings",
+                devToolsEnabled);
 
             // サーバー側のWebhook設定も保存（Hook通知用）
             WebhookSettingsService.SaveSettings(new WebhookSettings
@@ -733,5 +966,237 @@
             "inputHistory" => "入力履歴",
             _ => category
         };
+    }
+
+    // 開発ツール関連メソッド
+    private async Task RefreshDiagnostics()
+    {
+        try
+        {
+            diagnosticSessions = SessionManager.GetAllSessions().ToList();
+            jsTerminalCount = await JSRuntime.InvokeAsync<int>("terminalHubHelpers.getTerminalCount");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"診断情報取得エラー: {ex.Message}");
+        }
+    }
+
+    private async Task RunJSDiagnostics()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.diagnoseTerminals");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"JS診断エラー: {ex.Message}");
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.scrollAllTerminalsToBottom");
+            scrollInfo = $"最下部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task ScrollToTop()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.scrollAllTerminalsToTop");
+            scrollInfo = $"最上部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task GetScrollPosition()
+    {
+        try
+        {
+            var result = await JSRuntime.InvokeAsync<object>("terminalHubHelpers.getAllTerminalScrollPositions");
+            scrollInfo = $"スクロール位置: {System.Text.Json.JsonSerializer.Serialize(result)} - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            scrollInfo = $"エラー: {ex.Message}";
+        }
+    }
+
+    private IEnumerable<SessionInfo> GetAvailableSessions()
+    {
+        return SessionManager.GetAllSessions();
+    }
+
+    private SessionInfo? GetSelectedBufferSession()
+    {
+        if (string.IsNullOrEmpty(selectedSessionForBuffer) || !Guid.TryParse(selectedSessionForBuffer, out var sessionId))
+            return null;
+        return SessionManager.GetSessionInfo(sessionId);
+    }
+
+    private void StartCapture()
+    {
+        var session = GetSelectedBufferSession();
+        if (session == null)
+        {
+            bufferResult = "セッションを選択してください";
+            return;
+        }
+        session.StartBufferCapture();
+        bufferResult = $"キャプチャを開始しました - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private void StopCapture()
+    {
+        var session = GetSelectedBufferSession();
+        if (session == null)
+        {
+            bufferResult = "セッションを選択してください";
+            return;
+        }
+        session.StopBufferCapture();
+        bufferResult = $"キャプチャを停止しました - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private void ClearBuffer()
+    {
+        var session = GetSelectedBufferSession();
+        if (session == null)
+        {
+            bufferResult = "セッションを選択してください";
+            return;
+        }
+        session.ClearCapturedBuffer();
+        bufferResult = $"バッファをクリアしました - {DateTime.Now:HH:mm:ss}";
+        StateHasChanged();
+    }
+
+    private async Task DownloadBuffer()
+    {
+        try
+        {
+            var sessionInfo = GetSelectedBufferSession();
+            if (sessionInfo == null)
+            {
+                bufferResult = "セッションを選択してください";
+                return;
+            }
+
+            var content = sessionInfo.GetCapturedBuffer();
+            if (string.IsNullOrEmpty(content))
+            {
+                bufferResult = "バッファが空です";
+                return;
+            }
+
+            var bufferInfo = new
+            {
+                Status = sessionInfo.EnableBufferCapture ? "キャプチャ中" : "停止中",
+                BufferSize = content.Length,
+                LineCount = content.Split('\n').Length,
+                CaptureStartTime = sessionInfo.BufferCaptureStartTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                SessionName = sessionInfo.GetDisplayName(),
+                SessionId = sessionInfo.SessionId
+            };
+
+            var header = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n";
+            var fullContent = header + content;
+            var filename = $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(fullContent);
+            var base64 = Convert.ToBase64String(bytes);
+
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadBase64File", base64, filename, "text/plain");
+
+            bufferResult = $"ダウンロード完了: {filename} ({FormatBytes(content.Length)})";
+        }
+        catch (Exception ex)
+        {
+            bufferResult = $"エラー: {ex.Message}";
+        }
+    }
+
+    private string FormatBytes(int bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private string SanitizeFilename(string filename)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = filename;
+        foreach (var c in invalidChars)
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return sanitized;
+    }
+
+    private async Task TestBrowserNotification()
+    {
+        try
+        {
+            var testSession = new SessionInfo
+            {
+                SessionId = Guid.NewGuid(),
+                FolderPath = "C:\\TestFolder",
+                DisplayName = "通知テストセッション",
+                TerminalType = TerminalType.ClaudeCode,
+                ProcessingElapsedSeconds = testElapsedSeconds
+            };
+
+            notificationTestResult = $"ブラウザ通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            StateHasChanged();
+
+            await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
+
+            notificationTestResult = $"ブラウザ通知を送信しました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            notificationTestResult = $"エラー: {ex.Message}";
+        }
+    }
+
+    private async Task TestWebHookNotification()
+    {
+        try
+        {
+            var testSession = new SessionInfo
+            {
+                SessionId = Guid.NewGuid(),
+                FolderPath = "C:\\TestFolder",
+                DisplayName = "WebHookテストセッション",
+                TerminalType = TerminalType.GeminiCLI,
+                ProcessingElapsedSeconds = testElapsedSeconds
+            };
+
+            notificationTestResult = $"WebHook通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            StateHasChanged();
+
+            await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
+
+            notificationTestResult = $"WebHook通知を送信しました - {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            notificationTestResult = $"エラー: {ex.Message}";
+        }
     }
 }
