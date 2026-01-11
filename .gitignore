@@ -374,3 +374,6 @@ FodyWeavers.xsd
 stop.ps1
 installer/output/*.exe
 publish/
+
+# Application logs
+logs/

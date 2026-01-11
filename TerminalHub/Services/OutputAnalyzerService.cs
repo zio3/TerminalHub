@@ -90,13 +90,13 @@ namespace TerminalHub.Services
                 if (statusText != null)
                 {
                     // 処理開始時（初回のみ）にWebhook通知を送信
-                    // ただし、セッション接続直後（1秒以内）は過去バッファの誤検出を防ぐためスキップ
+                    // ただし、セッション接続直後（10秒以内）は過去バッファの誤検出を防ぐためスキップ
                     // ClaudeCode の場合は Hook 経由で通知されるためスキップ
                     if (session.ProcessingStartTime == null && !skipNotification &&
                         session.TerminalType != TerminalType.ClaudeCode)
                     {
                         var isRecentConnection = session.LastConnectionTime.HasValue &&
-                            (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 1.0;
+                            (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 10.0;
 
                         if (!isRecentConnection)
                         {
@@ -126,6 +126,16 @@ namespace TerminalHub.Services
                 }
                 else
                 {
+                    // セッション接続直後（10秒以内）は過去バッファの誤検出を防ぐためスキップ
+                    var isRecentConnection = session.LastConnectionTime.HasValue &&
+                        (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 10.0;
+
+                    if (isRecentConnection)
+                    {
+                        _logger.LogDebug("接続直後のため処理完了検出をスキップ: {SessionId}", session.SessionId);
+                        return;
+                    }
+
                     // 処理完了時の経過時間を計算（ProcessingElapsedSecondsがない場合はProcessingStartTimeから計算）
                     int? elapsedSeconds = session.ProcessingElapsedSeconds;
                     if (!elapsedSeconds.HasValue && session.ProcessingStartTime.HasValue)

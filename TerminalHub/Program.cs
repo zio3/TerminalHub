@@ -3,6 +3,7 @@ using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;
 using System.Text.Json;
+using Serilog;
 
 // CLI モードのチェック
 if (args.Contains("--notify"))
@@ -11,6 +12,23 @@ if (args.Contains("--notify"))
 }
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog 設定
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "terminalhub-.log");
+builder.Host.UseSerilog((context, configuration) =>
+{
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .WriteTo.Console()
+        .WriteTo.File(
+            logPath,
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 7,
+            fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
+            rollOnFileSizeLimit: true,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}");
+});
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
