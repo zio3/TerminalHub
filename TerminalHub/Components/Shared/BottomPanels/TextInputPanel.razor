@@ -81,6 +81,7 @@
     private bool isCtrlCPressed = false;
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
+    private bool isSending = false;
 
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
     {
@@ -136,12 +137,23 @@
 
     private async Task SendInput()
     {
-        if (!string.IsNullOrEmpty(inputText))
+        // 二重送信防止
+        if (isSending) return;
+
+        try
         {
-            InputHistoryService.AddToHistory(inputText);
+            isSending = true;
+            if (!string.IsNullOrEmpty(inputText))
+            {
+                InputHistoryService.AddToHistory(inputText);
+            }
+            await OnSendInput.InvokeAsync(inputText);
+            inputText = "";
         }
-        await OnSendInput.InvokeAsync(inputText);
-        inputText = "";
+        finally
+        {
+            isSending = false;
+        }
     }
 
     private async Task OnSendClick()
