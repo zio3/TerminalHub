@@ -112,6 +112,45 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
+        // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）
+        [System.Text.Json.Serialization.JsonIgnore]
+        private StringBuilder? _terminalBuffer;
+
+        private const int MaxTerminalBufferSize = 2 * 1024 * 1024; // 2MB上限
+
+        public void AppendToTerminalBuffer(string data)
+        {
+            _terminalBuffer ??= new StringBuilder();
+
+            // 上限チェック
+            if (_terminalBuffer.Length + data.Length > MaxTerminalBufferSize)
+            {
+                // 古いデータを削除して新しいデータを追加
+                var overflow = _terminalBuffer.Length + data.Length - MaxTerminalBufferSize;
+                if (overflow < _terminalBuffer.Length)
+                {
+                    _terminalBuffer.Remove(0, (int)overflow);
+                }
+                else
+                {
+                    _terminalBuffer.Clear();
+                }
+            }
+            _terminalBuffer.Append(data);
+        }
+
+        public string GetTerminalBuffer()
+        {
+            return _terminalBuffer?.ToString() ?? string.Empty;
+        }
+
+        public void ClearTerminalBuffer()
+        {
+            _terminalBuffer?.Clear();
+        }
+
+        public int TerminalBufferSize => _terminalBuffer?.Length ?? 0;
+
         // バッファキャプチャ機能（デバッグ用、再起動時にリセット）
         [System.Text.Json.Serialization.JsonIgnore]
         public bool EnableBufferCapture { get; set; } = false;

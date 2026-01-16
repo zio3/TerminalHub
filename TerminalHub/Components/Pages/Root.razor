@@ -370,6 +370,10 @@
     private EventHandler<string>? _taskDataReceivedHandler;
     private EventHandler<TaskSession>? _taskSessionUpdatedHandler;
 
+    // セッション再選択時のConPTYリサイズスキップフラグ
+    // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
+    private bool _skipConPtyResize = false;
+
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
 
@@ -1143,39 +1147,31 @@
         await InitializeTerminal(sessionId);
 
 
-        // ConPtySessionのリサイズトリックでバッファ内容を再取得
-        if (selectedSession?.ConPtySession != null)
+        // メモリ上のバッファから復元（リサイズトリックの代わり）
+        if (selectedSession != null && activeTerminal != null)
         {
             // 過去バッファの誤検出を防ぐため、接続時刻を記録
             selectedSession.LastConnectionTime = DateTime.Now;
 
-            // リサイズ処理全体で不要なデータを破棄
-            selectedSession.ConPtySession.SuspendOutput();
-
-            // ターミナルのリサイズを強制的に実行
-            if (activeTerminal != null)
+            // バッファ内容をターミナルに書き込み
+            var bufferContent = selectedSession.GetTerminalBuffer();
+            if (!string.IsNullOrEmpty(bufferContent))
             {
-                await TerminalService.ResizeTerminalAsync(activeTerminal);
+                await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
             }
 
-            await Task.Delay(100); // ターミナル初期化完了を待つ
-
-            // 現在のサイズを取得
-            var currentCols = selectedSession.ConPtySession.Cols;
-            var currentRows = selectedSession.ConPtySession.Rows;
-
-            // リサイズトリック：1行減らして元に戻す
-            selectedSession.ConPtySession.Resize(currentCols, currentRows - 1);
-            await Task.Delay(50);
-
-            // 2回目のリサイズから送出を再開（これが本来欲しいバッファ内容）
-            selectedSession.ConPtySession.ResumeOutput();
-            selectedSession.ConPtySession.Resize(currentCols, currentRows);
-        }
-        else if (activeTerminal != null)
-        {
-            // ConPtySessionがない場合は通常のリサイズのみ
-            await TerminalService.ResizeTerminalAsync(activeTerminal);
+            // セッション再選択時はConPTYリサイズをスキップ（重複防止）
+            // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
+            _skipConPtyResize = true;
+            try
+            {
+                await Task.Delay(50);
+                await TerminalService.ResizeTerminalAsync(activeTerminal);
+            }
+            finally
+            {
+                _skipConPtyResize = false;
+            }
         }
 
         // ConPtySessionをConPtyConnectionServiceに登録
@@ -1244,7 +1240,10 @@
             var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
             if (sessionInfo != null)
             {
-                // バッファキャプチャが有効な場合は追記
+                // スクロールバック保持用バッファに追記（常時有効）
+                sessionInfo.AppendToTerminalBuffer(data);
+
+                // バッファキャプチャが有効な場合は追記（デバッグ用）
                 sessionInfo.AppendToBuffer(data);
 
                 // Claude Codeの場合、"No conversation found to continue"エラーをチェック
@@ -1648,6 +1647,13 @@
             }
             if (guid == activeSessionId && activeSession != null)
             {
+                // セッション再選択時のfit()によるリサイズはConPTYに通知しない
+                // ConPTYリサイズは画面内容を再送信するため、重複が発生する
+                if (_skipConPtyResize)
+                {
+                    return;
+                }
+
                 // ConPtyにリサイズを通知
                 activeSession.Resize(cols, rows);
 
