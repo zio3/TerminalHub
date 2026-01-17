@@ -1031,28 +1031,34 @@
                 {
                     await TerminalService.WriteToTerminalAsync(activeTerminal, data);
 
-                    // 出力解析の実行
-                    _ = InvokeAsync(() => 
+                    // 接続直後（バッファ復元直後）は出力解析をスキップ
+                    if (!sessionInfo.IsRecentConnection)
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
-                            (id, status) => InvokeAsync(() => 
-                            {
-                                StateHasChanged();
-                            }));
-                    });
+                        _ = InvokeAsync(() =>
+                        {
+                            OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
+                                (id, status) => InvokeAsync(() =>
+                                {
+                                    StateHasChanged();
+                                }));
+                        });
+                    }
                 }
                 else
                 {
                     // 非アクティブセッションの場合もデータを処理
-                    // ただし、出力解析は実行してステータスを更新
-                    _ = InvokeAsync(() => 
+                    // 接続直後（バッファ復元直後）は出力解析をスキップ
+                    if (!sessionInfo.IsRecentConnection)
                     {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
-                            (id, status) => InvokeAsync(() => 
-                            {
-                                StateHasChanged();
-                            }));
-                    });
+                        _ = InvokeAsync(() =>
+                        {
+                            OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
+                                (id, status) => InvokeAsync(() =>
+                                {
+                                    StateHasChanged();
+                                }));
+                        });
+                    }
                 }
             }
         }

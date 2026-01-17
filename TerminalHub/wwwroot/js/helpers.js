@@ -411,5 +411,19 @@ window.terminalHubHelpers = {
     getDevToolsSettings: function() {
         const settings = this.getSettings();
         return settings.devTools || { enabled: false };
+    },
+
+    updateGeneralSettings: function(defaultFolderPath) {
+        const settings = this.getSettings();
+        if (!settings.general) {
+            settings.general = {};
+        }
+        settings.general.defaultFolderPath = defaultFolderPath;
+        this.saveSettings(settings);
+    },
+
+    getGeneralSettings: function() {
+        const settings = this.getSettings();
+        return settings.general || { defaultFolderPath: "" };
     }
 };

@@ -80,10 +80,10 @@ namespace TerminalHub.Models
         public DateTime? LastConnectionTime { get; set; }
 
         /// <summary>
-        /// 接続直後（10秒以内）かどうかを判定
+        /// 接続直後（5秒以内）かどうかを判定
         /// 過去バッファの誤検出を防ぐために使用
         /// </summary>
-        private const double RecentConnectionThresholdSeconds = 10.0;
+        private const double RecentConnectionThresholdSeconds = 5.0;
 
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsRecentConnection => LastConnectionTime.HasValue &&

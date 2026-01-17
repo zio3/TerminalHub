@@ -90,7 +90,22 @@
                         {
                             <div class="tab-pane fade show active">
                                 <h6 class="mb-3">一般設定</h6>
-                                <p class="text-muted">今後追加予定</p>
+
+                                <div class="mb-4">
+                                    <label class="form-label">デフォルトフォルダパス</label>
+                                    <input type="text" class="form-control @(defaultFolderPathWarning != null ? "is-warning" : "")"
+                                           @bind="defaultFolderPath"
+                                           placeholder="@Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)" />
+                                    @if (defaultFolderPathWarning != null)
+                                    {
+                                        <div class="text-warning small mt-1">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>@defaultFolderPathWarning
+                                        </div>
+                                    }
+                                    <small class="text-muted">
+                                        新規セッション作成時のデフォルトパスを設定します。空欄の場合はユーザーフォルダが使用されます。
+                                    </small>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "notifications")
@@ -353,6 +368,19 @@
                                         有効にすると、診断・バッファ・通知テストのタブが表示されます。
                                     </p>
                                 </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">ログファイル</h6>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="OpenLogFolder">
+                                        <i class="bi bi-folder2-open me-1"></i>ログフォルダを開く
+                                    </button>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        アプリケーションのログファイルが保存されているフォルダを開きます。
+                                    </p>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "devDiagnose")
@@ -546,6 +574,8 @@
     private string activeTab = "notifications";
     private string claudeModeSwitchKey = "altM";
     private string sessionSortMode = "createdAt";
+    private string defaultFolderPath = "";
+    private string? defaultFolderPathWarning = null;
 
     // 開発ツール関連
     private bool devToolsEnabled = false;
@@ -668,6 +698,13 @@
                         devToolsEnabled = enabled.GetBoolean();
                     }
                 }
+                if (s.TryGetProperty("general", out var general))
+                {
+                    if (general.TryGetProperty("defaultFolderPath", out var path))
+                    {
+                        defaultFolderPath = path.GetString() ?? "";
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -680,6 +717,7 @@
             claudeModeSwitchKey = "altM";
             sessionSortMode = "createdAt";
             devToolsEnabled = false;
+            defaultFolderPath = "";
         }
     }
     
@@ -740,6 +778,25 @@
         }
     }
 
+    private void OpenLogFolder()
+    {
+        try
+        {
+            var logPath = Path.Combine(AppContext.BaseDirectory, "logs");
+            if (!Directory.Exists(logPath))
+            {
+                Directory.CreateDirectory(logPath);
+            }
+            System.Diagnostics.Process.Start("explorer.exe", logPath);
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"フォルダを開けませんでした: {ex.Message}";
+            saveSuccess = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task SaveSettings()
     {
         try
@@ -759,6 +816,24 @@
                 return;
             }
 
+            // デフォルトフォルダパスの正規化と検証
+            defaultFolderPathWarning = null;
+            if (!string.IsNullOrWhiteSpace(defaultFolderPath))
+            {
+                // パス区切りをバックスラッシュに統一
+                defaultFolderPath = defaultFolderPath.Replace("/", "\\");
+                // 末尾にバックスラッシュがなければ追加
+                if (!defaultFolderPath.EndsWith("\\"))
+                {
+                    defaultFolderPath = defaultFolderPath + "\\";
+                }
+                // パスの存在チェック
+                if (!Directory.Exists(defaultFolderPath))
+                {
+                    defaultFolderPathWarning = "指定されたパスが存在しません";
+                }
+            }
+
             // LocalStorageに設定を保存
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateNotificationSettings",
                 browserNotificationEnabled, thresholdSeconds);
@@ -772,6 +847,8 @@
                 sessionSortMode);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateDevToolsSettings",
                 devToolsEnabled);
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateGeneralSettings",
+                defaultFolderPath);
 
             // サーバー側のWebhook設定も保存（Hook通知用）
             WebhookSettingsService.SaveSettings(new WebhookSettings

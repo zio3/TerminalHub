@@ -108,6 +108,7 @@
 
     private SessionOptionsSelector? optionsSelector;
     private string folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private string _cachedDefaultFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     private TerminalType selectedType = TerminalType.Terminal;
     private string startupCommand = "";
 
@@ -127,19 +128,55 @@
         public Dictionary<string, string> Options { get; set; } = new();
     }
 
+    private bool _isInitialized = false;
+    private bool _wasVisible = false;
+
     protected override Task OnInitializedAsync()
     {
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
     }
-    
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // ダイアログが開かれたときにデフォルトパスを再読み込み
+        if (IsVisible && !_wasVisible && _isInitialized)
+        {
+            await LoadDefaultFolderPath();
+        }
+        _wasVisible = IsVisible;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             await LoadRecentFolders();
             await LoadLastSelectedTerminalType();
+            await LoadDefaultFolderPath();
+            _isInitialized = true;
             StateHasChanged();
+        }
+    }
+
+    private async Task LoadDefaultFolderPath()
+    {
+        try
+        {
+            var generalSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getGeneralSettings");
+            if (generalSettings.HasValue && generalSettings.Value.TryGetProperty("defaultFolderPath", out var path))
+            {
+                var defaultPath = path.GetString();
+                if (!string.IsNullOrWhiteSpace(defaultPath))
+                {
+                    _cachedDefaultFolderPath = defaultPath;
+                    folderPath = defaultPath;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "デフォルトフォルダパスの読み込みに失敗");
         }
     }
 
@@ -229,7 +266,7 @@
 
     private void SelectDefaultFolder()
     {
-        folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        folderPath = _cachedDefaultFolderPath;
     }
 
     private async Task CreateSession()
@@ -325,7 +362,7 @@
 
     private void ResetForm()
     {
-        folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        folderPath = _cachedDefaultFolderPath;
         // selectedType は保持する（最後に選択したタイプを継続）
         startupCommand = "";
         claudeCodeOptions = new();
