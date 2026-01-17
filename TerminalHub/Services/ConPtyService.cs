@@ -66,7 +66,7 @@ namespace TerminalHub.Services
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         
         // パフォーマンス最適化設定
-        private bool _enableBuffering = false; // デフォルトは無効
+        private bool _enableBuffering = true; // バッファリング有効
         private readonly SemaphoreSlim _outputSemaphore = new(1, 1);
         private System.Timers.Timer? _flushTimer;
         private readonly StringBuilder _outputBuffer = new();
@@ -90,7 +90,7 @@ namespace TerminalHub.Services
         // プロセス終了イベント
         public event EventHandler? ProcessExited;
 
-        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = false)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = true)
         {
             _logger = logger;
             Cols = cols;
@@ -135,12 +135,14 @@ namespace TerminalHub.Services
         private IntPtr CreateEnvironmentBlock()
         {
             // xterm.js用の環境変数を設定
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var envVars = new Dictionary<string, string>
             {
                 ["TERM"] = "xterm-256color",
                 ["COLORTERM"] = "truecolor",
+                ["HOME"] = userProfile, // Claude CLI等のNode.jsツールが使用
             };
-            
+
             // 既存の環境変数を取得してマージ
             var currentEnv = Environment.GetEnvironmentVariables();
             foreach (System.Collections.DictionaryEntry env in currentEnv)
@@ -152,7 +154,7 @@ namespace TerminalHub.Services
                     envVars[key] = value;
                 }
             }
-            
+
             // 環境変数ブロックを作成（Unicode形式）
             var envBlock = new System.Text.StringBuilder();
             foreach (var kvp in envVars)
@@ -351,11 +353,7 @@ namespace TerminalHub.Services
                             var bufferedData = _outputBuffer.ToString();
                             _outputBuffer.Clear();
                             
-                            // 出力が一時停止中の場合はデータを破棄
-                            if (!_isOutputSuspended)
-                            {
-                                DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
-                            }
+                            DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
                         }
                     }
                 }
@@ -386,12 +384,8 @@ namespace TerminalHub.Services
                         var data = _outputBuffer.ToString();
                         _outputBuffer.Clear();
                         
-                        // 出力が一時停止中の場合はデータを破棄
-                        if (!_isOutputSuspended)
-                        {
-                            // メインスレッドでイベントを発生
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
-                        }
+                        // メインスレッドでイベントを発生
+                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
                     }
                 }
                 finally
@@ -429,12 +423,7 @@ namespace TerminalHub.Services
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
                         var data = new string(charBuffer, 0, charsRead);
                         
-                        if (_isOutputSuspended)
-                        {
-                            // 出力が一時停止中の場合、データを破棄
-                            continue;
-                        }
-                        else if (_enableBuffering)
+                        if (_enableBuffering)
                         {
                             // バッファリングが有効な場合
                             await BufferOutput(data);
@@ -488,32 +477,6 @@ namespace TerminalHub.Services
                 // xterm.js側でリフローを処理する
             }
         }
-        
-        // データ送出制御
-        private bool _isOutputSuspended = false;
-
-        /// <summary>
-        /// データ送出を一時停止する
-        /// </summary>
-        public void SuspendOutput()
-        {
-            _isOutputSuspended = true;
-            _logger.LogDebug("Output suspended for session");
-        }
-        
-        /// <summary>
-        /// データ送出を再開する（停止中のデータは破棄済み）
-        /// </summary>
-        public void ResumeOutput()
-        {
-            _isOutputSuspended = false;
-            _logger.LogDebug("Output resumed for session");
-        }
-        
-        /// <summary>
-        /// 出力が一時停止中かどうかを取得する
-        /// </summary>
-        public bool IsOutputSuspended => _isOutputSuspended;
 
         public void Dispose()
         {

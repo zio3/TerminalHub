@@ -15,8 +15,7 @@ namespace TerminalHub.Models
     public enum BottomPanelTab
     {
         TextInput,
-        DosTerminal,
-        TaskRunner
+        DosTerminal
     }
 
     public enum BottomPanelTabType
@@ -76,6 +75,16 @@ namespace TerminalHub.Models
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? LastConnectionTime { get; set; }
+
+        /// <summary>
+        /// 接続直後（10秒以内）かどうかを判定
+        /// 過去バッファの誤検出を防ぐために使用
+        /// </summary>
+        private const double RecentConnectionThresholdSeconds = 10.0;
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsRecentConnection => LastConnectionTime.HasValue &&
+            (DateTime.Now - LastConnectionTime.Value).TotalSeconds < RecentConnectionThresholdSeconds;
 
         [System.Text.Json.Serialization.JsonIgnore]
         public ConPtySession? ConPtySession { get; set; }
@@ -250,6 +259,22 @@ namespace TerminalHub.Models
 
             // セパレータがない場合はパス全体をフォルダ名とする
             return path;
+        }
+
+        /// <summary>
+        /// 通知用の軽量コピーを作成
+        /// 非同期処理中にセッション情報が変更されても影響を受けないようにするため
+        /// </summary>
+        public SessionInfo CloneForNotification()
+        {
+            return new SessionInfo
+            {
+                SessionId = SessionId,
+                DisplayName = DisplayName,
+                FolderPath = FolderPath,
+                FolderName = FolderName,
+                TerminalType = TerminalType
+            };
         }
     }
 }

@@ -95,10 +95,7 @@ namespace TerminalHub.Services
                     if (session.ProcessingStartTime == null && !skipNotification &&
                         session.TerminalType != TerminalType.ClaudeCode)
                     {
-                        var isRecentConnection = session.LastConnectionTime.HasValue &&
-                            (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 10.0;
-
-                        if (!isRecentConnection)
+                        if (!session.IsRecentConnection)
                         {
                             _ = Task.Run(async () =>
                             {
@@ -127,10 +124,7 @@ namespace TerminalHub.Services
                 else
                 {
                     // セッション接続直後（10秒以内）は過去バッファの誤検出を防ぐためスキップ
-                    var isRecentConnection = session.LastConnectionTime.HasValue &&
-                        (DateTime.Now - session.LastConnectionTime.Value).TotalSeconds < 10.0;
-
-                    if (isRecentConnection)
+                    if (session.IsRecentConnection)
                     {
                         _logger.LogDebug("接続直後のため処理完了検出をスキップ: {SessionId}", session.SessionId);
                         return;
@@ -152,19 +146,7 @@ namespace TerminalHub.Services
                         session.TerminalType != TerminalType.ClaudeCode)
                     {
                         // セッション情報をコピー（非同期処理で使用するため）
-                        var sessionCopy = new SessionInfo
-                        {
-                            SessionId = session.SessionId,
-                            DisplayName = session.DisplayName,
-                            FolderPath = session.FolderPath,
-                            FolderName = session.FolderName,
-                            CreatedAt = session.CreatedAt,
-                            LastAccessedAt = session.LastAccessedAt,
-                            IsActive = session.IsActive,
-                            TerminalType = session.TerminalType,
-                            Options = session.Options,
-                            Memo = session.Memo
-                        };
+                        var sessionCopy = session.CloneForNotification();
 
                         Task.Run(async () =>
                         {

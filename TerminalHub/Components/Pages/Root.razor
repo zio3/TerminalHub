@@ -10,7 +10,6 @@
 @using Microsoft.JSInterop
 @using Microsoft.Extensions.Configuration
 @using Microsoft.Extensions.Logging
-@using TaskStatus = TerminalHub.Models.TaskStatus
 @inject ISessionManager SessionManager
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
@@ -21,9 +20,7 @@
 @inject ITerminalService TerminalService
 @inject IOutputAnalyzerService OutputAnalyzerService
 @inject IInputHistoryService InputHistoryService
-@inject IPackageJsonService PackageJsonService
 @inject IConPtyService ConPtyService
-@inject ITaskManagerService TaskManagerService
 @inject ConPtyConnectionService ConPtyConnection
 @inject ILogger<Root> Logger
 @inject ILoggerFactory LoggerFactory
@@ -167,146 +164,6 @@
                                                       DotNetRef="@dotNetRef" />
                                 }
                             }
-                            @if (bottomPanelTab == BottomPanelTab.TaskRunner)
-                            {
-                                <div class="h-100 p-3 d-flex">
-                                    <!-- npm scripts一覧 (30%) -->
-                                    <div style="width: 30%; overflow-y: auto; padding-right: 1rem;">
-                                        <h6 class="mb-3">NPM Scripts</h6>
-                                        @if (npmScripts != null && npmScripts.Count > 0)
-                                        {
-                                            <div class="list-group">
-                                                @foreach (var script in npmScripts)
-                                                {
-                                                    var taskSession = GetTaskSessionByScriptName(script.Key);
-                                                    <div class="list-group-item" 
-                                                         style="cursor: pointer; @(selectedScript == script.Key ? "background-color: #e7f1ff; border-color: #0d6efd; border-width: 2px;" : "")"
-                                                         @onclick="() => SelectScript(script.Key)">
-                                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                                            <div class="d-flex align-items-start flex-grow-1">
-                                                                <input type="checkbox" 
-                                                                       class="form-check-input me-2" 
-                                                                       id="@($"script-check-{script.Key}")"
-                                                                       checked="@checkedScripts.Contains(script.Key)"
-                                                                       @onchange="() => ToggleScriptCheck(script.Key)"
-                                                                       @onclick:stopPropagation="true" />
-                                                                <div class="flex-grow-1">
-                                                                    <label for="@($"script-check-{script.Key}")" class="mb-0">
-                                                                        <strong>@script.Key</strong>
-                                                                    </label>
-                                                                    <div class="small text-muted" style="white-space: pre-wrap;">@script.Value</div>
-                                                                    @if (taskSession != null)
-                                                                    {
-                                                                        <div class="d-flex align-items-center gap-2 mt-1">
-                                                                            <span class="@taskSession.StatusCssClass">@taskSession.StatusText</span>
-                                                                            @if (taskSession.Duration != null)
-                                                                            {
-                                                                                <span class="small text-muted">@($"{taskSession.Duration.Value.TotalSeconds:F1}秒")</span>
-                                                                            }
-                                                                        </div>
-                                                                    }
-                                                                </div>
-                                                            </div>
-                                                            <div class="d-flex align-items-center gap-1">
-                                                                @if (taskSession?.Status == TaskStatus.Running)
-                                                                {
-                                                                    <span class="spinner-border spinner-border-sm text-primary" role="status">
-                                                                        <span class="visually-hidden">Loading...</span>
-                                                                    </span>
-                                                                }
-                                                                @if (taskSession?.IsTerminalConnected == true)
-                                                                {
-                                                                    <i class="bi bi-terminal text-info" title="ターミナル接続中"></i>
-                                                                }
-                                                            </div>
-                                                        </div>
-                                                        @if (selectedScript == script.Key)
-                                                        {
-                                                            <div class="d-flex gap-1 flex-wrap mt-2">
-                                                                @if (taskSession == null)
-                                                                {
-                                                                    <!-- タスクがまだ作成されていない -->
-                                                                    <button class="btn btn-primary btn-sm" 
-                                                                            @onclick="() => RunTaskWithTerminal(script.Key)" 
-                                                                            @onclick:stopPropagation="true"
-                                                                            title="実行（ターミナル表示）">
-                                                                        <i class="bi bi-play-circle"></i> 実行
-                                                                    </button>
-                                                                }
-                                                                else if (taskSession.Status == TaskStatus.Idle)
-                                                                {
-                                                                    <!-- タスクは作成済みだが未実行（実行のみで作成された） -->
-                                                                    
-                                                                    <button class="btn btn-danger btn-sm" 
-                                                                            @onclick="StopSelectedScript" 
-                                                                            @onclick:stopPropagation="true"
-                                                                            title="タスクを破棄">
-                                                                        <i class="bi bi-trash"></i> 破棄
-                                                                    </button>
-                                                                }
-                                                                else if (taskSession.Status == TaskStatus.Running)
-                                                                {
-                                                                    <!-- タスク実行中 -->
-                                                                    <button class="btn btn-danger btn-sm" 
-                                                                            @onclick="StopSelectedScript" 
-                                                                            @onclick:stopPropagation="true"
-                                                                            title="タスクを停止">
-                                                                        <i class="bi bi-stop-circle"></i> 停止
-                                                                    </button>
-                                                                    
-                                                                }
-                                                                else
-                                                                {
-                                                                    <!-- タスク完了/失敗/停止済み - 再実行可能 -->
-                                                                    <button class="btn btn-primary btn-sm" 
-                                                                            @onclick="() => RunTaskWithTerminal(script.Key)" 
-                                                                            @onclick:stopPropagation="true"
-                                                                            title="実行（ターミナル表示）">
-                                                                        <i class="bi bi-play-circle"></i> 再実行
-                                                                    </button>
-                                                                    
-                                                                    <button class="btn btn-secondary btn-sm" 
-                                                                            @onclick="() => RunTaskBackground(script.Key)" 
-                                                                            @onclick:stopPropagation="true"
-                                                                            title="バックグラウンド実行">
-                                                                        <i class="bi bi-play"></i> 実行のみ
-                                                                    </button>
-                                                                    
-                                                                    @if (taskSession.Status == TaskStatus.Completed)
-                                                                    {
-                                                                        <span class="badge bg-success ms-2">完了</span>
-                                                                    }
-                                                                    else if (taskSession.Status == TaskStatus.Failed)
-                                                                    {
-                                                                        <span class="badge bg-danger ms-2">失敗</span>
-                                                                    }
-                                                                    else if (taskSession.Status == TaskStatus.Stopped)
-                                                                    {
-                                                                        <span class="badge bg-warning ms-2">停止</span>
-                                                                    }
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="alert alert-info">
-                                                <i class="bi bi-info-circle"></i> npm scriptsが見つかりません
-                                            </div>
-                                        }
-                                    </div>
-                                    
-                                    <!-- タスク実行ターミナル (70%) -->
-                                    <div style="width: 70%; padding-left: 1rem; border-left: 1px solid #dee2e6;">
-                                        <div class="h-100" id="task-runner-terminal" style="background-color: #000; width: 100%; height: 100%;">
-                                            <!-- タスクランナー用ターミナル -->
-                                        </div>
-                                    </div>
-                                </div>
-                            }
                         </div>
                     }
                 </div>
@@ -357,18 +214,7 @@
     private Guid? settingsSessionId = null;
     private bool showArchivedSessionsDialog = false;
 
-    // タスクランナー関連
-    private bool hasPackageJson = false;
-    private Dictionary<string, string>? npmScripts = null;
-    private string? selectedScript = null;
     private HashSet<string> checkedScripts = new HashSet<string>();
-    private IJSObjectReference? taskRunnerTerminal;
-    private bool TaskRunnerInitialized = false;
-    private TaskSession? currentTaskSession => TaskManagerService.ActiveSession;
-
-    // TaskManagerServiceイベントハンドラー
-    private EventHandler<string>? _taskDataReceivedHandler;
-    private EventHandler<TaskSession>? _taskSessionUpdatedHandler;
 
     // セッション再選択時のConPTYリサイズスキップフラグ
     // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
@@ -383,18 +229,9 @@
     // DOSターミナルイベントハンドラー（セッションごと）
     private readonly Dictionary<Guid, (EventHandler<DataReceivedEventArgs> DataReceived, EventHandler ProcessExited)> _dosTerminalHandlers = new();
 
-    // スナップショット設定
-    private int _defaultSnapshotLines = 50;
-    private int _recreateSnapshotLines = 100;
-
-
     protected override Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
-
-        // スナップショット設定を読み込み
-        _defaultSnapshotLines = Configuration.GetValue<int>("TerminalSettings:DefaultSnapshotLines", 50);
-        _recreateSnapshotLines = Configuration.GetValue<int>("TerminalSettings:RecreateSnapshotLines", 100);
 
 
 
@@ -403,37 +240,6 @@
         {
             _ = InvokeAsync(async () => await OnSessionTimeout(sessionId));
         });
-
-        // TaskManagerServiceのイベントハンドラーを設定
-        _taskDataReceivedHandler = (sender, data) =>
-        {
-            InvokeAsync(async () =>
-            {
-                // アクティブセッションがターミナル接続されている場合のみ表示
-                if (taskRunnerTerminal != null && TaskManagerService.ActiveSession?.IsTerminalConnected == true)
-                {
-                    try
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", data);
-                    }
-                    catch (JSDisconnectedException)
-                    {
-                        // 回路が切断されている場合は無視
-                    }
-                    catch (Exception)
-                    {
-                        // その他のエラーも無視
-                    }
-                }
-            });
-        };
-        TaskManagerService.SessionDataReceived += _taskDataReceivedHandler;
-
-        _taskSessionUpdatedHandler = (sender, taskSession) =>
-        {
-            InvokeAsync(() => StateHasChanged());
-        };
-        TaskManagerService.SessionUpdated += _taskSessionUpdatedHandler;
 
         // HookNotificationServiceのイベントハンドラーを設定
         _hookNotificationHandler = (sender, args) =>
@@ -664,41 +470,11 @@
         {
             // DOSターミナルタブに切り替え - 常に新しいXTermを作成
             await CleanupSingleDosTerminal();
-            // タスクランナーターミナルはクリーンアップしない（保持）
             await InitializeSingleDosTerminal();
-        }
-        else if (tab == BottomPanelTab.TaskRunner && activeSessionId != null)
-        {
-            // タスクランナータブに切り替え
-            await CleanupSingleDosTerminal();
-
-            // 現在のセッションのpackage.jsonを確認
-            var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-            if (currentSession != null)
-            {
-                hasPackageJson = await PackageJsonService.HasPackageJsonAsync(currentSession.FolderPath);
-                // package.jsonの有無に関わらずタスクランナーを表示
-                await LoadNpmScripts();
-
-                // 既に初期化済みの場合は再初期化しない
-                if (!TaskRunnerInitialized)
-                {
-                    await InitializeTaskRunnerTerminal();
-                }
-                else
-                {
-                    // 既存のターミナルを表示
-                    if (taskRunnerTerminal != null)
-                    {
-                        await JSRuntime.InvokeVoidAsync("terminalFunctions.showTerminal", "task-runner-terminal");
-                    }
-                }
-            }
         }
         else if (tab == BottomPanelTab.TextInput)
         {
-            // テキスト入力タブに切り替え - DOSターミナルのみクリーンアップ
-            // タスクランナーターミナルは保持（タスク実行ボタンから使う可能性があるため）
+            // テキスト入力タブに切り替え - DOSターミナルをクリーンアップ
             await CleanupSingleDosTerminal();
         }
     }
@@ -988,25 +764,18 @@
         // テキストがある場合は送信
         if (!string.IsNullOrWhiteSpace(text))
         {
-            try
-            {
-                await activeSession.WriteAsync(text);
+            await activeSession.WriteAsync(text);
 
-                // 最終利用時刻を更新（ソート用）
-                if (activeSessionId.HasValue)
-                {
-                    var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
-                    if (sessionInfo != null)
-                    {
-                        Logger.LogInformation("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
-                        sessionInfo.LastAccessedAt = DateTime.Now;
-                        StateHasChanged(); // セッションリストのソート順を更新
-                    }
-                }
-            }
-            catch (Exception)
+            // 最終利用時刻を更新（ソート用）
+            if (activeSessionId.HasValue)
             {
-                throw;
+                var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
+                if (sessionInfo != null)
+                {
+                    Logger.LogInformation("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
+                    sessionInfo.LastAccessedAt = DateTime.Now;
+                    StateHasChanged(); // セッションリストのソート順を更新
+                }
             }
 
             // テキスト送信後、Enter送信前に0.2秒待機
@@ -1187,19 +956,10 @@
             // ConPty session not found - continue without subscription
         }
 
-        // package.jsonの存在をチェック
+        // チェックされたスクリプトを復元
         if (selectedSession != null)
         {
-            hasPackageJson = await PackageJsonService.HasPackageJsonAsync(selectedSession.FolderPath);
-            // チェックされたスクリプトを復元
             checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
-            
-            // package.jsonが存在する場合はnpm scriptsを読み込み
-            if (hasPackageJson)
-            {
-                await LoadNpmScripts();
-            }
-
             StateHasChanged(); // UIを更新
         }
 
@@ -1219,12 +979,6 @@
             // 既存のDOSターミナルをクリーンアップして新しく作成
             await CleanupSingleDosTerminal();
             await InitializeSingleDosTerminal();
-        }
-        else if (bottomPanelTab == BottomPanelTab.TaskRunner && selectedSession != null)
-        {
-            // npm scriptsを読み込み
-            await LoadNpmScripts();
-            await InitializeTaskRunnerTerminal();
         }
     }
 
@@ -1247,15 +1001,19 @@
                 sessionInfo.AppendToBuffer(data);
 
                 // Claude Codeの場合、"No conversation found to continue"エラーをチェック
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode && 
-                    data.Contains("No conversation found to continue") &&
+                // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
+                // エラーメッセージはセッション開始直後に表示されるため、ProcessingStartTime が null の場合のみ検出
+                if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
+                    sessionInfo.ProcessingStartTime == null &&  // 処理開始前のみ検出
+                    IsClaudeContinueError(data) &&
                     sessionInfo.Options.ContainsKey("continue") &&
                     !sessionInfo.HasContinueErrorOccurred)
                 {
-                    // Claude Continue Error detected
-
                     // フラグを設定して重複送信を防ぐ
                     sessionInfo.HasContinueErrorOccurred = true;
+
+                    Logger.LogInformation("'No conversation found to continue' エラーを検出しました。セッションを再作成します: SessionId={SessionId}",
+                        sessionId);
 
                     // セッション再起動のコマンドを送信
                     _ = InvokeAsync(async () =>
@@ -1545,55 +1303,36 @@
     [JSInvokable]
     public async Task SendInput(string sessionId, string data)
     {
-
-        try
+        // DOSターミナルからの入力を処理（singleDosTerminal用）
+        if (sessionId.StartsWith("dos-terminal-"))
         {
-            // タスクランナーターミナルからの入力を処理
-            if (sessionId == "task-runner-terminal")
+            var guidStr = sessionId.Replace("dos-terminal-", "");
+            if (Guid.TryParse(guidStr, out var guid))
             {
-                if (TaskManagerService.ActiveSession != null)
+                var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+                if (session?.DosTerminalConPtySession != null)
                 {
-                    await TaskManagerService.SendInputAsync(TaskManagerService.ActiveSession.Id, data ?? string.Empty);
-                }
-                else
-                {
-                }
-            }
-            // DOSターミナルからの入力を処理（singleDosTerminal用）
-            else if (sessionId.StartsWith("dos-terminal-"))
-            {
-                var guidStr = sessionId.Replace("dos-terminal-", "");
-                if (Guid.TryParse(guidStr, out var guid))
-                {
-                    var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                    if (session?.DosTerminalConPtySession != null)
-                    {
-                        await session.DosTerminalConPtySession.WriteAsync(data ?? string.Empty);
-                    }
-                }
-            }
-            // DosTerminalPanelからの入力を処理
-            else if (sessionId.StartsWith("dos-term-"))
-            {
-                var panelId = sessionId.Replace("dos-term-", "");
-                if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
-                {
-                    await dosPanel.WriteInput(data ?? string.Empty);
-                }
-            }
-            else
-            {
-                // 通常のセッションからの入力を処理
-                var guid = Guid.Parse(sessionId);
-                if (activeSession != null && guid == activeSessionId)
-                {
-                    await activeSession.WriteAsync(data ?? string.Empty);
+                    await session.DosTerminalConPtySession.WriteAsync(data ?? string.Empty);
                 }
             }
         }
-        catch (Exception)
+        // DosTerminalPanelからの入力を処理
+        else if (sessionId.StartsWith("dos-term-"))
         {
-            throw;
+            var panelId = sessionId.Replace("dos-term-", "");
+            if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
+            {
+                await dosPanel.WriteInput(data ?? string.Empty);
+            }
+        }
+        else
+        {
+            // 通常のセッションからの入力を処理
+            var guid = Guid.Parse(sessionId);
+            if (activeSession != null && guid == activeSessionId)
+            {
+                await activeSession.WriteAsync(data ?? string.Empty);
+            }
         }
     }
 
@@ -1622,27 +1361,12 @@
                 dosPanel.SendResize(cols, rows);
             }
         }
-        // タスクランナーターミナルのサイズ変更を処理
-        else if (sessionId == "task-runner-terminal")
-        {
-            
-            // 現在接続中のタスクセッションがあればリサイズ
-            if (!string.IsNullOrEmpty(selectedScript))
-            {
-                var taskSession = GetTaskSessionByScriptName(selectedScript);
-                if (taskSession?.IsTerminalConnected == true && TaskManagerService != null)
-                {
-                    // TaskManagerServiceを通じてConPtySessionをリサイズ
-                    TaskManagerService.ResizeSession(taskSession.Id, cols, rows);
-                }
-            }
-        }
         else
         {
             // 通常のセッションのサイズ変更を処理
             if (!Guid.TryParse(sessionId, out var guid))
             {
-                // GUIDではない値（タスクランナーなど）は無視
+                // GUIDではない値は無視
                 return;
             }
             if (guid == activeSessionId && activeSession != null)
@@ -1757,29 +1481,21 @@
         // テキストがある場合は送信
         if (!string.IsNullOrWhiteSpace(inputText))
         {
-
             // テキスト履歴に追加
             InputHistoryService.AddToHistory(inputText);
 
-            try
-            {
-                await activeSession.WriteAsync(inputText);
+            await activeSession.WriteAsync(inputText);
 
-                // 最終利用時刻を更新（ソート用）
-                if (activeSessionId.HasValue)
-                {
-                    var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
-                    if (sessionInfo != null)
-                    {
-                        Logger.LogInformation("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
-                        sessionInfo.LastAccessedAt = DateTime.Now;
-                        StateHasChanged(); // セッションリストのソート順を更新
-                    }
-                }
-            }
-            catch (Exception)
+            // 最終利用時刻を更新（ソート用）
+            if (activeSessionId.HasValue)
             {
-                throw;
+                var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
+                if (sessionInfo != null)
+                {
+                    Logger.LogInformation("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
+                    sessionInfo.LastAccessedAt = DateTime.Now;
+                    StateHasChanged(); // セッションリストのソート順を更新
+                }
             }
 
             // テキスト送信後、Enter送信前に0.2秒待機
@@ -2074,16 +1790,9 @@
             return;
         }
 
-        try
-        {
-            // 様々なEnterキーのパターンを試す
-            // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
-            await activeSession.WriteAsync("\r");
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+        // 様々なEnterキーのパターンを試す
+        // Windows環境では通常 \r\n だが、ターミナルによって異なる場合がある
+        await activeSession.WriteAsync("\r");
     }
 
 
@@ -2391,740 +2100,47 @@
         // ConPtyConnectionServiceのイベントハンドラーを設定
         ConPtyConnection.DataReceived += _dataReceivedHandler;
         ConPtyConnection.ProcessExited += _processExitedHandler;
-        
+
     }
-    
-    // タスクランナー関連メソッド
-    private async Task LoadNpmScripts()
+
+    /// <summary>
+    /// Claude Code の "--continue" エラーメッセージかどうかを判定
+    /// 誤検出を防ぐため、コード出力内の文字列ではなく実際のエラーメッセージのみを検出
+    /// </summary>
+    private bool IsClaudeContinueError(string data)
     {
-        if (activeSessionId == null) return;
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) return;
-        
-        
-        // TaskManagerServiceの作業ディレクトリを設定
-        TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-        
-        // スクリプトをロード
-        await TaskManagerService.LoadScriptsAsync();
-        npmScripts = TaskManagerService.GetAvailableScripts();
-        
-        
-        selectedScript = null;
-        StateHasChanged();
-    }
-    
-    private async void SelectScript(string scriptName)
-    {
-        
-        // 同じスクリプトが選択された場合は何もしない
-        if (selectedScript == scriptName)
+        // 基本文字列が含まれていなければ即座にfalse
+        if (!data.Contains("No conversation found to continue"))
+            return false;
+
+        // 誤検出パターンを除外:
+        // 1. 行番号を含む（コード表示やdiff出力）: "1234" + 空白 + コンテンツ
+        // 2. 引用符で囲まれている（文字列リテラル）: "No conversation..." や 'No conversation...'
+        // 3. コメント内（//や/*や#で始まる行）
+
+        // 行番号パターン（diff出力やgrep -nなど）を検出
+        // 例: "1334              }" や "1335          }"
+        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^\s*\d+\s+", System.Text.RegularExpressions.RegexOptions.Multiline))
         {
-            return;
+            return false;
         }
-        
-        selectedScript = scriptName;
-        
-        // TaskManagerServiceのアクティブセッションを設定
-        var taskSession = GetTaskSessionByScriptName(scriptName);
-        if (taskSession != null)
+
+        // diffの変更行マーカー（+や-で始まる）を検出
+        // 例: "-        catch (Ex..."
+        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^[+-]\s", System.Text.RegularExpressions.RegexOptions.Multiline))
         {
-            TaskManagerService.SetActiveSession(taskSession.Id);
-            
-            // タスクが実行中で未接続の場合は自動的に接続
-            if (taskSession.Status == TaskStatus.Running && !taskSession.IsTerminalConnected)
-            {
-                await ConnectTerminal(scriptName);
-            }
+            return false;
         }
-        
-        // タスクランナータブが表示されている場合のみXTermを再作成
-        if (bottomPanelTab == BottomPanelTab.TaskRunner && TaskRunnerInitialized)
+
+        // 引用符で囲まれた文字列パターンを検出
+        if (data.Contains("\"No conversation found to continue\"") ||
+            data.Contains("'No conversation found to continue'"))
         {
-            await RecreateTaskRunnerTerminalForSelectedScript();
+            return false;
         }
-    }
-    
-    // デバッグ用メソッド
-    
-    
-    
-    
-    private async Task RecreateTaskRunnerTerminalForSelectedScript()
-    {
-        if (string.IsNullOrEmpty(selectedScript))
-        {
-            return;
-        }
-        
-        
-        try
-        {
-            
-            // 既存のXTermを破棄
-            if (taskRunnerTerminal != null)
-            {
-                await JSRuntime.InvokeVoidAsync("eval", @"
-                    (function() {
-                        const terminalId = 'task-runner-terminal';
-                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                        if (termObj) {
-                            termObj.terminal.dispose();
-                            delete window.multiSessionTerminals[terminalId];
-                        }
-                    })()
-                ");
-                
-                await taskRunnerTerminal.DisposeAsync();
-                taskRunnerTerminal = null;
-                TaskRunnerInitialized = false;
-            }
-            
-            // 少し待つ
-            await Task.Delay(100);
-            
-            // 新しいXTermを作成
-            await InitializeTaskRunnerTerminal();
-            
-            // 選択したタスクのセッションがあれば接続
-            var taskSession = GetTaskSessionByScriptName(selectedScript);
-            if (taskSession != null)
-            {
-                
-                // TaskManagerServiceのアクティブセッションを設定
-                TaskManagerService.SetActiveSession(taskSession.Id);
-                
-                // 既存の出力バッファの内容を表示
-                if (taskRunnerTerminal != null)
-                {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", $"\x1b[94m=== タスク '{selectedScript}' のセッションに切り替えました ===\x1b[0m\r\n");
-                    
-                    // ステータス表示
-                    if (taskSession.Status == TaskStatus.Running)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", "\x1b[92m[実行中]\x1b[0m\r\n");
-                    }
-                    else if (taskSession.Status == TaskStatus.Completed)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", $"\x1b[92m[完了] {taskSession.Duration?.TotalSeconds:F1}秒\x1b[0m\r\n");
-                    }
-                    else if (taskSession.Status == TaskStatus.Failed)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", $"\x1b[91m[失敗] 終了コード: {taskSession.ExitCode}\x1b[0m\r\n");
-                    }
-                    else if (taskSession.Status == TaskStatus.Stopped)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", "\x1b[93m[停止]\x1b[0m\r\n");
-                    }
-                    else
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", "\x1b[90m[待機中]\x1b[0m\r\n");
-                    }
-                    
-                    // 出力バッファの内容を表示（コピーを作成してからイテレーション）
-                    if (taskSession.OutputBuffer.Count > 0)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", "\r\n--- 出力履歴 ---\r\n");
-                        var outputLines = taskSession.OutputBuffer.ToList();
-                        foreach (var line in outputLines)
-                        {
-                            await taskRunnerTerminal.InvokeVoidAsync("write", line);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                
-                if (taskRunnerTerminal != null)
-                {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", $"\x1b[93m=== タスク '{selectedScript}' は未実行です ===\x1b[0m\r\n");
-                }
-            }
-        }
-        catch (Exception)
-        {
-            // Ignore task runner terminal recreation errors
-        }
-    }
-    
-    private void ToggleScriptCheck(string scriptName)
-    {
-        if (activeSessionId == null) return;
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) return;
-        
-        if (currentSession.CheckedScripts.Contains(scriptName))
-        {
-            currentSession.CheckedScripts.Remove(scriptName);
-        }
-        else
-        {
-            currentSession.CheckedScripts.Add(scriptName);
-        }
-        
-        // グローバルのcheckedScriptsも更新
-        checkedScripts = new HashSet<string>(currentSession.CheckedScripts);
-        StateHasChanged();
-        
-        // セッション情報を保存
-        _ = LocalStorageService.SaveSessionsAsync(sessions);
-    }
-    
-    private async Task InitializeTaskRunnerTerminal()
-    {
-        try
-        {
-            if (taskRunnerTerminal != null)
-            {
-                return;
-            }
-            
-            // DOM要素の存在を確認
-            var elementExists = await JSRuntime.InvokeAsync<bool>("eval", @"
-                !!document.getElementById('task-runner-terminal')
-            ");
-            
-            
-            if (!elementExists)
-            {
-                StateHasChanged();
-                await Task.Delay(200); // DOM更新を待つ
-                
-                // 再度確認
-                elementExists = await JSRuntime.InvokeAsync<bool>("eval", @"
-                    !!document.getElementById('task-runner-terminal')
-                ");
-            }
-            
-            // 新しいXTermを作成
-            taskRunnerTerminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
-                "terminalFunctions.createMultiSessionTerminal",
-                "task-runner-terminal",
-                "task-runner-terminal",
-                dotNetRef
-            );
-            
-            
-            // 初期メッセージを表示
-            if (taskRunnerTerminal != null)
-            {
-                await taskRunnerTerminal.InvokeVoidAsync("write", "タスクランナーターミナル準備完了\r\n");
-            }
-            
-            // 初期化完了フラグを設定
-            TaskRunnerInitialized = true;
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"タスクランナーターミナルの初期化エラー: {ex.Message}");
-        }
-    }
-    
-    private async Task CleanupTaskRunnerTerminal()
-    {
-        try
-        {
-            if (taskRunnerTerminal != null)
-            {
-                try
-                {
-                    // JavaScript側で破棄（JavaScript interopが利用可能な場合のみ）
-                    await JSRuntime.InvokeVoidAsync("eval", @"
-                        (function() {
-                            const terminalId = 'task-runner-terminal';
-                            const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                            if (termObj) {
-                                termObj.terminal.dispose();
-                                delete window.multiSessionTerminals[terminalId];
-                            }
-                        })()
-                    ");
-                }
-                catch (JSDisconnectedException)
-                {
-                    // JavaScript接続が切断されている場合は無視
-                }
-                catch (InvalidOperationException)
-                {
-                    // JavaScript interopが利用できない場合は無視
-                }
-                
-                try
-                {
-                    await taskRunnerTerminal.DisposeAsync();
-                }
-                catch (JSDisconnectedException)
-                {
-                    // JavaScript接続が切断されている場合は無視
-                }
-                
-                taskRunnerTerminal = null;
-                TaskRunnerInitialized = false;
-            }
-        }
-        catch (Exception)
-        {
-            // エラーは無視（Dispose時のエラーは致命的ではない）
-        }
-    }
-    
-    private async Task RunSelectedScript()
-    {
-        
-        if (string.IsNullOrEmpty(selectedScript) || activeSessionId == null)
-        {
-            return;
-        }
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null)
-        {
-            return;
-        }
-        
-        try
-        {
-            
-            // TaskManagerServiceの作業ディレクトリを設定
-            TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-            
-            // TaskManagerServiceを使用してタスクを開始
-            var taskSession = await TaskManagerService.StartTaskAsync(selectedScript);
-            
-            if (taskSession == null)
-            {
-                toast?.ShowError("タスクの開始に失敗しました");
-                return;
-            }
-            
-            
-            // ターミナルをクリアして出力バッファの内容を表示
-            if (taskRunnerTerminal != null)
-            {
-                await taskRunnerTerminal.InvokeVoidAsync("clear");
-                
-                // 既存の出力バッファの内容を表示（コピーを作成してからイテレーション）
-                var outputLines = taskSession.OutputBuffer.ToList();
-                foreach (var line in outputLines)
-                {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", line);
-                }
-            }
-            
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"スクリプト実行エラー: {ex.Message}");
-            StateHasChanged();
-        }
-    }
-    
-    private async Task StopSelectedScript()
-    {
-        if (string.IsNullOrEmpty(selectedScript)) return;
-        
-        
-        // TaskManagerServiceを使用してタスクを停止
-        var taskSession = GetTaskSessionByScriptName(selectedScript);
-        if (taskSession != null)
-        {
-            await TaskManagerService.StopTaskAsync(taskSession.Id);
-        }
-        
-        StateHasChanged();
-        
-        if (taskRunnerTerminal != null && taskSession?.IsTerminalConnected == true)
-        {
-            await taskRunnerTerminal.InvokeVoidAsync("write", "\r\n\x1b[91mタスクを停止しました\x1b[0m\r\n");
-        }
-    }
-    
-    // 実行（ターミナル付き）
-    private async Task RunTaskWithTerminal(string scriptName)
-    {
-        
-        selectedScript = scriptName;
-        
-        if (activeSessionId == null) return;
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) return;
-        
-        try
-        {
-            // TaskManagerServiceの作業ディレクトリを設定
-            TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-            
-            // タスクを開始
-            var taskSession = await TaskManagerService.StartTaskAsync(scriptName);
-            
-            if (taskSession == null)
-            {
-                toast?.ShowError("タスクの開始に失敗しました");
-                return;
-            }
-            
-            // ターミナルを接続
-            taskSession.IsTerminalConnected = true;
-            
-            // npmコマンドをまだ送信していない場合は送信
-            if (!taskSession.IsCommandSent && taskSession.ConPtySession != null)
-            {
-                var npmCommand = $"npm run {scriptName}\r";
-                await taskSession.ConPtySession.WriteAsync(npmCommand);
-                taskSession.IsCommandSent = true;
-                taskSession.Status = TaskStatus.Running;
-                taskSession.StartTime = DateTime.Now;
-            }
-            
-            // XTermが初期化されていない場合は初期化
-            if (!TaskRunnerInitialized)
-            {
-                await InitializeTaskRunnerTerminal();
-            }
-            
-            // ターミナルをクリアして出力バッファの内容を表示
-            if (taskRunnerTerminal != null)
-            {
-                await taskRunnerTerminal.InvokeVoidAsync("clear");
-                
-                // 現在のターミナルサイズを取得してConPtySessionに反映
-                try
-                {
-                    var terminalSize = await taskRunnerTerminal.InvokeAsync<System.Text.Json.JsonElement>("getSize");
-                    if (terminalSize.TryGetProperty("cols", out var colsElement) && 
-                        terminalSize.TryGetProperty("rows", out var rowsElement))
-                    {
-                        int cols = colsElement.GetInt32();
-                        int rows = rowsElement.GetInt32();
-                        TaskManagerService.ResizeSession(taskSession.Id, cols, rows);
-                    }
-                }
-                catch (Exception)
-                {
-                    // Ignore terminal size retrieval errors
-                }
-                
-                // OutputBufferのコピーを作成してからイテレーション（同時変更を防ぐ）
-                var outputLines = taskSession.OutputBuffer.ToList();
-                foreach (var line in outputLines)
-                {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", line);
-                }
-            }
-            
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
-    
-    // 実行のみ（バックグラウンド）
-    private async Task RunTaskBackground(string scriptName)
-    {
-        
-        if (activeSessionId == null) return;
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) return;
-        
-        try
-        {
-            // TaskManagerServiceの作業ディレクトリを設定
-            TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-            
-            // タスクを開始（ターミナルなし）
-            var taskSession = await TaskManagerService.StartTaskAsync(scriptName);
-            
-            if (taskSession == null)
-            {
-                toast?.ShowError("タスクの開始に失敗しました");
-                return;
-            }
-            
-            // ターミナルは接続しない
-            taskSession.IsTerminalConnected = false;
-            
-            // npmコマンドを送信してタスクを開始（バックグラウンドで実行）
-            if (!taskSession.IsCommandSent && taskSession.ConPtySession != null)
-            {
-                var npmCommand = $"npm run {scriptName}\r";
-                await taskSession.ConPtySession.WriteAsync(npmCommand);
-                taskSession.IsCommandSent = true;
-                taskSession.Status = TaskStatus.Running;
-                taskSession.StartTime = DateTime.Now;
-            }
-            
-            toast?.ShowSuccess($"{scriptName} をバックグラウンドで実行開始しました");
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
-    
-    // ターミナル接続
-    private async Task ConnectTerminal(string scriptName)
-    {
-        
-        var taskSession = GetTaskSessionByScriptName(scriptName);
-        if (taskSession == null || (taskSession.Status != TaskStatus.Running && taskSession.Status != TaskStatus.Idle))
-        {
-            toast?.ShowWarning("接続可能なタスクが見つかりません");
-            return;
-        }
-        
-        try
-        {
-            // 選択中のスクリプトを更新
-            selectedScript = scriptName;
-            
-            // ターミナルを接続
-            taskSession.IsTerminalConnected = true;
-            
-            // npmコマンドをまだ送信していない場合は送信
-            if (!taskSession.IsCommandSent && taskSession.ConPtySession != null)
-            {
-                var npmCommand = $"npm run {scriptName}\r";
-                await taskSession.ConPtySession.WriteAsync(npmCommand);
-                taskSession.IsCommandSent = true;
-                taskSession.Status = TaskStatus.Running;
-                taskSession.StartTime = DateTime.Now;
-            }
-            
-            // TaskManagerServiceのアクティブセッションを設定
-            TaskManagerService.SetActiveSession(taskSession.Id);
-            
-            // XTermが初期化されていない場合は初期化
-            if (!TaskRunnerInitialized)
-            {
-                await InitializeTaskRunnerTerminal();
-            }
-            
-            // ターミナルをクリアして出力バッファの内容を表示
-            if (taskRunnerTerminal != null)
-            {
-                await taskRunnerTerminal.InvokeVoidAsync("clear");
-                await taskRunnerTerminal.InvokeVoidAsync("write", $"\x1b[94m=== タスク '{scriptName}' に接続しました ===\x1b[0m\r\n");
-                
-                // 現在のターミナルサイズを取得してConPtySessionに反映
-                try
-                {
-                    var terminalSize = await taskRunnerTerminal.InvokeAsync<System.Text.Json.JsonElement>("getSize");
-                    if (terminalSize.TryGetProperty("cols", out var colsElement) && 
-                        terminalSize.TryGetProperty("rows", out var rowsElement))
-                    {
-                        int cols = colsElement.GetInt32();
-                        int rows = rowsElement.GetInt32();
-                        TaskManagerService.ResizeSession(taskSession.Id, cols, rows);
-                    }
-                }
-                catch (Exception)
-                {
-                    // Ignore terminal size retrieval errors
-                }
-                
-                // 既存の出力バッファを表示
-                // OutputBufferのコピーを作成してからイテレーション（同時変更を防ぐ）
-                var outputLines = taskSession.OutputBuffer.ToList();
-                foreach (var line in outputLines)
-                {
-                    await taskRunnerTerminal.InvokeVoidAsync("write", line);
-                }
-            }
-            
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
-    
-    // ターミナル切断
-    private async Task DisconnectTerminal(string scriptName)
-    {
-        
-        var taskSession = GetTaskSessionByScriptName(scriptName);
-        if (taskSession == null)
-        {
-            return;
-        }
-        
-        try
-        {
-            // ターミナルを切断
-            taskSession.IsTerminalConnected = false;
-            
-            // ターミナルに切断メッセージを表示
-            if (taskRunnerTerminal != null && selectedScript == scriptName)
-            {
-                await taskRunnerTerminal.InvokeVoidAsync("write", $"\r\n\x1b[93m=== ターミナルを切断しました（タスクは実行継続中） ===\x1b[0m\r\n");
-            }
-            
-            toast?.ShowInfo($"{scriptName} のターミナルを切断しました（タスクは実行継続中）");
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"エラー: {ex.Message}");
-        }
-    }
-    
-    // TaskSessionをスクリプト名から取得するヘルパーメソッド
-    private TaskSession? GetTaskSessionByScriptName(string scriptName)
-    {
-        // 現在のセッションのフォルダパスを取得
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null)
-        {
-            return null;
-        }
-        
-        var currentFolderPath = currentSession.FolderPath ?? Directory.GetCurrentDirectory();
-        
-        // スクリプト名と作業ディレクトリの両方で検索
-        return TaskManagerService.Sessions.FirstOrDefault(s => 
-            s.ScriptName == scriptName && 
-            s.WorkingDirectory == currentFolderPath);
-    }
-    
-    // 現在は直接イベントハンドラーで処理しているため、このメソッドは使用されない
-    private void OnTaskRunnerDataReceived(string data)
-    {
-        // 互換性のため残しているが、実際には使用されない
-    }
-    
-    private void OnTaskRunnerExited(string scriptName)
-    {
-        InvokeAsync(async () =>
-        {
-            
-            // TaskManagerServiceのセッションステータスは自動的に更新される
-            // ターミナルに完了メッセージを表示
-            if (selectedScript == scriptName && taskRunnerTerminal != null)
-            {
-                var taskSession = GetTaskSessionByScriptName(scriptName);
-                if (taskSession != null)
-                {
-                    if (taskSession.Status == TaskStatus.Completed)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", "\r\n\x1b[92mタスクが完了しました\x1b[0m\r\n");
-                    }
-                    else if (taskSession.Status == TaskStatus.Failed)
-                    {
-                        await taskRunnerTerminal.InvokeVoidAsync("write", $"\r\n\x1b[91mタスクが失敗しました (終了コード: {taskSession.ExitCode})\x1b[0m\r\n");
-                    }
-                }
-            }
-            
-            StateHasChanged();
-        });
-    }
-    
-    private async void OnTaskButtonClick(string scriptName)
-    {
-        try
-        {
-            await RunScriptFromTextInput(scriptName);
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"タスク実行エラー: {ex.Message}");
-        }
-    }
-    
-    private async void StopTaskFromTextInput(string scriptName)
-    {
-        try
-        {
-            var taskSession = GetTaskSessionByScriptName(scriptName);
-            if (taskSession != null)
-            {
-                await TaskManagerService.StopTaskAsync(taskSession.Id);
-                toast?.ShowSuccess($"{scriptName} を停止しました");
-                StateHasChanged();
-            }
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"タスク停止エラー: {ex.Message}");
-        }
-    }
-    
-    private async Task RunScriptFromTextInput(string scriptName, string additionalArgs = "")
-    {
-        
-        if (activeSessionId == null) 
-        {
-            return;
-        }
-        
-        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-        if (currentSession == null) 
-        {
-            return;
-        }
-        
-        try
-        {
-            // TaskManagerServiceの作業ディレクトリを設定
-            TaskManagerService.WorkingDirectory = currentSession.FolderPath ?? Environment.CurrentDirectory;
-            
-            // タスクを開始（バックグラウンド実行と同じ - ターミナルなし）
-            var taskSession = await TaskManagerService.StartTaskAsync(scriptName);
-            
-            if (taskSession == null)
-            {
-                toast?.ShowError("タスクの開始に失敗しました");
-                return;
-            }
-            
-            // ターミナルは接続しない（バックグラウンド実行）
-            taskSession.IsTerminalConnected = false;
-            
-            // ターミナルは接続していないので、ActiveSessionは設定しても問題ない
-            // ただし、バックグラウンド実行の場合は設定しない方が良い（SessionDataReceivedイベントの処理を避けるため）
-            // TaskManagerService.SetActiveSession(taskSession.Id); // バックグラウンド実行なので設定しない
-            
-            // selectedScriptは設定しても良い（タスクランナータブで選択状態を表示するため）
-            selectedScript = scriptName;
-            
-            // npmコマンドを送信してタスクを開始（バックグラウンドで実行）
-            if (!taskSession.IsCommandSent && taskSession.ConPtySession != null)
-            {
-                // 追加引数がある場合はコマンドに追加
-                var npmCommand = string.IsNullOrWhiteSpace(additionalArgs) 
-                    ? $"npm run {scriptName}\r"
-                    : $"npm run {scriptName} -- {additionalArgs}\r";
-                    
-                await taskSession.ConPtySession.WriteAsync(npmCommand);
-                taskSession.IsCommandSent = true;
-                taskSession.Status = TaskStatus.Running;
-                taskSession.StartTime = DateTime.Now;
-            }
-            
-            var message = string.IsNullOrWhiteSpace(additionalArgs)
-                ? $"{scriptName} をバックグラウンドで実行開始しました"
-                : $"{scriptName} を引数 '{additionalArgs}' でバックグラウンド実行開始しました";
-            toast?.ShowSuccess(message);
-            
-            // タスクランナータブへの切り替えはしない（現在のタブのまま）
-            // ユーザーが確認したい場合は手動でタスクランナータブに切り替える
-            
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            toast?.ShowError($"タスク実行エラー: {ex.Message}");
-        }
+
+        // これらのパターンに該当しない場合は実際のエラーメッセージと判断
+        return true;
     }
 
     public async ValueTask DisposeAsync()
@@ -3158,21 +2174,6 @@
         
         // 単一DOSターミナルのクリーンアップ
         await CleanupSingleDosTerminal();
-        
-        // タスクランナーターミナルのクリーンアップ
-        await CleanupTaskRunnerTerminal();
-        
-        // TaskManagerServiceのイベントハンドラーを削除
-        if (_taskDataReceivedHandler != null)
-        {
-            TaskManagerService.SessionDataReceived -= _taskDataReceivedHandler;
-            _taskDataReceivedHandler = null;
-        }
-        if (_taskSessionUpdatedHandler != null)
-        {
-            TaskManagerService.SessionUpdated -= _taskSessionUpdatedHandler;
-            _taskSessionUpdatedHandler = null;
-        }
 
         // HookNotificationServiceのイベントハンドラーを削除
         if (_hookNotificationHandler != null)
@@ -3188,10 +2189,6 @@
             _sessionsChangedHandler = null;
         }
 
-        // TaskManagerServiceのクリーンアップ
-        await TaskManagerService.StopAllTasksAsync();
-        TaskManagerService.Dispose();
-        
         // 全セッションのDOS ConPTYセッションのクリーンアップ（ハンドラー解除後に破棄）
         foreach (var session in sessions)
         {

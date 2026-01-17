@@ -259,51 +259,6 @@ namespace TerminalHub.Services
             }
         }
 
-
-        private string? FindExecutable(string exeName)
-        {
-            // 1. 環境変数PATHから検索
-            var pathEnv = Environment.GetEnvironmentVariable("PATH");
-            if (!string.IsNullOrEmpty(pathEnv))
-            {
-                var paths = pathEnv.Split(Path.PathSeparator);
-                foreach (var path in paths)
-                {
-                    var fullPath = Path.Combine(path, exeName);
-                    if (File.Exists(fullPath))
-                    {
-                        _logger.LogInformation($"Found {exeName} at: {fullPath}");
-                        return fullPath;
-                    }
-                }
-            }
-
-            // 2. よくあるインストール場所を確認
-            var commonPaths = new[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Claude"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Gemini"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Claude"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Gemini"),
-                @"C:\claude",
-                @"C:\gemini"
-            };
-
-            foreach (var basePath in commonPaths)
-            {
-                var fullPath = Path.Combine(basePath, exeName);
-                if (File.Exists(fullPath))
-                {
-                    _logger.LogInformation($"Found {exeName} at: {fullPath}");
-                    return fullPath;
-                }
-            }
-
-            _logger.LogWarning($"Could not find {exeName} in PATH or common locations");
-            return null;
-        }
-
         public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
             bool removed = false;
@@ -372,6 +327,13 @@ namespace TerminalHub.Services
                 {
                     _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
                     return existingSession;
+                }
+
+                // 新規セッション起動時は HasContinueErrorOccurred フラグをリセット
+                // （新しいセッションで --continue を再度試行できるようにする）
+                if (sessionInfo.HasContinueErrorOccurred)
+                {
+                    sessionInfo.HasContinueErrorOccurred = false;
                 }
 
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
@@ -735,11 +697,12 @@ namespace TerminalHub.Services
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
         {
             var options = sessionInfo.Options ?? new Dictionary<string, string>();
-            if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && options.ContainsKey("continue"))
+            var hasContinueOption = options.ContainsKey("continue");
+
+            if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && hasContinueOption)
             {
                 options = new Dictionary<string, string>(options);
                 options.Remove("continue");
-                _logger.LogInformation("--continueオプションを除外しました: {SessionId}", sessionInfo.SessionId);
             }
             return options;
         }
@@ -756,6 +719,12 @@ namespace TerminalHub.Services
                 }
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
+
+                // セッション再作成時はバッファと状態をクリア
+                sessionInfo.ClearTerminalBuffer();
+                sessionInfo.ProcessingStartTime = null;
+                sessionInfo.ProcessingElapsedSeconds = null;
+                sessionInfo.LastProcessingUpdateTime = null;
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
@@ -792,6 +761,19 @@ namespace TerminalHub.Services
                 }
 
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
+
+                // セッション再起動時はバッファと状態をクリア
+                sessionInfo.ClearTerminalBuffer();
+                sessionInfo.ProcessingStartTime = null;
+                sessionInfo.ProcessingElapsedSeconds = null;
+                sessionInfo.LastProcessingUpdateTime = null;
+
+                // セッション再起動時は HasContinueErrorOccurred フラグをリセット
+                // （新しいセッションで --continue を再度試行できるようにする）
+                if (sessionInfo.HasContinueErrorOccurred)
+                {
+                    sessionInfo.HasContinueErrorOccurred = false;
+                }
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
