@@ -64,6 +64,12 @@
                     </label>
                 </div>
             }
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.ChromeMode" id="@($"claudeChrome{UniqueId}")">
+                <label class="form-check-label" for="@($"claudeChrome{UniqueId}")">
+                    ブラウザ連携 (--chrome)
+                </label>
+            </div>
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">追加引数</label>
                 <input type="text" class="form-control form-control-sm" @bind="ClaudeOptions.ExtraArgs"
@@ -286,6 +292,10 @@
                 {
                     options["continue"] = "true";
                 }
+                if (ClaudeOptions.ChromeMode)
+                {
+                    options["chrome"] = "true";
+                }
                 if (!string.IsNullOrWhiteSpace(ClaudeOptions.ExtraArgs))
                 {
                     options["extra-args"] = ClaudeOptions.ExtraArgs.Trim();
@@ -339,6 +349,7 @@
     {
         public bool BypassMode { get; set; } = true;
         public bool Continue { get; set; } = true;
+        public bool ChromeMode { get; set; } = false;
         public string ExtraArgs { get; set; } = "";
     }
 

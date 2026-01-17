@@ -61,6 +61,12 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public int? ProcessingElapsedSeconds { get; set; }
 
+        /// <summary>
+        /// Hook Stop イベントを受信した時刻（OutputAnalyzerからの更新を一時的にスキップするため）
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastStopEventTime { get; set; }
+
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? LastProcessingUpdateTime { get; set; }
 

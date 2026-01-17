@@ -140,6 +140,10 @@ public class HookNotificationService : IHookNotificationService
             "[ステータスクリア] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}, 旧ステータス: {OldStatus}",
             session.GetDisplayName(),
             session.ProcessingStatus ?? "(なし)");
+
+        // Stop イベント時刻を記録（OutputAnalyzerからの更新を一時的にスキップするため）
+        session.LastStopEventTime = DateTime.Now;
+
         session.ProcessingStartTime = null;
         session.ProcessingStatus = null;
         session.ProcessingElapsedSeconds = null;
@@ -155,6 +159,10 @@ public class HookNotificationService : IHookNotificationService
         _logger.LogInformation(
             "[ステータス設定] きっかけ: HookNotificationService(UserPromptSubmit イベント), セッション: {SessionName}, ステータス: 処理中",
             session.GetDisplayName());
+
+        // Stop イベントのクールダウンをリセット（新しい処理開始のため）
+        session.LastStopEventTime = null;
+
         session.ProcessingStartTime = DateTime.Now;
         session.ProcessingStatus = "処理中";
 

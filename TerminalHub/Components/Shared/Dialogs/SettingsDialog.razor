@@ -558,7 +558,10 @@
     private string notificationTestResult = "テスト結果がここに表示されます";
 
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
-    
+
+    // ダイアログが開いている間は設定を再読み込みしないためのフラグ
+    private bool _settingsLoaded = false;
+
     // エクスポート/インポート用
     private class ExportCategories
     {
@@ -577,10 +580,17 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (IsVisible)
+        if (IsVisible && !_settingsLoaded)
         {
+            // ダイアログが開かれた時のみ設定を読み込む
             await LoadSettings();
             await CheckNotificationPermission();
+            _settingsLoaded = true;
+        }
+        else if (!IsVisible && _settingsLoaded)
+        {
+            // ダイアログが閉じられたらフラグをリセット（次回開いた時に再読み込み）
+            _settingsLoaded = false;
         }
     }
 

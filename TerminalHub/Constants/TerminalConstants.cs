@@ -38,7 +38,6 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-
             if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
             {
                 args.Add("--dangerously-skip-permissions");
@@ -47,6 +46,11 @@ namespace TerminalHub.Constants
             if (options.ContainsKey("continue") && options["continue"] == "true")
             {
                 args.Add("--continue");
+            }
+
+            if (options.ContainsKey("chrome") && options["chrome"] == "true")
+            {
+                args.Add("--chrome");
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))

@@ -1905,6 +1905,10 @@
                     "[ステータスクリア] きっかけ: OnHookNotification(Stop), セッション: {SessionName}, 旧ステータス: {OldStatus}",
                     session.GetDisplayName(),
                     session.ProcessingStatus ?? "(なし)");
+
+                // Stop イベント時刻を記録（OutputAnalyzerからの更新を一時的にスキップするため）
+                session.LastStopEventTime = DateTime.Now;
+
                 session.ProcessingStatus = null;
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
@@ -1930,6 +1934,7 @@
 
             case HookEventType.UserPromptSubmit:
                 // 処理開始を記録（既にHookNotificationServiceで設定されているが念のため）
+                session.LastStopEventTime = null; // Stop クールダウンをリセット
                 session.ProcessingStartTime = DateTime.Now;
                 session.ProcessingStatus = "処理中";
                 session.LastProcessingUpdateTime = DateTime.Now;

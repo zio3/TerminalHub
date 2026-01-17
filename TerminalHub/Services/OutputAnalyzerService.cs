@@ -84,8 +84,27 @@ namespace TerminalHub.Services
             }
         }
 
+        // Stop イベント後、この秒数間は OutputAnalyzer からのステータス更新をスキップ
+        private const double StopEventCooldownSeconds = 3.0;
+
         private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?> updateStatus, bool skipNotification = false)
         {
+                // ClaudeCode の場合、Stop イベント直後は OutputAnalyzer からの更新をスキップ
+                // 遅延した出力によるステータス再設定を防ぐ
+                if (session.TerminalType == TerminalType.ClaudeCode && session.LastStopEventTime.HasValue)
+                {
+                    var timeSinceStop = (DateTime.Now - session.LastStopEventTime.Value).TotalSeconds;
+                    if (timeSinceStop < StopEventCooldownSeconds)
+                    {
+                        _logger.LogDebug(
+                            "Stop後 {Seconds:F1}秒のためステータス更新をスキップ: {SessionId}, statusText={StatusText}",
+                            timeSinceStop, session.SessionId, statusText ?? "(null)");
+                        // UIコールバックは呼ぶ（現在のステータスを表示更新）
+                        updateStatus(session.SessionId, session.ProcessingStatus);
+                        return;
+                    }
+                }
+
                 session.ProcessingStatus = statusText;
                 if (statusText != null)
                 {
