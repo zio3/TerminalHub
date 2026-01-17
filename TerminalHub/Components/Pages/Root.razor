@@ -60,6 +60,7 @@
                      ActiveSessionId=@activeSessionId
                      IsAddingSession=@isAddingSession
                      SortMode=@sessionSortMode
+                     NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
                      OnSessionRemove="async (sessionId) => await ArchiveSession(sessionId)"
@@ -222,6 +223,9 @@
 
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
+
+    // 通知対象セッションID（インスタンスごとに独立して管理）
+    private HashSet<Guid> _notificationPendingSessions = new();
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
@@ -890,12 +894,11 @@
         }
 
 
-        // 通知フラグをクリア
+        // 通知フラグをクリア（インスタンスごとの通知リストから削除）
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (selectedSession != null && selectedSession.HasNotificationPending)
+        if (_notificationPendingSessions.Remove(sessionId))
         {
-            Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession.GetDisplayName());
-            selectedSession.HasNotificationPending = false;
+            Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
         }
 
         // アクティブセッション変更を即座にUIに反映
@@ -1850,7 +1853,7 @@
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
-                    session.HasNotificationPending = true;
+                    _notificationPendingSessions.Add(sessionId);
                 }
 
                 // 処理完了の通知（アクティブセッションでも通知する）
@@ -1915,11 +1918,11 @@
                 session.LastProcessingUpdateTime = null;
                 session.IsWaitingForUserInput = false;
 
-                // 非アクティブセッションの場合は通知マークを表示
+                // 非アクティブセッションの場合は通知マークを表示（インスタンスごとの通知リストに追加）
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
-                    session.HasNotificationPending = true;
+                    _notificationPendingSessions.Add(notification.SessionId);
                 }
 
                 // タイマーを停止

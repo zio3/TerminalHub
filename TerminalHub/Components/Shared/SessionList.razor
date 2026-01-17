@@ -83,7 +83,7 @@
                                         <i class="bi @(session.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                                     </button>
                                 }
-                            @if (session.HasNotificationPending)
+                            @if (NotificationPendingSessions.Contains(session.SessionId))
                             {
                                 <span class="text-danger me-1" title="処理が完了しました">
                                     <i class="bi bi-bell-fill"></i>
@@ -193,6 +193,7 @@
     [Parameter] public Guid? ActiveSessionId { get; set; }
     [Parameter] public bool IsAddingSession { get; set; }
     [Parameter] public string SortMode { get; set; } = "createdAt"; // "createdAt" or "lastAccessed"
+    [Parameter] public ISet<Guid> NotificationPendingSessions { get; set; } = new HashSet<Guid>();
 
     private string filterText = string.Empty;
 

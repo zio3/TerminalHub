@@ -73,9 +73,6 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput { get; set; }
 
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool HasNotificationPending { get; set; }
-
         /// <summary>
         /// 最後にセッションに接続した時刻（過去バッファの誤検出防止用）
         /// </summary>
