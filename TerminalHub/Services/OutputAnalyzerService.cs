@@ -46,6 +46,8 @@ namespace TerminalHub.Services
                 // 解析を実行
                 if (analyzer.TryAnalyze(data, out var result))
                 {
+                    _logger.LogDebug("[OutputAnalyzer] 解析成功: SessionId={SessionId}, IsProcessing={IsProcessing}, ProcessingText={ProcessingText}",
+                        sessionInfo.SessionId, result.IsProcessing, result.ProcessingText ?? "(null)");
 
                     if (result.IsInterrupted)
                     {
@@ -77,6 +79,7 @@ namespace TerminalHub.Services
                         UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus);
                     }
                 }
+                // TryAnalyze が false の場合は何もしない（ステータスパターンに一致しないデータ）
             }
             catch (Exception ex)
             {

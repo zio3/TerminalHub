@@ -245,14 +245,22 @@
             _ = InvokeAsync(async () => await OnSessionTimeout(sessionId));
         });
 
-        // HookNotificationServiceのイベントハンドラーを設定
+        // HookNotificationServiceのイベントハンドラーを設定（ホットリロード対策で既存を解除）
+        if (_hookNotificationHandler != null)
+        {
+            HookNotificationService.OnHookNotification -= _hookNotificationHandler;
+        }
         _hookNotificationHandler = (sender, args) =>
         {
             _ = InvokeAsync(async () => await OnHookNotification(args.Notification));
         };
         HookNotificationService.OnHookNotification += _hookNotificationHandler;
 
-        // SessionManagerのセッション変更イベントを購読
+        // SessionManagerのセッション変更イベントを購読（ホットリロード対策で既存を解除）
+        if (_sessionsChangedHandler != null)
+        {
+            SessionManager.OnSessionsChanged -= _sessionsChangedHandler;
+        }
         _sessionsChangedHandler = (sender, args) =>
         {
             InvokeAsync(() => OnSessionsChanged());
@@ -405,6 +413,9 @@
 
             // ConPtyConnectionServiceのイベントハンドラーを設定
             SetupConPtyConnectionEventHandlers();
+
+            // 注意: ConPtySessionは遅延初期化されるため、起動時点ではnullです
+            // セッションの購読はSelectSession内でGetSessionAsync後に行われます
 
             // 保存されたアクティブセッションがあれば選択
             var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
@@ -593,13 +604,20 @@
 
     private async void OnDosTerminalDataReceived(Guid sessionId, string data)
     {
-        // アクティブなセッションのDOSターミナルデータのみ表示
-        if (singleDosTerminal != null && sessionId == currentDosTerminalSessionId)
+        try
         {
-            await InvokeAsync(async () =>
+            // アクティブなセッションのDOSターミナルデータのみ表示
+            if (singleDosTerminal != null && sessionId == currentDosTerminalSessionId)
             {
-                await singleDosTerminal.InvokeVoidAsync("write", data);
-            });
+                await InvokeAsync(async () =>
+                {
+                    await singleDosTerminal.InvokeVoidAsync("write", data);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "DOSターミナルデータ受信処理でエラー: SessionId={SessionId}", sessionId);
         }
     }
 
@@ -823,9 +841,10 @@
             await LocalStorageService.SaveSessionsAsync(sessions);
 
             // 新しいセッションをConPtyConnectionServiceに登録
+            // 注意: LastConnectionTimeは設定しない（新規セッションにはバッファがないため）
+            // SelectSession内でバッファ復元時に設定される
             if (sessionInfo.ConPtySession != null)
             {
-                sessionInfo.LastConnectionTime = DateTime.Now;
                 ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
             }
 
@@ -948,10 +967,10 @@
 
         // ConPtySessionをConPtyConnectionServiceに登録
         // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
+        // 注意: LastConnectionTimeは上で既に設定済み（バッファ復元時）
         var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
         if (latestSessionInfo?.ConPtySession != null)
         {
-            latestSessionInfo.LastConnectionTime = DateTime.Now;
             ConPtyConnection.SubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
         }
         else
@@ -995,70 +1014,91 @@
         try
         {
             var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-            if (sessionInfo != null)
+            if (sessionInfo == null)
             {
-                // スクロールバック保持用バッファに追記（常時有効）
-                sessionInfo.AppendToTerminalBuffer(data);
+                Logger.LogWarning("[ProcessReceivedData] セッションが見つかりません: SessionId={SessionId}", sessionId);
+                return;
+            }
 
-                // バッファキャプチャが有効な場合は追記（デバッグ用）
-                sessionInfo.AppendToBuffer(data);
+            // データ受信ログ（セッションがアクティブかどうかで分岐）
+            var isActive = activeSessionId == sessionId;
+            if (!isActive)
+            {
+                Logger.LogInformation("[ProcessReceivedData] 非アクティブセッションにデータ受信: SessionId={SessionId}, DataLength={DataLength}",
+                    sessionId, data.Length);
+            }
 
-                // Claude Codeの場合、"No conversation found to continue"エラーをチェック
-                // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
-                // エラーメッセージはセッション開始直後に表示されるため、ProcessingStartTime が null の場合のみ検出
-                if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
-                    sessionInfo.ProcessingStartTime == null &&  // 処理開始前のみ検出
-                    IsClaudeContinueError(data) &&
-                    sessionInfo.Options.ContainsKey("continue") &&
-                    !sessionInfo.HasContinueErrorOccurred)
+            // スクロールバック保持用バッファに追記（常時有効）
+            sessionInfo.AppendToTerminalBuffer(data);
+
+            // バッファキャプチャが有効な場合は追記（デバッグ用）
+            sessionInfo.AppendToBuffer(data);
+
+            // Claude Codeの場合、"No conversation found to continue"エラーをチェック
+            // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
+            // エラーメッセージはセッション開始直後に表示されるため、ProcessingStartTime が null の場合のみ検出
+            if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
+                sessionInfo.ProcessingStartTime == null &&  // 処理開始前のみ検出
+                IsClaudeContinueError(data) &&
+                sessionInfo.Options.ContainsKey("continue") &&
+                !sessionInfo.HasContinueErrorOccurred)
+            {
+                // フラグを設定して重複送信を防ぐ
+                sessionInfo.HasContinueErrorOccurred = true;
+
+                Logger.LogInformation("'No conversation found to continue' エラーを検出しました。セッションを再作成します: SessionId={SessionId}",
+                    sessionId);
+
+                // セッション再起動のコマンドを送信
+                _ = InvokeAsync(async () =>
                 {
-                    // フラグを設定して重複送信を防ぐ
-                    sessionInfo.HasContinueErrorOccurred = true;
+                    await RecreateSessionWithoutContinue(sessionId);
+                });
+                return;
+            }
 
-                    Logger.LogInformation("'No conversation found to continue' エラーを検出しました。セッションを再作成します: SessionId={SessionId}",
-                        sessionId);
+            // 処理中の場合、アニメーションパターン（スピナー文字）を検出したらタイムアウトを延長
+            // Claude Codeのジッター対策により、完全なステータス行ではなく部分的な更新（スピナー文字のみ）が送られることがある
+            if (sessionInfo.ProcessingStartTime != null &&
+                sessionInfo.TerminalType == TerminalType.ClaudeCode &&
+                ContainsSpinnerCharacter(data))
+            {
+                sessionInfo.LastProcessingUpdateTime = DateTime.Now;
+                OutputAnalyzerService.ResetSessionTimer(sessionId);
+            }
 
-                    // セッション再起動のコマンドを送信
-                    _ = InvokeAsync(async () =>
+            // アクティブセッションの場合は直接ターミナルに出力
+            if (activeSessionId == sessionId && activeTerminal != null)
+            {
+                await TerminalService.WriteToTerminalAsync(activeTerminal, data);
+
+                // 接続直後（バッファ復元直後）は出力解析をスキップ
+                if (!sessionInfo.IsRecentConnection)
+                {
+                    _ = InvokeAsync(() =>
                     {
-                        await RecreateSessionWithoutContinue(sessionId);
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
+                            (id, status) => InvokeAsync(() =>
+                            {
+                                StateHasChanged();
+                            }));
                     });
-                    return;
                 }
-
-                // アクティブセッションの場合は直接ターミナルに出力
-                if (activeSessionId == sessionId && activeTerminal != null)
+            }
+            else
+            {
+                // 非アクティブセッションの場合もデータを処理
+                // 接続直後（バッファ復元直後）は出力解析をスキップ
+                if (!sessionInfo.IsRecentConnection)
                 {
-                    await TerminalService.WriteToTerminalAsync(activeTerminal, data);
-
-                    // 接続直後（バッファ復元直後）は出力解析をスキップ
-                    if (!sessionInfo.IsRecentConnection)
+                    _ = InvokeAsync(() =>
                     {
-                        _ = InvokeAsync(() =>
-                        {
-                            OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
-                                (id, status) => InvokeAsync(() =>
-                                {
-                                    StateHasChanged();
-                                }));
-                        });
-                    }
-                }
-                else
-                {
-                    // 非アクティブセッションの場合もデータを処理
-                    // 接続直後（バッファ復元直後）は出力解析をスキップ
-                    if (!sessionInfo.IsRecentConnection)
-                    {
-                        _ = InvokeAsync(() =>
-                        {
-                            OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
-                                (id, status) => InvokeAsync(() =>
-                                {
-                                    StateHasChanged();
-                                }));
-                        });
-                    }
+                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
+                            (id, status) => InvokeAsync(() =>
+                            {
+                                StateHasChanged();
+                            }));
+                    });
                 }
             }
         }
@@ -1856,6 +1896,7 @@
                 session.LastProcessingUpdateTime = null;
                 session.IsWaitingForUserInput = false;
 
+                // 非アクティブセッションの場合は通知マークを表示
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
@@ -1945,7 +1986,7 @@
                 // 処理開始を記録（既にHookNotificationServiceで設定されているが念のため）
                 session.LastStopEventTime = null; // Stop クールダウンをリセット
                 session.ProcessingStartTime = DateTime.Now;
-                session.ProcessingStatus = "処理中";
+                // ProcessingStatus は OutputAnalyzer が実際のステータステキストを設定するため、ここでは設定しない
                 session.LastProcessingUpdateTime = DateTime.Now;
 
                 // タイマーを開始
@@ -2033,11 +2074,7 @@
             if (newSession != null)
            {
                 // 新しいセッションを購読
-                var targetSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                if (targetSession != null)
-                {
-                    targetSession.LastConnectionTime = DateTime.Now;
-                }
+                // 注意: LastConnectionTimeはSelectSession内で設定されるため、ここでは設定しない
                 ConPtyConnection.SubscribeToSession(sessionId, newSession);
                                 // セッションを起動
                 newSession.Start();
@@ -2115,6 +2152,18 @@
         ConPtyConnection.DataReceived += _dataReceivedHandler;
         ConPtyConnection.ProcessExited += _processExitedHandler;
 
+    }
+
+    // Claude Code のスピナー文字（アニメーションパターン）
+    // ジッター対策により部分的な更新（スピナー文字のみ）が送られることがある
+    private static readonly char[] SpinnerCharacters = new[] { '✶', '✽', '✻', '✼', '✴', '✵', '✷', '✸', '✹', '·', '⋆', '*', '✢' };
+
+    /// <summary>
+    /// データにスピナー文字が含まれているかを判定
+    /// </summary>
+    private static bool ContainsSpinnerCharacter(string data)
+    {
+        return data.IndexOfAny(SpinnerCharacters) >= 0;
     }
 
     /// <summary>

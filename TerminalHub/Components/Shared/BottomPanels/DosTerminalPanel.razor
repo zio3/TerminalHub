@@ -101,9 +101,13 @@
                 });
             }
         }
-        catch (Exception)
+        catch (ObjectDisposedException)
         {
-            // Ignore write errors
+            // コンポーネント破棄後の呼び出しは無視
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "DOSターミナルデータ書き込みエラー: {PanelId}", PanelId);
         }
     }
 

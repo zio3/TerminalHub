@@ -157,14 +157,14 @@ public class HookNotificationService : IHookNotificationService
 
         // 処理開始を記録
         _logger.LogInformation(
-            "[ステータス設定] きっかけ: HookNotificationService(UserPromptSubmit イベント), セッション: {SessionName}, ステータス: 処理中",
+            "[処理開始] きっかけ: HookNotificationService(UserPromptSubmit イベント), セッション: {SessionName}",
             session.GetDisplayName());
 
         // Stop イベントのクールダウンをリセット（新しい処理開始のため）
         session.LastStopEventTime = null;
 
         session.ProcessingStartTime = DateTime.Now;
-        session.ProcessingStatus = "処理中";
+        // ProcessingStatus は OutputAnalyzer が実際のステータステキストを設定するため、ここでは設定しない
 
         // Webhook通知を送信
         try
