@@ -25,7 +25,7 @@ namespace TerminalHub.Services
             _sessionTimerService = sessionTimerService;
         }
 
-        public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?> updateStatus)
+        public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?>? updateStatus)
         {
             if (sessionInfo == null)
             {
@@ -90,7 +90,7 @@ namespace TerminalHub.Services
         // Stop イベント後、この秒数間は OutputAnalyzer からのステータス更新をスキップ
         private const double StopEventCooldownSeconds = 3.0;
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?> updateStatus, bool skipNotification = false)
+        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?>? updateStatus, bool skipNotification = false)
         {
                 // ClaudeCode の場合、Stop イベント直後は OutputAnalyzer からの更新をスキップ
                 // 遅延した出力によるステータス再設定を防ぐ
@@ -103,7 +103,7 @@ namespace TerminalHub.Services
                             "Stop後 {Seconds:F1}秒のためステータス更新をスキップ: {SessionId}, statusText={StatusText}",
                             timeSinceStop, session.SessionId, statusText ?? "(null)");
                         // UIコールバックは呼ぶ（現在のステータスを表示更新）
-                        updateStatus(session.SessionId, session.ProcessingStatus);
+                        updateStatus?.Invoke(session.SessionId, session.ProcessingStatus);
                         return;
                     }
                 }
@@ -201,8 +201,8 @@ namespace TerminalHub.Services
                     StopSessionTimer(session.SessionId);
                 }
 
-                // UIを更新
-                updateStatus(session.SessionId, statusText);
+                // UIを更新（コールバックが設定されている場合のみ）
+                updateStatus?.Invoke(session.SessionId, statusText);
         }
 
         public void ResetSessionTimer(Guid sessionId)
@@ -218,6 +218,34 @@ namespace TerminalHub.Services
         public void SetTimeoutCallback(Action<Guid> timeoutCallback)
         {
             _sessionTimerService.SetTimeoutCallback(timeoutCallback);
+        }
+
+        /// <summary>
+        /// データにアニメーションパターンが含まれている場合、タイマーをリセットする
+        /// </summary>
+        public bool CheckAnimationPatternAndResetTimer(string data, SessionInfo sessionInfo)
+        {
+            if (sessionInfo == null || sessionInfo.ProcessingStartTime == null)
+            {
+                return false;
+            }
+
+            // ターミナルタイプに応じた解析器を取得
+            var analyzer = _analyzerFactory.GetAnalyzer(sessionInfo.TerminalType);
+            if (analyzer == null)
+            {
+                return false;
+            }
+
+            // アニメーションパターンが含まれているかチェック
+            if (analyzer.ContainsAnimationPattern(data))
+            {
+                sessionInfo.LastProcessingUpdateTime = DateTime.Now;
+                ResetSessionTimer(sessionInfo.SessionId);
+                return true;
+            }
+
+            return false;
         }
     }
 }

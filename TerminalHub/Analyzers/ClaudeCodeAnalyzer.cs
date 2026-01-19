@@ -5,15 +5,26 @@ namespace TerminalHub.Analyzers
 {
     public class ClaudeCodeAnalyzer : IOutputAnalyzer
     {
-        // 処理中パターン
+        // スピナー文字（アニメーションパターン）
+        // ジッター対策により部分的な更新（スピナー文字のみ）が送られることがある
+        private static readonly char[] SpinnerCharacters = new[] { '✶', '✽', '✻', '✼', '✴', '✵', '✷', '✸', '✹', '·', '⋆', '*', '✢' };
+
+        // 処理中パターン（完全形）
         // 例: ✶ Spellbinding… (esc to interrupt)
         //     ✢ Actualizing… (esc to interrupt · thinking)
         //     ✢ Pondering… (esc to interrupt · thought for 3s)
         //     * Honking… (ctrl+c to interrupt · 39s · ↓ 941 tokens · thought for 16s)
         //     · Jitterbugging… (ctrl+c to interrupt)
-        // アニメーション記号: ✶ ✽ ✻ ✼ ✴ ✵ ✷ ✸ ✹ ✢ · ⋆ * 等
-        private static readonly Regex ProcessingPattern = new Regex(
+        private static readonly Regex ProcessingPatternFull = new Regex(
             @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\((?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?\)",
+            RegexOptions.Compiled);
+
+        // 処理中パターン（簡易形）- ジッター対策で部分更新が来る場合用
+        // スピナー文字 + ステータステキスト（…で終わる）のみでマッチ
+        // 例: ✢ Boondoggling…
+        //     * Harmonizing…
+        private static readonly Regex ProcessingPatternSimple = new Regex(
+            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*(\S+…)",
             RegexOptions.Compiled);
 
         // 中断パターン
@@ -38,8 +49,8 @@ namespace TerminalHub.Analyzers
                 return true;
             }
 
-            // 処理中パターンをチェック
-            var match = ProcessingPattern.Match(cleanedData);
+            // 処理中パターンをチェック（完全形を優先）
+            var match = ProcessingPatternFull.Match(cleanedData);
             if (match.Success)
             {
                 result.IsProcessing = true;
@@ -47,7 +58,24 @@ namespace TerminalHub.Analyzers
                 return true;
             }
 
+            // 完全形にマッチしない場合、簡易形を試す（ジッター対策の部分更新用）
+            var simpleMatch = ProcessingPatternSimple.Match(cleanedData);
+            if (simpleMatch.Success)
+            {
+                result.IsProcessing = true;
+                result.ProcessingText = simpleMatch.Groups[1].Value.Trim();
+                return true;
+            }
+
             return false;
+        }
+
+        /// <summary>
+        /// データにスピナー文字（アニメーションパターン）が含まれているかを判定
+        /// </summary>
+        public bool ContainsAnimationPattern(string data)
+        {
+            return data.IndexOfAny(SpinnerCharacters) >= 0;
         }
     }
 }

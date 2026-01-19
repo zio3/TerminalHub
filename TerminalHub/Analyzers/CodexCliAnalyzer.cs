@@ -5,6 +5,9 @@ namespace TerminalHub.Analyzers
 {
     public class CodexCliAnalyzer : IOutputAnalyzer
     {
+        // スピナー文字（アニメーションパターン）
+        private static readonly char[] SpinnerCharacters = new[] { '•' };
+
         // 処理中パターン
         // 例: • Working (0s • esc to interrupt)
         //     • Running date command (5s • esc to interrupt)
@@ -30,6 +33,14 @@ namespace TerminalHub.Analyzers
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// データにスピナー文字（アニメーションパターン）が含まれているかを判定
+        /// </summary>
+        public bool ContainsAnimationPattern(string data)
+        {
+            return data.IndexOfAny(SpinnerCharacters) >= 0;
         }
     }
 }

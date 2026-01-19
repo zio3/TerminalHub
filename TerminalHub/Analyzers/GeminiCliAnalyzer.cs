@@ -5,6 +5,9 @@ namespace TerminalHub.Analyzers
 {
     public class GeminiCliAnalyzer : IOutputAnalyzer
     {
+        // スピナー文字（アニメーションパターン）
+        private static readonly char[] SpinnerCharacters = new[] { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' };
+
         // Gemini CLIの処理パターン
         // 例: "⠧ Identifying the File Path (esc to cancel, 7s)"
         // 例: "⠙ Defining Current Status (esc to cancel, 1m 39s)"
@@ -92,5 +95,12 @@ namespace TerminalHub.Analyzers
             return false;
         }
 
+        /// <summary>
+        /// データにスピナー文字（アニメーションパターン）が含まれているかを判定
+        /// </summary>
+        public bool ContainsAnimationPattern(string data)
+        {
+            return data.IndexOfAny(SpinnerCharacters) >= 0;
+        }
     }
 }

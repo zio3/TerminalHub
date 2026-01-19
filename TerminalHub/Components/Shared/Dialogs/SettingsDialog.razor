@@ -588,6 +588,7 @@
     private string notificationTestResult = "テスト結果がここに表示されます";
 
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
+    [Parameter] public string SessionSortMode { get; set; } = "createdAt";
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -1123,7 +1124,19 @@
 
     private IEnumerable<SessionInfo> GetAvailableSessions()
     {
-        return SessionManager.GetAllSessions();
+        // ConPtySessionを持っていて、アーカイブされていないセッションだけを表示
+        var activeSessions = SessionManager.GetAllSessions()
+            .Where(s => !s.IsArchived && s.ConPtySession != null);
+
+        // セッションリストと同じソート順
+        if (SessionSortMode == "lastAccessed")
+        {
+            return activeSessions.OrderByDescending(s => s.LastAccessedAt);
+        }
+        else
+        {
+            return activeSessions.OrderBy(s => s.CreatedAt);
+        }
     }
 
     private SessionInfo? GetSelectedBufferSession()

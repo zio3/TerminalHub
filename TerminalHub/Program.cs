@@ -2,6 +2,7 @@ using TerminalHub.Services;
 using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;
+using TerminalHub.Middleware;
 using System.Text.Json;
 using Serilog;
 
@@ -85,6 +86,10 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
+// ExternalAuthSettings を登録（外部アクセス時のBasic認証用）
+builder.Services.Configure<ExternalAuthSettings>(
+    builder.Configuration.GetSection("ExternalAuth"));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -96,6 +101,9 @@ if (!app.Environment.IsDevelopment())
 
 // HTTPSリダイレクトは無効化（ローカル環境での使用を想定）
 // app.UseHttpsRedirection();
+
+// 外部アクセス時のBasic認証（X-Forwarded-Forヘッダーがある場合のみ）
+app.UseExternalAuth();
 
 app.UseAntiforgery();
 

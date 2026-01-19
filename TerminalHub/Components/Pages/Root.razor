@@ -35,6 +35,7 @@
                     OnSessionCreate="OnSessionCreate" 
                     OnCancel="OnDialogCancel" />
 <SettingsDialog @bind-IsVisible="showSettingsDialog"
+                SessionSortMode="@sessionSortMode"
                 OnSessionSortModeChanged="HandleSessionSortModeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
@@ -232,6 +233,11 @@
 
     // DOSターミナルイベントハンドラー（セッションごと）
     private readonly Dictionary<Guid, (EventHandler<DataReceivedEventArgs> DataReceived, EventHandler ProcessExited)> _dosTerminalHandlers = new();
+
+    // StateHasChanged()デバウンス用
+    private DateTime _lastStateChangedTime = DateTime.MinValue;
+    private const int StateChangeDebounceMs = 100; // 100ms間隔で間引く
+    private bool _stateChangePending = false;
 
     protected override Task OnInitializedAsync()
     {
@@ -1020,13 +1026,7 @@
                 return;
             }
 
-            // データ受信ログ（セッションがアクティブかどうかで分岐）
             var isActive = activeSessionId == sessionId;
-            if (!isActive)
-            {
-                Logger.LogInformation("[ProcessReceivedData] 非アクティブセッションにデータ受信: SessionId={SessionId}, DataLength={DataLength}",
-                    sessionId, data.Length);
-            }
 
             // スクロールバック保持用バッファに追記（常時有効）
             sessionInfo.AppendToTerminalBuffer(data);
@@ -1058,17 +1058,11 @@
             }
 
             // 処理中の場合、アニメーションパターン（スピナー文字）を検出したらタイムアウトを延長
-            // Claude Codeのジッター対策により、完全なステータス行ではなく部分的な更新（スピナー文字のみ）が送られることがある
-            if (sessionInfo.ProcessingStartTime != null &&
-                sessionInfo.TerminalType == TerminalType.ClaudeCode &&
-                ContainsSpinnerCharacter(data))
-            {
-                sessionInfo.LastProcessingUpdateTime = DateTime.Now;
-                OutputAnalyzerService.ResetSessionTimer(sessionId);
-            }
+            // ジッター対策により、完全なステータス行ではなく部分的な更新（スピナー文字のみ）が送られることがある
+            OutputAnalyzerService.CheckAnimationPatternAndResetTimer(data, sessionInfo);
 
             // アクティブセッションの場合は直接ターミナルに出力
-            if (activeSessionId == sessionId && activeTerminal != null)
+            if (isActive && activeTerminal != null)
             {
                 await TerminalService.WriteToTerminalAsync(activeTerminal, data);
 
@@ -1080,25 +1074,19 @@
                         OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
                             (id, status) => InvokeAsync(() =>
                             {
-                                StateHasChanged();
+                                RequestDebouncedStateChange();
                             }));
                     });
                 }
             }
             else
             {
-                // 非アクティブセッションの場合もデータを処理
+                // 非アクティブセッションの場合もデータを処理（UIは更新しない）
                 // 接続直後（バッファ復元直後）は出力解析をスキップ
                 if (!sessionInfo.IsRecentConnection)
                 {
-                    _ = InvokeAsync(() =>
-                    {
-                        OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty,
-                            (id, status) => InvokeAsync(() =>
-                            {
-                                StateHasChanged();
-                            }));
-                    });
+                    // 非アクティブセッションはステータス更新のみ行い、UI更新は行わない
+                    OutputAnalyzerService.AnalyzeOutput(data, sessionInfo, activeSessionId ?? Guid.Empty, null);
                 }
             }
         }
@@ -1106,6 +1094,43 @@
         {
             // ProcessReceivedData error
         }
+    }
+
+    /// <summary>
+    /// デバウンスされたStateHasChanged()をリクエスト
+    /// 高頻度の呼び出しを間引いてパフォーマンスを改善
+    /// </summary>
+    private void RequestDebouncedStateChange()
+    {
+        var now = DateTime.Now;
+        var elapsed = (now - _lastStateChangedTime).TotalMilliseconds;
+
+        if (elapsed >= StateChangeDebounceMs)
+        {
+            // デバウンス間隔を超えていれば即座に更新
+            _lastStateChangedTime = now;
+            _stateChangePending = false;
+            StateHasChanged();
+        }
+        else if (!_stateChangePending)
+        {
+            // まだ保留中でなければ、遅延実行をスケジュール
+            _stateChangePending = true;
+            var delay = StateChangeDebounceMs - (int)elapsed;
+            _ = Task.Delay(delay).ContinueWith(_ =>
+            {
+                _ = InvokeAsync(() =>
+                {
+                    if (_stateChangePending)
+                    {
+                        _stateChangePending = false;
+                        _lastStateChangedTime = DateTime.Now;
+                        StateHasChanged();
+                    }
+                });
+            });
+        }
+        // 既に保留中の場合は何もしない（次の遅延実行で更新される）
     }
 
 
@@ -2152,18 +2177,6 @@
         ConPtyConnection.DataReceived += _dataReceivedHandler;
         ConPtyConnection.ProcessExited += _processExitedHandler;
 
-    }
-
-    // Claude Code のスピナー文字（アニメーションパターン）
-    // ジッター対策により部分的な更新（スピナー文字のみ）が送られることがある
-    private static readonly char[] SpinnerCharacters = new[] { '✶', '✽', '✻', '✼', '✴', '✵', '✷', '✸', '✹', '·', '⋆', '*', '✢' };
-
-    /// <summary>
-    /// データにスピナー文字が含まれているかを判定
-    /// </summary>
-    private static bool ContainsSpinnerCharacter(string data)
-    {
-        return data.IndexOfAny(SpinnerCharacters) >= 0;
     }
 
     /// <summary>
