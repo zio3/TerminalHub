@@ -154,6 +154,9 @@ namespace TerminalHub.Services
             // セッション数ベースの判定
             if (SqliteDatabaseExists)
             {
+                // 既存DBのスキーママイグレーションを確認・実行
+                await _repository.InitializeAsync();
+
                 var sqliteSessionCount = await _repository.GetSessionCountAsync();
                 if (sqliteSessionCount > 0)
                 {
