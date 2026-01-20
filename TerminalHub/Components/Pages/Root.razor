@@ -1524,6 +1524,42 @@
         }
     }
 
+    /// <summary>
+    /// フロー制御: クライアント側のバッファが溜まりすぎた時に呼ばれる
+    /// ConPTYからの出力読み取りを一時停止する
+    /// </summary>
+    [JSInvokable]
+    public void OnFlowControlPause(string sessionId)
+    {
+        if (!Guid.TryParse(sessionId, out var guid))
+            return;
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        if (session?.ConPtySession != null)
+        {
+            session.ConPtySession.PauseOutput();
+            Logger.LogDebug("Flow control: Paused output for session {SessionId}", sessionId);
+        }
+    }
+
+    /// <summary>
+    /// フロー制御: クライアント側のバッファが処理されたら呼ばれる
+    /// ConPTYからの出力読み取りを再開する
+    /// </summary>
+    [JSInvokable]
+    public void OnFlowControlResume(string sessionId)
+    {
+        if (!Guid.TryParse(sessionId, out var guid))
+            return;
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        if (session?.ConPtySession != null)
+        {
+            session.ConPtySession.ResumeOutput();
+            Logger.LogDebug("Flow control: Resumed output for session {SessionId}", sessionId);
+        }
+    }
+
     private async Task DestroyTerminal(Guid sessionId, bool showAlert = true)
     {
         try

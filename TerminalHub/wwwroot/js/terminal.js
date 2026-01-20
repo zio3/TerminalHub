@@ -59,6 +59,95 @@ class ResizeObserverManager {
 // グローバルインスタンス
 window.resizeObserverManager = new ResizeObserverManager();
 
+// フロー制御管理クラス
+class FlowControlManager {
+    constructor() {
+        // 閾値設定（バイト単位）
+        this.HIGH_WATERMARK = 500000;  // 500KB - 一時停止閾値
+        this.LOW_WATERMARK = 100000;   // 100KB - 再開閾値
+
+        // セッションごとの状態管理
+        this.sessionStates = new Map();
+    }
+
+    getState(sessionId) {
+        if (!this.sessionStates.has(sessionId)) {
+            this.sessionStates.set(sessionId, {
+                pendingBytes: 0,
+                isPaused: false,
+                dotNetRef: null
+            });
+        }
+        return this.sessionStates.get(sessionId);
+    }
+
+    setDotNetRef(sessionId, dotNetRef) {
+        const state = this.getState(sessionId);
+        state.dotNetRef = dotNetRef;
+    }
+
+    // 書き込み前に呼び出す - バイト数を加算
+    beforeWrite(sessionId, dataLength) {
+        const state = this.getState(sessionId);
+        state.pendingBytes += dataLength;
+
+        // HIGH_WATERMARKを超えたら一時停止を通知
+        if (!state.isPaused && state.pendingBytes > this.HIGH_WATERMARK) {
+            state.isPaused = true;
+            console.log(`[FlowControl] Session ${sessionId}: Pausing output (pending: ${state.pendingBytes} bytes)`);
+            this.notifyPause(sessionId);
+        }
+    }
+
+    // 書き込み完了後に呼び出す - バイト数を減算
+    afterWrite(sessionId, dataLength) {
+        const state = this.getState(sessionId);
+        state.pendingBytes -= dataLength;
+
+        // LOW_WATERMARKを下回ったら再開を通知
+        if (state.isPaused && state.pendingBytes < this.LOW_WATERMARK) {
+            state.isPaused = false;
+            console.log(`[FlowControl] Session ${sessionId}: Resuming output (pending: ${state.pendingBytes} bytes)`);
+            this.notifyResume(sessionId);
+        }
+    }
+
+    notifyPause(sessionId) {
+        const state = this.getState(sessionId);
+        if (state.dotNetRef) {
+            state.dotNetRef.invokeMethodAsync('OnFlowControlPause', sessionId)
+                .catch(err => console.error('[FlowControl] Failed to notify pause:', err));
+        }
+    }
+
+    notifyResume(sessionId) {
+        const state = this.getState(sessionId);
+        if (state.dotNetRef) {
+            state.dotNetRef.invokeMethodAsync('OnFlowControlResume', sessionId)
+                .catch(err => console.error('[FlowControl] Failed to notify resume:', err));
+        }
+    }
+
+    // セッション削除時のクリーンアップ
+    remove(sessionId) {
+        this.sessionStates.delete(sessionId);
+    }
+
+    // デバッグ用: 現在の状態を取得
+    getStatus(sessionId) {
+        const state = this.getState(sessionId);
+        return {
+            pendingBytes: state.pendingBytes,
+            isPaused: state.isPaused,
+            highWatermark: this.HIGH_WATERMARK,
+            lowWatermark: this.LOW_WATERMARK
+        };
+    }
+}
+
+// グローバルフロー制御マネージャー
+window.flowControlManager = new FlowControlManager();
+
 // URL検出の設定
 function setupUrlDetection(term) {
     // WebLinksAddonが利用可能か確認
@@ -428,6 +517,11 @@ window.terminalFunctions = {
                 scrollPosition: 0,
                 hasBufferedContent: false
             };
+
+            // フロー制御マネージャーにdotNetRefを設定
+            if (dotNetRef) {
+                window.flowControlManager.setDotNetRef(sessionId, dotNetRef);
+            }
             
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
             // console.log(`[JS] 現在のターミナル数: ${Object.keys(window.multiSessionTerminals).length}`);
@@ -440,44 +534,57 @@ window.terminalFunctions = {
         return {
             write: (data) => {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
-                
+                const dataLength = data.length;
+
+                // フロー制御: 書き込み前にバイト数を加算
+                window.flowControlManager.beforeWrite(sessionId, dataLength);
+
+                // 書き込み完了コールバック付きの関数
+                const writeWithCallback = (writeData) => {
+                    term.write(writeData, () => {
+                        // 書き込み完了後にフロー制御を更新
+                        window.flowControlManager.afterWrite(sessionId, writeData.length);
+                    });
+                };
+
                 // terminalInfoが存在しない場合は単純にデータを書き込み
                 if (!terminalInfo) {
-                    term.write(data);
+                    writeWithCallback(data);
                     return;
                 }
-                
+
                 // リサイズ直後の書き込みはカウント
                 if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
                     terminalInfo.resizeCount++;
                     // リサイズ後の書き込み
                     // リサイズデータは通常通り処理
-                    term.write(data);
-                    
+                    writeWithCallback(data);
+
                     if (terminalInfo.resizeCount >= 2) {
                         // リサイズ完了 - スクロールバック復元完了
                         // リサイズ完了 - スクロールバック復元
                         terminalInfo.resizeCount = 0;
-                        
+
                     }
                 }
                 // セッション切り替え直後の最初の書き込みを検出（リサイズトリック前）
                 else if (terminalInfo.isFirstWrite && data.includes('\x1b[2J') && (data.match(/\x1b\[K/g) || []).length > 10) {
                     // 画面クリアをスキップして、カーソル位置のみ適用
                     let processedData = data;
-                    
+
                     // 画面クリア(\x1b[2J)を削除
                     processedData = processedData.replace(/\x1b\[2J/g, '');
                     // ホーム位置への移動(\x1b[H)も一時的に削除
                     processedData = processedData.replace(/\x1b\[H/g, '');
-                    
+
                     // 改行を追加して続きから表示
-                    term.write('\r\n--- セッション再開 ---\r\n');
-                    term.write(processedData);
-                    
+                    const separator = '\r\n--- セッション再開 ---\r\n';
+                    term.write(separator);
+                    writeWithCallback(processedData);
+
                     // セッション切り替え検出 - スクロールバック保持
                     terminalInfo.isFirstWrite = false;
-                    
+
                     // リサイズトリックを待つ
                     terminalInfo.resizeCount = 1;
                 } else {
@@ -485,9 +592,9 @@ window.terminalFunctions = {
                     const beforeViewportY = term.buffer.active.viewportY;
                     const beforeLength = term.buffer.active.length;
                     const isAtBottom = beforeViewportY + term.rows >= beforeLength;
-                    
-                    term.write(data);
-                    
+
+                    writeWithCallback(data);
+
                     if (terminalInfo) {
                         terminalInfo.isFirstWrite = false;
                     }
@@ -645,13 +752,16 @@ window.terminalFunctions = {
     cleanupTerminal: function(sessionId) {
         console.log(`[JS] cleanupTerminal: ★★★ 開始 sessionId=${sessionId}`);
         console.trace(`[JS] cleanupTerminal: 呼び出し元`);
-        
+
         // 削除前の状態を記録
         if (window.multiSessionTerminals) {
             console.log(`[JS] cleanupTerminal: 削除前のターミナル数=${Object.keys(window.multiSessionTerminals).length}`);
             console.log(`[JS] cleanupTerminal: 削除前のセッションID一覧: ${Object.keys(window.multiSessionTerminals).join(', ')}`);
         }
-        
+
+        // フロー制御のクリーンアップ
+        window.flowControlManager.remove(sessionId);
+
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
         
@@ -748,10 +858,26 @@ window.terminalHubHelpers = {
             textArea.focus();
         }
     },
-    
+
     // エレメントの存在確認
     checkElementExists: function(elementId) {
         return document.getElementById(elementId) !== null;
+    },
+
+    // フロー制御のステータスを取得（デバッグ用）
+    getFlowControlStatus: function(sessionId) {
+        return window.flowControlManager.getStatus(sessionId);
+    },
+
+    // 全セッションのフロー制御ステータスを取得（デバッグ用）
+    getAllFlowControlStatus: function() {
+        const result = {};
+        if (window.multiSessionTerminals) {
+            for (const sessionId of Object.keys(window.multiSessionTerminals)) {
+                result[sessionId] = window.flowControlManager.getStatus(sessionId);
+            }
+        }
+        return result;
     }
 };
 

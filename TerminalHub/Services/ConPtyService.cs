@@ -73,6 +73,16 @@ namespace TerminalHub.Services
         private const int FLUSH_INTERVAL_MS = 16; // 約60fps
         private const int MAX_BUFFER_SIZE = 65536; // 64KB
 
+        // フロー制御用
+        private volatile bool _outputPaused = false;
+        private TaskCompletionSource<bool>? _resumeTcs;
+        private readonly object _pauseLock = new();
+
+        /// <summary>
+        /// 出力が一時停止中かどうか
+        /// </summary>
+        public bool IsOutputPaused => _outputPaused;
+
         public int Cols { get; private set; }
         public int Rows { get; private set; }
         
@@ -405,24 +415,47 @@ namespace TerminalHub.Services
         {
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
-            
+
             while (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 try
                 {
+                    // フロー制御: 一時停止中は再開を待つ
+                    if (_outputPaused)
+                    {
+                        var resumeTask = _resumeTcs?.Task;
+                        if (resumeTask != null)
+                        {
+                            // キャンセルトークンと組み合わせて待機
+                            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                            linkedCts.CancelAfter(TimeSpan.FromSeconds(30)); // 最大30秒待機
+
+                            try
+                            {
+                                await resumeTask.WaitAsync(linkedCts.Token);
+                            }
+                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                                // タイムアウトの場合は強制的に再開
+                                _logger.LogWarning("Flow control timeout - forcing resume");
+                                ResumeOutput();
+                            }
+                        }
+                    }
+
                     if (_pipeOutStream == null)
                         break;
-                        
+
                     var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken);
-                    
+
                     if (bytesRead > 0)
                     {
                         // 統計情報を更新
                         TotalBytesRead += bytesRead;
-                        
+
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
                         var data = new string(charBuffer, 0, charsRead);
-                        
+
                         if (_enableBuffering)
                         {
                             // バッファリングが有効な場合
@@ -472,9 +505,44 @@ namespace TerminalHub.Services
                 Rows = rows;
                 var size = new COORD { X = (short)cols, Y = (short)rows };
                 ResizePseudoConsole(_hPC, size);
-                
+
                 // xterm.jsの場合、リサイズ後に追加の処理は不要
                 // xterm.js側でリフローを処理する
+            }
+        }
+
+        /// <summary>
+        /// 出力読み取りを一時停止する（フロー制御用）
+        /// クライアント側のバッファが溜まりすぎた時に呼び出す
+        /// </summary>
+        public void PauseOutput()
+        {
+            lock (_pauseLock)
+            {
+                if (!_outputPaused)
+                {
+                    _outputPaused = true;
+                    _resumeTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _logger.LogDebug("Output paused (flow control)");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 出力読み取りを再開する（フロー制御用）
+        /// クライアント側のバッファが処理されたら呼び出す
+        /// </summary>
+        public void ResumeOutput()
+        {
+            lock (_pauseLock)
+            {
+                if (_outputPaused)
+                {
+                    _outputPaused = false;
+                    _resumeTcs?.TrySetResult(true);
+                    _resumeTcs = null;
+                    _logger.LogDebug("Output resumed (flow control)");
+                }
             }
         }
 
@@ -484,6 +552,14 @@ namespace TerminalHub.Services
 
             // まず破棄フラグを設定
             _disposed = true;
+
+            // フロー制御を解除（読み取りタスクがブロックされている場合に備えて）
+            lock (_pauseLock)
+            {
+                _outputPaused = false;
+                _resumeTcs?.TrySetResult(true);
+                _resumeTcs = null;
+            }
 
             // 読み取りタスクをキャンセル
             try
