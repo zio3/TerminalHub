@@ -50,6 +50,17 @@ builder.Services.AddSingleton<ISessionManager, SessionManager>();
 // LocalStorageServiceを登録
 builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
+// SQLiteセッションストレージを登録
+var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+var dbPath = Path.Combine(appDataPath, "TerminalHub", "sessions.db");
+builder.Services.AddSingleton<SessionDbContext>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();
+    return new SessionDbContext(dbPath, logger);
+});
+builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
+builder.Services.AddScoped<IStorageServiceFactory, StorageServiceFactory>();
+
 // NotificationServiceを登録
 builder.Services.AddScoped<INotificationService, NotificationService>();
 

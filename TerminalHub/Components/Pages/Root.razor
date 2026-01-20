@@ -25,6 +25,7 @@
 @inject ILogger<Root> Logger
 @inject ILoggerFactory LoggerFactory
 @inject IHookNotificationService HookNotificationService
+@inject IStorageServiceFactory StorageServiceFactory
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -239,6 +240,55 @@
     private const int StateChangeDebounceMs = 100; // 100ms間隔で間引く
     private bool _stateChangePending = false;
 
+    // ストレージサービス（SQLiteまたはLocalStorage）
+    private IStorageService? _storageService;
+
+    /// <summary>
+    /// セッションをストレージに保存（SQLiteの場合は部分更新、LocalStorageの場合は全体更新）
+    /// </summary>
+    private async Task SaveSessionsToStorageAsync()
+    {
+        if (_storageService != null)
+        {
+            await _storageService.SaveSessionsAsync(sessions);
+        }
+        else
+        {
+            // フォールバック: LocalStorageServiceを直接使用
+            await LocalStorageService.SaveSessionsAsync(sessions);
+        }
+    }
+
+    /// <summary>
+    /// アクティブセッションIDをストレージに保存
+    /// </summary>
+    private async Task SaveActiveSessionIdToStorageAsync(Guid? sessionId)
+    {
+        if (_storageService != null)
+        {
+            await _storageService.SaveActiveSessionIdAsync(sessionId);
+        }
+        else
+        {
+            await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
+        }
+    }
+
+    /// <summary>
+    /// 展開状態をストレージに保存
+    /// </summary>
+    private async Task SaveExpandedStatesToStorageAsync(Dictionary<Guid, bool> expandedStates)
+    {
+        if (_storageService != null)
+        {
+            await _storageService.SaveSessionExpandedStatesAsync(expandedStates);
+        }
+        else
+        {
+            await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
+        }
+    }
+
     protected override Task OnInitializedAsync()
     {
         dotNetRef = DotNetObjectReference.Create(this);
@@ -331,14 +381,19 @@
             // 下部パネルタブを初期化
             await InitializeBottomPanelTabs();
 
+            // ストレージサービスを初期化
+            // SQLiteにセッションがあればSQLite、なければLocalStorageを使用
+            _storageService = await StorageServiceFactory.GetCurrentStorageServiceAsync();
+            Logger.LogInformation("ストレージタイプ: {StorageType}", _storageService.CurrentStorageType);
+
             // SessionManagerにセッションが存在するかチェック
-            // 存在する場合は他のブラウザが既に起動しているため、LocalStorageからの読み込みはスキップ
+            // 存在する場合は他のブラウザが既に起動しているため、ストレージからの読み込みはスキップ
             var sessionsToPopulateGitInfo = new List<Guid>();
 
             if (!SessionManager.HasSessions())
             {
-                // SessionManagerが空の場合のみLocalStorageから復元
-                var savedSessions = await LocalStorageService.LoadSessionsAsync();
+                // SessionManagerが空の場合のみストレージから復元
+                var savedSessions = await _storageService.LoadSessionsAsync();
 
                 foreach (var sessionInfo in savedSessions)
                 {
@@ -408,7 +463,7 @@
             sessions = SessionManager.GetAllSessions().ToList();
 
             // 保存された展開状態を読み込んで適用
-            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
+            var expandedStates = await _storageService.LoadSessionExpandedStatesAsync();
             foreach (var session in sessions)
             {
                 if (!session.ParentSessionId.HasValue && expandedStates.ContainsKey(session.SessionId))
@@ -424,7 +479,7 @@
             // セッションの購読はSelectSession内でGetSessionAsync後に行われます
 
             // 保存されたアクティブセッションがあれば選択
-            var savedActiveId = await LocalStorageService.LoadActiveSessionIdAsync();
+            var savedActiveId = await _storageService.LoadActiveSessionIdAsync();
             if (savedActiveId != null && sessions.Any(s => s.SessionId == savedActiveId))
             {
                 await SelectSession(savedActiveId.Value);
@@ -844,7 +899,7 @@
             sessions = SessionManager.GetAllSessions().ToList();
 
             // ローカルストレージに保存
-            await LocalStorageService.SaveSessionsAsync(sessions);
+            await SaveSessionsToStorageAsync();
 
             // 新しいセッションをConPtyConnectionServiceに登録
             // 注意: LastConnectionTimeは設定しない（新規セッションにはバッファがないため）
@@ -930,7 +985,7 @@
         StateHasChanged();
 
         // アクティブセッションIDをローカルストレージに保存
-        await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
+        await SaveActiveSessionIdToStorageAsync(sessionId);
 
         // ターミナルdivが存在するか確認し、表示する
         var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
@@ -1147,7 +1202,7 @@
             .Where(s => !s.ParentSessionId.HasValue) // 親セッションのみ
             .ToDictionary(s => s.SessionId, s => s.IsExpanded);
 
-        await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
+        await SaveExpandedStatesToStorageAsync(expandedStates);
     }
 
 
@@ -1158,7 +1213,7 @@
         {
             session.Memo = memo;
             // ローカルストレージを更新
-            await LocalStorageService.SaveSessionsAsync(sessions);
+            await SaveSessionsToStorageAsync();
         }
     }
 
@@ -1227,7 +1282,7 @@
         sessions = SessionManager.GetAllSessions().ToList();
 
         // ローカルストレージを更新
-        await LocalStorageService.SaveSessionsAsync(sessions);
+        await SaveSessionsToStorageAsync();
 
         if (activeSessionId == sessionId)
         {
@@ -1237,7 +1292,7 @@
             // セッション削除を即座にUIに反映
             StateHasChanged();
 
-            await LocalStorageService.SaveActiveSessionIdAsync(null);
+            await SaveActiveSessionIdToStorageAsync(null);
 
             // 他のセッションがあれば最初のものを選択
             if (sessions.Any())
@@ -1297,13 +1352,13 @@
 
         // ローカルストレージを更新（再起動時の復元用）
         sessions = SessionManager.GetAllSessions().ToList();
-        await LocalStorageService.SaveSessionsAsync(sessions);
+        await SaveSessionsToStorageAsync();
 
         if (activeSessionId == sessionId)
         {
             activeSessionId = null;
             activeSession = null;
-            await LocalStorageService.SaveActiveSessionIdAsync(null);
+            await SaveActiveSessionIdToStorageAsync(null);
 
             // アーカイブされていない他のセッションがあれば最初のものを選択
             var activeSessionsList = SessionManager.GetActiveSessions().ToList();
@@ -1332,7 +1387,7 @@
             sessions = SessionManager.GetAllSessions().ToList();
 
             // ローカルストレージを更新
-            await LocalStorageService.SaveSessionsAsync(sessions);
+            await SaveSessionsToStorageAsync();
             StateHasChanged();
         }
         catch (Exception ex)
@@ -1349,7 +1404,7 @@
         // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
 
-        await LocalStorageService.SaveSessionsAsync(sessions);
+        await SaveSessionsToStorageAsync();
         StateHasChanged();
     }
 
@@ -1365,7 +1420,7 @@
         // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
 
-        await LocalStorageService.SaveSessionsAsync(sessions);
+        await SaveSessionsToStorageAsync();
         StateHasChanged();
     }
 
@@ -1734,7 +1789,7 @@
                 sessions = SessionManager.GetAllSessions().ToList();
 
                 // ローカルストレージに保存
-                await LocalStorageService.SaveSessionsAsync(sessions);
+                await SaveSessionsToStorageAsync();
 
                 // 新しいセッションを選択
                 await SelectSession(newSession.SessionId);
@@ -2034,7 +2089,7 @@
         showSessionSettingsDialog = false;
         // セッション一覧を更新
         sessions = SessionManager.GetAllSessions().ToList();
-        await LocalStorageService.SaveSessionsAsync(sessions);
+        await SaveSessionsToStorageAsync();
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
         if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)
@@ -2072,7 +2127,7 @@
                 sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
                 sessionInfo.IsWorktree = gitInfo.IsWorktree;
 
-                await LocalStorageService.SaveSessionsAsync(sessions);
+                await SaveSessionsToStorageAsync();
                 StateHasChanged();
             }
         }
@@ -2112,7 +2167,7 @@
                 sessions = SessionManager.GetAllSessions().ToList();
                 
                 // ローカルストレージに保存
-                await LocalStorageService.SaveSessionsAsync(sessions);
+                await SaveSessionsToStorageAsync();
                 
                 // 強制的にセッションを再初期化するため、一旦nullにする
                 activeSessionId = null;

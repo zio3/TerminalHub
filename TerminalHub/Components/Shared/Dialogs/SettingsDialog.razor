@@ -8,6 +8,7 @@
 @inject ILocalStorageService LocalStorageService
 @inject IWebhookSettingsService WebhookSettingsService
 @inject ISessionManager SessionManager
+@inject IStorageServiceFactory StorageServiceFactory
 
 @if (IsVisible)
 {
@@ -38,12 +39,22 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @(activeTab == "sessions" ? "active" : "")" 
-                                    type="button" 
+                            <button class="nav-link @(activeTab == "sessions" ? "active" : "")"
+                                    type="button"
                                     @onclick="@(() => activeTab = "sessions")">
                                 <i class="bi bi-terminal me-1"></i>セッション
                             </button>
                         </li>
+                        @if (showMigrationTab)
+                        {
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @(activeTab == "migration" ? "active" : "")"
+                                        type="button"
+                                        @onclick="@(() => activeTab = "migration")">
+                                    <i class="bi bi-database me-1"></i>データ移行
+                                </button>
+                            </li>
+                        }
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "export" ? "active" : "")"
                                     type="button"
@@ -246,6 +257,93 @@
                                 </div>
                             </div>
                         }
+                        else if (activeTab == "migration")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">データ移行</h6>
+
+                                <div class="mb-4">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">現在のデータ保存先:</span>
+                                        <span class="badge @(currentStorageType == StorageType.SQLite ? "bg-success" : "bg-warning")">
+                                            @(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")
+                                        </span>
+                                    </div>
+
+                                    @if (currentStorageType == StorageType.SQLite)
+                                    {
+                                        <div class="alert alert-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            現在SQLiteを使用しています
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <p class="mb-1">SQLiteセッション数: <strong>@sqliteSessionCount</strong>件</p>
+                                            <p class="mb-1">データベースパス:</p>
+                                            <code class="small">@sqliteDbPath</code>
+                                        </div>
+                                    }
+
+                                    @if (localStorageSessionCount > 0)
+                                    {
+                                        <div class="@(currentStorageType == StorageType.SQLite ? "mt-4 pt-3 border-top" : "")">
+                                            <h6 class="mb-2">
+                                                <i class="bi bi-hdd me-1"></i>LocalStorageのデータ
+                                            </h6>
+                                            <div class="mb-3">
+                                                <p class="mb-1">セッション数: <strong>@localStorageSessionCount</strong>件</p>
+                                                <p class="mb-1">データサイズ: 約 <strong>@FormatBytes(localStorageDataSize)</strong></p>
+                                            </div>
+
+                                            @if (currentStorageType == StorageType.LocalStorage)
+                                            {
+                                                <div class="alert alert-info">
+                                                    <h6 class="alert-heading"><i class="bi bi-info-circle me-1"></i>SQLiteに移行すると</h6>
+                                                    <ul class="mb-0 small">
+                                                        <li>セッション切り替えが高速化</li>
+                                                        <li>データの部分更新が可能に</li>
+                                                        <li>アプリ再インストール時もデータ保持</li>
+                                                    </ul>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="alert alert-warning">
+                                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                                    再移行するとSQLiteの現在のデータが上書きされます
+                                                </div>
+                                            }
+
+                                            <button class="btn @(currentStorageType == StorageType.SQLite ? "btn-warning" : "btn-primary")"
+                                                    @onclick="MigrateToSqlite" disabled="@isMigrating">
+                                                @if (isMigrating)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                                    <span>移行中...</span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-database-fill-up me-1"></i>
+                                                    <span>@(currentStorageType == StorageType.SQLite ? "LocalStorageから再移行" : "SQLiteに移行する")</span>
+                                                }
+                                            </button>
+
+                                            <p class="text-muted small mt-2">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                移行後もLocalStorageのデータはバックアップとして残ります
+                                            </p>
+                                        </div>
+                                    }
+                                    else if (currentStorageType == StorageType.LocalStorage)
+                                    {
+                                        <div class="alert alert-secondary">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            LocalStorageにセッションデータがありません
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
                         else if (activeTab == "export")
                         {
                             <div class="tab-pane fade show active">
@@ -254,36 +352,18 @@
                                 <!-- エクスポート -->
                                 <div class="mb-4">
                                     <h6 class="mb-2">エクスポート</h6>
-                                    <p class="text-muted small">選択したカテゴリのデータをJSONファイルとしてダウンロードします。</p>
+                                    <p class="text-muted small">
+                                        現在のストレージ（@(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")）からセッション情報をJSONファイルとしてダウンロードします。
+                                    </p>
 
-                                    <div class="mb-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.notifications" id="exportNotifications">
-                                            <label class="form-check-label" for="exportNotifications">
-                                                <i class="bi bi-bell me-1"></i>通知設定
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.sessions" id="exportSessions">
-                                            <label class="form-check-label" for="exportSessions">
-                                                <i class="bi bi-terminal me-1"></i>セッション情報
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.ui" id="exportUI">
-                                            <label class="form-check-label" for="exportUI">
-                                                <i class="bi bi-window me-1"></i>UI設定
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" @bind="exportCategories.history" id="exportHistory">
-                                            <label class="form-check-label" for="exportHistory">
-                                                <i class="bi bi-clock-history me-1"></i>履歴
-                                            </label>
-                                        </div>
+                                    <div class="alert alert-secondary mb-3">
+                                        <small>
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            エクスポート対象: セッション情報（@currentStorageSessionCount 件）
+                                        </small>
                                     </div>
 
-                                    <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(!HasExportSelection)">
+                                    <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(currentStorageSessionCount == 0)">
                                         <i class="bi bi-download me-1"></i>エクスポート
                                     </button>
                                 </div>
@@ -293,23 +373,21 @@
                                 <!-- インポート -->
                                 <div>
                                     <h6 class="mb-2">インポート</h6>
-                                    <p class="text-muted small">JSONファイルを選択して設定をインポートします。</p>
+                                    <p class="text-muted small">
+                                        JSONファイルを選択してセッション情報をインポートします。
+                                        現在のストレージ（@(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")）に追加されます。
+                                    </p>
 
                                     <div class="mb-3">
                                         <InputFile OnChange="@LoadImportFile" accept=".json" class="form-control" />
                                     </div>
 
-                                    @if (importPreview != null)
+                                    @if (importSessionCount > 0)
                                     {
                                         <div class="alert alert-info">
                                             <h6 class="alert-heading">インポートプレビュー</h6>
                                             <small>
-                                                @foreach (var category in importPreview)
-                                                {
-                                                    <div>
-                                                        <i class="bi bi-check-circle me-1"></i>@GetCategoryDisplayName(category)
-                                                    </div>
-                                                }
+                                                <i class="bi bi-terminal me-1"></i>セッション情報: @importSessionCount 件
                                             </small>
                                         </div>
 
@@ -587,6 +665,15 @@
     private int testElapsedSeconds = 10;
     private string notificationTestResult = "テスト結果がここに表示されます";
 
+    // データ移行関連
+    private bool showMigrationTab = false;
+    private StorageType currentStorageType = StorageType.LocalStorage;
+    private int localStorageSessionCount = 0;
+    private int localStorageDataSize = 0;
+    private int sqliteSessionCount = 0;
+    private string sqliteDbPath = "";
+    private bool isMigrating = false;
+
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "createdAt";
 
@@ -594,20 +681,9 @@
     private bool _settingsLoaded = false;
 
     // エクスポート/インポート用
-    private class ExportCategories
-    {
-        public bool notifications { get; set; } = false;
-        public bool sessions { get; set; } = false;
-        public bool ui { get; set; } = false;
-        public bool history { get; set; } = false;
-    }
-    
-    private ExportCategories exportCategories = new();
-    private List<string>? importPreview = null;
-    private Dictionary<string, object>? importData = null;
-    
-    private bool HasExportSelection => exportCategories.notifications || exportCategories.sessions || 
-                                       exportCategories.ui || exportCategories.history;
+    private int currentStorageSessionCount = 0;
+    private int importSessionCount = 0;
+    private List<SessionInfo>? importSessions = null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -629,6 +705,9 @@
     {
         try
         {
+            // データ移行タブの状態を更新
+            await LoadMigrationTabState();
+
             // LocalStorageから設定を読み込み
             var settings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSettings");
             if (settings.HasValue)
@@ -902,67 +981,34 @@
     {
         try
         {
-            var exportData = new Dictionary<string, object>();
-            
-            if (exportCategories.notifications)
+            // 現在のストレージからセッションを取得
+            var storageService = await StorageServiceFactory.GetCurrentStorageServiceAsync();
+            var sessions = await storageService.LoadSessionsAsync();
+            var activeSessionId = await storageService.LoadActiveSessionIdAsync();
+
+            var exportData = new Dictionary<string, object>
             {
-                var settings = await JSRuntime.InvokeAsync<object>("terminalHubHelpers.getSettings");
-                if (settings != null)
+                ["sessions"] = sessions,
+                ["activeSessionId"] = activeSessionId?.ToString() ?? "",
+                ["_metadata"] = new
                 {
-                    exportData["notifications"] = settings;
+                    exportedAt = DateTime.Now,
+                    version = "2.0",
+                    storageType = currentStorageType.ToString(),
+                    sessionCount = sessions.Count
                 }
-            }
-            
-            if (exportCategories.sessions)
-            {
-                var sessions = await LocalStorageService.GetAsync<object>("terminalHub_sessions");
-                if (sessions != null)
-                {
-                    exportData["sessions"] = sessions;
-                }
-                
-                var activeSession = await LocalStorageService.GetAsync<object>("terminalHub_activeSession");
-                if (activeSession != null)
-                {
-                    exportData["activeSession"] = activeSession;
-                }
-            }
-            
-            if (exportCategories.ui)
-            {
-                var devWindowPos = await LocalStorageService.GetAsync<object>("devWindowPosition");
-                if (devWindowPos != null)
-                {
-                    exportData["devWindowPosition"] = devWindowPos;
-                }
-            }
-            
-            if (exportCategories.history)
-            {
-                var history = await LocalStorageService.GetAsync<object>("inputHistory");
-                if (history != null)
-                {
-                    exportData["inputHistory"] = history;
-                }
-            }
-            
-            // メタデータを追加
-            exportData["_metadata"] = new
-            {
-                exportedAt = DateTime.Now,
-                version = "1.0"
             };
-            
+
             // JSONに変換してダウンロード
             var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions
             {
                 WriteIndented = true
             });
-            
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadJson", 
-                json, $"terminalhub_export_{DateTime.Now:yyyyMMdd_HHmmss}.json");
-            
-            saveMessage = "エクスポートが完了しました";
+
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadJson",
+                json, $"terminalhub_sessions_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+
+            saveMessage = $"セッション情報（{sessions.Count}件）をエクスポートしました";
             saveSuccess = true;
         }
         catch (Exception ex)
@@ -983,77 +1029,77 @@
                 saveSuccess = false;
                 return;
             }
-            
+
             using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
             using var reader = new StreamReader(stream);
             var json = await reader.ReadToEndAsync();
-            
-            importData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-            if (importData != null)
+
+            var importData = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+
+            // セッション配列を取得
+            if (importData.TryGetProperty("sessions", out var sessionsElement))
             {
-                importPreview = importData.Keys.Where(k => k != "_metadata").ToList();
+                var options = new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                importSessions = System.Text.Json.JsonSerializer.Deserialize<List<SessionInfo>>(sessionsElement.GetRawText(), options);
+                importSessionCount = importSessions?.Count ?? 0;
+            }
+            else
+            {
+                saveMessage = "セッション情報が見つかりませんでした";
+                saveSuccess = false;
+                importSessions = null;
+                importSessionCount = 0;
             }
         }
         catch (Exception ex)
         {
             saveMessage = $"ファイル読み込みエラー: {ex.Message}";
             saveSuccess = false;
-            importPreview = null;
-            importData = null;
+            importSessions = null;
+            importSessionCount = 0;
         }
     }
-    
+
     private async Task ImportSettings()
     {
-        if (importData == null) return;
-        
+        if (importSessions == null || importSessions.Count == 0) return;
+
         try
         {
-            foreach (var kvp in importData.Where(k => k.Key != "_metadata"))
+            // 現在のストレージにセッションをインポート
+            var storageService = await StorageServiceFactory.GetCurrentStorageServiceAsync();
+
+            // 既存のセッションを取得
+            var existingSessions = await storageService.LoadSessionsAsync();
+            var existingIds = existingSessions.Select(s => s.SessionId).ToHashSet();
+
+            // 重複しないセッションのみ追加
+            int addedCount = 0;
+            foreach (var session in importSessions)
             {
-                switch (kvp.Key)
+                if (!existingIds.Contains(session.SessionId))
                 {
-                    case "notifications":
-                        await JSRuntime.InvokeVoidAsync("terminalHubHelpers.saveSettings", kvp.Value);
-                        break;
-                    case "sessions":
-                        await LocalStorageService.SetAsync("terminalHub_sessions", kvp.Value);
-                        break;
-                    case "activeSession":
-                        await LocalStorageService.SetAsync("terminalHub_activeSession", kvp.Value);
-                        break;
-                    case "devWindowPosition":
-                        await LocalStorageService.SetAsync("devWindowPosition", kvp.Value);
-                        break;
-                    case "inputHistory":
-                        await LocalStorageService.SetAsync("inputHistory", kvp.Value);
-                        break;
+                    await storageService.SaveSessionAsync(session);
+                    addedCount++;
                 }
             }
-            
-            saveMessage = "インポートが完了しました。ページを再読み込みしてください。";
+
+            saveMessage = $"インポートが完了しました（{addedCount}件追加、{importSessions.Count - addedCount}件は重複のためスキップ）。ページを再読み込みしてください。";
             saveSuccess = true;
-            importPreview = null;
-            importData = null;
+            importSessions = null;
+            importSessionCount = 0;
+
+            // 状態を更新
+            await LoadMigrationTabState();
         }
         catch (Exception ex)
         {
             saveMessage = $"インポートエラー: {ex.Message}";
             saveSuccess = false;
         }
-    }
-    
-    private string GetCategoryDisplayName(string category)
-    {
-        return category switch
-        {
-            "notifications" => "通知設定",
-            "sessions" => "セッション情報",
-            "activeSession" => "アクティブセッション",
-            "devWindowPosition" => "開発ウィンドウ位置",
-            "inputHistory" => "入力履歴",
-            _ => category
-        };
     }
 
     // 開発ツール関連メソッド
@@ -1297,6 +1343,101 @@
         catch (Exception ex)
         {
             notificationTestResult = $"エラー: {ex.Message}";
+        }
+    }
+
+    // データ移行関連メソッド
+    private async Task LoadMigrationTabState()
+    {
+        try
+        {
+            // SQLite DBの存在チェック
+            var sqliteExists = StorageServiceFactory.SqliteDatabaseExists;
+
+            // SQLiteのパスを設定
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            sqliteDbPath = Path.Combine(appDataPath, "TerminalHub", "sessions.db");
+
+            // 常にLocalStorageのデータを読み込む（再移行用）
+            try
+            {
+                var localSessions = await LocalStorageService.LoadSessionsAsync();
+                localStorageSessionCount = localSessions.Count;
+
+                // データサイズを概算（JSON形式のサイズ）
+                var json = System.Text.Json.JsonSerializer.Serialize(localSessions);
+                localStorageDataSize = System.Text.Encoding.UTF8.GetByteCount(json);
+            }
+            catch
+            {
+                localStorageSessionCount = 0;
+                localStorageDataSize = 0;
+            }
+
+            if (sqliteExists)
+            {
+                // SQLite使用中
+                currentStorageType = StorageType.SQLite;
+                sqliteSessionCount = await StorageServiceFactory.GetSqliteSessionCountAsync();
+                currentStorageSessionCount = sqliteSessionCount;
+                // SQLite使用中でも、LocalStorageにデータがあれば再移行可能なのでタブを表示
+                showMigrationTab = true;
+            }
+            else
+            {
+                // LocalStorage使用中
+                currentStorageType = StorageType.LocalStorage;
+                currentStorageSessionCount = localStorageSessionCount;
+                // LocalStorageにセッションがある場合のみ移行タブを表示
+                showMigrationTab = localStorageSessionCount > 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"データ移行状態の読み込みエラー: {ex.Message}");
+            showMigrationTab = false;
+        }
+    }
+
+    private async Task MigrateToSqlite()
+    {
+        if (isMigrating) return;
+
+        isMigrating = true;
+        StateHasChanged();
+
+        try
+        {
+            // LocalStorageからデータを取得
+            var sessions = await LocalStorageService.LoadSessionsAsync();
+            var activeSessionId = await LocalStorageService.LoadActiveSessionIdAsync();
+            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
+
+            // SQLiteに移行
+            var success = await StorageServiceFactory.MigrateToSqliteAsync(sessions, activeSessionId, expandedStates);
+
+            if (success)
+            {
+                saveMessage = "SQLiteへの移行が完了しました。ページを再読み込みしてください。";
+                saveSuccess = true;
+                currentStorageType = StorageType.SQLite;
+                sqliteSessionCount = sessions.Count;
+            }
+            else
+            {
+                saveMessage = "SQLiteへの移行に失敗しました";
+                saveSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"移行エラー: {ex.Message}";
+            saveSuccess = false;
+        }
+        finally
+        {
+            isMigrating = false;
+            StateHasChanged();
         }
     }
 }
