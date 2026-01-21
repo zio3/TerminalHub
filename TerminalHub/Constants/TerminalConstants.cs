@@ -26,11 +26,43 @@ namespace TerminalHub.Constants
         // ファイルパス
         public const string DefaultShell = @"C:\Windows\System32\cmd.exe";
         
-        // Claude Codeのデフォルトパス（ユーザー固有）
+        // Claude Codeのパス（ネイティブ版優先、npm版フォールバック）
         public static string GetDefaultClaudeCmdPath()
         {
             var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+
+            // 1. ネイティブ版を優先（v2.x以降）
+            var nativePath = Path.Combine(userProfile, ".local", "bin", "claude.exe");
+            if (File.Exists(nativePath))
+                return nativePath;
+
+            // 2. npm版にフォールバック
+            var npmPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+            if (File.Exists(npmPath))
+                return npmPath;
+
+            // 3. どちらもなければネイティブ版のパスを返す（推奨インストール方法）
+            return nativePath;
+        }
+
+        /// <summary>
+        /// Claude Codeのインストール状態を確認
+        /// </summary>
+        public static (bool isInstalled, string path, string installType) GetClaudeCodeInstallInfo()
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            // ネイティブ版
+            var nativePath = Path.Combine(userProfile, ".local", "bin", "claude.exe");
+            if (File.Exists(nativePath))
+                return (true, nativePath, "native");
+
+            // npm版
+            var npmPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
+            if (File.Exists(npmPath))
+                return (true, npmPath, "npm");
+
+            return (false, nativePath, "not installed");
         }
 
         // コマンドライン引数の構築ヘルパー

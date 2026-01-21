@@ -149,11 +149,21 @@ namespace TerminalHub.Services
                 case TerminalType.ClaudeCode:
                     var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options);
                     var claudeCmdPath = GetClaudeCmdPath();
-                    // /c オプションを使用（コマンド実行後にプロセスを終了）
-                    var args = string.IsNullOrWhiteSpace(claudeArgs)
-                        ? $"/c \"{claudeCmdPath}\""
-                        : $"/c \"{claudeCmdPath}\" {claudeArgs}";
-                    return ("cmd.exe", args);
+
+                    // ネイティブ版(.exe)は直接実行、npm版(.cmd)はcmd.exe経由
+                    if (claudeCmdPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // ネイティブ版: 直接実行
+                        return (claudeCmdPath, claudeArgs);
+                    }
+                    else
+                    {
+                        // npm版: cmd.exe経由で実行
+                        var args = string.IsNullOrWhiteSpace(claudeArgs)
+                            ? $"/c \"{claudeCmdPath}\""
+                            : $"/c \"{claudeCmdPath}\" {claudeArgs}";
+                        return ("cmd.exe", args);
+                    }
 
                 case TerminalType.GeminiCLI:
                     var geminiArgs = TerminalConstants.BuildGeminiArgs(options);
