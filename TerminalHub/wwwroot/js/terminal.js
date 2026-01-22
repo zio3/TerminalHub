@@ -425,8 +425,9 @@ window.terminalFunctions = {
             // レンダリング後のイベント（再描画完了を検出）
             // 自動スクロールは削除 - ユーザーのスクロール操作を妨げないため
             
-            // カスタムキーハンドラー（Ctrl+Cをコピー用に使う）
+            // カスタムキーハンドラー
             term.attachCustomKeyEventHandler((arg) => {
+                // Ctrl+C: テキスト選択がある場合はコピー動作を許可
                 if (arg.ctrlKey && arg.code === "KeyC" && arg.type === "keydown") {
                     const selection = term.getSelection();
                     if (selection) {
@@ -437,6 +438,7 @@ window.terminalFunctions = {
                     }
                     // 選択がない場合は通常のCtrl+C（中断）として動作
                 }
+
                 return true; // その他のキーは通常通り処理
             });
             

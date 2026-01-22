@@ -255,6 +255,30 @@
                                         「最終利用日時順」では、子セッション（Worktree）の利用も親セッションの順序に反映されます。
                                     </p>
                                 </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <label class="form-label">セッション一覧の表示設定</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="showTerminalType" id="showTerminalType">
+                                        <label class="form-check-label" for="showTerminalType">
+                                            <i class="bi bi-tag me-1"></i>ターミナル種別を表示
+                                            <span class="text-muted small">（Claude/Gemini/Codexバッジ）</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="showGitInfo" id="showGitInfo">
+                                        <label class="form-check-label" for="showGitInfo">
+                                            <i class="bi bi-git me-1"></i>Git情報を表示
+                                            <span class="text-muted small">（ブランチ名バッジ）</span>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        セッション一覧に表示する追加情報を選択できます。
+                                    </p>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "migration")
@@ -424,10 +448,19 @@
                                                 <kbd>Shift+Tab</kbd>
                                             </label>
                                         </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="claudeModeSwitchKey"
+                                                   id="keyPlan" value="plan" checked="@(claudeModeSwitchKey == "plan")"
+                                                   @onchange="@(() => claudeModeSwitchKey = "plan")">
+                                            <label class="form-check-label" for="keyPlan">
+                                                <kbd>/plan</kbd> <span class="text-muted">（コマンド送信）</span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <p class="text-muted small mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        環境によってはAlt+Mが他の機能と競合する場合があります。その場合はShift+Tabをお試しください。
+                                        環境によってはAlt+Mが他の機能と競合する場合があります。その場合はShift+Tabをお試しください。<br/>
+                                        <code>/plan</code>を選択すると、ボタンクリック時に/planコマンドを送信してPlanモードに入ります。
                                     </p>
                                 </div>
 
@@ -652,6 +685,8 @@
     private string activeTab = "notifications";
     private string claudeModeSwitchKey = "altM";
     private string sessionSortMode = "createdAt";
+    private bool showTerminalType = false;
+    private bool showGitInfo = false;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
 
@@ -676,6 +711,8 @@
 
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "createdAt";
+    [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
+    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo)> OnSessionDisplaySettingsChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -770,6 +807,14 @@
                     {
                         sessionSortMode = sortMode.GetString() ?? "createdAt";
                     }
+                    if (sessionsSettings.TryGetProperty("showTerminalType", out var showTermType))
+                    {
+                        showTerminalType = showTermType.GetBoolean();
+                    }
+                    if (sessionsSettings.TryGetProperty("showGitInfo", out var showGit))
+                    {
+                        showGitInfo = showGit.GetBoolean();
+                    }
                 }
                 if (s.TryGetProperty("devTools", out var devTools))
                 {
@@ -796,6 +841,8 @@
             webHookUrl = "";
             claudeModeSwitchKey = "altM";
             sessionSortMode = "createdAt";
+            showTerminalType = false;
+            showGitInfo = false;
             devToolsEnabled = false;
             defaultFolderPath = "";
         }
@@ -924,7 +971,7 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
                 claudeModeSwitchKey);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSessionSettings",
-                sessionSortMode);
+                sessionSortMode, showTerminalType, showGitInfo);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateDevToolsSettings",
                 devToolsEnabled);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateGeneralSettings",
@@ -939,6 +986,12 @@
 
             // セッションソートモードの変更を通知
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
+
+            // セッション表示設定の変更を通知
+            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo));
+
+            // モード切替キーの変更を通知
+            await OnClaudeModeSwitchKeyChanged.InvokeAsync(claudeModeSwitchKey);
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;

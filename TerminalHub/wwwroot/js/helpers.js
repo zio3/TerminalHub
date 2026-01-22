@@ -385,18 +385,20 @@ window.terminalHubHelpers = {
         };
     },
 
-    updateSessionSettings: function(sortMode) {
+    updateSessionSettings: function(sortMode, showTerminalType, showGitInfo) {
         const settings = this.getSettings();
         if (!settings.sessions) {
             settings.sessions = {};
         }
         settings.sessions.sortMode = sortMode;
+        settings.sessions.showTerminalType = showTerminalType;
+        settings.sessions.showGitInfo = showGitInfo;
         this.saveSettings(settings);
     },
 
     getSessionSettings: function() {
         const settings = this.getSettings();
-        return settings.sessions || { sortMode: "createdAt" };
+        return settings.sessions || { sortMode: "createdAt", showTerminalType: false, showGitInfo: false };
     },
 
     updateDevToolsSettings: function(enabled) {

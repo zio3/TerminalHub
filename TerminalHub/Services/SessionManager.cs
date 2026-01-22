@@ -37,6 +37,12 @@ namespace TerminalHub.Services
         IEnumerable<SessionInfo> GetActiveSessions();
 
         SessionInfo? GetSessionInfo(Guid sessionId);
+
+        /// <summary>
+        /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
+        /// </summary>
+        void MarkSessionConnected(Guid sessionId);
+
         Task<bool> SetActiveSessionAsync(Guid sessionId);
         Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
@@ -273,7 +279,6 @@ namespace TerminalHub.Services
         {
             bool removed = false;
 
-            // ConPtyセッションが存在する場合は削除
             if (_sessions.TryRemove(sessionId, out var session))
             {
                 session.Dispose();
@@ -331,13 +336,17 @@ namespace TerminalHub.Services
             try
             {
                 await initLock.WaitAsync();
-                
+
                 // ダブルチェックロッキング
                 if (_sessions.TryGetValue(sessionId, out existingSession))
                 {
                     _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
                     return existingSession;
                 }
+
+                // 接続処理中フラグを立てる
+                sessionInfo.IsConnecting = true;
+                NotifySessionsChanged();
 
                 // 新規セッション起動時は HasContinueErrorOccurred フラグをリセット
                 // （新しいセッションで --continue を再度試行できるようにする）
@@ -395,6 +404,18 @@ namespace TerminalHub.Services
         public SessionInfo? GetSessionInfo(Guid sessionId)
         {
             return _sessionInfos.TryGetValue(sessionId, out var info) ? info : null;
+        }
+
+        /// <summary>
+        /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
+        /// </summary>
+        public void MarkSessionConnected(Guid sessionId)
+        {
+            if (_sessionInfos.TryGetValue(sessionId, out var sessionInfo) && sessionInfo.IsConnecting)
+            {
+                sessionInfo.IsConnecting = false;
+                NotifySessionsChanged();
+            }
         }
 
         public Task<bool> SetActiveSessionAsync(Guid sessionId)

@@ -38,9 +38,9 @@
                 {
                     <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")"
                             @onclick="OnModeSwitchClick"
-                            title="@(ClaudeModeSwitchKey == "shiftTab" ? "モード切替 (Shift+Tab)" : "モード切替 (Alt+M)")"
+                            title="@GetModeSwitchTooltip()"
                             style="@(isModeSwitchPressed ? "transform: scale(0.95);" : "")">
-                        <i class="bi bi-arrow-repeat"></i> @(ClaudeModeSwitchKey == "shiftTab" ? "Shift+Tab" : "Alt+M")
+                        <i class="bi bi-arrow-repeat"></i> @GetModeSwitchLabel()
                     </button>
                 }
                 <button class="btn btn-primary" @onclick="OnSendClick">
@@ -183,5 +183,25 @@
         await OnModeSwitch.InvokeAsync();
         await Task.Delay(100);
         isModeSwitchPressed = false;
+    }
+
+    private string GetModeSwitchLabel()
+    {
+        return ClaudeModeSwitchKey switch
+        {
+            "shiftTab" => "Shift+Tab",
+            "plan" => "/plan",
+            _ => "Alt+M"
+        };
+    }
+
+    private string GetModeSwitchTooltip()
+    {
+        return ClaudeModeSwitchKey switch
+        {
+            "shiftTab" => "モード切替 (Shift+Tab)",
+            "plan" => "Planモードに入る (/plan)",
+            _ => "モード切替 (Alt+M)"
+        };
     }
 }

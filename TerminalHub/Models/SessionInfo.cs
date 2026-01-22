@@ -92,6 +92,12 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public ConPtySession? ConPtySession { get; set; }
 
+        /// <summary>
+        /// ConPTY接続処理中かどうか
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsConnecting { get; set; } = false;
+
         [System.Text.Json.Serialization.JsonIgnore]
         public int LastKnownScrollPosition { get; set; } = 0;
         

@@ -152,6 +152,14 @@ namespace TerminalHub.Services
                         return;
                     }
 
+                    // 処理中でなかった場合はスキップ（ProcessingStartTimeがないと処理完了とは言えない）
+                    // これにより、バックグラウンドConPTYからの出力で誤ってLastAccessedAtが更新されるのを防ぐ
+                    if (!session.ProcessingStartTime.HasValue)
+                    {
+                        _logger.LogDebug("処理中でなかったため処理完了検出をスキップ: {SessionId}", session.SessionId);
+                        return;
+                    }
+
                     // 処理完了時の経過時間を計算（ProcessingElapsedSecondsがない場合はProcessingStartTimeから計算）
                     int? elapsedSeconds = session.ProcessingElapsedSeconds;
                     if (!elapsedSeconds.HasValue && session.ProcessingStartTime.HasValue)

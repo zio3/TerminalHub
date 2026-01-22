@@ -58,6 +58,15 @@
                         </div>
                     </div>
 
+                    @if (!sessionInfo.IsWorktree)
+                    {
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
+                                <i class="bi bi-plus-circle me-1"></i>サブセッションを作成
+                            </button>
+                        </div>
+                    }
+
                     <hr />
 
                     <!-- セッション名の変更 -->
@@ -121,6 +130,7 @@
     [Parameter] public Guid? SessionId { get; set; }
     [Parameter] public EventCallback OnSettingsSaved { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback<Guid> OnCreateSubSession { get; set; }
 
     private SessionOptionsSelector? optionsSelector;
     private SessionInfo? sessionInfo;
@@ -279,6 +289,14 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "フォルダを開けませんでした: {Path}", path);
+        }
+    }
+
+    private async Task HandleCreateSubSession()
+    {
+        if (SessionId.HasValue)
+        {
+            await OnCreateSubSession.InvokeAsync(SessionId.Value);
         }
     }
 

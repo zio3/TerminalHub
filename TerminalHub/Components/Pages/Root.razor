@@ -37,7 +37,9 @@
                     OnCancel="OnDialogCancel" />
 <SettingsDialog @bind-IsVisible="showSettingsDialog"
                 SessionSortMode="@sessionSortMode"
-                OnSessionSortModeChanged="HandleSessionSortModeChanged" />
+                OnSessionSortModeChanged="HandleSessionSortModeChanged"
+                OnClaudeModeSwitchKeyChanged="HandleClaudeModeSwitchKeyChanged"
+                OnSessionDisplaySettingsChanged="HandleSessionDisplaySettingsChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -48,7 +50,8 @@
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
                        SessionId="@settingsSessionId"
                        OnSettingsSaved="OnSessionSettingsSaved"
-                       OnCancel="() => showSessionSettingsDialog = false" />
+                       OnCancel="() => showSessionSettingsDialog = false"
+                       OnCreateSubSession="HandleCreateSubSessionFromSettings" />
 <ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
                         ArchivedSessions="@GetArchivedSessions()"
                         OnRestoreSession="RestoreArchivedSession"
@@ -62,6 +65,8 @@
                      ActiveSessionId=@activeSessionId
                      IsAddingSession=@isAddingSession
                      SortMode=@sessionSortMode
+                     ShowTerminalType=@showTerminalType
+                     ShowGitInfo=@showGitInfo
                      NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
@@ -190,6 +195,8 @@
     private Guid? activeSessionId;
     private bool isAddingSession = false;
     private string sessionSortMode = "createdAt"; // セッション一覧のソートモード
+    private bool showTerminalType = false; // ターミナル種別を表示
+    private bool showGitInfo = false; // Git情報を表示
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
@@ -368,9 +375,20 @@
             try
             {
                 var sessionSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSessionSettings");
-                if (sessionSettings.HasValue && sessionSettings.Value.TryGetProperty("sortMode", out var sortMode))
+                if (sessionSettings.HasValue)
                 {
-                    sessionSortMode = sortMode.GetString() ?? "createdAt";
+                    if (sessionSettings.Value.TryGetProperty("sortMode", out var sortMode))
+                    {
+                        sessionSortMode = sortMode.GetString() ?? "createdAt";
+                    }
+                    if (sessionSettings.Value.TryGetProperty("showTerminalType", out var showTermType))
+                    {
+                        showTerminalType = showTermType.GetBoolean();
+                    }
+                    if (sessionSettings.Value.TryGetProperty("showGitInfo", out var showGit))
+                    {
+                        showGitInfo = showGit.GetBoolean();
+                    }
                 }
             }
             catch
@@ -534,6 +552,19 @@
     private void HandleSessionSortModeChanged(string sortMode)
     {
         sessionSortMode = sortMode;
+        StateHasChanged();
+    }
+
+    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo) settings)
+    {
+        showTerminalType = settings.showTerminalType;
+        showGitInfo = settings.showGitInfo;
+        StateHasChanged();
+    }
+
+    private void HandleClaudeModeSwitchKeyChanged(string key)
+    {
+        claudeModeSwitchKey = key;
         StateHasChanged();
     }
 
@@ -1111,6 +1142,12 @@
             {
                 Logger.LogWarning("[ProcessReceivedData] セッションが見つかりません: SessionId={SessionId}", sessionId);
                 return;
+            }
+
+            // ConPTYからの最初のデータ受信時に接続処理中フラグを解除
+            if (sessionInfo.IsConnecting)
+            {
+                SessionManager.MarkSessionConnected(sessionId);
             }
 
             var isActive = activeSessionId == sessionId;
@@ -1784,8 +1821,25 @@
         if (activeSession == null)
             return;
 
-        // Alt+M を送信（\x1B はESC、m はM）
-        await activeSession.WriteAsync("\x1Bm");
+        // 設定に応じたキー送信
+        switch (claudeModeSwitchKey)
+        {
+            case "shiftTab":
+                // Shift+Tab のエスケープシーケンス (CSI Z)
+                await activeSession.WriteAsync("\x1b[Z");
+                break;
+            case "plan":
+                // /plan コマンドを送信して改行
+                await activeSession.WriteAsync("/plan");
+                await Task.Delay(100); // 100ms待機
+                await activeSession.WriteAsync("\r");
+                break;
+            case "altM":
+            default:
+                // Alt+M を送信（\x1B はESC、m はM）
+                await activeSession.WriteAsync("\x1Bm");
+                break;
+        }
     }
 
 
@@ -2150,6 +2204,14 @@
     {
         settingsSessionId = sessionId;
         showSessionSettingsDialog = true;
+    }
+
+    private void HandleCreateSubSessionFromSettings(Guid sessionId)
+    {
+        // 設定ダイアログを閉じる
+        showSessionSettingsDialog = false;
+        // サブセッションダイアログを表示
+        ShowWorktreeDialog(sessionId);
     }
 
     private async Task OnSessionSettingsSaved()

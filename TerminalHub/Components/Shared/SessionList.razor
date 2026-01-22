@@ -89,12 +89,12 @@
                                     <i class="bi bi-bell-fill"></i>
                                 </span>
                             }
-                            @session.GetDisplayName()
-                            @if (session.TerminalType != TerminalType.Terminal)
+                            <span class="@GetConnectionOpacityClass(session)">@session.GetDisplayName()</span>
+                            @if (ShowTerminalType && session.TerminalType != TerminalType.Terminal)
                             {
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                             }
-                            @if (session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
+                            @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
                                 <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" title="@(session.IsWorktree ? "Worktree" : "Git ブランチ")">
                                     <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
@@ -109,16 +109,6 @@
                                 <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">
                                     @GetChildrenCount(session) 件
                                 </span>
-                            }
-                            @if (!session.IsWorktree)
-                            {
-                                <button class="btn btn-sm btn-outline-success border-0 ms-1" 
-                                        @onclick:stopPropagation="true"
-                                        @onclick="() => OnCreateWorktree.InvokeAsync(session.SessionId)"
-                                        title="@(session.IsGitRepository ? "新しいWorktreeを作成" : "サブセッションを作成")"
-                                        style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">
-                                    <i class="bi bi-plus-circle"></i>
-                                </button>
                             }
                         </h6>
                         @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
@@ -160,8 +150,8 @@
                 @if (!string.IsNullOrWhiteSpace(session.Memo))
                 {
                     <div class="mt-2">
-                        <div class="text-muted small" 
-                             style="font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03);">
+                        <div class="text-muted small"
+                             style="font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03); white-space: pre-line;">
                             @session.Memo
                         </div>
                     </div>
@@ -194,6 +184,8 @@
     [Parameter] public bool IsAddingSession { get; set; }
     [Parameter] public string SortMode { get; set; } = "createdAt"; // "createdAt" or "lastAccessed"
     [Parameter] public ISet<Guid> NotificationPendingSessions { get; set; } = new HashSet<Guid>();
+    [Parameter] public bool ShowTerminalType { get; set; } = false;
+    [Parameter] public bool ShowGitInfo { get; set; } = false;
 
     private string filterText = string.Empty;
 
@@ -386,5 +378,22 @@
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// ConPTY接続状態に応じた透明度クラスを返す
+    /// </summary>
+    private string GetConnectionOpacityClass(SessionInfo session)
+    {
+        // 接続処理中は通常表示
+        if (session.IsConnecting)
+            return "";
+
+        // 接続済み（プロセス実行中）は通常表示
+        if (session.ConPtySession != null && !session.ConPtySession.HasExited)
+            return "";
+
+        // 未接続または切断は薄く表示
+        return "opacity-50";
     }
 }
