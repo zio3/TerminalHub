@@ -401,17 +401,19 @@ window.terminalFunctions = {
             }
             
             term.open(element);
-            
-            // requestAnimationFrameを使用してDOMの準備を確実に待つ
-            requestAnimationFrame(() => {
+
+            // ターミナルを同期的にフィット（バッファ書き込み前に確実に初期化完了させるため）
+            try {
                 fitAddon.fit();
-                // ターミナルフィット実行
-                
+                console.log(`[JS] createMultiSessionTerminal: 初期fit完了 cols=${term.cols}, rows=${term.rows}`);
+
                 // フィット後のサイズを通知
                 if (dotNetRef) {
                     dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
                 }
-            });
+            } catch (e) {
+                console.log(`[JS] createMultiSessionTerminal: 初期fitエラー (無視): ${e.message}`);
+            }
             
             // 直接入力モードのハンドラー
             term.onData((data) => {
@@ -472,19 +474,37 @@ window.terminalFunctions = {
             
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
+                // 非表示のターミナルではfit()をスキップ（11x5のような極小サイズになるのを防ぐ）
+                if (element.style.display === 'none' || element.offsetParent === null) {
+                    console.log(`[JS] ResizeObserver: スキップ（非表示） sessionId=${sessionId}`);
+                    return;
+                }
+
+                // 要素のサイズが極小の場合もスキップ
+                if (element.clientWidth < 100 || element.clientHeight < 100) {
+                    console.log(`[JS] ResizeObserver: スキップ（極小サイズ） sessionId=${sessionId}, size=${element.clientWidth}x${element.clientHeight}`);
+                    return;
+                }
+
                 console.log(`[JS] ResizeObserver fired for ${sessionId}`);
                 if (fitAddon) {
                     fitAddon.fit();
                     // リサイズ処理
                     console.log(`[JS] After fit: ${term.cols}x${term.rows}`);
-                    
+
+                    // 極小サイズの場合はC#への通知をスキップ
+                    if (term.cols < 20 || term.rows < 10) {
+                        console.warn(`[JS] ResizeObserver: 異常なサイズを検出、通知スキップ cols=${term.cols}, rows=${term.rows}`);
+                        return;
+                    }
+
                     if (dotNetRef) {
                         console.log(`[JS] ResizeObserver calling OnTerminalSizeChanged for ${sessionId}`);
                         dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
                     } else {
                         console.log(`[JS] ResizeObserver: dotNetRef is null for ${sessionId}`);
                     }
-                    
+
                     // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
                 }
             });
@@ -525,16 +545,36 @@ window.terminalFunctions = {
             
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
             // console.log(`[JS] 現在のターミナル数: ${Object.keys(window.multiSessionTerminals).length}`);
+
+            // ターミナルごとの状態を保存（if (element) ブロック内に移動）
+            window.multiSessionTerminals[sessionId].isFirstWrite = true;
+            window.multiSessionTerminals[sessionId].resizeCount = 0;
+        } else {
+            // DOM要素が見つからない場合はエラーログを出力
+            console.error(`[JS] createMultiSessionTerminal: DOM要素が見つかりません terminalId=${terminalId}`);
+            return null;
         }
-        
-        // ターミナルごとの状態を保存
-        window.multiSessionTerminals[sessionId].isFirstWrite = true;
-        window.multiSessionTerminals[sessionId].resizeCount = 0;
-        
+
         return {
             write: (data) => {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 const dataLength = data.length;
+
+                // デバッグ: 大きなデータの書き込みを検出
+                if (dataLength > 100000) {
+                    console.warn(`[JS] write: 大きなデータ検出 sessionId=${sessionId}, size=${dataLength}`);
+                }
+
+                // デバッグ: 危険なカーソル移動シーケンスを検出（行番号1000以上）
+                const cursorMoveRegex = /\x1b\[(\d+);?(\d*)H/g;
+                let match;
+                while ((match = cursorMoveRegex.exec(data)) !== null) {
+                    const row = parseInt(match[1], 10);
+                    if (row > 1000) {
+                        console.error(`[JS] write: 危険なカーソル移動検出! row=${row}, match=${match[0].replace(/\x1b/g, '\\e')}`);
+                        console.error(`[JS] write: データの最初500文字: ${data.substring(0, 500).replace(/\x1b/g, '\\e').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}`);
+                    }
+                }
 
                 // フロー制御: 書き込み前にバイト数を加算
                 window.flowControlManager.beforeWrite(sessionId, dataLength);
@@ -809,6 +849,29 @@ window.terminalFunctions = {
             if (terminal) {
                 // xtermのscrollToBottom機能を1回だけ実行
                 terminal.scrollToBottom();
+            }
+        }
+    },
+
+    // ターミナルをリフレッシュ（バッファ復元後の表示更新用）
+    refreshTerminal: function(sessionId) {
+        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
+            const terminalInfo = window.multiSessionTerminals[sessionId];
+            const term = terminalInfo.terminal;
+            const fitAddon = terminalInfo.fitAddon;
+
+            if (term && fitAddon) {
+                try {
+                    // fit()を実行して確実にサイズを合わせる
+                    fitAddon.fit();
+
+                    // 全行をリフレッシュして表示を更新
+                    term.refresh(0, term.rows - 1);
+
+                    console.log(`[JS] refreshTerminal: リフレッシュ完了 sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
+                } catch (e) {
+                    console.log(`[JS] refreshTerminal: エラー ${e.message}`);
+                }
             }
         }
     },

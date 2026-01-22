@@ -62,8 +62,19 @@ namespace TerminalHub.Analyzers
             var simpleMatch = ProcessingPatternSimple.Match(cleanedData);
             if (simpleMatch.Success)
             {
+                var capturedText = simpleMatch.Groups[1].Value.Trim();
+
+                // アニメーション更新による断片的なマッチを除外
+                // 6文字以上（…を含む）
+                // "g…"(2), "in…"(3), "kig…"(4), "king…"(5) → フィルタ
+                // "sking…"(6), "Whisking…"(9) → OK
+                if (capturedText.Length < 6)
+                {
+                    return false;
+                }
+
                 result.IsProcessing = true;
-                result.ProcessingText = simpleMatch.Groups[1].Value.Trim();
+                result.ProcessingText = capturedText;
                 return true;
             }
 

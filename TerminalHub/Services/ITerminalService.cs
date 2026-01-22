@@ -54,5 +54,10 @@ namespace TerminalHub.Services
         /// ターミナルの表示状態を確実に設定する
         /// </summary>
         Task EnsureTerminalVisibleAsync(Guid sessionId);
+
+        /// <summary>
+        /// ターミナルの表示をリフレッシュする（バッファ復元後の表示更新用）
+        /// </summary>
+        Task RefreshTerminalAsync(Guid sessionId);
     }
 }

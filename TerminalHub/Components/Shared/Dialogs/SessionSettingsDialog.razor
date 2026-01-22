@@ -168,6 +168,7 @@
                 {
                     BypassMode = options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true",
                     Continue = options.ContainsKey("continue") && options["continue"] == "true",
+                    ChromeMode = options.ContainsKey("chrome") && options["chrome"] == "true",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }
@@ -177,6 +178,7 @@
                 {
                     YoloMode = options.ContainsKey("yolo") && options["yolo"] == "true",
                     SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true",
+                    Continue = options.ContainsKey("continue") && options["continue"] == "true",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }

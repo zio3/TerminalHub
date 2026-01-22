@@ -1009,7 +1009,36 @@
             var bufferContent = selectedSession.GetTerminalBuffer();
             if (!string.IsNullOrEmpty(bufferContent))
             {
+                // デバッグ: バッファ内容を解析
+                Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}バイト",
+                    sessionId, bufferContent.Length);
+
+                // 危険なエスケープシーケンスをチェック（巨大な行/列番号）
+                var cursorMovePattern = new System.Text.RegularExpressions.Regex(@"\x1b\[(\d+);?(\d*)H");
+                var matches = cursorMovePattern.Matches(bufferContent);
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    if (int.TryParse(match.Groups[1].Value, out int row) && row > 1000)
+                    {
+                        Logger.LogWarning("[SelectSession] 危険なカーソル移動検出: Row={Row}, Match={Match}",
+                            row, match.Value);
+                    }
+                }
+
+                // バッファの先頭と末尾をログ出力（エスケープシーケンスを可視化）
+                var preview = bufferContent.Length > 500 ? bufferContent.Substring(0, 500) : bufferContent;
+                var previewEscaped = preview.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
+                Logger.LogDebug("[SelectSession] バッファ先頭500文字: {Preview}", previewEscaped);
+
+                if (bufferContent.Length > 500)
+                {
+                    var tail = bufferContent.Substring(bufferContent.Length - 500);
+                    var tailEscaped = tail.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
+                    Logger.LogDebug("[SelectSession] バッファ末尾500文字: {Tail}", tailEscaped);
+                }
+
                 await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
+                Logger.LogInformation("[SelectSession] バッファ書き込み完了");
             }
 
             // セッション再選択時はConPTYリサイズをスキップ（重複防止）
@@ -1019,6 +1048,9 @@
             {
                 await Task.Delay(50);
                 await TerminalService.ResizeTerminalAsync(activeTerminal);
+
+                // バッファ復元後、表示を確実にリフレッシュ
+                await TerminalService.RefreshTerminalAsync(sessionId);
             }
             finally
             {

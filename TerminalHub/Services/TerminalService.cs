@@ -151,6 +151,18 @@ namespace TerminalHub.Services
             await terminal.InvokeVoidAsync("write", data);
         }
 
+        public async Task RefreshTerminalAsync(Guid sessionId)
+        {
+            try
+            {
+                await _jsRuntime.InvokeVoidAsync("terminalFunctions.refreshTerminal", sessionId.ToString());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[RefreshTerminal] リフレッシュエラー（無視）");
+            }
+        }
+
         public async Task<bool> CheckElementExistsAsync(string elementId)
         {
             try
