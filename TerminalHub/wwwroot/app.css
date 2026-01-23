@@ -67,3 +67,209 @@ h1:focus {
 
 /* xterm.js IME positioning fix - 一旦削除してデフォルトの挙動に戻す */
 /* IMEは右端からの入力になるが、コンテキストメニューは正常に動作する */
+
+/* ===========================================
+   レスポンシブ対応 - メインレイアウト
+   =========================================== */
+
+/* メインコンテナ - dvhでモバイルアドレスバー対応 */
+.main-container {
+    height: 100dvh;
+}
+
+/* モバイルサイドバートグルボタン - デスクトップでは非表示 */
+.mobile-sidebar-toggle {
+    display: none;
+}
+
+/* モバイルオーバーレイ - デスクトップでは非表示 */
+.mobile-sidebar-overlay {
+    display: none;
+}
+
+/* ===========================================
+   モバイル対応 (768px以下)
+   =========================================== */
+@media (max-width: 768px) {
+    /* 全体のフォントサイズを2/3に */
+    html {
+        font-size: 10.67px; /* 16px * 2/3 = 10.67px */
+    }
+
+    /* モバイルサイドバートグルボタン */
+    .mobile-sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 1001;
+        width: 44px;
+        height: 44px;
+        border: none;
+        border-radius: 8px;
+        background-color: #0d6efd;
+        color: white;
+        font-size: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .mobile-sidebar-toggle:hover {
+        background-color: #0b5ed7;
+    }
+
+    .mobile-sidebar-toggle:active {
+        transform: scale(0.95);
+    }
+
+    /* モバイルオーバーレイ */
+    .mobile-sidebar-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+    }
+
+    /* サイドバー - モバイル用 */
+    .session-list-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 85%;
+        max-width: 320px;
+        height: 100%;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+        padding: 0.75rem;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+
+    .session-list-sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    /* サイドバー内のパディング調整 */
+    .session-list-sidebar .p-3 {
+        padding: 0.5rem !important;
+    }
+
+    .session-list-sidebar .p-2 {
+        padding: 0.375rem !important;
+    }
+
+    .session-list-sidebar .mb-2 {
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* サイドバーフッター */
+    .sidebar-footer {
+        background-color: #f8f9fa;
+    }
+
+    /* ターミナルメインエリア - モバイル用 */
+    .terminal-main-area {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: none !important;
+        padding-top: 54px; /* トグルボタンの分だけ余白 */
+        height: calc(100dvh) !important;
+    }
+
+    /* ターミナルセクション比率 - モバイル用 */
+    .terminal-section {
+        height: 75% !important;
+    }
+
+    /* 下部パネルセクション比率 - モバイル用 */
+    .bottom-panel-section {
+        height: 25% !important;
+    }
+
+    /* 下部パネル内のパディング調整 */
+    .bottom-panel-section .p-3 {
+        padding: 0.5rem !important;
+    }
+
+    .bottom-panel-section .px-3 {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+
+    .bottom-panel-section .pt-2 {
+        padding-top: 0.375rem !important;
+    }
+
+    /* タブナビゲーション調整 */
+    .bottom-panel-section .nav-tabs {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 0.375rem !important;
+    }
+
+    .bottom-panel-section .nav-link {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    /* テキスト入力パネル調整 */
+    .bottom-panel-section textarea {
+        font-size: 16px; /* iOSでズームを防ぐ */
+        max-height: 60px !important; /* 高さを制限 */
+        flex-grow: 0 !important;
+    }
+
+    /* ボタン群調整 */
+    .bottom-panel-section .btn-sm {
+        padding: 0.375rem 0.5rem;
+    }
+
+    /* セッション名を控えめに */
+    .session-list-sidebar h6 {
+        font-size: 0.9rem;
+    }
+
+    /* バッジを小さく */
+    .session-list-sidebar .badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+}
+
+/* ===========================================
+   スモールモバイル対応 (480px以下)
+   =========================================== */
+@media (max-width: 480px) {
+    .mobile-sidebar-toggle {
+        width: 40px;
+        height: 40px;
+        font-size: 1.25rem;
+    }
+
+    .session-list-sidebar {
+        width: 90%;
+        max-width: none;
+        padding: 0.5rem;
+    }
+
+    .terminal-main-area {
+        padding-top: 50px;
+    }
+
+    /* さらにパディングを削減 */
+    .session-list-sidebar .p-3,
+    .session-list-sidebar .p-2 {
+        padding: 0.25rem !important;
+    }
+
+    .bottom-panel-section .p-3 {
+        padding: 0.375rem !important;
+    }
+}

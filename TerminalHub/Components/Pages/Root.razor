@@ -59,14 +59,20 @@
                         OnDeleteAllSessions="DeleteAllArchivedSessions"
                         OnClose="() => showArchivedSessionsDialog = false" />
 
-<div class="container-fluid h-100">
-    <div class="row h-100">
+<div class="container-fluid h-100 main-container">
+    <div class="row h-100 main-layout">
+        <!-- モバイル用サイドバートグルボタン -->
+        <button class="mobile-sidebar-toggle" @onclick="ToggleMobileSidebar">
+            <i class="bi @(isMobileSidebarOpen ? "bi-x-lg" : "bi-list")"></i>
+        </button>
+
         <SessionList Sessions=@sessions
                      ActiveSessionId=@activeSessionId
                      IsAddingSession=@isAddingSession
                      SortMode=@sessionSortMode
                      ShowTerminalType=@showTerminalType
                      ShowGitInfo=@showGitInfo
+                     IsMobileOpen=@isMobileSidebarOpen
                      NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
@@ -76,13 +82,14 @@
                      OnSessionSettings="ShowSessionSettingsDialog"
                      OnGitStatusRefresh="RefreshGitStatus"
                      OnSessionExpandedChanged="HandleSessionExpandedChanged"
-                     OnShowArchivedSessions="() => showArchivedSessionsDialog = true" />
+                     OnShowArchivedSessions="() => showArchivedSessionsDialog = true"
+                     OnMobileSidebarClose="CloseMobileSidebar" />
 
-        <div class="col-md-9 p-0 position-relative" style="height: 100vh; display: flex; flex-direction: column;">
+        <div class="col-md-9 p-0 position-relative terminal-main-area" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
             {
                 <!-- ターミナル部分 (70%) -->
-                <div style="height: 70%; overflow: hidden;">
+                <div class="terminal-section" style="height: 70%; overflow: hidden;">
                     <div class="terminal-wrapper h-100">
                         @foreach (var session in sessions)
                         {
@@ -93,7 +100,7 @@
                 </div>
                 
                 <!-- WebUI部分 (30%) -->
-                <div style="height: 30%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
+                <div class="bottom-panel-section" style="height: 30%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
@@ -197,6 +204,7 @@
     private string sessionSortMode = "createdAt"; // セッション一覧のソートモード
     private bool showTerminalType = false; // ターミナル種別を表示
     private bool showGitInfo = false; // Git情報を表示
+    private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
@@ -547,6 +555,16 @@
     private void ShowSettings()
     {
         showSettingsDialog = true;
+    }
+
+    private void ToggleMobileSidebar()
+    {
+        isMobileSidebarOpen = !isMobileSidebarOpen;
+    }
+
+    private void CloseMobileSidebar()
+    {
+        isMobileSidebarOpen = false;
     }
 
     private void HandleSessionSortModeChanged(string sortMode)

@@ -354,9 +354,13 @@ window.terminalFunctions = {
         const Terminal = window.Terminal;
         const FitAddon = window.FitAddon.FitAddon;
         
+        // モバイル判定でフォントサイズを調整（768px以下で2/3サイズ）
+        const isMobile = window.innerWidth <= 768;
+        const terminalFontSize = isMobile ? 9 : 14;
+
         const term = new Terminal({
             cursorBlink: true,
-            fontSize: 14,
+            fontSize: terminalFontSize,
             fontFamily: 'Consolas, monospace',
             scrollback: 10000,
             scrollOnInput: true,

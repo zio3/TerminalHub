@@ -6,11 +6,11 @@
         border: 2px solid #0d6efd !important;
         background-color: #e7f1ff !important;
     }
-    
+
     .active-session:hover {
         background-color: #d7e9ff !important;
     }
-    
+
     @@keyframes bell-ring {
         0% { transform: rotate(0); }
         10% { transform: rotate(14deg); }
@@ -21,13 +21,19 @@
         60% { transform: rotate(0); }
         100% { transform: rotate(0); }
     }
-    
+
     .bi-bell-fill {
         animation: bell-ring 2s ease-in-out infinite;
     }
 </style>
 
-<div class="col-md-3 border-end bg-light p-3 d-flex flex-column" style="height: 100vh;">
+<!-- モバイル用オーバーレイ -->
+@if (IsMobileOpen)
+{
+    <div class="mobile-sidebar-overlay" @onclick="CloseMobileSidebar"></div>
+}
+
+<div class="col-md-3 border-end bg-light p-3 d-flex flex-column session-list-sidebar @(IsMobileOpen ? "mobile-open" : "")" style="height: 100vh;">
 
     <div class="mb-2">
         <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
@@ -169,7 +175,7 @@
     }
 
     <!-- 設定ボタンとショートカット説明を最下部に固定 -->
-    <div class="mt-auto border-top" style="position: sticky; bottom: 0; background-color: #f8f9fa;">
+    <div class="mt-auto border-top sidebar-footer">
         <div class="p-2">
             <button class="btn btn-outline-secondary btn-sm w-100" @onclick="OnSettingsClick">
                 <i class="bi bi-gear me-1"></i>設定
@@ -186,6 +192,7 @@
     [Parameter] public ISet<Guid> NotificationPendingSessions { get; set; } = new HashSet<Guid>();
     [Parameter] public bool ShowTerminalType { get; set; } = false;
     [Parameter] public bool ShowGitInfo { get; set; } = false;
+    [Parameter] public bool IsMobileOpen { get; set; } = false;
 
     private string filterText = string.Empty;
 
@@ -198,6 +205,7 @@
     [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
     [Parameter] public EventCallback<(Guid sessionId, bool isExpanded)> OnSessionExpandedChanged { get; set; }
     [Parameter] public EventCallback OnShowArchivedSessions { get; set; }
+    [Parameter] public EventCallback OnMobileSidebarClose { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -302,9 +310,17 @@
     {
         // セッションを選択
         await OnSessionSelect.InvokeAsync(sessionId);
-        
+
         // Gitステータスを再確認
         await OnGitStatusRefresh(sessionId);
+
+        // モバイルサイドバーを閉じる
+        await CloseMobileSidebar();
+    }
+
+    private async Task CloseMobileSidebar()
+    {
+        await OnMobileSidebarClose.InvokeAsync();
     }
     
     private bool HasChildren(SessionInfo session)
