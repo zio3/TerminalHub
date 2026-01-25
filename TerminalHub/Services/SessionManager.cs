@@ -277,38 +277,52 @@ namespace TerminalHub.Services
 
         public Task<bool> RemoveSessionAsync(Guid sessionId)
         {
+            ConPtySession? sessionToDispose = null;
+            ConPtySession? sessionInfoConPtyToDispose = null;
+            SemaphoreSlim? initLockToDispose = null;
             bool removed = false;
 
-            if (_sessions.TryRemove(sessionId, out var session))
+            lock (_lockObject)
             {
-                session.Dispose();
-                removed = true;
+                if (_sessions.TryRemove(sessionId, out var session))
+                {
+                    sessionToDispose = session;
+                    removed = true;
+                }
+
+                // SessionInfoを削除（ConPtySessionも破棄）
+                if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
+                {
+                    // ConPtySessionを破棄（二重Dispose防止）
+                    if (sessionInfo.ConPtySession != null &&
+                        !ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
+                    {
+                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
+                    }
+                    sessionInfo.ConPtySession = null;
+                    removed = true;
+                }
+
+                // 初期化ロックを削除
+                if (_initializationLocks.TryRemove(sessionId, out var initLock))
+                {
+                    initLockToDispose = initLock;
+                }
+
+                // アクティブセッションの更新
+                if (removed && _activeSessionId == sessionId)
+                {
+                    _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
+                }
             }
 
-            // SessionInfoを削除（ConPtySessionも破棄）
-            if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
-            {
-                // ConPtySessionを破棄
-                sessionInfo.ConPtySession?.Dispose();
-                removed = true;
-            }
+            // ロック外でDispose（デッドロック防止）
+            sessionToDispose?.Dispose();
+            sessionInfoConPtyToDispose?.Dispose();
+            initLockToDispose?.Dispose();
 
-            // 初期化ロックを削除
-            if (_initializationLocks.TryRemove(sessionId, out var initLock))
-            {
-                initLock.Dispose();
-            }
-
-            // _activeSessionIdへのアクセスはロックで保護
             if (removed)
             {
-                lock (_lockObject)
-                {
-                    if (_activeSessionId == sessionId)
-                    {
-                        _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
-                    }
-                }
                 NotifySessionsChanged();
             }
 
@@ -317,35 +331,54 @@ namespace TerminalHub.Services
 
         public async Task<ConPtySession?> GetSessionAsync(Guid sessionId)
         {
-            // まずSessionInfoの存在を確認
-            if (!_sessionInfos.TryGetValue(sessionId, out var sessionInfo))
-            {
-                return null;
-            }
+            SessionInfo? sessionInfo;
+            SemaphoreSlim? initLock;
 
-            // 既にConPtyセッションが存在する場合はそれを返す
-            if (_sessions.TryGetValue(sessionId, out var existingSession))
+            // SessionInfoとinitLockの取得をロックで保護
+            lock (_lockObject)
             {
-                _logger.LogDebug("既存セッションを再利用: SessionId={SessionId}", sessionId);
-                return existingSession;
+                // SessionInfoの存在を確認
+                if (!_sessionInfos.TryGetValue(sessionId, out sessionInfo))
+                {
+                    return null;
+                }
+
+                // 既にConPtyセッションが存在する場合はそれを返す
+                if (_sessions.TryGetValue(sessionId, out var existingSession))
+                {
+                    _logger.LogDebug("既存セッションを再利用: SessionId={SessionId}", sessionId);
+                    return existingSession;
+                }
+
+                // 初期化ロックを取得
+                initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
             }
 
             // ConPtyセッションがまだ初期化されていない場合は遅延初期化を実行
-            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
-            
             try
             {
                 await initLock.WaitAsync();
 
-                // ダブルチェックロッキング
-                if (_sessions.TryGetValue(sessionId, out existingSession))
+                // セマフォ取得後、セッションが削除されていないか再確認
+                lock (_lockObject)
                 {
-                    _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
-                    return existingSession;
+                    if (!_sessionInfos.ContainsKey(sessionId))
+                    {
+                        _logger.LogWarning("セマフォ取得後にセッションが削除されていました: SessionId={SessionId}", sessionId);
+                        return null;
+                    }
+
+                    // ダブルチェックロッキング
+                    if (_sessions.TryGetValue(sessionId, out var existingSession))
+                    {
+                        _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
+                        return existingSession;
+                    }
+
+                    // 接続処理中フラグを立てる
+                    sessionInfo.IsConnecting = true;
                 }
 
-                // 接続処理中フラグを立てる
-                sessionInfo.IsConnecting = true;
                 NotifySessionsChanged();
 
                 // 新規セッション起動時は HasContinueErrorOccurred フラグをリセット
@@ -366,10 +399,23 @@ namespace TerminalHub.Services
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
-                _sessions[sessionId] = newSession;
-                
-                // ConPtySessionをSessionInfoに設定
-                sessionInfo.ConPtySession = newSession;
+
+                // ConPtySession登録をロック内で実行
+                lock (_lockObject)
+                {
+                    // 登録前に再度セッションが削除されていないか確認
+                    if (!_sessionInfos.ContainsKey(sessionId))
+                    {
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除されていました: SessionId={SessionId}", sessionId);
+                        newSession.Dispose();
+                        return null;
+                    }
+
+                    _sessions[sessionId] = newSession;
+                    // ConPtySessionをSessionInfoに設定
+                    sessionInfo.ConPtySession = newSession;
+                }
+
                 // Startメソッドを呼ぶ
                 newSession.Start();
                 // 初期サイズを設定
@@ -377,7 +423,7 @@ namespace TerminalHub.Services
 
                 _logger.LogInformation("新規セッション接続完了: SessionId={SessionId}", sessionId);
                 _logger.LogInformation($"ConPty session with buffer initialized on-demand: {sessionId}");
-                
+
                 return newSession;
             }
             catch (Exception ex)
@@ -443,7 +489,10 @@ namespace TerminalHub.Services
 
         public Guid? GetActiveSessionId()
         {
-            return _activeSessionId;
+            lock (_lockObject)
+            {
+                return _activeSessionId;
+            }
         }
 
         public Task SaveSessionInfoAsync(SessionInfo sessionInfo)
@@ -676,17 +725,33 @@ namespace TerminalHub.Services
         /// </summary>
         private async Task DisposeExistingSessionAsync(Guid sessionId, SessionInfo sessionInfo)
         {
-            if (_sessions.TryGetValue(sessionId, out var currentSession))
+            ConPtySession? sessionToDispose = null;
+            ConPtySession? sessionInfoConPtyToDispose = null;
+
+            lock (_lockObject)
             {
-                currentSession.Dispose();
-                _sessions.TryRemove(sessionId, out _);
+                if (_sessions.TryRemove(sessionId, out var currentSession))
+                {
+                    sessionToDispose = currentSession;
+                }
 
                 if (sessionInfo.ConPtySession != null)
                 {
-                    sessionInfo.ConPtySession.Dispose();
+                    // 二重Dispose防止
+                    if (!ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
+                    {
+                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
+                    }
                     sessionInfo.ConPtySession = null;
-                    _logger.LogInformation("既存のConPtySessionを破棄しました: {SessionId}", sessionId);
                 }
+            }
+
+            // ロック外でDispose（デッドロック防止）
+            if (sessionToDispose != null || sessionInfoConPtyToDispose != null)
+            {
+                sessionToDispose?.Dispose();
+                sessionInfoConPtyToDispose?.Dispose();
+                _logger.LogInformation("既存のConPtySessionを破棄しました: {SessionId}", sessionId);
 
                 // リソースのクリーンアップを待つ
                 await Task.Delay(100);
@@ -864,43 +929,73 @@ namespace TerminalHub.Services
         /// </summary>
         public void ArchiveSession(Guid sessionId)
         {
-            if (!_sessionInfos.TryGetValue(sessionId, out var sessionInfo))
+            ConPtySession? conPtySessionToDispose = null;
+            ConPtySession? sessionInfoConPtyToDispose = null;
+            ConPtySession? dosTerminalToDispose = null;
+            SemaphoreSlim? initLockToDispose = null;
+            bool shouldNotify = false;
+
+            lock (_lockObject)
             {
-                _logger.LogWarning("アーカイブするセッションが見つかりません: {SessionId}", sessionId);
-                return;
+                if (!_sessionInfos.TryGetValue(sessionId, out var sessionInfo))
+                {
+                    _logger.LogWarning("アーカイブするセッションが見つかりません: {SessionId}", sessionId);
+                    return;
+                }
+
+                // 二重アーカイブ防止
+                if (sessionInfo.IsArchived)
+                {
+                    _logger.LogWarning("セッションは既にアーカイブされています: {SessionId}", sessionId);
+                    return;
+                }
+
+                // ConPtyセッションを取得（Disposeはロック外で実行）
+                if (_sessions.TryRemove(sessionId, out var conPtySession))
+                {
+                    conPtySessionToDispose = conPtySession;
+                }
+
+                if (sessionInfo.ConPtySession != null)
+                {
+                    // 二重Dispose防止
+                    if (!ReferenceEquals(sessionInfo.ConPtySession, conPtySessionToDispose))
+                    {
+                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
+                    }
+                    sessionInfo.ConPtySession = null;
+                }
+
+                if (sessionInfo.DosTerminalConPtySession != null)
+                {
+                    dosTerminalToDispose = sessionInfo.DosTerminalConPtySession;
+                    sessionInfo.DosTerminalConPtySession = null;
+                }
+
+                // 初期化ロックを削除
+                if (_initializationLocks.TryRemove(sessionId, out var initLock))
+                {
+                    initLockToDispose = initLock;
+                }
+
+                // アーカイブフラグを設定
+                sessionInfo.IsArchived = true;
+                sessionInfo.ArchivedAt = DateTime.Now;
+                shouldNotify = true;
+
+                _logger.LogInformation("セッションをアーカイブしました: {SessionId}", sessionId);
             }
 
-            // ConPtyセッションを破棄
-            if (_sessions.TryRemove(sessionId, out var conPtySession))
+            // ロック外でDispose（デッドロック防止）
+            conPtySessionToDispose?.Dispose();
+            sessionInfoConPtyToDispose?.Dispose();
+            dosTerminalToDispose?.Dispose();
+            initLockToDispose?.Dispose();
+
+            if (shouldNotify)
             {
-                conPtySession.Dispose();
+                NotifySessionsChanged();
             }
-
-            if (sessionInfo.ConPtySession != null)
-            {
-                sessionInfo.ConPtySession.Dispose();
-                sessionInfo.ConPtySession = null;
-            }
-
-            if (sessionInfo.DosTerminalConPtySession != null)
-            {
-                sessionInfo.DosTerminalConPtySession.Dispose();
-                sessionInfo.DosTerminalConPtySession = null;
-            }
-
-            // 初期化ロックを削除
-            if (_initializationLocks.TryRemove(sessionId, out var initLock))
-            {
-                initLock.Dispose();
-            }
-
-            // アーカイブフラグを設定
-            sessionInfo.IsArchived = true;
-            sessionInfo.ArchivedAt = DateTime.Now;
-
-            _logger.LogInformation("セッションをアーカイブしました: {SessionId}", sessionId);
-
-            NotifySessionsChanged();
         }
 
         /// <summary>
@@ -949,28 +1044,64 @@ namespace TerminalHub.Services
         /// </summary>
         public void DeleteSession(Guid sessionId)
         {
-            // ConPtyセッションが存在する場合は削除
-            if (_sessions.TryRemove(sessionId, out var session))
+            ConPtySession? sessionToDispose = null;
+            ConPtySession? sessionInfoConPtyToDispose = null;
+            ConPtySession? dosTerminalToDispose = null;
+            SemaphoreSlim? initLockToDispose = null;
+            bool deleted = false;
+
+            lock (_lockObject)
             {
-                session.Dispose();
+                // ConPtyセッションが存在する場合は取得
+                if (_sessions.TryRemove(sessionId, out var session))
+                {
+                    sessionToDispose = session;
+                    deleted = true;
+                }
+
+                // SessionInfoを削除
+                if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
+                {
+                    // 二重Dispose防止
+                    if (sessionInfo.ConPtySession != null &&
+                        !ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
+                    {
+                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
+                    }
+                    sessionInfo.ConPtySession = null;
+
+                    if (sessionInfo.DosTerminalConPtySession != null)
+                    {
+                        dosTerminalToDispose = sessionInfo.DosTerminalConPtySession;
+                        sessionInfo.DosTerminalConPtySession = null;
+                    }
+                    deleted = true;
+                }
+
+                // 初期化ロックを削除
+                if (_initializationLocks.TryRemove(sessionId, out var initLock))
+                {
+                    initLockToDispose = initLock;
+                }
+
+                // アクティブセッションの更新
+                if (deleted && _activeSessionId == sessionId)
+                {
+                    _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
+                }
             }
 
-            // SessionInfoを削除
-            if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
+            // ロック外でDispose（デッドロック防止）
+            sessionToDispose?.Dispose();
+            sessionInfoConPtyToDispose?.Dispose();
+            dosTerminalToDispose?.Dispose();
+            initLockToDispose?.Dispose();
+
+            if (deleted)
             {
-                sessionInfo.ConPtySession?.Dispose();
-                sessionInfo.DosTerminalConPtySession?.Dispose();
+                _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
+                NotifySessionsChanged();
             }
-
-            // 初期化ロックを削除
-            if (_initializationLocks.TryRemove(sessionId, out var initLock))
-            {
-                initLock.Dispose();
-            }
-
-            _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
-
-            NotifySessionsChanged();
         }
 
         /// <summary>
