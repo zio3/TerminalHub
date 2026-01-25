@@ -97,9 +97,14 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-            if (options.ContainsKey("yolo") && options["yolo"] == "true")
+            if (options.TryGetValue("approval-mode", out var mode) && mode != "default")
             {
-                args.Add("-y");
+                args.Add($"--approval-mode {mode}");
+            }
+
+            if (options.TryGetValue("model", out var model) && !string.IsNullOrWhiteSpace(model))
+            {
+                args.Add($"-m {model}");
             }
 
             if (options.ContainsKey("sandbox") && options["sandbox"] == "true")
@@ -114,7 +119,7 @@ namespace TerminalHub.Constants
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {
-                args.Add(extraArgs.Trim());
+                args.Add(extraArgs);
             }
 
             return string.Join(" ", args);
@@ -124,35 +129,52 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
+            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
+            {
+                args.Add("resume --last");
+            }
+
             // 実行モード: auto, standard, yolo
+            var allowSandboxOverrides = true;
             if (options.TryGetValue("mode", out var mode))
             {
                 switch (mode)
                 {
                     case "auto":
                         args.Add("--full-auto");
+                        allowSandboxOverrides = false;
                         break;
                     case "yolo":
                         args.Add("--yolo");
+                        allowSandboxOverrides = false;
                         break;
                     // standard はオプションなし
                 }
             }
 
             // サンドボックスモード: read-only, workspace-write, danger-full-access
-            if (options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode))
+            var hasSandboxMode = options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode);
+            if (allowSandboxOverrides && hasSandboxMode)
             {
                 args.Add($"--sandbox {sandboxMode}");
             }
 
-            if (options.TryGetValue("approval-policy", out var approvalPolicy) && !string.IsNullOrEmpty(approvalPolicy))
+            if (allowSandboxOverrides)
             {
-                args.Add($"--approval-policy {approvalPolicy}");
+                options.TryGetValue("ask-for-approval", out var approvalPolicy);
+                if (!string.IsNullOrEmpty(approvalPolicy))
+                {
+                    args.Add($"--ask-for-approval {approvalPolicy}");
+                }
             }
 
-            if (options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
+            if (allowSandboxOverrides && options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
             {
-                args.Add($"--network-access {networkAccess}");
+                if (!hasSandboxMode || sandboxMode == "workspace-write")
+                {
+                    var networkAccessEnabled = networkAccess == "enabled" ? "true" : "false";
+                    args.Add($"-c sandbox_workspace_write.network_access={networkAccessEnabled}");
+                }
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))

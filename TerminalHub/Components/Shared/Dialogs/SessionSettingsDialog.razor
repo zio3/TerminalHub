@@ -186,10 +186,12 @@
             {
                 geminiOptions = new SessionOptionsSelector.GeminiOptionsData
                 {
-                    YoloMode = options.ContainsKey("yolo") && options["yolo"] == "true",
                     SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true",
                     Continue = options.ContainsKey("continue") && options["continue"] == "true",
-                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : "",
+                    ApprovalMode = options.ContainsKey("approval-mode") ? options["approval-mode"] : "default",
+                    Model = options.ContainsKey("model") ? options["model"] : null,
+                    UseCustomModel = options.ContainsKey("model")
                 };
             }
             else if (selectedType == TerminalType.CodexCLI)
@@ -197,9 +199,10 @@
                 codexOptions = new SessionOptionsSelector.CodexOptionsData
                 {
                     Mode = options.ContainsKey("mode") ? options["mode"] : "auto",
+                    ResumeLast = options.ContainsKey("resume-last") && options["resume-last"] == "true",
                     SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "workspace-write",
-                    ApprovalPolicy = options.ContainsKey("approval-policy") ? options["approval-policy"] : "",
-                    NetworkAccess = options.ContainsKey("network-access") ? options["network-access"] : "",
+                    ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
+                    NetworkAccess = options.ContainsKey("network-access") ? options["network-access"] : "enabled",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }

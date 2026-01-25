@@ -1,13 +1,16 @@
 @using TerminalHub.Models
+@using TerminalHub.Services
 @using Microsoft.Extensions.Configuration
+@using Microsoft.JSInterop
 @inject IConfiguration Configuration
+@inject ILocalStorageService LocalStorage
 
 <div class="session-options">
     <div class="mb-3">
         <label class="form-label d-block">ターミナルタイプ</label>
         <div class="btn-group d-flex" role="group">
-            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType1{UniqueId}")" 
-                   checked="@(SelectedType == TerminalType.Terminal)" 
+            <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType1{UniqueId}")"
+                   checked="@(SelectedType == TerminalType.Terminal)"
                    @onchange="() => OnTerminalTypeChanged(TerminalType.Terminal)" autocomplete="off">
             <label class="btn btn-outline-primary" for="@($"terminalType1{UniqueId}")">
                 <i class="bi bi-terminal"></i> ターミナル
@@ -15,8 +18,8 @@
 
             @if (Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true))
             {
-                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType2{UniqueId}")" 
-                       checked="@(SelectedType == TerminalType.ClaudeCode)" 
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType2{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.ClaudeCode)"
                        @onchange="() => OnTerminalTypeChanged(TerminalType.ClaudeCode)" autocomplete="off">
                 <label class="btn btn-outline-primary" for="@($"terminalType2{UniqueId}")">
                     <i class="bi bi-robot"></i> Claude Code
@@ -82,34 +85,108 @@
     {
         <div class="mb-3">
             <label class="form-label">Gemini CLI オプション</label>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.YoloMode" id="@($"geminiYolo{UniqueId}")">
-                <label class="form-check-label" for="@($"geminiYolo{UniqueId}")">
-                    YOLOモード (-y/--yolo) - すべてのアクションを自動承認
-                </label>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" @bind="GeminiOptions.SandboxMode" id="@($"geminiSandbox{UniqueId}")">
-                <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
-                    サンドボックスモード (-s/--sandbox)
-                </label>
-                <div class="form-text text-muted small">
-                    <i class="bi bi-info-circle"></i> この機能を使用するには、Docker Desktopがインストールされている必要があります。
-                </div>
-            </div>
-            @if (!DisableContinueOption)
-            {
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.Continue" id="@($"geminiContinue{UniqueId}")">
-                    <label class="form-check-label" for="@($"geminiContinue{UniqueId}")">
-                        コンティニュー (--resume latest)
+
+            <!-- Approval Mode -->
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">承認モード</label>
+                <div class="btn-group d-flex" role="group">
+                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeDefault{UniqueId}")"
+                           checked="@(GeminiOptions.ApprovalMode == "default")"
+                           @onchange=@(() => GeminiOptions.ApprovalMode = "default") autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"geminiModeDefault{UniqueId}")" title="ツール使用時に都度確認を求めます（デフォルト）">
+                        Default
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeAutoEdit{UniqueId}")"
+                           checked="@(GeminiOptions.ApprovalMode == "auto_edit")"
+                           @onchange=@(() => GeminiOptions.ApprovalMode = "auto_edit") autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="@($"geminiModeAutoEdit{UniqueId}")" title="ファイル編集など、安全な操作を自動で承認します">
+                        Auto-Edit
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeYolo{UniqueId}")"
+                           checked="@(GeminiOptions.ApprovalMode == "yolo")"
+                           @onchange=@(() => GeminiOptions.ApprovalMode = "yolo") autocomplete="off">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"geminiModeYolo{UniqueId}")" title="全ての操作を警告なしで自動的に承認します（危険）">
+                        YOLO
                     </label>
                 </div>
-            }
+                @if (!string.IsNullOrWhiteSpace(GetGeminiApprovalModeHelp()))
+                {
+                    <div class="form-text small mt-1">@GetGeminiApprovalModeHelp()</div>
+                }
+            </div>
+
+            <!-- Other Options -->
+            <div class="mt-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.SandboxMode" id="@($"geminiSandbox{UniqueId}")">
+                    <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
+                        サンドボックスモード (-s)
+                    </label>
+                    <div class="form-text text-muted small mt-0">
+                        <i class="bi bi-info-circle"></i> この機能を使用するには、Docker Desktopがインストールされている必要があります。
+                    </div>
+                </div>
+
+                @if (!DisableContinueOption)
+                {
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" @bind="GeminiOptions.Continue" id="@($"geminiContinue{UniqueId}")">
+                        <label class="form-check-label" for="@($"geminiContinue{UniqueId}")">
+                            コンティニュー (--resume latest)
+                        </label>
+                    </div>
+                }
+            </div>
+
+            <!-- Custom Model -->
+            <div class="mt-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.UseCustomModel" id="@($"geminiUseCustomModel{UniqueId}")">
+                    <label class="form-check-label" for="@($"geminiUseCustomModel{UniqueId}")">
+                        モデルをカスタマイズ
+                    </label>
+                </div>
+
+                @if (GeminiOptions.UseCustomModel)
+                {
+                    <div class="mt-2 ps-4">
+                        <div class="mb-2">
+                            <label for="@($"geminiModelSelect{UniqueId}")" class="form-label small text-muted mb-1">使用するモデル</label>
+                            <select class="form-select form-select-sm" id="@($"geminiModelSelect{UniqueId}")" @bind="GeminiOptions.Model">
+                                @foreach (var model in geminiModelList)
+                                {
+                                    <option value="@model">@model</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">モデルリスト管理</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" @bind="newGeminiModelName" placeholder="モデル名を追加..." @onkeydown="OnModelInputKeyDown" />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="AddGeminiModel">追加</button>
+                            </div>
+                            <ul class="list-group mt-2" style="max-height: 150px; overflow-y: auto;">
+                                @foreach (var model in geminiModelList.OrderBy(m => m))
+                                {
+                                    <li class="list-group-item list-group-item-sm d-flex justify-content-between align-items-center py-1">
+                                        <span class="text-truncate" title="@model">@model</span>
+                                        <button class="btn btn-sm btn-outline-danger p-0" style="width: 1.5rem; height: 1.5rem;" @onclick="() => RemoveGeminiModel(model)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                }
+            </div>
+            
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">追加引数</label>
                 <input type="text" class="form-control form-control-sm" @bind="GeminiOptions.ExtraArgs"
-                       placeholder="例: --model gemini-2.0-flash --debug" />
+                       placeholder="例: --debug --allowed-tools shell,file" />
                 <div class="form-text small">そのままGemini CLIに渡します</div>
             </div>
         </div>
@@ -132,17 +209,21 @@
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
                            checked="@(CodexOptions.Mode == "standard")"
                            @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="対話ベースで設定しながら使用">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="対話ベースで進行します">
                         Standard
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
                            checked="@(CodexOptions.Mode == "yolo")"
                            @onchange="() => SetCodexMode(CodexMode.Yolo)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="隔離環境（WSL/Docker/VM/CI）前提の全自動">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="全自動実行（危険）。隔離環境推奨。">
                         YOLO (危険)
                     </label>
                 </div>
+                @if (!string.IsNullOrWhiteSpace(GetCodexModeHelp()))
+                {
+                    <div class="form-text small">@GetCodexModeHelp()</div>
+                }
             </div>
 
             @if (CodexOptions.Mode == "yolo")
@@ -153,38 +234,49 @@
                 </div>
             }
 
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumeLast" id="@($"codexResumeLast{UniqueId}")">
+                <label class="form-check-label" for="@($"codexResumeLast{UniqueId}")">
+                    前回セッションを再開 (resume --last)
+                </label>
+            </div>
+
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">サンドボックスモード</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "none")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.None)" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="サンドボックスなし">
+                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="制限なし。ローカル環境へフルアクセス可能。">
                         なし
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxReadOnly{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "read-only")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.ReadOnly)" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="読み取り専用（最も安全）">
+                    <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="読み取り専用。書き込みはブロック。">
                         読み取り専用
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxWorkspace{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "workspace-write")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.WorkspaceWrite)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="ワークスペースのみ書き込み可">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="ワークスペース内のみ書き込み可能。">
                         ワークスペース (推奨)
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxFull{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "danger-full-access")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.FullAccess)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="フルアクセス（危険）">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="フルアクセス（危険）。">
                         フルアクセス
                     </label>
                 </div>
                 <div class="form-text small">外部通信やファイルアクセス範囲を制限</div>
+                @if (!string.IsNullOrWhiteSpace(GetSandboxModeHelp()))
+                {
+                    <div class="form-text small">@GetSandboxModeHelp()</div>
+                }
             </div>
 
             <div class="mt-3">
@@ -196,7 +288,11 @@
                     <option value="on-failure">on-failure</option>
                     <option value="never">never</option>
                 </select>
-                <div class="form-text small">操作の承認レベル</div>
+                <div class="form-text small">操作の承認レベル（--ask-for-approval）</div>
+                @if (!string.IsNullOrWhiteSpace(GetApprovalPolicyHelp()))
+                {
+                    <div class="form-text small">@GetApprovalPolicyHelp()</div>
+                }
             </div>
 
             <div class="mt-3">
@@ -206,7 +302,11 @@
                     <option value="restricted">restricted</option>
                     <option value="enabled">enabled</option>
                 </select>
-                <div class="form-text small">外部ネットワークの利用可否</div>
+                <div class="form-text small">workspace-write時の通信許可（-c sandbox_workspace_write.network_access）。デフォルトは enabled。</div>
+                @if (!string.IsNullOrWhiteSpace(GetNetworkAccessHelp()))
+                {
+                    <div class="form-text small">@GetNetworkAccessHelp()</div>
+                }
             </div>
 
             <div class="mt-3">
@@ -237,10 +337,82 @@
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
+    private const string GEMINI_MODELS_KEY = "gemini_models";
+
+    // Geminiモデル管理用
+    private List<string> geminiModelList = new();
+    private string newGeminiModelName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGeminiModelsAsync();
+    }
+
+    private async Task LoadGeminiModelsAsync()
+    {
+        try
+        {
+            var models = await LocalStorage.GetAsync<List<string>>(GEMINI_MODELS_KEY);
+            if (models == null || !models.Any())
+            {
+                // LocalStorageにない場合はappsettings.jsonから読み込む
+                models = Configuration.GetSection("ExternalTools:GeminiModels").Get<List<string>>() ?? new List<string>();
+                await LocalStorage.SetAsync(GEMINI_MODELS_KEY, models);
+            }
+            geminiModelList = models;
+
+            // 選択中のモデルがリストにない場合は、リストの先頭を選択する
+            if (!string.IsNullOrEmpty(GeminiOptions.Model) && !geminiModelList.Contains(GeminiOptions.Model))
+            {
+                GeminiOptions.Model = geminiModelList.FirstOrDefault();
+            }
+            else if (string.IsNullOrEmpty(GeminiOptions.Model))
+            {
+                GeminiOptions.Model = geminiModelList.FirstOrDefault();
+            }
+        }
+        catch
+        {
+            geminiModelList = new List<string> { "gemini-1.5-pro-latest" };
+        }
+    }
+
+    private async Task AddGeminiModel()
+    {
+        if (!string.IsNullOrWhiteSpace(newGeminiModelName) && !geminiModelList.Contains(newGeminiModelName.Trim()))
+        {
+            geminiModelList.Add(newGeminiModelName.Trim());
+            newGeminiModelName = "";
+            await LocalStorage.SetAsync(GEMINI_MODELS_KEY, geminiModelList);
+        }
+    }
+
+    private async Task RemoveGeminiModel(string modelToRemove)
+    {
+        geminiModelList.Remove(modelToRemove);
+        if (GeminiOptions.Model == modelToRemove)
+        {
+            GeminiOptions.Model = geminiModelList.FirstOrDefault();
+        }
+        await LocalStorage.SetAsync(GEMINI_MODELS_KEY, geminiModelList);
+    }
+
+    private async Task OnModelInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddGeminiModel();
+        }
+    }
 
     private async Task OnTerminalTypeChanged(TerminalType newType)
     {
         SelectedType = newType;
+        if (newType == TerminalType.GeminiCLI)
+        {
+            // Geminiが選択されたときにモデルリストを再読み込み
+            await LoadGeminiModelsAsync();
+        }
         await SelectedTypeChanged.InvokeAsync(newType);
     }
 
@@ -303,10 +475,6 @@
                 break;
 
             case TerminalType.GeminiCLI:
-                if (GeminiOptions.YoloMode)
-                {
-                    options["yolo"] = "true";
-                }
                 if (GeminiOptions.SandboxMode)
                 {
                     options["sandbox"] = "true";
@@ -314,6 +482,14 @@
                 if (GeminiOptions.Continue && !DisableContinueOption)
                 {
                     options["continue"] = "true";
+                }
+                if (GeminiOptions.ApprovalMode != "default")
+                {
+                    options["approval-mode"] = GeminiOptions.ApprovalMode;
+                }
+                if (GeminiOptions.UseCustomModel && !string.IsNullOrWhiteSpace(GeminiOptions.Model))
+                {
+                    options["model"] = GeminiOptions.Model;
                 }
                 if (!string.IsNullOrWhiteSpace(GeminiOptions.ExtraArgs))
                 {
@@ -323,13 +499,17 @@
 
             case TerminalType.CodexCLI:
                 options["mode"] = CodexOptions.Mode;
+                if (CodexOptions.ResumeLast)
+                {
+                    options["resume-last"] = "true";
+                }
                 if (CodexOptions.SandboxMode != "none")
                 {
                     options["sandbox-mode"] = CodexOptions.SandboxMode;
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.ApprovalPolicy))
                 {
-                    options["approval-policy"] = CodexOptions.ApprovalPolicy;
+                    options["ask-for-approval"] = CodexOptions.ApprovalPolicy;
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.NetworkAccess))
                 {
@@ -355,18 +535,77 @@
 
     public class GeminiOptionsData
     {
-        public bool YoloMode { get; set; }
-        public bool SandboxMode { get; set; }
         public bool Continue { get; set; } = true;
+        public bool SandboxMode { get; set; }
+        public string ApprovalMode { get; set; } = "default"; // default, auto_edit, yolo
+        public bool UseCustomModel { get; set; }
+        public string? Model { get; set; }
         public string ExtraArgs { get; set; } = "";
     }
 
     public class CodexOptionsData
     {
         public string Mode { get; set; } = "auto"; // auto, standard, yolo
+        public bool ResumeLast { get; set; } = false;
         public string SandboxMode { get; set; } = "workspace-write"; // none, read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
-        public string NetworkAccess { get; set; } = "";
+        public string NetworkAccess { get; set; } = "enabled";
         public string ExtraArgs { get; set; } = "";
+    }
+    
+    private string GetGeminiApprovalModeHelp()
+    {
+        return GeminiOptions.ApprovalMode switch
+        {
+            "default" => "ツール使用時に都度確認を求めます（デフォルト）。",
+            "auto_edit" => "ファイル編集など、安全な操作を自動で承認します。",
+            "yolo" => "全ての操作を警告なしで自動的に承認します（危険）。",
+            _ => ""
+        };
+    }
+
+    private string GetApprovalPolicyHelp()
+    {
+        return CodexOptions.ApprovalPolicy switch
+        {
+            "untrusted" => "未信頼扱い。すべての操作で承認を求めます。",
+            "on-request" => "必要なときだけ承認を求めます（デフォルトに近い挙動）。",
+            "on-failure" => "失敗した操作のみ承認を求めます。",
+            "never" => "承認を求めません（危険）。",
+            _ => ""
+        };
+    }
+
+    private string GetCodexModeHelp()
+    {
+        return CodexOptions.Mode switch
+        {
+            "auto" => "自動実行優先。追加のサンドボックス設定は無視されます。",
+            "standard" => "対話ベースで進行します。",
+            "yolo" => "全自動実行（危険）。隔離環境推奨。追加のサンドボックス設定は無視されます。",
+            _ => ""
+        };
+    }
+
+    private string GetSandboxModeHelp()
+    {
+        return CodexOptions.SandboxMode switch
+        {
+            "none" => "制限なし。ローカル環境へフルアクセス可能。",
+            "read-only" => "読み取り専用。書き込みはブロック。",
+            "workspace-write" => "ワークスペース内のみ書き込み可能。",
+            "danger-full-access" => "フルアクセス（危険）。",
+            _ => ""
+        };
+    }
+
+    private string GetNetworkAccessHelp()
+    {
+        return CodexOptions.NetworkAccess switch
+        {
+            "enabled" => "ネットワークアクセスを許可します。",
+            "restricted" => "ネットワークアクセスを制限します。",
+            _ => ""
+        };
     }
 }
