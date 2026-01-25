@@ -279,6 +279,23 @@
                                         セッション一覧に表示する追加情報を選択できます。
                                     </p>
                                 </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <label class="form-label">入力パネル設定</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="hideInputPanel" id="hideInputPanel">
+                                        <label class="form-check-label" for="hideInputPanel">
+                                            <i class="bi bi-textarea me-1"></i>入力パネルを非表示
+                                            <span class="text-muted small">（ターミナルのみ表示）</span>
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        下部の入力パネルを非表示にして、ターミナル領域を広く使えます。
+                                    </p>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "migration")
@@ -687,6 +704,7 @@
     private string sessionSortMode = "createdAt";
     private bool showTerminalType = false;
     private bool showGitInfo = false;
+    private bool hideInputPanel = false;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
 
@@ -712,7 +730,7 @@
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "createdAt";
     [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
-    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo)> OnSessionDisplaySettingsChanged { get; set; }
+    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo, bool hideInputPanel)> OnSessionDisplaySettingsChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -814,6 +832,10 @@
                     if (sessionsSettings.TryGetProperty("showGitInfo", out var showGit))
                     {
                         showGitInfo = showGit.GetBoolean();
+                    }
+                    if (sessionsSettings.TryGetProperty("hideInputPanel", out var hidePanel))
+                    {
+                        hideInputPanel = hidePanel.GetBoolean();
                     }
                 }
                 if (s.TryGetProperty("devTools", out var devTools))
@@ -971,7 +993,7 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
                 claudeModeSwitchKey);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSessionSettings",
-                sessionSortMode, showTerminalType, showGitInfo);
+                sessionSortMode, showTerminalType, showGitInfo, hideInputPanel);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateDevToolsSettings",
                 devToolsEnabled);
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateGeneralSettings",
@@ -988,7 +1010,7 @@
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
 
             // セッション表示設定の変更を通知
-            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo));
+            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo, hideInputPanel));
 
             // モード切替キーの変更を通知
             await OnClaudeModeSwitchKeyChanged.InvokeAsync(claudeModeSwitchKey);

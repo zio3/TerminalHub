@@ -38,6 +38,11 @@ PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
 DisableProgramGroupPage=yes
 
+; 実行中のアプリケーションを自動検出して強制終了
+CloseApplications=force
+CloseApplicationsFilter=TerminalHub.exe
+RestartApplications=no
+
 [Languages]
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -50,8 +55,13 @@ Name: "startmenuicon"; Description: "スタートメニューにショートカ�
 ; publishフォルダの全ファイルをインストール
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; 認証設定ファイル - 既存なら上書きしない
+Source: "..\TerminalHub\auth.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
+Source: "..\TerminalHub\auth.readme.md"; DestDir: "{app}"; Flags: ignoreversion
+
 ; バッチファイル（メインランチャー）
 Source: "TerminalHub.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "TerminalHub-App.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; スタートメニュー - バッチファイルを使用

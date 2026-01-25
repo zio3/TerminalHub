@@ -385,7 +385,7 @@ window.terminalHubHelpers = {
         };
     },
 
-    updateSessionSettings: function(sortMode, showTerminalType, showGitInfo) {
+    updateSessionSettings: function(sortMode, showTerminalType, showGitInfo, hideInputPanel) {
         const settings = this.getSettings();
         if (!settings.sessions) {
             settings.sessions = {};
@@ -393,12 +393,13 @@ window.terminalHubHelpers = {
         settings.sessions.sortMode = sortMode;
         settings.sessions.showTerminalType = showTerminalType;
         settings.sessions.showGitInfo = showGitInfo;
+        settings.sessions.hideInputPanel = hideInputPanel;
         this.saveSettings(settings);
     },
 
     getSessionSettings: function() {
         const settings = this.getSettings();
-        return settings.sessions || { sortMode: "createdAt", showTerminalType: false, showGitInfo: false };
+        return settings.sessions || { sortMode: "createdAt", showTerminalType: false, showGitInfo: false, hideInputPanel: false };
     },
 
     updateDevToolsSettings: function(enabled) {
@@ -427,5 +428,21 @@ window.terminalHubHelpers = {
     getGeneralSettings: function() {
         const settings = this.getSettings();
         return settings.general || { defaultFolderPath: "" };
+    },
+
+    // モバイルキーボード表示時のハンバーガーメニュー位置補正
+    setupMobileKeyboardHandler: function() {
+        if (window.visualViewport) {
+            const updateButtonPosition = () => {
+                const button = document.querySelector('.mobile-sidebar-toggle');
+                if (button) {
+                    // キーボード表示時はvisualViewport.offsetTopが変化する
+                    button.style.top = `${10 + window.visualViewport.offsetTop}px`;
+                }
+            };
+
+            window.visualViewport.addEventListener('resize', updateButtonPosition);
+            window.visualViewport.addEventListener('scroll', updateButtonPosition);
+        }
     }
 };

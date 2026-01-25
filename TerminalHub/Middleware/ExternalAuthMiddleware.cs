@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+using System.Net;
 using System.Text;
 using Microsoft.Extensions.Options;
 using TerminalHub.Models;
@@ -7,7 +7,7 @@ namespace TerminalHub.Middleware;
 
 /// <summary>
 /// 外部アクセス時にBasic認証を要求するミドルウェア
-/// X-Forwarded-Forヘッダーが存在する場合（ngrok等のトンネル経由）のみ認証チェックを実行
+/// localhost (127.0.0.1, ::1) 以外からのアクセスには認証を要求
 /// </summary>
 public class ExternalAuthMiddleware
 {
@@ -34,16 +34,18 @@ public class ExternalAuthMiddleware
             return;
         }
 
-        // X-Forwarded-Forヘッダーがない場合はローカルアクセスとみなしスキップ
-        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (string.IsNullOrEmpty(forwardedFor))
+        // リクエスト元IPアドレスを取得
+        var remoteIp = context.Connection.RemoteIpAddress;
+
+        // localhostからのアクセスは認証スキップ
+        if (IsLocalhost(remoteIp))
         {
             await _next(context);
             return;
         }
 
         // 外部アクセスの場合、Basic認証をチェック
-        _logger.LogDebug("外部アクセスを検出: X-Forwarded-For={ForwardedFor}", forwardedFor);
+        _logger.LogDebug("外部アクセスを検出: RemoteIP={RemoteIP}", remoteIp);
 
         var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
 
@@ -91,6 +93,28 @@ public class ExternalAuthMiddleware
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.Headers.WWWAuthenticate = "Basic realm=\"TerminalHub\"";
+    }
+
+    /// <summary>
+    /// IPアドレスがlocalhostかどうかを判定
+    /// </summary>
+    private static bool IsLocalhost(IPAddress? ipAddress)
+    {
+        if (ipAddress == null)
+            return false;
+
+        // ループバックアドレス (127.0.0.1, ::1)
+        if (IPAddress.IsLoopback(ipAddress))
+            return true;
+
+        // IPv4-mapped IPv6アドレス (::ffff:127.0.0.1) の場合
+        if (ipAddress.IsIPv4MappedToIPv6)
+        {
+            var ipv4 = ipAddress.MapToIPv4();
+            return IPAddress.IsLoopback(ipv4);
+        }
+
+        return false;
     }
 }
 

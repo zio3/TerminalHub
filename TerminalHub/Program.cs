@@ -98,8 +98,29 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
 // ExternalAuthSettings を登録（外部アクセス時のBasic認証用）
-builder.Services.Configure<ExternalAuthSettings>(
-    builder.Configuration.GetSection("ExternalAuth"));
+// auth.json から読み込む（インストールフォルダに配置、更新時に上書きされない）
+var authFilePath = Path.Combine(AppContext.BaseDirectory, "auth.json");
+if (File.Exists(authFilePath))
+{
+    try
+    {
+        var authJson = File.ReadAllText(authFilePath);
+        var authSettings = JsonSerializer.Deserialize<ExternalAuthSettings>(authJson);
+        builder.Services.Configure<ExternalAuthSettings>(options =>
+        {
+            options.Username = authSettings?.Username;
+            options.Password = authSettings?.Password;
+        });
+    }
+    catch
+    {
+        builder.Services.Configure<ExternalAuthSettings>(_ => { });
+    }
+}
+else
+{
+    builder.Services.Configure<ExternalAuthSettings>(_ => { });
+}
 
 var app = builder.Build();
 

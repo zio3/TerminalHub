@@ -172,6 +172,9 @@ h1:focus {
     /* サイドバーフッター */
     .sidebar-footer {
         background-color: #f8f9fa;
+        position: sticky;
+        bottom: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0);
     }
 
     /* ターミナルメインエリア - モバイル用 */
@@ -186,6 +189,10 @@ h1:focus {
     /* ターミナルセクション比率 - モバイル用 */
     .terminal-section {
         height: 75% !important;
+    }
+
+    .terminal-section.terminal-fullscreen {
+        height: 100% !important;
     }
 
     /* 下部パネルセクション比率 - モバイル用 */

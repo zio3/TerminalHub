@@ -88,17 +88,19 @@
         <div class="col-md-9 p-0 position-relative terminal-main-area" style="height: 100vh; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
             {
-                <!-- ターミナル部分 (70%) -->
-                <div class="terminal-section" style="height: 70%; overflow: hidden;">
+                <!-- ターミナル部分 -->
+                <div class="terminal-section @(hideInputPanel ? "terminal-fullscreen" : "")" style="height: @(hideInputPanel ? "100%" : "70%"); overflow: hidden;">
                     <div class="terminal-wrapper h-100">
                         @foreach (var session in sessions)
                         {
-                            <div id="terminal-@session.SessionId" class="terminal-container" 
+                            <div id="terminal-@session.SessionId" class="terminal-container"
                                  style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
                         }
                     </div>
                 </div>
-                
+
+                @if (!hideInputPanel)
+                {
                 <!-- WebUI部分 (30%) -->
                 <div class="bottom-panel-section" style="height: 30%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
                     @{
@@ -182,6 +184,7 @@
                         </div>
                     }
                 </div>
+                }
             }
             else
             {
@@ -204,6 +207,7 @@
     private string sessionSortMode = "createdAt"; // セッション一覧のソートモード
     private bool showTerminalType = false; // ターミナル種別を表示
     private bool showGitInfo = false; // Git情報を表示
+    private bool hideInputPanel = false; // 入力パネルを非表示
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
@@ -352,6 +356,8 @@
                 await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupKeyboardShortcuts", dotNetRef);
                 // 通知用のDotNetRefを設定
                 await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
+                // モバイルキーボード表示時のハンバーガーメニュー位置補正
+                await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupMobileKeyboardHandler");
             }
             catch (JSDisconnectedException)
             {
@@ -396,6 +402,10 @@
                     if (sessionSettings.Value.TryGetProperty("showGitInfo", out var showGit))
                     {
                         showGitInfo = showGit.GetBoolean();
+                    }
+                    if (sessionSettings.Value.TryGetProperty("hideInputPanel", out var hidePanel))
+                    {
+                        hideInputPanel = hidePanel.GetBoolean();
                     }
                 }
             }
@@ -573,10 +583,11 @@
         StateHasChanged();
     }
 
-    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo) settings)
+    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool hideInputPanel) settings)
     {
         showTerminalType = settings.showTerminalType;
         showGitInfo = settings.showGitInfo;
+        hideInputPanel = settings.hideInputPanel;
         StateHasChanged();
     }
 
