@@ -233,8 +233,9 @@ namespace TerminalHub.Services
 
             // プロセスの作成
             var processInfo = new PROCESS_INFORMATION();
-            // argumentsが空の場合は余分なスペースを追加しない
-            var cmdline = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
+            // すべてのコマンドをcmd.exe経由で実行（.cmd/.batファイルも確実に動作）
+            var fullCommand = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
+            var cmdline = $"cmd.exe /c {fullCommand}";
 
             _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");
             

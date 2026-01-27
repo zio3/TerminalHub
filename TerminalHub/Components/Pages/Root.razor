@@ -996,12 +996,19 @@
 
 
         // 再起動後の新しいセッションを確実に取得
-        activeSession = await SessionManager.GetSessionAsync(sessionId);
+        try
+        {
+            activeSession = await SessionManager.GetSessionAsync(sessionId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "セッション {SessionId} の初期化に失敗", sessionId);
+            activeSession = null;
+        }
 
-        // セッションが存在しない場合はエラー
+        // セッションが存在しない、または初期化に失敗した場合
         if (activeSession == null)
         {
-            // セッションが見つからない
             activeSessionId = null;
             return;
         }
