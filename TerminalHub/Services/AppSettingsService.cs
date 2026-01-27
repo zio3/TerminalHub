@@ -1,22 +1,23 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TerminalHub.Models;
 
 namespace TerminalHub.Services;
 
 /// <summary>
-/// Webhook設定をファイルで管理するサービス
+/// アプリケーション設定をファイルで管理するサービス
 /// </summary>
-public interface IWebhookSettingsService
+public interface IAppSettingsService
 {
     /// <summary>
-    /// Webhook設定を取得
+    /// 全設定を取得
     /// </summary>
-    WebhookSettings? GetSettings();
+    AppSettings GetSettings();
 
     /// <summary>
-    /// Webhook設定を保存
+    /// 全設定を保存
     /// </summary>
-    void SaveSettings(WebhookSettings settings);
+    void SaveSettings(AppSettings settings);
 
     /// <summary>
     /// Webhookを送信（設定が有効な場合のみ）
@@ -25,12 +26,12 @@ public interface IWebhookSettingsService
         string terminalType, int? elapsedSeconds, string folderPath);
 }
 
-public class WebhookSettingsService : IWebhookSettingsService
+public class AppSettingsService : IAppSettingsService
 {
-    private readonly ILogger<WebhookSettingsService> _logger;
+    private readonly ILogger<AppSettingsService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _settingsFilePath;
-    private WebhookSettings? _cachedSettings;
+    private AppSettings? _cachedSettings;
     private DateTime _lastReadTime = DateTime.MinValue;
     private readonly object _lock = new();
 
@@ -40,8 +41,8 @@ public class WebhookSettingsService : IWebhookSettingsService
         WriteIndented = true
     };
 
-    public WebhookSettingsService(
-        ILogger<WebhookSettingsService> logger,
+    public AppSettingsService(
+        ILogger<AppSettingsService> logger,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
@@ -49,10 +50,10 @@ public class WebhookSettingsService : IWebhookSettingsService
 
         // 実行ファイルと同じディレクトリに設定ファイルを保存
         var exeDir = AppContext.BaseDirectory;
-        _settingsFilePath = Path.Combine(exeDir, "webhook-settings.json");
+        _settingsFilePath = Path.Combine(exeDir, "app-settings.json");
     }
 
-    public WebhookSettings? GetSettings()
+    public AppSettings GetSettings()
     {
         lock (_lock)
         {
@@ -70,23 +71,26 @@ public class WebhookSettingsService : IWebhookSettingsService
             {
                 if (!File.Exists(_settingsFilePath))
                 {
-                    return null;
+                    // デフォルト設定を返す
+                    _cachedSettings = new AppSettings();
+                    return _cachedSettings;
                 }
 
                 var json = File.ReadAllText(_settingsFilePath);
-                _cachedSettings = JsonSerializer.Deserialize<WebhookSettings>(json, JsonOptions);
+                _cachedSettings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
                 _lastReadTime = DateTime.Now;
                 return _cachedSettings;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Webhook設定ファイルの読み込みに失敗: {Path}", _settingsFilePath);
-                return null;
+                _logger.LogError(ex, "設定ファイルの読み込みに失敗: {Path}", _settingsFilePath);
+                _cachedSettings = new AppSettings();
+                return _cachedSettings;
             }
         }
     }
 
-    public void SaveSettings(WebhookSettings settings)
+    public void SaveSettings(AppSettings settings)
     {
         lock (_lock)
         {
@@ -96,11 +100,11 @@ public class WebhookSettingsService : IWebhookSettingsService
                 File.WriteAllText(_settingsFilePath, json);
                 _cachedSettings = settings;
                 _lastReadTime = DateTime.Now;
-                _logger.LogInformation("Webhook設定を保存しました: {Path}", _settingsFilePath);
+                _logger.LogInformation("設定を保存しました: {Path}", _settingsFilePath);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Webhook設定ファイルの保存に失敗: {Path}", _settingsFilePath);
+                _logger.LogError(ex, "設定ファイルの保存に失敗: {Path}", _settingsFilePath);
                 throw;
             }
         }
@@ -110,7 +114,8 @@ public class WebhookSettingsService : IWebhookSettingsService
         string terminalType, int? elapsedSeconds, string folderPath)
     {
         var settings = GetSettings();
-        if (settings?.Enabled != true || string.IsNullOrEmpty(settings.Url))
+        var webhook = settings.Webhook;
+        if (webhook?.Enabled != true || string.IsNullOrEmpty(webhook.Url))
         {
             _logger.LogDebug("Webhook通知をスキップ（無効または未設定）");
             return;
@@ -118,13 +123,12 @@ public class WebhookSettingsService : IWebhookSettingsService
 
         try
         {
-            // IHttpClientFactory から取得した HttpClient は Dispose 不要（ファクトリーが管理）
             var httpClient = _httpClientFactory.CreateClient();
 
             // ヘッダーを設定
-            if (settings.Headers != null)
+            if (webhook.Headers != null)
             {
-                foreach (var header in settings.Headers)
+                foreach (var header in webhook.Headers)
                 {
                     if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
                     {
@@ -149,22 +153,22 @@ public class WebhookSettingsService : IWebhookSettingsService
             var json = JsonSerializer.Serialize(payload, JsonOptions);
             using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", settings.Url, eventType);
+            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, eventType);
 
-            using var response = await httpClient.PostAsync(settings.Url, content);
+            using var response = await httpClient.PostAsync(webhook.Url, content);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", eventType, settings.Url);
+                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", eventType, webhook.Url);
             }
             else
             {
-                _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Url}", response.StatusCode, settings.Url);
+                _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Url}", response.StatusCode, webhook.Url);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Webhook送信エラー: {Url}", settings.Url);
+            _logger.LogError(ex, "Webhook送信エラー: {Url}", webhook.Url);
         }
     }
 }

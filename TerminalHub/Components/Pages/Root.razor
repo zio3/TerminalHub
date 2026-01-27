@@ -26,6 +26,7 @@
 @inject ILoggerFactory LoggerFactory
 @inject IHookNotificationService HookNotificationService
 @inject IStorageServiceFactory StorageServiceFactory
+@inject IAppSettingsService AppSettingsService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -371,43 +372,15 @@
             // テキスト履歴を読み込み
             await InputHistoryService.LoadHistoryAsync();
 
-            // 特殊設定を読み込み
+            // アプリ設定を読み込み
             try
             {
-                var specialSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSpecialSettings");
-                if (specialSettings.HasValue && specialSettings.Value.TryGetProperty("claudeModeSwitchKey", out var key))
-                {
-                    claudeModeSwitchKey = key.GetString() ?? "altM";
-                }
-            }
-            catch
-            {
-                // エラー時はデフォルト値を使用
-            }
-
-            // セッション設定を読み込み
-            try
-            {
-                var sessionSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSessionSettings");
-                if (sessionSettings.HasValue)
-                {
-                    if (sessionSettings.Value.TryGetProperty("sortMode", out var sortMode))
-                    {
-                        sessionSortMode = sortMode.GetString() ?? "createdAt";
-                    }
-                    if (sessionSettings.Value.TryGetProperty("showTerminalType", out var showTermType))
-                    {
-                        showTerminalType = showTermType.GetBoolean();
-                    }
-                    if (sessionSettings.Value.TryGetProperty("showGitInfo", out var showGit))
-                    {
-                        showGitInfo = showGit.GetBoolean();
-                    }
-                    if (sessionSettings.Value.TryGetProperty("hideInputPanel", out var hidePanel))
-                    {
-                        hideInputPanel = hidePanel.GetBoolean();
-                    }
-                }
+                var appSettings = AppSettingsService.GetSettings();
+                claudeModeSwitchKey = appSettings.Special.ClaudeModeSwitchKey;
+                sessionSortMode = appSettings.Sessions.SortMode;
+                showTerminalType = appSettings.Sessions.ShowTerminalType;
+                showGitInfo = appSettings.Sessions.ShowGitInfo;
+                hideInputPanel = appSettings.Sessions.HideInputPanel;
             }
             catch
             {

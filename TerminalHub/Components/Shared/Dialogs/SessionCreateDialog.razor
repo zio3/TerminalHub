@@ -6,6 +6,7 @@
 @inject ILocalStorageService LocalStorage
 @inject ISessionManager SessionManager
 @inject ILogger<SessionCreateDialog> Logger
+@inject IAppSettingsService AppSettingsService
 
 <div class="modal fade @(IsVisible && !showCreateFolderDialog ? "show" : "")" tabindex="-1" style="@(IsVisible && !showCreateFolderDialog ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
@@ -159,25 +160,23 @@
         }
     }
 
-    private async Task LoadDefaultFolderPath()
+    private Task LoadDefaultFolderPath()
     {
         try
         {
-            var generalSettings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getGeneralSettings");
-            if (generalSettings.HasValue && generalSettings.Value.TryGetProperty("defaultFolderPath", out var path))
+            var settings = AppSettingsService.GetSettings();
+            var defaultPath = settings.General.DefaultFolderPath;
+            if (!string.IsNullOrWhiteSpace(defaultPath))
             {
-                var defaultPath = path.GetString();
-                if (!string.IsNullOrWhiteSpace(defaultPath))
-                {
-                    _cachedDefaultFolderPath = defaultPath;
-                    folderPath = defaultPath;
-                }
+                _cachedDefaultFolderPath = defaultPath;
+                folderPath = defaultPath;
             }
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "デフォルトフォルダパスの読み込みに失敗");
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadLastSelectedTerminalType()

@@ -39,7 +39,7 @@ public class HookNotificationService : IHookNotificationService
 {
     private readonly ILogger<HookNotificationService> _logger;
     private readonly ISessionManager _sessionManager;
-    private readonly IWebhookSettingsService _webhookSettingsService;
+    private readonly IAppSettingsService _appSettingsService;
     private readonly ISessionTimerService _sessionTimerService;
 
     public event EventHandler<HookNotificationEventArgs>? OnHookNotification;
@@ -47,12 +47,12 @@ public class HookNotificationService : IHookNotificationService
     public HookNotificationService(
         ILogger<HookNotificationService> logger,
         ISessionManager sessionManager,
-        IWebhookSettingsService webhookSettingsService,
+        IAppSettingsService appSettingsService,
         ISessionTimerService sessionTimerService)
     {
         _logger = logger;
         _sessionManager = sessionManager;
-        _webhookSettingsService = webhookSettingsService;
+        _appSettingsService = appSettingsService;
         _sessionTimerService = sessionTimerService;
     }
 
@@ -116,7 +116,7 @@ public class HookNotificationService : IHookNotificationService
         // Webhook通知を送信
         try
         {
-            await _webhookSettingsService.SendWebhookAsync(
+            await _appSettingsService.SendWebhookAsync(
                 "complete",
                 session.SessionId,
                 session.GetDisplayName(),
@@ -169,7 +169,7 @@ public class HookNotificationService : IHookNotificationService
         // Webhook通知を送信
         try
         {
-            await _webhookSettingsService.SendWebhookAsync(
+            await _appSettingsService.SendWebhookAsync(
                 "start",
                 session.SessionId,
                 session.GetDisplayName(),

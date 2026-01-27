@@ -6,7 +6,7 @@
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
-@inject IWebhookSettingsService WebhookSettingsService
+@inject IAppSettingsService AppSettingsService
 @inject ISessionManager SessionManager
 @inject IStorageServiceFactory StorageServiceFactory
 
@@ -763,110 +763,42 @@
             // データ移行タブの状態を更新
             await LoadMigrationTabState();
 
-            // LocalStorageから設定を読み込み
-            var settings = await JSRuntime.InvokeAsync<System.Text.Json.JsonElement?>("terminalHubHelpers.getSettings");
-            if (settings.HasValue)
-            {
-                var s = settings.Value;
-                if (s.TryGetProperty("notifications", out var notifications))
-                {
-                    if (notifications.TryGetProperty("enableBrowserNotifications", out var enabled))
-                    {
-                        browserNotificationEnabled = enabled.GetBoolean();
-                    }
-                    if (notifications.TryGetProperty("processingTimeThresholdSeconds", out var threshold))
-                    {
-                        thresholdSeconds = threshold.GetInt32();
-                    }
-                }
-                if (s.TryGetProperty("webhook", out var webhook))
-                {
-                    if (webhook.TryGetProperty("enabled", out var enabled))
-                    {
-                        webHookEnabled = enabled.GetBoolean();
-                    }
-                    if (webhook.TryGetProperty("url", out var url))
-                    {
-                        webHookUrl = url.GetString() ?? "";
-                    }
-                }
-                if (s.TryGetProperty("claudeHook", out var claudeHook))
-                {
-                    if (claudeHook.TryGetProperty("enabled", out var hookEnabled))
-                    {
-                        claudeHookEnabled = hookEnabled.GetBoolean();
-                    }
-                    if (claudeHook.TryGetProperty("events", out var events))
-                    {
-                        if (events.TryGetProperty("stop", out var stop))
-                        {
-                            hookEventStop = stop.GetBoolean();
-                        }
-                        if (events.TryGetProperty("userPromptSubmit", out var userPrompt))
-                        {
-                            hookEventUserPromptSubmit = userPrompt.GetBoolean();
-                        }
-                        if (events.TryGetProperty("notification", out var notif))
-                        {
-                            hookEventNotification = notif.GetBoolean();
-                        }
-                    }
-                }
-                if (s.TryGetProperty("special", out var special))
-                {
-                    if (special.TryGetProperty("claudeModeSwitchKey", out var key))
-                    {
-                        claudeModeSwitchKey = key.GetString() ?? "altM";
-                    }
-                }
-                if (s.TryGetProperty("sessions", out var sessionsSettings))
-                {
-                    if (sessionsSettings.TryGetProperty("sortMode", out var sortMode))
-                    {
-                        sessionSortMode = sortMode.GetString() ?? "createdAt";
-                    }
-                    if (sessionsSettings.TryGetProperty("showTerminalType", out var showTermType))
-                    {
-                        showTerminalType = showTermType.GetBoolean();
-                    }
-                    if (sessionsSettings.TryGetProperty("showGitInfo", out var showGit))
-                    {
-                        showGitInfo = showGit.GetBoolean();
-                    }
-                    if (sessionsSettings.TryGetProperty("hideInputPanel", out var hidePanel))
-                    {
-                        hideInputPanel = hidePanel.GetBoolean();
-                    }
-                }
-                if (s.TryGetProperty("devTools", out var devTools))
-                {
-                    if (devTools.TryGetProperty("enabled", out var enabled))
-                    {
-                        devToolsEnabled = enabled.GetBoolean();
-                    }
-                }
-                if (s.TryGetProperty("general", out var general))
-                {
-                    if (general.TryGetProperty("defaultFolderPath", out var path))
-                    {
-                        defaultFolderPath = path.GetString() ?? "";
-                    }
-                }
-            }
+            // ファイルから設定を読み込み
+            var settings = AppSettingsService.GetSettings();
+
+            // 通知設定
+            browserNotificationEnabled = settings.Notifications.EnableBrowserNotifications;
+            thresholdSeconds = settings.Notifications.ProcessingTimeThresholdSeconds;
+
+            // Webhook設定
+            webHookEnabled = settings.Webhook.Enabled;
+            webHookUrl = settings.Webhook.Url ?? "";
+
+            // Claude Hook設定
+            claudeHookEnabled = settings.ClaudeHook.Enabled;
+            hookEventStop = settings.ClaudeHook.Events.Stop;
+            hookEventUserPromptSubmit = settings.ClaudeHook.Events.UserPromptSubmit;
+            hookEventNotification = settings.ClaudeHook.Events.Notification;
+
+            // 特殊設定
+            claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
+
+            // セッション表示設定
+            sessionSortMode = settings.Sessions.SortMode;
+            showTerminalType = settings.Sessions.ShowTerminalType;
+            showGitInfo = settings.Sessions.ShowGitInfo;
+            hideInputPanel = settings.Sessions.HideInputPanel;
+
+            // 開発ツール設定
+            devToolsEnabled = settings.DevTools.Enabled;
+
+            // 一般設定
+            defaultFolderPath = settings.General.DefaultFolderPath;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"設定読み込みエラー: {ex.Message}");
-            // デフォルト値を使用
-            thresholdSeconds = 5;
-            webHookEnabled = false;
-            webHookUrl = "";
-            claudeModeSwitchKey = "altM";
-            sessionSortMode = "createdAt";
-            showTerminalType = false;
-            showGitInfo = false;
-            devToolsEnabled = false;
-            defaultFolderPath = "";
+            // デフォルト値を使用（AppSettingsのデフォルトコンストラクタの値）
         }
     }
     
@@ -983,28 +915,50 @@
                 }
             }
 
-            // LocalStorageに設定を保存
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateNotificationSettings",
-                browserNotificationEnabled, thresholdSeconds);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateWebhookSettings",
-                webHookEnabled, webHookUrl, null);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateClaudeHookSettings",
-                claudeHookEnabled, hookEventStop, hookEventUserPromptSubmit, hookEventNotification);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSpecialSettings",
-                claudeModeSwitchKey);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateSessionSettings",
-                sessionSortMode, showTerminalType, showGitInfo, hideInputPanel);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateDevToolsSettings",
-                devToolsEnabled);
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.updateGeneralSettings",
-                defaultFolderPath);
-
-            // サーバー側のWebhook設定も保存（Hook通知用）
-            WebhookSettingsService.SaveSettings(new WebhookSettings
+            // ファイルに設定を保存
+            var settings = new AppSettings
             {
-                Enabled = webHookEnabled,
-                Url = webHookUrl ?? ""
-            });
+                Notifications = new NotificationSettings
+                {
+                    EnableBrowserNotifications = browserNotificationEnabled,
+                    ProcessingTimeThresholdSeconds = thresholdSeconds
+                },
+                Webhook = new WebhookSettings
+                {
+                    Enabled = webHookEnabled,
+                    Url = webHookUrl ?? ""
+                },
+                ClaudeHook = new ClaudeHookSettings
+                {
+                    Enabled = claudeHookEnabled,
+                    Events = new ClaudeHookEvents
+                    {
+                        Stop = hookEventStop,
+                        UserPromptSubmit = hookEventUserPromptSubmit,
+                        Notification = hookEventNotification
+                    }
+                },
+                Special = new SpecialSettings
+                {
+                    ClaudeModeSwitchKey = claudeModeSwitchKey
+                },
+                Sessions = new SessionDisplaySettings
+                {
+                    SortMode = sessionSortMode,
+                    ShowTerminalType = showTerminalType,
+                    ShowGitInfo = showGitInfo,
+                    HideInputPanel = hideInputPanel
+                },
+                DevTools = new DevToolsSettings
+                {
+                    Enabled = devToolsEnabled
+                },
+                General = new GeneralSettings
+                {
+                    DefaultFolderPath = defaultFolderPath
+                }
+            };
+            AppSettingsService.SaveSettings(settings);
 
             // セッションソートモードの変更を通知
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);

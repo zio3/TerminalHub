@@ -88,8 +88,8 @@ builder.Services.AddScoped<ConPtyConnectionService>();
 // HttpClientFactoryを登録（WebHook用）
 builder.Services.AddHttpClient();
 
-// WebhookSettingsServiceを登録（Singleton - ファイルベース）
-builder.Services.AddSingleton<IWebhookSettingsService, WebhookSettingsService>();
+// AppSettingsServiceを登録（Singleton - ファイルベース）
+builder.Services.AddSingleton<IAppSettingsService, AppSettingsService>();
 
 // HookNotificationServiceを登録
 builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();

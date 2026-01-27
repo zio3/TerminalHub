@@ -10,34 +10,33 @@ namespace TerminalHub.Services
 {
     public class NotificationService : INotificationService
     {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNameCaseInsensitive = true
-        };
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<NotificationService> _logger;
+        private readonly IAppSettingsService _appSettingsService;
 
         public NotificationService(
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory,
             IJSRuntime jsRuntime,
-            ILogger<NotificationService> logger)
+            ILogger<NotificationService> logger,
+            IAppSettingsService appSettingsService)
         {
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
             _jsRuntime = jsRuntime;
             _logger = logger;
+            _appSettingsService = appSettingsService;
         }
 
         public async Task NotifyProcessingCompleteAsync(SessionInfo session, int elapsedSeconds)
         {
-            // LocalStorageから設定を取得
-            var notificationSettings = await GetNotificationSettingsAsync();
-            var webhookSettings = await GetWebhookSettingsAsync();
-            
-            var thresholdSeconds = notificationSettings?.ProcessingTimeThresholdSeconds ?? 60;
+            // 設定を取得
+            var notificationSettings = GetNotificationSettings();
+            var webhookSettings = GetWebhookSettings();
+
+            var thresholdSeconds = notificationSettings.ProcessingTimeThresholdSeconds;
 
             // 閾値を超えていない場合は通知しない（0秒設定の場合は常に通知）
             if (thresholdSeconds > 0 && elapsedSeconds < thresholdSeconds)
@@ -47,13 +46,13 @@ namespace TerminalHub.Services
             }
 
             // ブラウザ通知
-            if (notificationSettings?.EnableBrowserNotifications == true)
+            if (notificationSettings.EnableBrowserNotifications)
             {
                 await SendBrowserNotificationAsync(session, elapsedSeconds);
             }
 
             // WebHook通知
-            if (webhookSettings?.Enabled == true)
+            if (webhookSettings.Enabled)
             {
                 await SendWebHookNotificationAsync(session, elapsedSeconds, webhookSettings);
             }
@@ -101,38 +100,14 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task<NotificationSettings?> GetNotificationSettingsAsync()
+        private NotificationSettings GetNotificationSettings()
         {
-            try
-            {
-                var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getNotificationSettings");
-                if (settingsObj == null) return null;
-
-                var settingsJson = JsonSerializer.Serialize(settingsObj);
-                return JsonSerializer.Deserialize<NotificationSettings>(settingsJson, JsonOptions);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "通知設定の取得に失敗しました");
-                return null;
-            }
+            return _appSettingsService.GetSettings().Notifications;
         }
 
-        private async Task<WebhookSettings?> GetWebhookSettingsAsync()
+        private WebhookSettings GetWebhookSettings()
         {
-            try
-            {
-                var settingsObj = await _jsRuntime.InvokeAsync<object>("terminalHubHelpers.getWebhookSettings");
-                if (settingsObj == null) return null;
-
-                var settingsJson = JsonSerializer.Serialize(settingsObj);
-                return JsonSerializer.Deserialize<WebhookSettings>(settingsJson, JsonOptions);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Webhook設定の取得に失敗しました");
-                return null;
-            }
+            return _appSettingsService.GetSettings().Webhook;
         }
 
         /// <summary>
@@ -140,9 +115,9 @@ namespace TerminalHub.Services
         /// </summary>
         public async Task NotifyProcessingStartAsync(SessionInfo session)
         {
-            var webhookSettings = await GetWebhookSettingsAsync();
+            var webhookSettings = GetWebhookSettings();
 
-            if (webhookSettings?.Enabled != true || string.IsNullOrEmpty(webhookSettings.Url))
+            if (!webhookSettings.Enabled || string.IsNullOrEmpty(webhookSettings.Url))
             {
                 return;
             }
@@ -222,21 +197,5 @@ namespace TerminalHub.Services
                 _logger.LogError(ex, $"WebHook通知の送信に失敗しました ({eventType})");
             }
         }
-    }
-
-    public class NotificationSettings
-    {
-        public bool EnableBrowserNotifications { get; set; } = true;
-        public int ProcessingTimeThresholdSeconds { get; set; } = 5;
-    }
-
-    public class WebhookSettings
-    {
-        public bool Enabled { get; set; } = false;
-        public string Url { get; set; } = "";
-        public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string> 
-        { 
-            { "Content-Type", "application/json" } 
-        };
     }
 }
