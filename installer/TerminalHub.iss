@@ -66,6 +66,7 @@ Source: "TerminalHub-App.bat"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 ; スタートメニュー - バッチファイルを使用
 Name: "{group}\{#MyAppName}"; Filename: "{app}\TerminalHub.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
+Name: "{group}\{#MyAppName} (App Mode)"; Filename: "{app}\TerminalHub-App.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 
 ; デスクトップ - バッチファイルを使用
