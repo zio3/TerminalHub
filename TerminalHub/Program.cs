@@ -97,6 +97,9 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
+// VersionCheckServiceを登録
+builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
+
 // ExternalAuthSettings を登録（外部アクセス時のBasic認証用）
 // auth.json から読み込む（インストールフォルダに配置、更新時に上書きされない）
 var authFilePath = Path.Combine(AppContext.BaseDirectory, "auth.json");

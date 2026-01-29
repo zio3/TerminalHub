@@ -36,7 +36,7 @@ jobs:
           Set-Content $issPath $content -NoNewline
 
       - name: Publish application
-        run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish
+        run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
 
       - name: Install Inno Setup
         shell: pwsh
