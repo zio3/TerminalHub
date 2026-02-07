@@ -15,16 +15,19 @@ namespace TerminalHub.Analyzers
         //     ✢ Pondering… (esc to interrupt · thought for 3s)
         //     * Honking… (ctrl+c to interrupt · 39s · ↓ 941 tokens · thought for 16s)
         //     · Jitterbugging… (ctrl+c to interrupt)
+        //     ✻ Docker ビルド & テスト中… (1m 24s · ↓ 0 tokens)
+        //     ✻ Docker ビルド & テスト中… (running stop hook)
         private static readonly Regex ProcessingPatternFull = new Regex(
-            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\((?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?\)",
+            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\((?:(?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?|[^)]+)\)",
             RegexOptions.Compiled);
 
         // 処理中パターン（簡易形）- ジッター対策で部分更新が来る場合用
-        // スピナー文字 + ステータステキスト（…で終わる）のみでマッチ
+        // スピナー文字 + ステータステキスト（…で終わる）でマッチ
         // 例: ✢ Boondoggling…
         //     * Harmonizing…
+        //     ✶ Docker ビルド & テスト中…  (タスク名の場合は複数単語)
         private static readonly Regex ProcessingPatternSimple = new Regex(
-            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*(\S+…)",
+            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*(.+?…)",
             RegexOptions.Compiled);
 
         // 中断パターン
@@ -83,10 +86,18 @@ namespace TerminalHub.Analyzers
 
         /// <summary>
         /// データにスピナー文字（アニメーションパターン）が含まれているかを判定
+        /// Synchronized Outputシーケンスも処理中の画面更新として検出
         /// </summary>
         public bool ContainsAnimationPattern(string data)
         {
-            return data.IndexOfAny(SpinnerCharacters) >= 0;
+            if (data.IndexOfAny(SpinnerCharacters) >= 0)
+                return true;
+
+            // Synchronized Output（処理中の画面更新に頻出）
+            if (data.Contains("\x1B[?2026h") || data.Contains("\x1B[?2026l"))
+                return true;
+
+            return false;
         }
     }
 }

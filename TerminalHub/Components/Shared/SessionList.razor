@@ -1,3 +1,4 @@
+@using System.IO
 @using TerminalHub.Models
 @using TerminalHub.Constants
 
@@ -96,6 +97,12 @@
                                 </span>
                             }
                             <span class="@GetConnectionOpacityClass(session)">@session.GetDisplayName()</span>
+                            @if (!string.IsNullOrEmpty(session.FolderPath) && !Directory.Exists(session.FolderPath))
+                            {
+                                <span class="text-warning ms-1" title="ディレクトリが見つかりません: @session.FolderPath">
+                                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem;"></i>
+                                </span>
+                            }
                             @if (ShowTerminalType && session.TerminalType != TerminalType.Terminal)
                             {
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>

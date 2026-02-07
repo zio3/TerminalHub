@@ -1,3 +1,4 @@
+@using System.IO
 @using TerminalHub.Models
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
@@ -14,23 +15,52 @@
                         <div class="input-group input-group-sm">
                             <span class="input-group-text"><i class="bi bi-search"></i></span>
                             <input type="text" class="form-control" placeholder="アーカイブを検索..."
-                                   @bind="searchText" @bind:event="oninput" />
+                                   value="@searchText" @oninput="OnSearchTextChanged" />
                             @if (!string.IsNullOrEmpty(searchText))
                             {
-                                <button class="btn btn-outline-secondary" type="button" @onclick="() => searchText = string.Empty">
+                                <button class="btn btn-outline-secondary" type="button" @onclick="ClearSearch">
                                     <i class="bi bi-x"></i>
                                 </button>
                             }
                         </div>
                     </div>
 
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="form-check me-3">
+                            <input type="checkbox" class="form-check-input" id="selectAllArchived"
+                                   checked="@IsAllSelected"
+                                   @onchange="ToggleSelectAll" />
+                            <label class="form-check-label small" for="selectAllArchived">全選択</label>
+                        </div>
+                        @if (selectedSessionIds.Count > 0)
+                        {
+                            <span class="small text-muted me-2">@selectedSessionIds.Count 件選択中</span>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="ConfirmDeleteSelected">
+                                <i class="bi bi-trash me-1"></i>選択を削除
+                            </button>
+                        }
+                    </div>
+
                     <div class="list-group">
-                        @foreach (var session in GetFilteredArchivedSessions())
+                        @foreach (var session in _cachedFilteredSessions)
                         {
                             <div class="list-group-item">
                                 <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div class="form-check me-2" @onclick:stopPropagation="true">
+                                        <input type="checkbox" class="form-check-input"
+                                               checked="@selectedSessionIds.Contains(session.SessionId)"
+                                               @onchange="() => ToggleSelection(session.SessionId)" />
+                                    </div>
                                     <div class="flex-grow-1">
-                                        <h6 class="mb-1">@session.GetDisplayName()</h6>
+                                        <h6 class="mb-1">
+                                            @session.GetDisplayName()
+                                            @if (!string.IsNullOrEmpty(session.FolderPath) && !Directory.Exists(session.FolderPath))
+                                            {
+                                                <span class="text-warning ms-1" title="ディレクトリが見つかりません">
+                                                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem;"></i>
+                                                </span>
+                                            }
+                                        </h6>
                                         <small class="text-muted">
                                             <i class="bi bi-folder me-1"></i>@session.FolderPath
                                         </small>
@@ -57,7 +87,7 @@
                         }
                     </div>
 
-                    @if (!GetFilteredArchivedSessions().Any())
+                    @if (!_cachedFilteredSessions.Any())
                     {
                         <div class="text-center text-muted py-3">
                             <i class="bi bi-search"></i> 検索結果がありません
@@ -104,6 +134,10 @@
                     {
                         <p>すべてのアーカイブ済みセッション（@ArchivedSessions.Count 件）を完全に削除しますか？</p>
                     }
+                    else if (deleteSelectedMode)
+                    {
+                        <p>選択した @selectedSessionIds.Count 件のアーカイブ済みセッションを完全に削除しますか？</p>
+                    }
                     else
                     {
                         <p>「@sessionToDelete?.GetDisplayName()」を完全に削除しますか？</p>
@@ -131,23 +165,33 @@
     private string searchText = string.Empty;
     private bool showDeleteConfirm = false;
     private bool deleteAllMode = false;
+    private bool deleteSelectedMode = false;
     private SessionInfo? sessionToDelete = null;
     private bool isMouseDownOnBackdrop = false;
+    private HashSet<Guid> selectedSessionIds = new();
+    private List<SessionInfo> _cachedFilteredSessions = new();
 
-    private List<SessionInfo> GetFilteredArchivedSessions()
+    protected override void OnParametersSet()
+    {
+        RefreshFilteredSessions();
+    }
+
+    private void RefreshFilteredSessions()
     {
         if (string.IsNullOrWhiteSpace(searchText))
         {
-            return ArchivedSessions.OrderByDescending(s => s.ArchivedAt).ToList();
+            _cachedFilteredSessions = ArchivedSessions.OrderByDescending(s => s.ArchivedAt).ToList();
         }
-
-        var filter = searchText.Trim().ToLowerInvariant();
-        return ArchivedSessions
-            .Where(s => s.GetDisplayName().ToLowerInvariant().Contains(filter) ||
-                       (!string.IsNullOrEmpty(s.Memo) && s.Memo.ToLowerInvariant().Contains(filter)) ||
-                       (!string.IsNullOrEmpty(s.FolderPath) && s.FolderPath.ToLowerInvariant().Contains(filter)))
-            .OrderByDescending(s => s.ArchivedAt)
-            .ToList();
+        else
+        {
+            var filter = searchText.Trim().ToLowerInvariant();
+            _cachedFilteredSessions = ArchivedSessions
+                .Where(s => s.GetDisplayName().ToLowerInvariant().Contains(filter) ||
+                           (!string.IsNullOrEmpty(s.Memo) && s.Memo.ToLowerInvariant().Contains(filter)) ||
+                           (!string.IsNullOrEmpty(s.FolderPath) && s.FolderPath.ToLowerInvariant().Contains(filter)))
+                .OrderByDescending(s => s.ArchivedAt)
+                .ToList();
+        }
     }
 
     private async Task RestoreSession(Guid sessionId)
@@ -159,6 +203,7 @@
     {
         sessionToDelete = session;
         deleteAllMode = false;
+        deleteSelectedMode = false;
         showDeleteConfirm = true;
     }
 
@@ -166,13 +211,65 @@
     {
         sessionToDelete = null;
         deleteAllMode = true;
+        deleteSelectedMode = false;
         showDeleteConfirm = true;
+    }
+
+    private void ConfirmDeleteSelected()
+    {
+        if (selectedSessionIds.Count == 0) return;
+        sessionToDelete = null;
+        deleteAllMode = false;
+        deleteSelectedMode = true;
+        showDeleteConfirm = true;
+    }
+
+    private void ToggleSelection(Guid id)
+    {
+        if (!selectedSessionIds.Remove(id))
+        {
+            selectedSessionIds.Add(id);
+        }
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (IsAllSelected)
+        {
+            foreach (var s in _cachedFilteredSessions)
+            {
+                selectedSessionIds.Remove(s.SessionId);
+            }
+        }
+        else
+        {
+            foreach (var s in _cachedFilteredSessions)
+            {
+                selectedSessionIds.Add(s.SessionId);
+            }
+        }
+    }
+
+    private bool IsAllSelected =>
+        _cachedFilteredSessions.Count > 0 && _cachedFilteredSessions.All(s => selectedSessionIds.Contains(s.SessionId));
+
+    private void OnSearchTextChanged(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        RefreshFilteredSessions();
+    }
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        RefreshFilteredSessions();
     }
 
     private void CancelDelete()
     {
         showDeleteConfirm = false;
         deleteAllMode = false;
+        deleteSelectedMode = false;
         sessionToDelete = null;
     }
 
@@ -182,6 +279,15 @@
         {
             await OnDeleteAllSessions.InvokeAsync();
         }
+        else if (deleteSelectedMode)
+        {
+            var idsToDelete = selectedSessionIds.ToList();
+            foreach (var id in idsToDelete)
+            {
+                await OnDeleteSession.InvokeAsync(id);
+            }
+            selectedSessionIds.Clear();
+        }
         else if (sessionToDelete != null)
         {
             await OnDeleteSession.InvokeAsync(sessionToDelete.SessionId);
@@ -189,12 +295,14 @@
 
         showDeleteConfirm = false;
         deleteAllMode = false;
+        deleteSelectedMode = false;
         sessionToDelete = null;
     }
 
     private async Task Close()
     {
         searchText = string.Empty;
+        selectedSessionIds.Clear();
         await OnClose.InvokeAsync();
     }
 

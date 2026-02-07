@@ -214,11 +214,10 @@ namespace TerminalHub.Services
                     ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
             
-                // フォルダが存在することを確認
+                // フォルダが存在しない場合は警告ログ（セッション情報は登録する）
                 if (!Directory.Exists(folderPath))
                 {
-                    _logger.LogError($"Directory not found: {folderPath}");
-                    throw new DirectoryNotFoundException($"指定されたフォルダが見つかりません: {folderPath}");
+                    _logger.LogWarning("Directory not found: {FolderPath} - セッション情報は登録しますが、接続時にエラーになります", folderPath);
                 }
             
             var sessionInfo = new SessionInfo

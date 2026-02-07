@@ -37,6 +37,8 @@ public class SessionTimerService : ISessionTimerService, IDisposable
 
     public void ResetSessionTimer(Guid sessionId)
     {
+        if (_disposed) return;
+
         lock (_timerLock)
         {
             // 既存のタイマーを停止
@@ -46,11 +48,13 @@ public class SessionTimerService : ISessionTimerService, IDisposable
                 _sessionProcessingTimers.Remove(sessionId);
             }
 
-            // 新しいタイマーを作成（5秒後にタイムアウト）
+            // 新しいタイマーを作成（8秒後にタイムアウト）
+            // 新しいClaude CodeフォーマットではTask一覧やステータスバーの描画で
+            // スピナー文字を含まないチャンクが続く場合があるため余裕を持たせる
             var timer = new Timer(
                 (state) => CheckSessionTimeout(sessionId),
                 null,
-                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(8),
                 Timeout.InfiniteTimeSpan
             );
 

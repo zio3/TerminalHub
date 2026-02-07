@@ -343,9 +343,13 @@
     private List<string> geminiModelList = new();
     private string newGeminiModelName = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadGeminiModelsAsync();
+        if (firstRender)
+        {
+            await LoadGeminiModelsAsync();
+            StateHasChanged();
+        }
     }
 
     private async Task LoadGeminiModelsAsync()

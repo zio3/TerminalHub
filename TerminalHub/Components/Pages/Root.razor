@@ -491,20 +491,42 @@
             StateHasChanged();
 
             // Phase 2: バックグラウンドでGit情報を取得（UIを先に表示した後）
+            // HasSessions()がtrueの場合もGit情報が未取得のセッションを対象に含める
+            if (sessionsToPopulateGitInfo.Count == 0)
+            {
+                foreach (var session in sessions.Where(s => !s.IsArchived && !s.IsGitRepository && !string.IsNullOrEmpty(s.FolderPath) && Directory.Exists(s.FolderPath)))
+                {
+                    sessionsToPopulateGitInfo.Add(session.SessionId);
+                }
+            }
             if (sessionsToPopulateGitInfo.Count > 0)
             {
                 _ = Task.Run(async () =>
                 {
-                    // 並列でGit情報を取得
-                    var tasks = sessionsToPopulateGitInfo.Select(async sessionId =>
+                    try
                     {
-                        await SessionManager.PopulateGitInfoForSessionAsync(sessionId);
-                    });
+                        // 各セッションのGit情報を並列で取得し、完了次第UIを更新
+                        var tasks = sessionsToPopulateGitInfo.Select(async sessionId =>
+                        {
+                            try
+                            {
+                                await SessionManager.PopulateGitInfoForSessionAsync(sessionId);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogWarning(ex, "セッション {SessionId} のGit情報取得に失敗", sessionId);
+                            }
+                        });
 
-                    await Task.WhenAll(tasks);
+                        await Task.WhenAll(tasks);
 
-                    // Git情報取得完了後にUIを更新
-                    await InvokeAsync(StateHasChanged);
+                        // Git情報取得完了後にUIを更新
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "バックグラウンドGit情報取得でエラーが発生");
+                    }
                 });
             }
         }
@@ -808,6 +830,16 @@
         activeSessionId = sessionId;
 
 
+        // ディレクトリが存在しないセッションは接続を試みない
+        var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+        if (sessionInfo != null && !string.IsNullOrEmpty(sessionInfo.FolderPath) && !Directory.Exists(sessionInfo.FolderPath))
+        {
+            Logger.LogWarning("セッション {SessionId} のディレクトリが存在しません: {FolderPath}", sessionId, sessionInfo.FolderPath);
+            toast?.ShowError($"ディレクトリが見つかりません: {sessionInfo.FolderPath}");
+            activeSessionId = null;
+            return;
+        }
+
         // 再起動後の新しいセッションを確実に取得
         try
         {
@@ -816,6 +848,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "セッション {SessionId} の初期化に失敗", sessionId);
+            toast?.ShowError($"セッション初期化エラー: {ex.Message}");
             activeSession = null;
         }
 

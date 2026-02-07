@@ -377,7 +377,18 @@ namespace TerminalHub.Services
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
-                await process.WaitForExitAsync();
+                // タイムアウト付きで待機（10秒）
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                try
+                {
+                    await process.WaitForExitAsync(cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    try { process.Kill(); } catch { }
+                    _logger.LogWarning("Gitコマンドがタイムアウトしました: git {Arguments} in {WorkingDirectory}", arguments, workingDirectory);
+                    return (false, null, "タイムアウト");
+                }
 
                 var output = outputBuilder.ToString();
                 var error = errorBuilder.ToString();
