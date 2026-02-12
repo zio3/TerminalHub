@@ -8,7 +8,7 @@ namespace TerminalHub.Services
         /// <summary>
         /// ターミナルを初期化する
         /// </summary>
-        Task<IJSObjectReference?> InitializeTerminalAsync(Guid sessionId, DotNetObjectReference<object> dotNetRef);
+        Task<IJSObjectReference?> InitializeTerminalAsync(Guid sessionId, DotNetObjectReference<object> dotNetRef, int fontSize = 14);
 
         /// <summary>
         /// ターミナルを破棄する

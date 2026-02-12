@@ -335,28 +335,29 @@ function setupContextMenuAndIME(element, sessionId) {
 
 window.terminalFunctions = {
     // マルチセッション用のターミナル作成関数
-    createMultiSessionTerminal: function(terminalId, sessionId, dotNetRef) {
-        console.log(`[JS] createMultiSessionTerminal開始: terminalId=${terminalId}, sessionId=${sessionId}`);
-        
+    createMultiSessionTerminal: function(terminalId, sessionId, dotNetRef, fontSize) {
+        console.log(`[JS] createMultiSessionTerminal開始: terminalId=${terminalId}, sessionId=${sessionId}, fontSize=${fontSize}`);
+
         // 初期化
         if (!window.multiSessionTerminals) {
             window.multiSessionTerminals = {};
             console.log(`[JS] createMultiSessionTerminal: multiSessionTerminals初期化`);
         }
-        
+
         // 既存のターミナルがあれば警告
         if (window.multiSessionTerminals[sessionId]) {
             console.warn(`[JS] ★★★ 警告: セッション ${sessionId} のターミナルは既に存在します！`);
             const existing = window.multiSessionTerminals[sessionId];
             console.log(`[JS] 既存ターミナル状態: term=${!!existing.term}, disposed=${existing.disposed}`);
         }
-        
+
         const Terminal = window.Terminal;
         const FitAddon = window.FitAddon.FitAddon;
-        
+
         // モバイル判定でフォントサイズを調整（768px以下で2/3サイズ）
         const isMobile = window.innerWidth <= 768;
-        const terminalFontSize = isMobile ? 9 : 14;
+        const baseFontSize = (typeof fontSize === 'number' && fontSize > 0) ? fontSize : 14;
+        const terminalFontSize = isMobile ? Math.round(baseFontSize * 2 / 3) : baseFontSize;
 
         const term = new Terminal({
             cursorBlink: true,
@@ -915,6 +916,32 @@ window.terminalFunctions = {
                 term.scrollToLine(terminalInfo.scrollPosition);
             }
         }
+    },
+
+    // 全ターミナルのフォントサイズを一括更新
+    updateAllTerminalFontSizes: function(fontSize) {
+        if (!window.multiSessionTerminals) return;
+
+        const isMobile = window.innerWidth <= 768;
+        const actualSize = isMobile ? Math.round(fontSize * 2 / 3) : fontSize;
+
+        for (const sessionId of Object.keys(window.multiSessionTerminals)) {
+            const terminalInfo = window.multiSessionTerminals[sessionId];
+            if (terminalInfo && terminalInfo.terminal) {
+                terminalInfo.terminal.options.fontSize = actualSize;
+
+                // 表示中のターミナルのみfit()を実行（非表示はResizeObserverに委譲）
+                const element = terminalInfo.terminal.element;
+                if (element && element.offsetParent !== null && terminalInfo.fitAddon) {
+                    try {
+                        terminalInfo.fitAddon.fit();
+                    } catch (e) {
+                        console.log(`[JS] updateAllTerminalFontSizes: fit()エラー sessionId=${sessionId}: ${e.message}`);
+                    }
+                }
+            }
+        }
+        console.log(`[JS] updateAllTerminalFontSizes: fontSize=${fontSize}, actualSize=${actualSize}`);
     }
 };
 

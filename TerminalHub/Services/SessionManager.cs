@@ -817,9 +817,11 @@ namespace TerminalHub.Services
 
                 // セッション再作成時はバッファと状態をクリア
                 sessionInfo.ClearTerminalBuffer();
+                sessionInfo.ProcessingStatus = null;
                 sessionInfo.ProcessingStartTime = null;
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
+                sessionInfo.IsWaitingForUserInput = false;
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
@@ -859,9 +861,11 @@ namespace TerminalHub.Services
 
                 // セッション再起動時はバッファと状態をクリア
                 sessionInfo.ClearTerminalBuffer();
+                sessionInfo.ProcessingStatus = null;
                 sessionInfo.ProcessingStartTime = null;
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
+                sessionInfo.IsWaitingForUserInput = false;
 
                 // セッション再起動時は HasContinueErrorOccurred フラグをリセット
                 // （新しいセッションで --continue を再度試行できるようにする）

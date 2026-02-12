@@ -119,6 +119,48 @@
                                     </small>
                                 </div>
 
+                                <div class="mb-4">
+                                    <label class="form-label">セッションリスト表示倍率</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="0.5" max="1.5" step="0.05"
+                                               value="@sessionListScale"
+                                               @oninput="OnSessionListScaleSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 50px;">@((sessionListScale * 100).ToString("0"))%</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        セッションリストの表示倍率を調整します（50%〜150%）。
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">ターミナルフォントサイズ</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="8" max="28" step="1"
+                                               value="@terminalFontSize"
+                                               @oninput="OnTerminalFontSizeSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 50px;">@(terminalFontSize)px</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        ターミナルのフォントサイズを調整します（8px〜28px）。
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">ターミナル / 入力パネル比率</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="50" max="90" step="5"
+                                               value="@terminalHeightPercent"
+                                               @oninput="OnTerminalHeightPercentSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 80px;">@(terminalHeightPercent) / @(100 - terminalHeightPercent)</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。
+                                    </small>
+                                </div>
+
                                 <hr />
 
                                 <div class="mb-4">
@@ -748,6 +790,9 @@
     private bool hideInputPanel = false;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
+    private double sessionListScale = 1.0;
+    private int terminalFontSize = 14;
+    private int terminalHeightPercent = 70;
 
     // バージョンチェック関連
     private string currentVersion = "";
@@ -778,6 +823,9 @@
     [Parameter] public string SessionSortMode { get; set; } = "createdAt";
     [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
     [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo, bool hideInputPanel)> OnSessionDisplaySettingsChanged { get; set; }
+    [Parameter] public EventCallback<double> OnSessionListScaleChanged { get; set; }
+    [Parameter] public EventCallback<int> OnTerminalFontSizeChanged { get; set; }
+    [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -841,6 +889,9 @@
 
             // 一般設定
             defaultFolderPath = settings.General.DefaultFolderPath;
+            sessionListScale = settings.General.SessionListScale;
+            terminalFontSize = settings.General.TerminalFontSize;
+            terminalHeightPercent = settings.General.TerminalHeightPercent;
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1033,7 +1084,10 @@
                 },
                 General = new GeneralSettings
                 {
-                    DefaultFolderPath = defaultFolderPath
+                    DefaultFolderPath = defaultFolderPath,
+                    SessionListScale = sessionListScale,
+                    TerminalFontSize = terminalFontSize,
+                    TerminalHeightPercent = terminalHeightPercent
                 }
             };
             AppSettingsService.SaveSettings(settings);
@@ -1046,6 +1100,15 @@
 
             // モード切替キーの変更を通知
             await OnClaudeModeSwitchKeyChanged.InvokeAsync(claudeModeSwitchKey);
+
+            // セッションリスト倍率の変更を通知
+            await OnSessionListScaleChanged.InvokeAsync(sessionListScale);
+
+            // ターミナルフォントサイズの変更を通知
+            await OnTerminalFontSizeChanged.InvokeAsync(terminalFontSize);
+
+            // ターミナル高さ比率の変更を通知
+            await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;
@@ -1068,6 +1131,33 @@
         }
     }
     
+    private async Task OnSessionListScaleSliderInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            sessionListScale = value;
+            await OnSessionListScaleChanged.InvokeAsync(sessionListScale);
+        }
+    }
+
+    private async Task OnTerminalFontSizeSliderInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            terminalFontSize = value;
+            await OnTerminalFontSizeChanged.InvokeAsync(terminalFontSize);
+        }
+    }
+
+    private async Task OnTerminalHeightPercentSliderInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            terminalHeightPercent = value;
+            await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
+        }
+    }
+
     private string GetNotificationBadgeClass()
     {
         return notificationStatus switch

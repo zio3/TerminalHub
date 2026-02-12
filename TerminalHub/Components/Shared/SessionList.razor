@@ -34,7 +34,7 @@
     <div class="mobile-sidebar-overlay" @onclick="CloseMobileSidebar"></div>
 }
 
-<div class="col-md-3 border-end bg-light p-3 d-flex flex-column session-list-sidebar @(IsMobileOpen ? "mobile-open" : "")" style="height: 100vh;">
+<div class="col-md-3 border-end bg-light p-3 d-flex flex-column session-list-sidebar @(IsMobileOpen ? "mobile-open" : "")" style="height: 100%; @GetScaleStyle()">
 
     <div class="mb-2">
         <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
@@ -200,6 +200,7 @@
     [Parameter] public bool ShowTerminalType { get; set; } = false;
     [Parameter] public bool ShowGitInfo { get; set; } = false;
     [Parameter] public bool IsMobileOpen { get; set; } = false;
+    [Parameter] public double Scale { get; set; } = 1.0;
 
     private string filterText = string.Empty;
 
@@ -418,5 +419,12 @@
 
         // 未接続または切断は薄く表示
         return "opacity-50";
+    }
+
+    private string GetScaleStyle()
+    {
+        if (Scale == 1.0) return "";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return $"zoom: {Scale.ToString(inv)};";
     }
 }

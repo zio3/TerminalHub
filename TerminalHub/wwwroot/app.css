@@ -183,7 +183,7 @@ h1:focus {
         max-width: 100% !important;
         flex: none !important;
         padding-top: 54px; /* トグルボタンの分だけ余白 */
-        height: calc(100dvh) !important;
+        height: 100% !important;
     }
 
     /* ターミナルセクション比率 - モバイル用 */

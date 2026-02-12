@@ -15,7 +15,7 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task<IJSObjectReference?> InitializeTerminalAsync(Guid sessionId, DotNetObjectReference<object> dotNetRef)
+        public async Task<IJSObjectReference?> InitializeTerminalAsync(Guid sessionId, DotNetObjectReference<object> dotNetRef, int fontSize = 14)
         {
             var terminalId = $"terminal-{sessionId}";
             _logger.LogDebug("[InitializeTerminal] 開始: terminalId={TerminalId}", terminalId);
@@ -38,7 +38,8 @@ namespace TerminalHub.Services
                     "terminalFunctions.createMultiSessionTerminal",
                     terminalId,
                     sessionId.ToString(),
-                    dotNetRef);
+                    dotNetRef,
+                    fontSize);
 
                 _logger.LogDebug("[InitializeTerminal] ターミナル作成成功");
                 return terminal;

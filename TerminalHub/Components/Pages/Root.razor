@@ -40,7 +40,10 @@
                 SessionSortMode="@sessionSortMode"
                 OnSessionSortModeChanged="HandleSessionSortModeChanged"
                 OnClaudeModeSwitchKeyChanged="HandleClaudeModeSwitchKeyChanged"
-                OnSessionDisplaySettingsChanged="HandleSessionDisplaySettingsChanged" />
+                OnSessionDisplaySettingsChanged="HandleSessionDisplaySettingsChanged"
+                OnSessionListScaleChanged="HandleSessionListScaleChanged"
+                OnTerminalFontSizeChanged="HandleTerminalFontSizeChanged"
+                OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -60,7 +63,7 @@
                         OnDeleteAllSessions="DeleteAllArchivedSessions"
                         OnClose="() => showArchivedSessionsDialog = false" />
 
-<div class="container-fluid h-100 main-container">
+<div class="container-fluid main-container">
     <div class="row h-100 main-layout">
         <!-- モバイル用サイドバートグルボタン -->
         <button class="mobile-sidebar-toggle" @onclick="ToggleMobileSidebar">
@@ -74,6 +77,7 @@
                      ShowTerminalType=@showTerminalType
                      ShowGitInfo=@showGitInfo
                      IsMobileOpen=@isMobileSidebarOpen
+                     Scale=@sessionListScale
                      NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
@@ -86,11 +90,11 @@
                      OnShowArchivedSessions="() => showArchivedSessionsDialog = true"
                      OnMobileSidebarClose="CloseMobileSidebar" />
 
-        <div class="col-md-9 p-0 position-relative terminal-main-area" style="height: 100vh; display: flex; flex-direction: column;">
+        <div class="col-md-9 p-0 position-relative terminal-main-area" style="height: 100%; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
             {
                 <!-- ターミナル部分 -->
-                <div class="terminal-section @(hideInputPanel ? "terminal-fullscreen" : "")" style="height: @(hideInputPanel ? "100%" : "70%"); overflow: hidden;">
+                <div class="terminal-section @(hideInputPanel ? "terminal-fullscreen" : "")" style="height: @(hideInputPanel ? "100%" : $"{terminalHeightPercent}%"); overflow: hidden;">
                     <div class="terminal-wrapper h-100">
                         @foreach (var session in sessions)
                         {
@@ -102,8 +106,8 @@
 
                 @if (!hideInputPanel)
                 {
-                <!-- WebUI部分 (30%) -->
-                <div class="bottom-panel-section" style="height: 30%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
+                <!-- WebUI部分 -->
+                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
@@ -210,6 +214,9 @@
     private bool showGitInfo = false; // Git情報を表示
     private bool hideInputPanel = false; // 入力パネルを非表示
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
+    private double sessionListScale = 1.0; // セッションリスト表示倍率
+    private int terminalFontSize = 14; // ターミナルフォントサイズ
+    private int terminalHeightPercent = 70; // ターミナル高さ比率
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
@@ -374,6 +381,9 @@
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
+                sessionListScale = appSettings.General.SessionListScale;
+                terminalFontSize = appSettings.General.TerminalFontSize;
+                terminalHeightPercent = appSettings.General.TerminalHeightPercent;
             }
             catch
             {
@@ -582,6 +592,31 @@
     private void HandleClaudeModeSwitchKeyChanged(string key)
     {
         claudeModeSwitchKey = key;
+        StateHasChanged();
+    }
+
+    private void HandleSessionListScaleChanged(double scale)
+    {
+        sessionListScale = scale;
+        StateHasChanged();
+    }
+
+    private async Task HandleTerminalFontSizeChanged(int fontSize)
+    {
+        terminalFontSize = fontSize;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalFunctions.updateAllTerminalFontSizes", fontSize);
+        }
+        catch (Exception)
+        {
+            // JS interopエラーは無視
+        }
+    }
+
+    private void HandleTerminalHeightPercentChanged(int percent)
+    {
+        terminalHeightPercent = percent;
         StateHasChanged();
     }
 
@@ -985,7 +1020,7 @@
 
     private async Task InitializeTerminal(Guid sessionId)
     {
-        activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, DotNetObjectReference.Create<object>(this));
+        activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, DotNetObjectReference.Create<object>(this), terminalFontSize);
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data)

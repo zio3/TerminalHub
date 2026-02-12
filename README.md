@@ -3,47 +3,89 @@
 [![GitHub Release](https://img.shields.io/github/v/release/zio3/TerminalHub)](https://github.com/zio3/TerminalHub/releases/latest)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
-TerminalHubは、Webブラウザから複数のターミナルセッションを管理できるBlazor Serverアプリケーションです。Windows ConPTY APIを使用して、本格的なターミナル体験を提供します。
+**Windows ネイティブで動く、AI CLI セッション管理 GUI ツール**
 
-## ダウンロード
+TerminalHub は、Claude Code / Gemini CLI / Codex CLI の複数セッションを GUI で一元管理できる Windows デスクトップアプリケーションです。Windows ConPTY API を使用し、tmux なしでセッション管理・状態監視・通知を実現します。
 
-**[最新版をダウンロード](https://github.com/zio3/TerminalHub/releases/latest)**
+**[最新版をダウンロード](https://github.com/zio3/TerminalHub/releases/latest)** | インストーラーを実行するだけで使用できます（.NET のインストール不要）
 
-インストーラーをダウンロードして実行するだけで使用できます。.NETのインストールは不要です。
+---
+
+## なぜ TerminalHub？
+
+macOS / Linux では tmux + claude-tmux 等で複数セッションを管理できますが、Windows ネイティブ環境では tmux が使えず、セッション管理の選択肢が限られています。
+
+| 課題 | TerminalHub の解決策 |
+|------|---------------------|
+| Windows Terminal のタブではセッション名・状態が区別できない | セッション名・処理状態・経過時間を一覧表示 |
+| tmux が使えないのでセッション管理ツールがない | GUI でセッション作成・切替・アーカイブ |
+| 長時間タスクの完了を画面に張り付いて確認している | 処理完了の通知 + Webhook 連携 |
+| git worktree の管理が全て手動 | GUI から worktree セッションをワンクリック作成 |
+| AI CLI ごとにオプション指定が面倒 | チェックボックスでオプション設定（承認モード、resume 等） |
+
+---
 
 ## 主な機能
 
 ### マルチセッション管理
-- 複数のターミナルセッションを同時に管理
-- セッションごとに独立したConPTYインスタンス
-- タブ切り替えで簡単にセッション間を移動
+
+- 複数のターミナルセッションを同時管理（セッション数の制限なし）
+- セッション名・メモの設定、検索フィルター
 - セッション状態の自動保存と復元
-- セッション検索フィルター機能
-
-### AI CLIツール対応
-- **Claude Code CLI**: トークン使用量と処理時間をリアルタイム表示
-- **Gemini CLI**: 出力解析と処理状態の可視化
-- 処理完了時の通知機能
-- タイムアウト検出（5秒間更新なし）
-
-### Git統合
-- Gitリポジトリの自動検出
-- ブランチ情報の表示
-- Git Worktree作成機能
-- ファイル変更状態のインジケーター
-
-### その他の機能
-- コマンド履歴（Ctrl+↑/↓でナビゲーション）
-- ターミナル内URLの自動検出とクリック対応
-- セッション展開状態の永続化
+- セッションのアーカイブ / 復元 / 一括削除
 - マルチブラウザ対応（同一セッションを複数ブラウザから操作可能）
+
+### AI CLI 統合
+
+| 機能 | Claude Code | Gemini CLI | Codex CLI |
+|------|:-----------:|:----------:|:---------:|
+| セッション管理 | o | o | o |
+| 処理状態のリアルタイム検出 | o | o | - |
+| トークン使用量 / 処理時間の表示 | o | o | - |
+| 処理完了通知 | o | o | o |
+| オプション GUI 設定 | o | o | o |
+
+- 処理中 / 待機中 / 入力待ちをリアルタイムで検出・表示
+- 非アクティブセッションの処理完了を通知ベルで表示
+- Webhook 通知でスマートフォンや外部サービスへ連携可能
+
+### Git 統合
+
+- Git リポジトリの自動検出とブランチ表示
+- 未コミット変更のインジケーター
+- GUI から Git Worktree セッションを作成
+- 親セッションと worktree セッションの親子関係表示
+
+### Webhook 通知
+
+セッションの処理開始・完了を外部に通知できます。
+
+```json
+{
+  "eventType": "complete",
+  "sessionName": "セッション名",
+  "terminalType": "ClaudeCode",
+  "elapsedSeconds": 123,
+  "timestamp": "2025-01-01T00:00:00Z",
+  "folderPath": "C:\\path\\to\\folder"
+}
+```
+
+### その他
+
+- コマンド履歴（Ctrl+Up/Down でナビゲーション）
+- ターミナル内 URL の自動検出とクリック対応
+- 存在しないディレクトリのセッションに警告表示
+- セッション初期化エラーのトースト通知
+
+---
 
 ## システム要件
 
-- Windows 10/11（ConPTY API使用のため）
+- Windows 10 / 11
 
 ### 開発者向け追加要件
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Node.js（オプション）
 
 ## インストール
@@ -57,11 +99,8 @@ TerminalHubは、Webブラウザから複数のターミナルセッションを
 ### 開発者向け（ソースから実行）
 
 ```powershell
-# リポジトリをクローン
 git clone https://github.com/zio3/TerminalHub.git
 cd TerminalHub
-
-# ビルド＆起動
 dotnet run --project TerminalHub/TerminalHub.csproj
 
 # または npm を使用
@@ -71,43 +110,28 @@ npm start
 ## 使い方
 
 ### セッションの作成
-1. 左側の「新しいセッションを作成」ボタンをクリック
-2. フォルダを選択（存在しないフォルダは自動作成可能）
-3. セッションタイプを選択（通常/Claude Code/Gemini）
+1. 「新しいセッションを作成」ボタンをクリック
+2. 作業フォルダを選択
+3. セッションタイプを選択（Terminal / Claude Code / Gemini CLI / Codex CLI）
 4. 必要に応じてオプションを設定
 
-### セッションの検索
-- セッションリスト上部の検索ボックスでセッション名やメモで絞り込み
+### セッションの管理
+- 左サイドバーでセッション一覧を確認・切替
+- 検索ボックスでセッション名やメモで絞り込み
+- 歯車アイコンからメモ設定・アーカイブ
+- 右クリックメニューから Worktree セッション作成
 
 ### キーボードショートカット
-- `Ctrl + ↑/↓`: コマンド履歴のナビゲーション
-- `Ctrl + C`: 選択テキストのコピー（選択なしの場合は中断）
-- `Ctrl + V`: ペースト
-
-## プロジェクト構造
-
-```
-TerminalHub/
-├── TerminalHub/              # メインプロジェクト
-│   ├── Components/          # Blazorコンポーネント
-│   │   ├── Pages/          # ページコンポーネント
-│   │   └── Shared/         # 共有コンポーネント
-│   ├── Services/           # ビジネスロジック
-│   ├── Models/             # データモデル
-│   ├── Helpers/            # ヘルパークラス
-│   └── wwwroot/           # 静的ファイル
-│       └── js/            # JavaScriptファイル
-├── installer/             # インストーラー関連ファイル
-├── .github/workflows/     # GitHub Actions（自動リリース）
-├── build-installer.bat    # インストーラービルドスクリプト
-├── package.json           # npm設定
-└── CLAUDE.md             # 開発者向けドキュメント
-```
+| キー | 動作 |
+|------|------|
+| `Ctrl + Up/Down` | コマンド履歴のナビゲーション |
+| `Ctrl + C` | 選択テキストのコピー（選択なしの場合は中断） |
+| `Ctrl + V` | ペースト |
 
 ## 技術スタック
 
 - **フロントエンド**: Blazor Server, XTerm.js
-- **バックエンド**: ASP.NET Core 9.0
+- **バックエンド**: ASP.NET Core (.NET 10.0)
 - **ターミナル**: Windows ConPTY API
 - **JavaScript**: XTerm.js, WebLinksAddon
 - **スタイリング**: Bootstrap 5
@@ -115,19 +139,12 @@ TerminalHub/
 
 ## 開発
 
-開発に関する詳細情報は[CLAUDE.md](CLAUDE.md)を参照してください。
-
-### インストーラーのビルド
-
-```powershell
-# Inno Setup 6 が必要
-./build-installer.bat
-```
+開発に関する詳細情報は [CLAUDE.md](CLAUDE.md) を参照してください。
 
 ## トラブルシューティング
 
 ### ターミナルが表示されない
-- Windows 10/11を使用しているか確認
+- Windows 10/11 を使用しているか確認
 - ブラウザのコンソールでエラーを確認
 
 ### セッションが保存されない
