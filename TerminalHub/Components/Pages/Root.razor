@@ -1071,6 +1071,26 @@
                 return;
             }
 
+            // Gemini CLIの場合、"Error resuming session"エラーをチェック
+            // --resume latest で再開するセッションが存在しない場合のエラーを検出し、オプションなしで再起動
+            if (sessionInfo.TerminalType == TerminalType.GeminiCLI &&
+                sessionInfo.ProcessingStartTime == null &&
+                IsGeminiResumeError(data) &&
+                sessionInfo.Options.ContainsKey("continue") &&
+                !sessionInfo.HasContinueErrorOccurred)
+            {
+                sessionInfo.HasContinueErrorOccurred = true;
+
+                Logger.LogInformation("'Error resuming session' エラーを検出しました。セッションを再作成します: SessionId={SessionId}",
+                    sessionId);
+
+                _ = InvokeAsync(async () =>
+                {
+                    await RecreateSessionWithoutContinue(sessionId);
+                });
+                return;
+            }
+
             // 処理中の場合、アニメーションパターン（スピナー文字）を検出したらタイムアウトを延長
             // ジッター対策により、完全なステータス行ではなく部分的な更新（スピナー文字のみ）が送られることがある
             OutputAnalyzerService.CheckAnimationPatternAndResetTimer(data, sessionInfo);
@@ -2291,6 +2311,33 @@
         }
 
         // これらのパターンに該当しない場合は実際のエラーメッセージと判断
+        return true;
+    }
+
+    private bool IsGeminiResumeError(string data)
+    {
+        if (!data.Contains("Error resuming session"))
+            return false;
+
+        // 行番号パターン（diff出力やgrep -nなど）を検出
+        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^\s*\d+\s+", System.Text.RegularExpressions.RegexOptions.Multiline))
+        {
+            return false;
+        }
+
+        // diffの変更行マーカーを検出
+        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^[+-]\s", System.Text.RegularExpressions.RegexOptions.Multiline))
+        {
+            return false;
+        }
+
+        // 引用符で囲まれた文字列パターンを検出
+        if (data.Contains("\"Error resuming session\"") ||
+            data.Contains("'Error resuming session'"))
+        {
+            return false;
+        }
+
         return true;
     }
 
