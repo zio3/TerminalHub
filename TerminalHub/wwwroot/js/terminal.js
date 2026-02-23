@@ -518,6 +518,29 @@ window.terminalFunctions = {
             
             // URL検出機能を追加
             setupUrlDetection(term);
+
+            // Unicode11Addonをロード（ブロック文字の幅計算を改善）
+            if (typeof Unicode11Addon !== 'undefined' && Unicode11Addon.Unicode11Addon) {
+                try {
+                    const unicode11Addon = new Unicode11Addon.Unicode11Addon();
+                    term.loadAddon(unicode11Addon);
+                    term.unicode.activeVersion = '11';
+                    console.log('[Unicode11] Unicode11Addon loaded successfully');
+                } catch (error) {
+                    console.error('[Unicode11] Failed to load Unicode11Addon:', error);
+                }
+            }
+
+            // CanvasAddonをロード（ブロック文字をCanvas描画で正確にレンダリング）
+            if (typeof CanvasAddon !== 'undefined' && CanvasAddon.CanvasAddon) {
+                try {
+                    const canvasAddon = new CanvasAddon.CanvasAddon();
+                    term.loadAddon(canvasAddon);
+                    console.log('[CanvasAddon] CanvasAddon loaded successfully');
+                } catch (error) {
+                    console.error('[CanvasAddon] Failed to load CanvasAddon:', error);
+                }
+            }
             
             // スクロール関数をオーバーライドしてログを追加
             const originalScrollToBottom = term.scrollToBottom.bind(term);
