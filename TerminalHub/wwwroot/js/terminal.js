@@ -768,6 +768,11 @@ window.terminalFunctions = {
                             terminal.appendChild(termObj.terminal.element);
                         }
                         
+                        // Canvas描画の復元（スリープ復帰等でコンテキストが失われた場合の対策）
+                        if (termObj.fitAddon) {
+                            termObj.fitAddon.fit();
+                        }
+
                         termObj.terminal.focus();
                         termObj.terminal.refresh(0, termObj.terminal.rows - 1);
                         console.log(`[JS] showTerminal: フォーカスとリフレッシュ実行`);
