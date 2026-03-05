@@ -1053,7 +1053,7 @@
             // エラーメッセージはセッション開始直後に表示されるため、ProcessingStartTime が null の場合のみ検出
             if (sessionInfo.TerminalType == TerminalType.ClaudeCode &&
                 sessionInfo.ProcessingStartTime == null &&  // 処理開始前のみ検出
-                IsClaudeContinueError(data) &&
+                IsCliErrorMessage(data, "No conversation found to continue") &&
                 sessionInfo.Options.ContainsKey("continue") &&
                 !sessionInfo.HasContinueErrorOccurred)
             {
@@ -1075,7 +1075,7 @@
             // --resume latest で再開するセッションが存在しない場合のエラーを検出し、オプションなしで再起動
             if (sessionInfo.TerminalType == TerminalType.GeminiCLI &&
                 sessionInfo.ProcessingStartTime == null &&
-                IsGeminiResumeError(data) &&
+                IsCliErrorMessage(data, "Error resuming session") &&
                 sessionInfo.Options.ContainsKey("continue") &&
                 !sessionInfo.HasContinueErrorOccurred)
             {
@@ -1445,8 +1445,16 @@
     }
 
     [JSInvokable]
-    public void OnTerminalSizeChanged(string sessionId, int cols, int rows)
+    public void OnTerminalSizeChanged(string sessionId, int cols, int rows,
+        string source = "", string detail = "", string dupSource = "")
     {
+        // 診断ログ: 全てのリサイズ通知を記録（source/detailはJS側から渡される）
+        var shortId = sessionId.Length > 8 ? sessionId.Substring(0, 8) : sessionId;
+        var dupInfo = !string.IsNullOrEmpty(dupSource) ? $" dup={dupSource}" : "";
+        var detailInfo = !string.IsNullOrEmpty(detail) ? $" ({detail})" : "";
+        Logger.LogInformation("[Resize] JS→C#: {Cols}x{Rows} src={Source}{Detail}{Dup} session={SessionId}",
+            cols, rows, source, detailInfo, dupInfo, shortId);
+
         // DOSターミナルのサイズ変更を処理（singleDosTerminal用）
         if (sessionId.StartsWith("dos-terminal-"))
         {
@@ -1474,7 +1482,6 @@
             // 通常のセッションのサイズ変更を処理
             if (!Guid.TryParse(sessionId, out var guid))
             {
-                // GUIDではない値は無視
                 return;
             }
             if (guid == activeSessionId && activeSession != null)
@@ -1483,22 +1490,37 @@
                 // ConPTYリサイズは画面内容を再送信するため、重複が発生する
                 if (_skipConPtyResize)
                 {
+                    Logger.LogInformation("[Resize] ConPTYスキップ(切替中): {Cols}x{Rows} src={Source} session={SessionId}",
+                        cols, rows, source, shortId);
                     return;
+                }
+
+                // ConPTYの現在サイズと比較して差異をログ出力
+                var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
+                if (selectedSession?.ConPtySession != null)
+                {
+                    var prevCols = selectedSession.ConPtySession.Cols;
+                    var prevRows = selectedSession.ConPtySession.Rows;
+                    if (prevCols != cols || prevRows != rows)
+                    {
+                        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
+                            prevCols, prevRows, cols, rows, shortId);
+                    }
                 }
 
                 // ConPtyにリサイズを通知
                 activeSession.Resize(cols, rows);
 
                 // ConPtySessionもリサイズを通知
-                var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
                 if (selectedSession?.ConPtySession != null)
                 {
                     selectedSession.ConPtySession.Resize(cols, rows);
                 }
-
-                // リサイズ時のスナップショット再表示は削除
-                // ConPTYは自身でリフロー処理を行い、アプリケーションが再描画する
-                // 手動でクリア＆再描画すると、ConPTYの再描画と競合する可能性がある
+            }
+            else if (guid != activeSessionId)
+            {
+                Logger.LogInformation("[Resize] 非アクティブ(無視): {Cols}x{Rows} src={Source} session={SessionId}",
+                    cols, rows, source, shortId);
             }
         }
     }
@@ -2274,69 +2296,31 @@
 
     }
 
-    /// <summary>
-    /// Claude Code の "--continue" エラーメッセージかどうかを判定
-    /// 誤検出を防ぐため、コード出力内の文字列ではなく実際のエラーメッセージのみを検出
-    /// </summary>
-    private bool IsClaudeContinueError(string data)
-    {
-        // 基本文字列が含まれていなければ即座にfalse
-        if (!data.Contains("No conversation found to continue"))
-            return false;
+    private static readonly System.Text.RegularExpressions.Regex LineNumberPattern =
+        new(@"^\s*\d+\s+", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex DiffMarkerPattern =
+        new(@"^[+-]\s", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
-        // 誤検出パターンを除外:
-        // 1. 行番号を含む（コード表示やdiff出力）: "1234" + 空白 + コンテンツ
-        // 2. 引用符で囲まれている（文字列リテラル）: "No conversation..." や 'No conversation...'
-        // 3. コメント内（//や/*や#で始まる行）
+    /// <summary>
+    /// CLI出力が実際のエラーメッセージかどうかを判定
+    /// diff出力・コード表示・文字列リテラル内の誤検出を防ぐ
+    /// </summary>
+    private bool IsCliErrorMessage(string data, string errorMessage)
+    {
+        if (!data.Contains(errorMessage))
+            return false;
 
         // 行番号パターン（diff出力やgrep -nなど）を検出
-        // 例: "1334              }" や "1335          }"
-        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^\s*\d+\s+", System.Text.RegularExpressions.RegexOptions.Multiline))
-        {
+        if (LineNumberPattern.IsMatch(data))
             return false;
-        }
 
         // diffの変更行マーカー（+や-で始まる）を検出
-        // 例: "-        catch (Ex..."
-        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^[+-]\s", System.Text.RegularExpressions.RegexOptions.Multiline))
-        {
+        if (DiffMarkerPattern.IsMatch(data))
             return false;
-        }
 
         // 引用符で囲まれた文字列パターンを検出
-        if (data.Contains("\"No conversation found to continue\"") ||
-            data.Contains("'No conversation found to continue'"))
-        {
+        if (data.Contains($"\"{errorMessage}\"") || data.Contains($"'{errorMessage}'"))
             return false;
-        }
-
-        // これらのパターンに該当しない場合は実際のエラーメッセージと判断
-        return true;
-    }
-
-    private bool IsGeminiResumeError(string data)
-    {
-        if (!data.Contains("Error resuming session"))
-            return false;
-
-        // 行番号パターン（diff出力やgrep -nなど）を検出
-        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^\s*\d+\s+", System.Text.RegularExpressions.RegexOptions.Multiline))
-        {
-            return false;
-        }
-
-        // diffの変更行マーカーを検出
-        if (System.Text.RegularExpressions.Regex.IsMatch(data, @"^[+-]\s", System.Text.RegularExpressions.RegexOptions.Multiline))
-        {
-            return false;
-        }
-
-        // 引用符で囲まれた文字列パターンを検出
-        if (data.Contains("\"Error resuming session\"") ||
-            data.Contains("'Error resuming session'"))
-        {
-            return false;
-        }
 
         return true;
     }

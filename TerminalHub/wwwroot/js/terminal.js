@@ -414,7 +414,7 @@ window.terminalFunctions = {
 
                 // フィット後のサイズを通知
                 if (dotNetRef) {
-                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
+                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows, 'init', '', '');
                 }
             } catch (e) {
                 console.log(`[JS] createMultiSessionTerminal: 初期fitエラー (無視): ${e.message}`);
@@ -453,66 +453,65 @@ window.terminalFunctions = {
             // IME検出とフォーカス制御
          //   setupIMEDetection(term, element, sessionId);
             
+            // リサイズ診断用: 最後に通知したサイズと通知元を記録
+            let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
+
+            // C#側にリサイズを通知する共通関数（診断情報付き）
+            function notifyResize(cols, rows, source, detail) {
+                if (!dotNetRef) return;
+                const now = Date.now();
+                const prev = lastNotifiedSize;
+                let dupSource = '';
+                if (prev.cols === cols && prev.rows === rows && now - prev.time < 500) {
+                    dupSource = prev.source;
+                }
+                lastNotifiedSize = { cols, rows, source, time: now };
+                dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, cols, rows, source, detail, dupSource);
+            }
+
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
-                console.log(`[JS] onResize fired for ${sessionId}: ${size.cols}x${size.rows}`);
-                
                 // リサイズイベントをトラック
                 const terminalInfo = window.multiSessionTerminals[sessionId];
                 if (terminalInfo) {
-                    // ターミナルリサイズ検出
-                    // リサイズトリックが適用された場合のフラグ設定
                     if (terminalInfo.isFirstWrite) {
                         terminalInfo.resizeCount = 1;
-                        // リサイズトリック検出
                     }
                 }
-                
-                // C#側にサイズ変更を通知
-                if (dotNetRef) {
-                    console.log(`[JS] Calling OnTerminalSizeChanged for ${sessionId}`);
-                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, size.cols, size.rows);
-                } else {
-                    console.log(`[JS] dotNetRef is null for ${sessionId}, cannot notify resize`);
-                }
-                
-                // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
+
+                notifyResize(size.cols, size.rows, 'onResize', '');
             });
-            
+
             // ResizeObserverを設定
             window.resizeObserverManager.add(sessionId, element, () => {
                 // 非表示のターミナルではfit()をスキップ（11x5のような極小サイズになるのを防ぐ）
                 if (element.style.display === 'none' || element.offsetParent === null) {
-                    console.log(`[JS] ResizeObserver: スキップ（非表示） sessionId=${sessionId}`);
                     return;
                 }
 
                 // 要素のサイズが極小の場合もスキップ
                 if (element.clientWidth < 100 || element.clientHeight < 100) {
-                    console.log(`[JS] ResizeObserver: スキップ（極小サイズ） sessionId=${sessionId}, size=${element.clientWidth}x${element.clientHeight}`);
                     return;
                 }
 
-                console.log(`[JS] ResizeObserver fired for ${sessionId}`);
+                const beforeCols = term.cols, beforeRows = term.rows;
                 if (fitAddon) {
                     fitAddon.fit();
-                    // リサイズ処理
-                    console.log(`[JS] After fit: ${term.cols}x${term.rows}`);
+                    const afterCols = term.cols, afterRows = term.rows;
+                    const changed = (beforeCols !== afterCols || beforeRows !== afterRows);
 
                     // 極小サイズの場合はC#への通知をスキップ
-                    if (term.cols < 20 || term.rows < 10) {
-                        console.warn(`[JS] ResizeObserver: 異常なサイズを検出、通知スキップ cols=${term.cols}, rows=${term.rows}`);
+                    if (afterCols < 20 || afterRows < 10) {
                         return;
                     }
 
-                    if (dotNetRef) {
-                        console.log(`[JS] ResizeObserver calling OnTerminalSizeChanged for ${sessionId}`);
-                        dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows);
-                    } else {
-                        console.log(`[JS] ResizeObserver: dotNetRef is null for ${sessionId}`);
+                    // fit()でサイズが変わった場合、onResizeが自動発火してC#に通知される
+                    // サイズ変化なしの場合のみここから通知（onResizeは発火しないため）
+                    if (!changed) {
+                        notifyResize(afterCols, afterRows, 'ResizeObserver',
+                            `dom=${element.clientWidth}x${element.clientHeight},noChange`);
                     }
-
-                    // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
+                    // changed時はonResizeが発火するので通知不要
                 }
             });
             
@@ -673,17 +672,13 @@ window.terminalFunctions = {
             clear: () => term.clear(),
             focus: () => term.focus(),
             resize: () => {
-                console.log(`[JS] resize: 開始 sessionId=${sessionId}`);
+                // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
                 if (fitAddon) {
                     try {
                         fitAddon.fit();
-                        console.log(`[JS] resize: fitAddon.fit()実行完了 cols=${term.cols}, rows=${term.rows}`);
-                        // 手動リサイズ時はxterm.onResizeイベントで自動的にスクロールされる
                     } catch (e) {
-                        console.log(`[JS] resize: エラー ${e.message}`);
+                        console.log(`[Resize] resize() エラー ${sessionId.substring(0,8)}: ${e.message}`);
                     }
-                } else {
-                    console.log(`[JS] resize: ★★★ fitAddonが存在しない`);
                 }
             },
             getSize: () => {
@@ -769,6 +764,7 @@ window.terminalFunctions = {
                         }
                         
                         // Canvas描画の復元（スリープ復帰等でコンテキストが失われた場合の対策）
+                        // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
                         if (termObj.fitAddon) {
                             termObj.fitAddon.fit();
                         }
