@@ -908,75 +908,79 @@
         // アクティブセッションIDをローカルストレージに保存
         await SaveActiveSessionIdToStorageAsync(sessionId);
 
-        // ターミナルdivが存在するか確認し、表示する
-        var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
-        if (divExists)
+        // セッション切替中はConPTYリサイズをスキップ
+        // showTerminal/InitializeTerminal内のfitAddon.fit()が過渡的なサイズでConPTYに通知するのを防ぐ
+        // 最終的なリサイズはResizeTerminalAsyncで正しいサイズを適用する
+        _skipConPtyResize = true;
+        try
         {
-            // 新しいターミナルを表示
-            await TerminalService.ShowTerminalAsync(sessionId);
-        }
-
-        // ターミナルを初期化
-        await InitializeTerminal(sessionId);
-
-
-        // メモリ上のバッファから復元（リサイズトリックの代わり）
-        if (selectedSession != null && activeTerminal != null)
-        {
-            // 過去バッファの誤検出を防ぐため、接続時刻を記録
-            selectedSession.LastConnectionTime = DateTime.Now;
-
-            // バッファ内容をターミナルに書き込み
-            var bufferContent = selectedSession.GetTerminalBuffer();
-            if (!string.IsNullOrEmpty(bufferContent))
+            // ターミナルdivが存在するか確認し、表示する
+            var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
+            if (divExists)
             {
-                // デバッグ: バッファ内容を解析
-                Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}バイト",
-                    sessionId, bufferContent.Length);
-
-                // 危険なエスケープシーケンスをチェック（巨大な行/列番号）
-                var cursorMovePattern = new System.Text.RegularExpressions.Regex(@"\x1b\[(\d+);?(\d*)H");
-                var matches = cursorMovePattern.Matches(bufferContent);
-                foreach (System.Text.RegularExpressions.Match match in matches)
-                {
-                    if (int.TryParse(match.Groups[1].Value, out int row) && row > 1000)
-                    {
-                        Logger.LogWarning("[SelectSession] 危険なカーソル移動検出: Row={Row}, Match={Match}",
-                            row, match.Value);
-                    }
-                }
-
-                // バッファの先頭と末尾をログ出力（エスケープシーケンスを可視化）
-                var preview = bufferContent.Length > 500 ? bufferContent.Substring(0, 500) : bufferContent;
-                var previewEscaped = preview.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
-                Logger.LogDebug("[SelectSession] バッファ先頭500文字: {Preview}", previewEscaped);
-
-                if (bufferContent.Length > 500)
-                {
-                    var tail = bufferContent.Substring(bufferContent.Length - 500);
-                    var tailEscaped = tail.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
-                    Logger.LogDebug("[SelectSession] バッファ末尾500文字: {Tail}", tailEscaped);
-                }
-
-                await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
-                Logger.LogInformation("[SelectSession] バッファ書き込み完了");
+                // 新しいターミナルを表示
+                await TerminalService.ShowTerminalAsync(sessionId);
             }
 
-            // セッション再選択時はConPTYリサイズをスキップ（重複防止）
-            // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
-            _skipConPtyResize = true;
-            try
-            {
-                await Task.Delay(50);
-                await TerminalService.ResizeTerminalAsync(activeTerminal);
+            // ターミナルを初期化
+            await InitializeTerminal(sessionId);
 
-                // バッファ復元後、表示を確実にリフレッシュ
+            // メモリ上のバッファから復元（リサイズトリックの代わり）
+            if (selectedSession != null && activeTerminal != null)
+            {
+                // 過去バッファの誤検出を防ぐため、接続時刻を記録
+                selectedSession.LastConnectionTime = DateTime.Now;
+
+                // バッファ内容をターミナルに書き込み
+                var bufferContent = selectedSession.GetTerminalBuffer();
+                if (!string.IsNullOrEmpty(bufferContent))
+                {
+                    // デバッグ: バッファ内容を解析
+                    Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}バイト",
+                        sessionId, bufferContent.Length);
+
+                    // 危険なエスケープシーケンスをチェック（巨大な行/列番号）
+                    var cursorMovePattern = new System.Text.RegularExpressions.Regex(@"\x1b\[(\d+);?(\d*)H");
+                    var matches = cursorMovePattern.Matches(bufferContent);
+                    foreach (System.Text.RegularExpressions.Match match in matches)
+                    {
+                        if (int.TryParse(match.Groups[1].Value, out int row) && row > 1000)
+                        {
+                            Logger.LogWarning("[SelectSession] 危険なカーソル移動検出: Row={Row}, Match={Match}",
+                                row, match.Value);
+                        }
+                    }
+
+                    // バッファの先頭と末尾をログ出力（エスケープシーケンスを可視化）
+                    var preview = bufferContent.Length > 500 ? bufferContent.Substring(0, 500) : bufferContent;
+                    var previewEscaped = preview.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
+                    Logger.LogDebug("[SelectSession] バッファ先頭500文字: {Preview}", previewEscaped);
+
+                    if (bufferContent.Length > 500)
+                    {
+                        var tail = bufferContent.Substring(bufferContent.Length - 500);
+                        var tailEscaped = tail.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
+                        Logger.LogDebug("[SelectSession] バッファ末尾500文字: {Tail}", tailEscaped);
+                    }
+
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
+                    Logger.LogInformation("[SelectSession] バッファ書き込み完了");
+                }
+
+                await Task.Delay(50);
+            }
+
+            // 最終リサイズ: スキップを解除してからfit()を実行し、正しいサイズをConPTYに通知
+            _skipConPtyResize = false;
+            if (activeTerminal != null)
+            {
+                await TerminalService.ResizeTerminalAsync(activeTerminal);
                 await TerminalService.RefreshTerminalAsync(sessionId);
             }
-            finally
-            {
-                _skipConPtyResize = false;
-            }
+        }
+        finally
+        {
+            _skipConPtyResize = false;
         }
 
         // ConPtySessionをConPtyConnectionServiceに登録
@@ -1042,11 +1046,8 @@
 
             var isActive = activeSessionId == sessionId;
 
-            // スクロールバック保持用バッファに追記（常時有効）
+            // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
             sessionInfo.AppendToTerminalBuffer(data);
-
-            // バッファキャプチャが有効な場合は追記（デバッグ用）
-            sessionInfo.AppendToBuffer(data);
 
             // Claude Codeの場合、"No conversation found to continue"エラーをチェック
             // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
@@ -1448,12 +1449,16 @@
     public void OnTerminalSizeChanged(string sessionId, int cols, int rows,
         string source = "", string detail = "", string dupSource = "")
     {
-        // 診断ログ: 全てのリサイズ通知を記録（source/detailはJS側から渡される）
+        // ログ用の短縮セッションID（source/detail/dupSourceは診断ログ専用、二重通知抑制はJS側で完結）
         var shortId = sessionId.Length > 8 ? sessionId.Substring(0, 8) : sessionId;
-        var dupInfo = !string.IsNullOrEmpty(dupSource) ? $" dup={dupSource}" : "";
-        var detailInfo = !string.IsNullOrEmpty(detail) ? $" ({detail})" : "";
-        Logger.LogInformation("[Resize] JS→C#: {Cols}x{Rows} src={Source}{Detail}{Dup} session={SessionId}",
-            cols, rows, source, detailInfo, dupInfo, shortId);
+
+        if (Logger.IsEnabled(LogLevel.Debug))
+        {
+            var dupInfo = !string.IsNullOrEmpty(dupSource) ? $" dup={dupSource}" : "";
+            var detailInfo = !string.IsNullOrEmpty(detail) ? $" ({detail})" : "";
+            Logger.LogDebug("[Resize] JS→C#: {Cols}x{Rows} src={Source}{Detail}{Dup} session={SessionId}",
+                cols, rows, source, detailInfo, dupInfo, shortId);
+        }
 
         // DOSターミナルのサイズ変更を処理（singleDosTerminal用）
         if (sessionId.StartsWith("dos-terminal-"))
@@ -1490,8 +1495,11 @@
                 // ConPTYリサイズは画面内容を再送信するため、重複が発生する
                 if (_skipConPtyResize)
                 {
-                    Logger.LogInformation("[Resize] ConPTYスキップ(切替中): {Cols}x{Rows} src={Source} session={SessionId}",
-                        cols, rows, source, shortId);
+                    if (Logger.IsEnabled(LogLevel.Debug))
+                    {
+                        Logger.LogDebug("[Resize] ConPTYスキップ(切替中): {Cols}x{Rows} src={Source} session={SessionId}",
+                            cols, rows, source, shortId);
+                    }
                     return;
                 }
 
@@ -1519,8 +1527,11 @@
             }
             else if (guid != activeSessionId)
             {
-                Logger.LogInformation("[Resize] 非アクティブ(無視): {Cols}x{Rows} src={Source} session={SessionId}",
-                    cols, rows, source, shortId);
+                if (Logger.IsEnabled(LogLevel.Debug))
+                {
+                    Logger.LogDebug("[Resize] 非アクティブ(無視): {Cols}x{Rows} src={Source} session={SessionId}",
+                        cols, rows, source, shortId);
+                }
             }
         }
     }
@@ -2305,7 +2316,7 @@
     /// CLI出力が実際のエラーメッセージかどうかを判定
     /// diff出力・コード表示・文字列リテラル内の誤検出を防ぐ
     /// </summary>
-    private bool IsCliErrorMessage(string data, string errorMessage)
+    private static bool IsCliErrorMessage(string data, string errorMessage)
     {
         if (!data.Contains(errorMessage))
             return false;

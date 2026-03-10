@@ -190,66 +190,6 @@ namespace TerminalHub.Models
             }
         }
 
-        // バッファキャプチャ機能（デバッグ用、再起動時にリセット）
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool EnableBufferCapture { get; set; } = false;
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        public StringBuilder? CapturedBuffer { get; set; }
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        public DateTime? BufferCaptureStartTime { get; set; }
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        public int CapturedBufferSize => CapturedBuffer?.Length ?? 0;
-
-        private const int MaxBufferCaptureSize = 1024 * 1024; // 1MB上限
-
-        public void StartBufferCapture()
-        {
-            EnableBufferCapture = true;
-            CapturedBuffer = new StringBuilder();
-            BufferCaptureStartTime = DateTime.Now;
-        }
-
-        public void StopBufferCapture()
-        {
-            EnableBufferCapture = false;
-        }
-
-        public void ClearCapturedBuffer()
-        {
-            CapturedBuffer?.Clear();
-            CapturedBuffer = null;
-            BufferCaptureStartTime = null;
-            EnableBufferCapture = false;
-        }
-
-        public void AppendToBuffer(string data)
-        {
-            if (!EnableBufferCapture || CapturedBuffer == null) return;
-
-            // 上限チェック
-            if (CapturedBuffer.Length + data.Length > MaxBufferCaptureSize)
-            {
-                // 古いデータを削除して新しいデータを追加
-                var overflow = CapturedBuffer.Length + data.Length - MaxBufferCaptureSize;
-                if (overflow < CapturedBuffer.Length)
-                {
-                    CapturedBuffer.Remove(0, overflow);
-                }
-                else
-                {
-                    CapturedBuffer.Clear();
-                }
-            }
-            CapturedBuffer.Append(data);
-        }
-
-        public string GetCapturedBuffer()
-        {
-            return CapturedBuffer?.ToString() ?? string.Empty;
-        }
 
         public string GetDisplayName()
         {

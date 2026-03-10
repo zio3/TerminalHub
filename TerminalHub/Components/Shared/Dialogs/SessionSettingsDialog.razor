@@ -203,6 +203,10 @@
                     SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "workspace-write",
                     ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
                     NetworkAccess = options.ContainsKey("network-access") ? options["network-access"] : "enabled",
+                    Profile = options.ContainsKey("profile") ? options["profile"] : "",
+                    Model = options.ContainsKey("model") ? options["model"] : "",
+                    SearchEnabled = options.ContainsKey("search") && options["search"] == "true",
+                    AdditionalDirectories = options.ContainsKey("add-dir") ? options["add-dir"] : "",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }

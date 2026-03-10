@@ -209,8 +209,8 @@
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
                            checked="@(CodexOptions.Mode == "standard")"
                            @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="対話ベースで進行します">
-                        Standard
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="明示的な自動実行フラグを付けず、対話ベースで進行します">
+                        Interactive
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
@@ -245,10 +245,10 @@
                 <label class="form-label small text-muted mb-1">サンドボックスモード</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
-                           checked="@(CodexOptions.SandboxMode == "none")"
+                           checked="@(string.IsNullOrEmpty(CodexOptions.SandboxMode))"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.None)" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="制限なし。ローカル環境へフルアクセス可能。">
-                        なし
+                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="--sandbox を付けず、Codex CLI の既定値に任せます。">
+                        CLI既定
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxReadOnly{UniqueId}")"
@@ -285,7 +285,6 @@
                     <option value="">未指定</option>
                     <option value="untrusted">untrusted</option>
                     <option value="on-request">on-request</option>
-                    <option value="on-failure">on-failure</option>
                     <option value="never">never</option>
                 </select>
                 <div class="form-text small">操作の承認レベル（--ask-for-approval）</div>
@@ -310,9 +309,37 @@
             </div>
 
             <div class="mt-3">
+                <label class="form-label small text-muted mb-1">プロファイル</label>
+                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Profile"
+                       placeholder="例: trusted" />
+                <div class="form-text small">Codex CLI の `--profile` を指定します</div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">モデル</label>
+                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Model"
+                       placeholder="例: gpt-5-codex" />
+                <div class="form-text small">Codex CLI の `--model` を指定します</div>
+            </div>
+
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
+                <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
+                    Web 検索を有効化 (--search)
+                </label>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">追加ディレクトリ</label>
+                <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
+                          rows="3" placeholder="1行に1ディレクトリずつ指定"></textarea>
+                <div class="form-text small">各行を `--add-dir` として渡します</div>
+            </div>
+
+            <div class="mt-3">
                 <label class="form-label small text-muted mb-1">追加引数</label>
                 <input type="text" class="form-control form-control-sm" @bind="CodexOptions.ExtraArgs"
-                       placeholder="例: --model gpt-4.1 --approval-policy on-request" />
+                       placeholder="例: --reasoning-effort high" />
                 <div class="form-text small">そのままCodex CLIに渡します</div>
             </div>
         </div>
@@ -507,7 +534,7 @@
                 {
                     options["resume-last"] = "true";
                 }
-                if (CodexOptions.SandboxMode != "none")
+                if (!string.IsNullOrWhiteSpace(CodexOptions.SandboxMode))
                 {
                     options["sandbox-mode"] = CodexOptions.SandboxMode;
                 }
@@ -518,6 +545,22 @@
                 if (!string.IsNullOrWhiteSpace(CodexOptions.NetworkAccess))
                 {
                     options["network-access"] = CodexOptions.NetworkAccess;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.Profile))
+                {
+                    options["profile"] = CodexOptions.Profile.Trim();
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.Model))
+                {
+                    options["model"] = CodexOptions.Model.Trim();
+                }
+                if (CodexOptions.SearchEnabled)
+                {
+                    options["search"] = "true";
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.AdditionalDirectories))
+                {
+                    options["add-dir"] = CodexOptions.AdditionalDirectories.Trim();
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.ExtraArgs))
                 {
@@ -551,9 +594,13 @@
     {
         public string Mode { get; set; } = "auto"; // auto, standard, yolo
         public bool ResumeLast { get; set; } = false;
-        public string SandboxMode { get; set; } = "workspace-write"; // none, read-only, workspace-write, danger-full-access
+        public string SandboxMode { get; set; } = "workspace-write"; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
         public string NetworkAccess { get; set; } = "enabled";
+        public string Profile { get; set; } = "";
+        public string Model { get; set; } = "";
+        public bool SearchEnabled { get; set; }
+        public string AdditionalDirectories { get; set; } = "";
         public string ExtraArgs { get; set; } = "";
     }
     
@@ -574,7 +621,6 @@
         {
             "untrusted" => "未信頼扱い。すべての操作で承認を求めます。",
             "on-request" => "必要なときだけ承認を求めます（デフォルトに近い挙動）。",
-            "on-failure" => "失敗した操作のみ承認を求めます。",
             "never" => "承認を求めません（危険）。",
             _ => ""
         };
@@ -584,9 +630,9 @@
     {
         return CodexOptions.Mode switch
         {
-            "auto" => "自動実行優先。追加のサンドボックス設定は無視されます。",
-            "standard" => "対話ベースで進行します。",
-            "yolo" => "全自動実行（危険）。隔離環境推奨。追加のサンドボックス設定は無視されます。",
+            "auto" => "推奨。`--full-auto` を付けて自動実行寄りに進めます。",
+            "standard" => "明示的な自動実行フラグを付けず、対話ベースで進行します。",
+            "yolo" => "全自動実行（危険）。隔離環境推奨です。",
             _ => ""
         };
     }
@@ -595,7 +641,7 @@
     {
         return CodexOptions.SandboxMode switch
         {
-            "none" => "制限なし。ローカル環境へフルアクセス可能。",
+            "" => "Codex CLI の既定値に任せます。",
             "read-only" => "読み取り専用。書き込みはブロック。",
             "workspace-write" => "ワークスペース内のみ書き込み可能。",
             "danger-full-access" => "フルアクセス（危険）。",

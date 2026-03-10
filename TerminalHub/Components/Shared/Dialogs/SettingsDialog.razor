@@ -668,7 +668,8 @@
                         else if (activeTab == "devBuffer")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">バッファキャプチャ</h6>
+                                <h6 class="mb-3">バッファダンプ</h6>
+                                <p class="text-muted small mb-3">セッションの出力バッファ（最大2MB）をファイルにダウンロードします。</p>
 
                                 <div class="mb-3">
                                     <label class="form-label">セッション選択</label>
@@ -676,9 +677,8 @@
                                         <option value="">-- セッションを選択 --</option>
                                         @foreach (var session in GetAvailableSessions())
                                         {
-                                            var captureStatus = session.EnableBufferCapture ? " [キャプチャ中]" : "";
-                                            var bufferSize = session.CapturedBufferSize > 0 ? $" ({FormatBytes(session.CapturedBufferSize)})" : "";
-                                            <option value="@session.SessionId">@session.GetDisplayName()@captureStatus@bufferSize</option>
+                                            var bufferSize = session.TerminalBufferSize > 0 ? $" ({FormatBytes(session.TerminalBufferSize)})" : " (空)";
+                                            <option value="@session.SessionId">@session.GetDisplayName()@bufferSize</option>
                                         }
                                     </select>
                                 </div>
@@ -686,33 +686,13 @@
                                 @if (GetSelectedBufferSession() is SessionInfo selectedSession)
                                 {
                                     <div class="mb-3">
-                                        <span class="badge @(selectedSession.EnableBufferCapture ? "bg-success" : "bg-secondary") me-2">
-                                            @(selectedSession.EnableBufferCapture ? "キャプチャ中" : "停止中")
-                                        </span>
-                                        @if (selectedSession.CapturedBufferSize > 0)
-                                        {
-                                            <span class="badge bg-info">@FormatBytes(selectedSession.CapturedBufferSize)</span>
-                                        }
+                                        <span class="badge bg-info">@FormatBytes(selectedSession.TerminalBufferSize)</span>
                                     </div>
                                 }
 
                                 <div class="mb-3">
-                                    <div class="btn-group me-2">
-                                        <button class="btn btn-success btn-sm" @onclick="StartCapture"
-                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.EnableBufferCapture == true)">
-                                            <i class="bi bi-record-circle me-1"></i>開始
-                                        </button>
-                                        <button class="btn btn-warning btn-sm" @onclick="StopCapture"
-                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.EnableBufferCapture != true)">
-                                            <i class="bi bi-stop-circle me-1"></i>停止
-                                        </button>
-                                        <button class="btn btn-danger btn-sm" @onclick="ClearBuffer"
-                                                disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.CapturedBufferSize == 0)">
-                                            <i class="bi bi-trash me-1"></i>クリア
-                                        </button>
-                                    </div>
                                     <button class="btn btn-primary btn-sm" @onclick="DownloadBuffer"
-                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.CapturedBufferSize == 0)">
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
                                         <i class="bi bi-download me-1"></i>ダウンロード
                                     </button>
                                 </div>
@@ -1389,44 +1369,6 @@
         return SessionManager.GetSessionInfo(sessionId);
     }
 
-    private void StartCapture()
-    {
-        var session = GetSelectedBufferSession();
-        if (session == null)
-        {
-            bufferResult = "セッションを選択してください";
-            return;
-        }
-        session.StartBufferCapture();
-        bufferResult = $"キャプチャを開始しました - {DateTime.Now:HH:mm:ss}";
-        StateHasChanged();
-    }
-
-    private void StopCapture()
-    {
-        var session = GetSelectedBufferSession();
-        if (session == null)
-        {
-            bufferResult = "セッションを選択してください";
-            return;
-        }
-        session.StopBufferCapture();
-        bufferResult = $"キャプチャを停止しました - {DateTime.Now:HH:mm:ss}";
-        StateHasChanged();
-    }
-
-    private void ClearBuffer()
-    {
-        var session = GetSelectedBufferSession();
-        if (session == null)
-        {
-            bufferResult = "セッションを選択してください";
-            return;
-        }
-        session.ClearCapturedBuffer();
-        bufferResult = $"バッファをクリアしました - {DateTime.Now:HH:mm:ss}";
-        StateHasChanged();
-    }
 
     private async Task DownloadBuffer()
     {
@@ -1439,7 +1381,7 @@
                 return;
             }
 
-            var content = sessionInfo.GetCapturedBuffer();
+            var content = sessionInfo.GetTerminalBuffer();
             if (string.IsNullOrEmpty(content))
             {
                 bufferResult = "バッファが空です";
@@ -1448,10 +1390,9 @@
 
             var bufferInfo = new
             {
-                Status = sessionInfo.EnableBufferCapture ? "キャプチャ中" : "停止中",
                 BufferSize = content.Length,
                 LineCount = content.Split('\n').Length,
-                CaptureStartTime = sessionInfo.BufferCaptureStartTime?.ToString("yyyy-MM-dd HH:mm:ss"),
+                DumpTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
                 SessionName = sessionInfo.GetDisplayName(),
                 SessionId = sessionInfo.SessionId
             };

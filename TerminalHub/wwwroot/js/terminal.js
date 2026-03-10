@@ -407,15 +407,27 @@ window.terminalFunctions = {
             
             term.open(element);
 
+            // リサイズ診断用: 最後に通知したサイズと通知元を記録
+            let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
+
+            // C#側にリサイズを通知する共通関数（診断情報付き）
+            function notifyResize(cols, rows, source, detail) {
+                if (!dotNetRef) return;
+                const now = Date.now();
+                const prev = lastNotifiedSize;
+                let dupSource = '';
+                if (prev.cols === cols && prev.rows === rows && now - prev.time < 500) {
+                    dupSource = prev.source;
+                }
+                lastNotifiedSize = { cols, rows, source, time: now };
+                dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, cols, rows, source, detail, dupSource);
+            }
+
             // ターミナルを同期的にフィット（バッファ書き込み前に確実に初期化完了させるため）
             try {
                 fitAddon.fit();
                 console.log(`[JS] createMultiSessionTerminal: 初期fit完了 cols=${term.cols}, rows=${term.rows}`);
-
-                // フィット後のサイズを通知
-                if (dotNetRef) {
-                    dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, term.cols, term.rows, 'init', '', '');
-                }
+                notifyResize(term.cols, term.rows, 'init', '');
             } catch (e) {
                 console.log(`[JS] createMultiSessionTerminal: 初期fitエラー (無視): ${e.message}`);
             }
@@ -453,22 +465,6 @@ window.terminalFunctions = {
             // IME検出とフォーカス制御
          //   setupIMEDetection(term, element, sessionId);
             
-            // リサイズ診断用: 最後に通知したサイズと通知元を記録
-            let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
-
-            // C#側にリサイズを通知する共通関数（診断情報付き）
-            function notifyResize(cols, rows, source, detail) {
-                if (!dotNetRef) return;
-                const now = Date.now();
-                const prev = lastNotifiedSize;
-                let dupSource = '';
-                if (prev.cols === cols && prev.rows === rows && now - prev.time < 500) {
-                    dupSource = prev.source;
-                }
-                lastNotifiedSize = { cols, rows, source, time: now };
-                dotNetRef.invokeMethodAsync('OnTerminalSizeChanged', sessionId, cols, rows, source, detail, dupSource);
-            }
-
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
                 // リサイズイベントをトラック
@@ -839,7 +835,12 @@ window.terminalFunctions = {
         // ターミナルインスタンスのクリーンアップ
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             if (window.multiSessionTerminals[sessionId].terminal) {
-                window.multiSessionTerminals[sessionId].terminal.dispose();
+                try {
+                    window.multiSessionTerminals[sessionId].terminal.dispose();
+                } catch (e) {
+                    // CanvasAddonの内部レンダラーが不整合な状態（スリープ復帰後等）でも安全に破棄
+                    console.log(`[JS] cleanupTerminal: dispose()エラー（無視）: ${e.message}`);
+                }
                 console.log(`[JS] cleanupTerminal: ターミナル ${sessionId} を破棄`);
             }
             delete window.multiSessionTerminals[sessionId];

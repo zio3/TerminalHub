@@ -56,8 +56,16 @@ namespace TerminalHub.Analyzers
             var match = ProcessingPatternFull.Match(cleanedData);
             if (match.Success)
             {
+                var capturedText = match.Groups[1].Value.Trim();
+
+                // チャンク分割による断片的なマッチを除外（lazy +? が1〜2文字でマッチするケース）
+                if (capturedText.Length < 3)
+                {
+                    return false;
+                }
+
                 result.IsProcessing = true;
-                result.ProcessingText = match.Groups[1].Value.Trim();
+                result.ProcessingText = capturedText;
                 return true;
             }
 

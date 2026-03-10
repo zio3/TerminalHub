@@ -129,24 +129,49 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
+            if (options.TryGetValue("profile", out var profile) && !string.IsNullOrWhiteSpace(profile))
+            {
+                args.Add($"--profile {profile.Trim()}");
+            }
+
+            if (options.TryGetValue("model", out var model) && !string.IsNullOrWhiteSpace(model))
+            {
+                args.Add($"--model {model.Trim()}");
+            }
+
             if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
             {
                 args.Add("resume --last");
             }
 
+            if (options.ContainsKey("search") && options["search"] == "true")
+            {
+                args.Add("--search");
+            }
+
+            if (options.TryGetValue("add-dir", out var addDirValue) && !string.IsNullOrWhiteSpace(addDirValue))
+            {
+                var directories = addDirValue
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                foreach (var directory in directories)
+                {
+                    args.Add($"--add-dir \"{directory}\"");
+                }
+            }
+
             // 実行モード: auto, standard, yolo
-            var allowSandboxOverrides = true;
+            var applyDefaultAutoPolicy = false;
             if (options.TryGetValue("mode", out var mode))
             {
                 switch (mode)
                 {
                     case "auto":
                         args.Add("--full-auto");
-                        allowSandboxOverrides = false;
+                        applyDefaultAutoPolicy = true;
                         break;
                     case "yolo":
                         args.Add("--yolo");
-                        allowSandboxOverrides = false;
                         break;
                     // standard はオプションなし
                 }
@@ -154,23 +179,28 @@ namespace TerminalHub.Constants
 
             // サンドボックスモード: read-only, workspace-write, danger-full-access
             var hasSandboxMode = options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode);
-            if (allowSandboxOverrides && hasSandboxMode)
+            if (hasSandboxMode)
             {
                 args.Add($"--sandbox {sandboxMode}");
             }
-
-            if (allowSandboxOverrides)
+            else if (applyDefaultAutoPolicy)
             {
-                options.TryGetValue("ask-for-approval", out var approvalPolicy);
-                if (!string.IsNullOrEmpty(approvalPolicy))
-                {
-                    args.Add($"--ask-for-approval {approvalPolicy}");
-                }
+                sandboxMode = "workspace-write";
             }
 
-            if (allowSandboxOverrides && options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
+            options.TryGetValue("ask-for-approval", out var approvalPolicy);
+            if (!string.IsNullOrEmpty(approvalPolicy))
             {
-                if (!hasSandboxMode || sandboxMode == "workspace-write")
+                args.Add($"--ask-for-approval {approvalPolicy}");
+            }
+            else if (applyDefaultAutoPolicy)
+            {
+                approvalPolicy = "on-request";
+            }
+
+            if (options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
+            {
+                if (sandboxMode == "workspace-write")
                 {
                     var networkAccessEnabled = networkAccess == "enabled" ? "true" : "false";
                     args.Add($"-c sandbox_workspace_write.network_access={networkAccessEnabled}");
