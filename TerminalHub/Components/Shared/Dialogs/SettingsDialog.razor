@@ -164,6 +164,28 @@
                                 <hr />
 
                                 <div class="mb-4">
+                                    <label class="form-label">テーマ</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="themeMode"
+                                               id="themeLight" value="light" checked="@(theme == "light")"
+                                               @onchange="@(() => OnThemePreviewChange("light"))">
+                                        <label class="form-check-label" for="themeLight">
+                                            <i class="bi bi-sun me-1"></i>ライト
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="themeMode"
+                                               id="themeDark" value="dark" checked="@(theme == "dark")"
+                                               @onchange="@(() => OnThemePreviewChange("dark"))">
+                                        <label class="form-check-label" for="themeDark">
+                                            <i class="bi bi-moon-stars me-1"></i>ダーク
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <hr />
+
+                                <div class="mb-4">
                                     <h6 class="mb-2">バージョン情報</h6>
                                     <div class="d-flex align-items-center mb-2">
                                         <span class="me-2">現在のバージョン:</span>
@@ -567,6 +589,22 @@
                                 <hr />
 
                                 <div class="mb-4">
+                                    <h6 class="mb-2">音声入力</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="voiceInputEnabled" id="voiceInputSwitch">
+                                        <label class="form-check-label" for="voiceInputSwitch">
+                                            音声入力を有効にする（実験的）
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        有効にすると、テキスト入力パネルにマイクボタンが表示されます。ボタンを押している間だけ音声認識が動作します（Chrome推奨）。
+                                    </p>
+                                </div>
+
+                                <hr />
+
+                                <div class="mb-4">
                                     <h6 class="mb-2">開発ツール</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
@@ -686,14 +724,23 @@
                                 @if (GetSelectedBufferSession() is SessionInfo selectedSession)
                                 {
                                     <div class="mb-3">
-                                        <span class="badge bg-info">@FormatBytes(selectedSession.TerminalBufferSize)</span>
+                                        <span class="badge bg-info me-2">バッファ: @FormatBytes(selectedSession.TerminalBufferSize)</span>
+                                        <span class="badge bg-secondary">ステータス履歴: @selectedSession.StatusChangeHistoryCount 件</span>
                                     </div>
                                 }
 
                                 <div class="mb-3">
-                                    <button class="btn btn-primary btn-sm" @onclick="DownloadBuffer"
+                                    <button class="btn btn-primary btn-sm me-2" @onclick="DownloadBuffer"
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
-                                        <i class="bi bi-download me-1"></i>ダウンロード
+                                        <i class="bi bi-download me-1"></i>バッファ
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm me-2" @onclick="DownloadBufferClean"
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
+                                        <i class="bi bi-file-text me-1"></i>バッファ (ANSI除去)
+                                    </button>
+                                    <button class="btn btn-outline-info btn-sm" @onclick="DownloadStatusHistory"
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.StatusChangeHistoryCount == 0)">
+                                        <i class="bi bi-clock-history me-1"></i>ステータス履歴 JSON
                                     </button>
                                 </div>
 
@@ -764,6 +811,7 @@
     private bool saveSuccess = false;
     private string activeTab = "general";
     private string claudeModeSwitchKey = "altM";
+    private bool voiceInputEnabled = false;
     private string sessionSortMode = "createdAt";
     private bool showTerminalType = false;
     private bool showGitInfo = false;
@@ -773,6 +821,7 @@
     private double sessionListScale = 1.0;
     private int terminalFontSize = 14;
     private int terminalHeightPercent = 70;
+    private string theme = "light";
 
     // バージョンチェック関連
     private string currentVersion = "";
@@ -806,6 +855,8 @@
     [Parameter] public EventCallback<double> OnSessionListScaleChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalFontSizeChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
+    [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -857,6 +908,7 @@
 
             // 特殊設定
             claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
+            voiceInputEnabled = settings.Special.VoiceInputEnabled;
 
             // セッション表示設定
             sessionSortMode = settings.Sessions.SortMode;
@@ -872,6 +924,7 @@
             sessionListScale = settings.General.SessionListScale;
             terminalFontSize = settings.General.TerminalFontSize;
             terminalHeightPercent = settings.General.TerminalHeightPercent;
+            theme = settings.General.Theme;
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1049,7 +1102,8 @@
                 },
                 Special = new SpecialSettings
                 {
-                    ClaudeModeSwitchKey = claudeModeSwitchKey
+                    ClaudeModeSwitchKey = claudeModeSwitchKey,
+                    VoiceInputEnabled = voiceInputEnabled
                 },
                 Sessions = new SessionDisplaySettings
                 {
@@ -1067,7 +1121,8 @@
                     DefaultFolderPath = defaultFolderPath,
                     SessionListScale = sessionListScale,
                     TerminalFontSize = terminalFontSize,
-                    TerminalHeightPercent = terminalHeightPercent
+                    TerminalHeightPercent = terminalHeightPercent,
+                    Theme = theme
                 }
             };
             AppSettingsService.SaveSettings(settings);
@@ -1089,6 +1144,12 @@
 
             // ターミナル高さ比率の変更を通知
             await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
+
+            // 音声入力設定の変更を通知
+            await OnVoiceInputEnabledChanged.InvokeAsync(voiceInputEnabled);
+
+            // テーマの変更を通知
+            await OnThemeChanged.InvokeAsync(theme);
 
             saveMessage = "設定を保存しました";
             saveSuccess = true;
@@ -1135,6 +1196,19 @@
         {
             terminalHeightPercent = value;
             await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
+        }
+    }
+
+    private async Task OnThemePreviewChange(string newTheme)
+    {
+        theme = newTheme;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setTheme", theme);
+        }
+        catch
+        {
+            // JSInteropエラーは無視
         }
     }
 
@@ -1372,21 +1446,11 @@
 
     private async Task DownloadBuffer()
     {
-        try
+        await WithSelectedBufferSession(sessionInfo =>
         {
-            var sessionInfo = GetSelectedBufferSession();
-            if (sessionInfo == null)
-            {
-                bufferResult = "セッションを選択してください";
-                return;
-            }
-
             var content = sessionInfo.GetTerminalBuffer();
             if (string.IsNullOrEmpty(content))
-            {
-                bufferResult = "バッファが空です";
-                return;
-            }
+                return Task.FromResult<(string?, string, string)?>(null);
 
             var bufferInfo = new
             {
@@ -1396,16 +1460,87 @@
                 SessionName = sessionInfo.GetDisplayName(),
                 SessionId = sessionInfo.SessionId
             };
-
             var header = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n";
-            var fullContent = header + content;
-            var filename = $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
 
-            var bytes = System.Text.Encoding.UTF8.GetBytes(fullContent);
+            return Task.FromResult<(string?, string, string)?>(
+                (header + content, $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt", "text/plain"));
+        });
+    }
+
+    private async Task DownloadBufferClean()
+    {
+        await WithSelectedBufferSession(sessionInfo =>
+        {
+            var content = sessionInfo.GetTerminalBuffer();
+            if (string.IsNullOrEmpty(content))
+                return Task.FromResult<(string?, string, string)?>(null);
+
+            var cleanedContent = Helpers.AnsiHelper.CleanAnsiSequences(content);
+            return Task.FromResult<(string?, string, string)?>(
+                (cleanedContent, $"buffer_clean_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt", "text/plain"));
+        });
+    }
+
+    private async Task DownloadStatusHistory()
+    {
+        await WithSelectedBufferSession(sessionInfo =>
+        {
+            var history = sessionInfo.GetStatusChangeHistory();
+            if (history.Count == 0)
+                return Task.FromResult<(string?, string, string)?>(null);
+
+            var exportData = new
+            {
+                SessionName = sessionInfo.GetDisplayName(),
+                SessionId = sessionInfo.SessionId,
+                ExportTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                TotalEntries = history.Count,
+                Entries = history.Select(e => new
+                {
+                    Timestamp = e.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    Previous = e.PreviousStatus ?? "(idle)",
+                    Current = e.NewStatus ?? "(idle)",
+                    MatchedText = e.MatchedText
+                }).ToList()
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
+            return Task.FromResult<(string?, string, string)?>(
+                (json, $"status_history_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.json", "application/json"));
+        });
+    }
+
+    /// <summary>
+    /// バッファダウンロード共通処理。コールバックが (content, filename, mimeType) を返すとダウンロード実行。null を返すとバッファ空扱い。
+    /// </summary>
+    private async Task WithSelectedBufferSession(Func<SessionInfo, Task<(string? Content, string Filename, string MimeType)?>> contentFactory)
+    {
+        try
+        {
+            var sessionInfo = GetSelectedBufferSession();
+            if (sessionInfo == null)
+            {
+                bufferResult = "セッションを選択してください";
+                return;
+            }
+
+            var result = await contentFactory(sessionInfo);
+            if (result == null || result.Value.Content == null)
+            {
+                bufferResult = "バッファが空です";
+                return;
+            }
+
+            var (content, filename, mimeType) = result.Value;
+            var bytes = System.Text.Encoding.UTF8.GetBytes(content);
             var base64 = Convert.ToBase64String(bytes);
 
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadBase64File", base64, filename, "text/plain");
-
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadBase64File", base64, filename, mimeType);
             bufferResult = $"ダウンロード完了: {filename} ({FormatBytes(content.Length)})";
         }
         catch (Exception ex)

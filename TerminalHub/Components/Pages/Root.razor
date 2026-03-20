@@ -43,7 +43,9 @@
                 OnSessionDisplaySettingsChanged="HandleSessionDisplaySettingsChanged"
                 OnSessionListScaleChanged="HandleSessionListScaleChanged"
                 OnTerminalFontSizeChanged="HandleTerminalFontSizeChanged"
-                OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged" />
+                OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged"
+                OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
+                OnThemeChanged="HandleThemeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -107,7 +109,7 @@
                 @if (!hideInputPanel)
                 {
                 <!-- WebUI部分 -->
-                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid #dee2e6; background-color: #f8f9fa; display: flex; flex-direction: column;">
+                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid var(--bs-border-color); background-color: var(--bs-tertiary-bg); display: flex; flex-direction: column;">
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
@@ -170,6 +172,7 @@
                                     <TextInputPanel PanelId="@activeTab.Id"
                                                     TerminalType="@currentSession.TerminalType"
                                                     ClaudeModeSwitchKey="@claudeModeSwitchKey"
+                                                    VoiceInputEnabled="@voiceInputEnabled"
                                                     PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
                                                     Text="@GetTextInputPanelText(activeTab.Id)"
                                                     TextChanged="@(text => SetTextInputPanelText(activeTab.Id, text))"
@@ -377,6 +380,7 @@
             {
                 var appSettings = AppSettingsService.GetSettings();
                 claudeModeSwitchKey = appSettings.Special.ClaudeModeSwitchKey;
+                voiceInputEnabled = appSettings.Special.VoiceInputEnabled;
                 sessionSortMode = appSettings.Sessions.SortMode;
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
@@ -384,6 +388,13 @@
                 sessionListScale = appSettings.General.SessionListScale;
                 terminalFontSize = appSettings.General.TerminalFontSize;
                 terminalHeightPercent = appSettings.General.TerminalHeightPercent;
+
+                // テーマを適用
+                var theme = appSettings.General.Theme;
+                if (!string.IsNullOrEmpty(theme))
+                {
+                    await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setTheme", theme);
+                }
             }
             catch
             {
@@ -593,6 +604,24 @@
     {
         claudeModeSwitchKey = key;
         StateHasChanged();
+    }
+
+    private void HandleVoiceInputEnabledChanged(bool enabled)
+    {
+        voiceInputEnabled = enabled;
+        StateHasChanged();
+    }
+
+    private async Task HandleThemeChanged(string newTheme)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setTheme", newTheme);
+        }
+        catch
+        {
+            // JSInteropエラーは無視
+        }
     }
 
     private void HandleSessionListScaleChanged(double scale)
@@ -1740,6 +1769,7 @@
     }
 
     private string claudeModeSwitchKey = "altM";
+    private bool voiceInputEnabled = false;
 
     private async Task SendCtrlC()
     {

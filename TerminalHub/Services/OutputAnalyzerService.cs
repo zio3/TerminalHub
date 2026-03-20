@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TerminalHub.Models;
 using TerminalHub.Analyzers;
 
+
 namespace TerminalHub.Services
 {
     public class OutputAnalyzerService : IOutputAnalyzerService
@@ -52,7 +53,7 @@ namespace TerminalHub.Services
                     if (result.IsInterrupted)
                     {
                         // 処理が中断された（ユーザーが止めたので通知不要）
-                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus, skipNotification: true);
+                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus, result.MatchedText, skipNotification: true);
                     }
                     else if (result.IsProcessing)
                     {
@@ -70,13 +71,13 @@ namespace TerminalHub.Services
                                 sessionInfo.ProcessingElapsedSeconds = result.ElapsedSeconds.Value;
                             }
 
-                            UpdateSessionProcessingStatus(sessionInfo, statusText, activeSessionId, updateStatus);
+                            UpdateSessionProcessingStatus(sessionInfo, statusText, activeSessionId, updateStatus, result.MatchedText);
                         }
                     }
                     else
                     {
                         // 処理完了
-                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus);
+                        UpdateSessionProcessingStatus(sessionInfo, null, activeSessionId, updateStatus, result.MatchedText);
                     }
                 }
                 // TryAnalyze が false の場合は何もしない（ステータスパターンに一致しないデータ）
@@ -90,7 +91,7 @@ namespace TerminalHub.Services
         // Stop イベント後、この秒数間は OutputAnalyzer からのステータス更新をスキップ
         private const double StopEventCooldownSeconds = 3.0;
 
-        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?>? updateStatus, bool skipNotification = false)
+        private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?>? updateStatus, string? matchedText = null, bool skipNotification = false)
         {
                 // ClaudeCode の場合、Stop イベント直後は OutputAnalyzer からの更新をスキップ
                 // 遅延した出力によるステータス再設定を防ぐ
@@ -106,6 +107,20 @@ namespace TerminalHub.Services
                         updateStatus?.Invoke(session.SessionId, session.ProcessingStatus);
                         return;
                     }
+                }
+
+                // ステータス変更の診断ログと履歴記録（前回と異なる場合のみ）
+                var previousStatus = session.ProcessingStatus;
+                if (previousStatus != statusText)
+                {
+                    _logger.LogInformation(
+                        "[StatusChange] {SessionName}: \"{Previous}\" → \"{Current}\" matched=\"{Matched}\"",
+                        session.GetDisplayName(),
+                        previousStatus ?? "(idle)",
+                        statusText ?? "(idle)",
+                        matchedText ?? "");
+
+                    session.RecordStatusChange(previousStatus, statusText, matchedText);
                 }
 
                 session.ProcessingStatus = statusText;
@@ -137,7 +152,8 @@ namespace TerminalHub.Services
                         }
                     }
 
-                    session.ProcessingStartTime = DateTime.Now;
+                    // ProcessingStartTime は処理開始時（初回）のみ設定。ステータス更新のたびに上書きしない
+                    session.ProcessingStartTime ??= DateTime.Now;
                     session.LastProcessingUpdateTime = DateTime.Now;
 
                     // セッションごとのタイマーをリセット（ISessionTimerServiceに委譲）

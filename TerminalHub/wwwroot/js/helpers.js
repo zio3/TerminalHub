@@ -298,5 +298,15 @@ window.terminalHubHelpers = {
             window.visualViewport.addEventListener('resize', updateButtonPosition);
             window.visualViewport.addEventListener('scroll', updateButtonPosition);
         }
+    },
+
+    // テーマ切替
+    setTheme: function(theme) {
+        document.documentElement.setAttribute('data-bs-theme', theme);
+    },
+
+    // 現在のテーマ取得
+    getTheme: function() {
+        return document.documentElement.getAttribute('data-bs-theme') || 'light';
     }
 };

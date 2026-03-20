@@ -7,7 +7,8 @@ namespace TerminalHub.Analyzers
     {
         // スピナー文字（アニメーションパターン）
         // ジッター対策により部分的な更新（スピナー文字のみ）が送られることがある
-        private static readonly char[] SpinnerCharacters = new[] { '✶', '✽', '✻', '✼', '✴', '✵', '✷', '✸', '✹', '·', '⋆', '*', '✢' };
+        // 注意: '·' (middle dot) はステータス行の区切り文字としても使われるため、スピナーから除外
+        private static readonly char[] SpinnerCharacters = new[] { '✶', '✽', '✻', '✼', '✴', '✵', '✷', '✸', '✹', '⋆', '*', '✢' };
 
         // 処理中パターン（完全形）
         // 例: ✶ Spellbinding… (esc to interrupt)
@@ -18,7 +19,7 @@ namespace TerminalHub.Analyzers
         //     ✻ Docker ビルド & テスト中… (1m 24s · ↓ 0 tokens)
         //     ✻ Docker ビルド & テスト中… (running stop hook)
         private static readonly Regex ProcessingPatternFull = new Regex(
-            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*([^\r\n()]+?)\s*\((?:(?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?|[^)]+)\)",
+            @"[✶✽✻✼✴✵✷✸✹⋆*✢]\s*([^\r\n()]+?)\s*\((?:(?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?|[^)]+)\)",
             RegexOptions.Compiled);
 
         // 処理中パターン（簡易形）- ジッター対策で部分更新が来る場合用
@@ -27,7 +28,7 @@ namespace TerminalHub.Analyzers
         //     * Harmonizing…
         //     ✶ Docker ビルド & テスト中…  (タスク名の場合は複数単語)
         private static readonly Regex ProcessingPatternSimple = new Regex(
-            @"[✶✽✻✼✴✵✷✸✹·⋆*✢]\s*(.+?…)",
+            @"[✶✽✻✼✴✵✷✸✹⋆*✢]\s*(.+?…)",
             RegexOptions.Compiled);
 
         // 中断パターン
@@ -45,10 +46,12 @@ namespace TerminalHub.Analyzers
             var cleanedData = AnsiHelper.CleanAnsiSequences(data);
 
             // 中断パターンをチェック
-            if (InterruptedPattern.IsMatch(cleanedData))
+            var interruptMatch = InterruptedPattern.Match(cleanedData);
+            if (interruptMatch.Success)
             {
                 result.IsInterrupted = true;
                 result.IsProcessing = false;
+                result.MatchedText = interruptMatch.Value;
                 return true;
             }
 
@@ -58,14 +61,25 @@ namespace TerminalHub.Analyzers
             {
                 var capturedText = match.Groups[1].Value.Trim();
 
-                // チャンク分割による断片的なマッチを除外（lazy +? が1〜2文字でマッチするケース）
-                if (capturedText.Length < 3)
+                // チャンク分割による断片的なマッチを除外
+                // 正規のステータステキストは必ず「…」を含み、文字で始まる
+                if (!capturedText.Contains('…') || char.IsDigit(capturedText[0]))
                 {
                     return false;
                 }
 
+                // ANSIクリーン後にカーソル前進がスペース化され、レイアウト情報が混入するケースに対応
+                // 例: "Bloviating…          402        s…" → "Bloviating…"
+                // 正規のステータスは最初の「…」で終わるため、それ以降を除去
+                var ellipsisIndex = capturedText.IndexOf('…');
+                if (ellipsisIndex >= 0 && ellipsisIndex < capturedText.Length - 1)
+                {
+                    capturedText = capturedText.Substring(0, ellipsisIndex + 1);
+                }
+
                 result.IsProcessing = true;
                 result.ProcessingText = capturedText;
+                result.MatchedText = match.Value;
                 return true;
             }
 
@@ -84,8 +98,17 @@ namespace TerminalHub.Analyzers
                     return false;
                 }
 
+                // ステータステキストは必ず文字で始まる（"Wandering…", "Docker ビルド…" 等）
+                // "34.8k tokensWandering…" のように数字で始まるものは、
+                // ステータス行内の区切り「·」がスピナーとして誤マッチしたケース
+                if (char.IsDigit(capturedText[0]))
+                {
+                    return false;
+                }
+
                 result.IsProcessing = true;
                 result.ProcessingText = capturedText;
+                result.MatchedText = simpleMatch.Value;
                 return true;
             }
 

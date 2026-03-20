@@ -70,8 +70,15 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-            if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
+            // permission-mode: 新キー優先、旧キー(bypass-mode)フォールバック
+            if (options.TryGetValue("permission-mode", out var permMode))
             {
+                if (permMode == "bypass") args.Add("--dangerously-skip-permissions");
+                else if (permMode == "auto") args.Add("--enable-auto-mode");
+            }
+            else if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
+            {
+                // 旧データ互換
                 args.Add("--dangerously-skip-permissions");
             }
 

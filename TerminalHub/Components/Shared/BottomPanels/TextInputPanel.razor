@@ -1,6 +1,8 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @inject IInputHistoryService InputHistoryService
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <div class="p-3 h-100 d-flex flex-column">
     <div class="flex-grow-1 d-flex flex-column">
@@ -43,6 +45,19 @@
                         <i class="bi bi-arrow-repeat d-none d-md-inline"></i> @GetModeSwitchLabel()
                     </button>
                 }
+                @if (VoiceInputEnabled)
+                {
+                    <button class="btn btn-secondary @(isVoiceRecording ? "btn-danger active" : "")"
+                            @onmousedown="OnVoiceStart"
+                            @onmouseup="OnVoiceStop"
+                            @onmouseleave="OnVoiceStop"
+                            @ontouchstart="OnVoiceStart"
+                            @ontouchstart:preventDefault
+                            @ontouchend="OnVoiceStop"
+                            title="音声入力（押している間録音）">
+                        <i class="bi bi-mic"></i>
+                    </button>
+                }
                 <button class="btn btn-primary" @onclick="OnSendClick">
                     <i class="bi bi-send d-none d-md-inline"></i> 送信
                 </button>
@@ -56,6 +71,7 @@
     [Parameter] public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public string ClaudeModeSwitchKey { get; set; } = "altM";
     [Parameter] public string PlaceholderText { get; set; } = "コマンドを入力...";
+    [Parameter] public bool VoiceInputEnabled { get; set; } = false;
 
     [Parameter] public string Text { get; set; } = "";
     [Parameter] public EventCallback<string> TextChanged { get; set; }
@@ -82,6 +98,9 @@
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
     private bool isSending = false;
+    private bool isVoiceRecording = false;
+    private DotNetObjectReference<TextInputPanel>? dotNetRef;
+    private bool voiceInitialized = false;
 
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
     {
@@ -203,5 +222,87 @@
             "plan" => "Planモードに入る (/plan)",
             _ => "モード切替 (Alt+M)"
         };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && VoiceInputEnabled)
+        {
+            await InitVoiceInput();
+        }
+    }
+
+    private async Task InitVoiceInput()
+    {
+        if (voiceInitialized) return;
+        try
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            var supported = await JS.InvokeAsync<bool>("voiceInputManager.isSupported");
+            if (supported)
+            {
+                await JS.InvokeAsync<bool>("voiceInputManager.init", dotNetRef);
+                voiceInitialized = true;
+            }
+        }
+        catch
+        {
+            // JSInteropエラーは無視
+        }
+    }
+
+    private async Task OnVoiceStart()
+    {
+        if (!voiceInitialized)
+        {
+            await InitVoiceInput();
+            if (!voiceInitialized) return;
+        }
+        isVoiceRecording = true;
+        try
+        {
+            await JS.InvokeVoidAsync("voiceInputManager.startRecording", $"inputText-{PanelId}");
+        }
+        catch
+        {
+            isVoiceRecording = false;
+        }
+    }
+
+    private async Task OnVoiceStop()
+    {
+        if (!isVoiceRecording) return;
+        isVoiceRecording = false;
+        try
+        {
+            await JS.InvokeVoidAsync("voiceInputManager.stopRecording");
+        }
+        catch
+        {
+            // JSInteropエラーは無視
+        }
+    }
+
+    [JSInvokable]
+    public void OnVoiceResult(string text)
+    {
+        inputText = text;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (voiceInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("voiceInputManager.dispose");
+            }
+            catch
+            {
+                // JSDisconnectedException等は無視
+            }
+        }
+        dotNetRef?.Dispose();
     }
 }

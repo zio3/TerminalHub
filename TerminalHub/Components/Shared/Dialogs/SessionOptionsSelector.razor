@@ -52,12 +52,38 @@
     {
         <div class="mb-3">
             <label class="form-label">Claude Code オプション</label>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.BypassMode" id="@($"claudeBypass{UniqueId}")">
-                <label class="form-check-label" for="@($"claudeBypass{UniqueId}")">
-                    バイパスモード (--dangerously-skip-permissions)
-                </label>
+
+            <!-- 権限モード -->
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">権限モード</label>
+                <div class="btn-group d-flex" role="group">
+                    <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermBypass{UniqueId}")"
+                           checked="@(ClaudeOptions.PermissionMode == "bypass")"
+                           @onchange="@(() => ClaudeOptions.PermissionMode = "bypass")" autocomplete="off">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"claudePermBypass{UniqueId}")" title="全操作を無条件で自動承認します（危険）">
+                        バイパス
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermAuto{UniqueId}")"
+                           checked="@(ClaudeOptions.PermissionMode == "auto")"
+                           @onchange="@(() => ClaudeOptions.PermissionMode = "auto")" autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="@($"claudePermAuto{UniqueId}")" title="低リスク操作を自動承認し、高リスク操作のみ確認を求めます">
+                        オートモード
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermDefault{UniqueId}")"
+                           checked="@(ClaudeOptions.PermissionMode == "default")"
+                           @onchange="@(() => ClaudeOptions.PermissionMode = "default")" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"claudePermDefault{UniqueId}")" title="全ての操作で都度確認を求めます">
+                        デフォルト
+                    </label>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(GetPermissionModeHelp()))
+                {
+                    <div class="form-text small mt-1">@GetPermissionModeHelp()</div>
+                }
             </div>
+
             @if (!DisableContinueOption)
             {
                 <div class="form-check mt-2">
@@ -487,9 +513,9 @@
                 break;
 
             case TerminalType.ClaudeCode:
-                if (ClaudeOptions.BypassMode)
+                if (ClaudeOptions.PermissionMode != "default")
                 {
-                    options["bypass-mode"] = "true";
+                    options["permission-mode"] = ClaudeOptions.PermissionMode;
                 }
                 if (ClaudeOptions.Continue && !DisableContinueOption)
                 {
@@ -574,7 +600,7 @@
 
     public class ClaudeCodeOptions
     {
-        public bool BypassMode { get; set; } = true;
+        public string PermissionMode { get; set; } = "bypass"; // "bypass" | "auto" | "default"
         public bool Continue { get; set; } = true;
         public bool ChromeMode { get; set; } = false;
         public string ExtraArgs { get; set; } = "";
@@ -604,6 +630,17 @@
         public string ExtraArgs { get; set; } = "";
     }
     
+    private string GetPermissionModeHelp()
+    {
+        return ClaudeOptions.PermissionMode switch
+        {
+            "bypass" => "全操作を無条件で自動承認します（--dangerously-skip-permissions）。",
+            "auto" => "低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。",
+            "default" => "全ての操作で都度確認を求めます。",
+            _ => ""
+        };
+    }
+
     private string GetGeminiApprovalModeHelp()
     {
         return GeminiOptions.ApprovalMode switch

@@ -190,6 +190,59 @@ namespace TerminalHub.Models
             }
         }
 
+        // ステータス変更履歴（診断用、Queue で O(1) eviction）
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly Queue<StatusChangeEntry> _statusChangeHistory = new();
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly object _statusHistoryLock = new();
+
+        private const int MaxStatusHistoryCount = 500;
+
+        public void RecordStatusChange(string? previousStatus, string? newStatus, string? matchedText)
+        {
+            lock (_statusHistoryLock)
+            {
+                if (_statusChangeHistory.Count >= MaxStatusHistoryCount)
+                {
+                    _statusChangeHistory.Dequeue();
+                }
+                _statusChangeHistory.Enqueue(new StatusChangeEntry
+                {
+                    Timestamp = DateTime.Now,
+                    PreviousStatus = previousStatus,
+                    NewStatus = newStatus,
+                    MatchedText = matchedText
+                });
+            }
+        }
+
+        public List<StatusChangeEntry> GetStatusChangeHistory()
+        {
+            lock (_statusHistoryLock)
+            {
+                return new List<StatusChangeEntry>(_statusChangeHistory);
+            }
+        }
+
+        public int StatusChangeHistoryCount
+        {
+            get
+            {
+                lock (_statusHistoryLock)
+                {
+                    return _statusChangeHistory.Count;
+                }
+            }
+        }
+
+        public void ClearStatusChangeHistory()
+        {
+            lock (_statusHistoryLock)
+            {
+                _statusChangeHistory.Clear();
+            }
+        }
 
         public string GetDisplayName()
         {
@@ -246,5 +299,19 @@ namespace TerminalHub.Models
                 TerminalType = TerminalType
             };
         }
+    }
+
+    /// <summary>
+    /// ステータス変更履歴エントリ（診断用）
+    /// </summary>
+    public class StatusChangeEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string? PreviousStatus { get; set; }
+        public string? NewStatus { get; set; }
+        /// <summary>
+        /// ステータス変更のトリガーとなった正規表現マッチテキスト（ANSIクリーン済み）
+        /// </summary>
+        public string? MatchedText { get; set; }
     }
 }

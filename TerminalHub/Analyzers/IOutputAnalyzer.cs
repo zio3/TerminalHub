@@ -29,5 +29,9 @@ namespace TerminalHub.Analyzers
         public int? ElapsedSeconds { get; set; }      // GeminiCLI用
         public string? StatusText { get; set; }       // GeminiCLI用
         public string? ProcessingText { get; set; }   // ClaudeCode用
+        /// <summary>
+        /// 正規表現がマッチした部分文字列（ANSIクリーン済み）。診断用。
+        /// </summary>
+        public string? MatchedText { get; set; }
     }
 }

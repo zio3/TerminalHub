@@ -46,18 +46,22 @@ namespace TerminalHub.Analyzers
             var cleanedData = AnsiHelper.CleanAnsiSequences(data);
 
             // ESCキーでの中断パターンをチェック
-            if (EscInterruptedPattern.IsMatch(cleanedData))
+            var escMatch = EscInterruptedPattern.Match(cleanedData);
+            if (escMatch.Success)
             {
                 result.IsInterrupted = true;
                 result.IsProcessing = false;
+                result.MatchedText = escMatch.Value;
                 return true;
             }
 
             // キャンセル/エラーパターンをチェック
-            if (CancelledPattern.IsMatch(cleanedData))
+            var cancelMatch = CancelledPattern.Match(cleanedData);
+            if (cancelMatch.Success)
             {
                 result.IsInterrupted = true;
                 result.IsProcessing = false;
+                result.MatchedText = cancelMatch.Value;
                 return true;
             }
 
@@ -66,6 +70,7 @@ namespace TerminalHub.Analyzers
             if (completeMatch.Success)
             {
                 result.IsProcessing = false;
+                result.MatchedText = completeMatch.Value;
                 // 秒数が含まれている場合は抽出
                 if (completeMatch.Groups.Count > 1 && !string.IsNullOrEmpty(completeMatch.Groups[1].Value))
                 {
@@ -75,11 +80,13 @@ namespace TerminalHub.Analyzers
             }
 
             // ユーザー入力待ちパターンをチェック
-            if (WaitingForUserPattern.IsMatch(cleanedData))
+            var waitMatch = WaitingForUserPattern.Match(cleanedData);
+            if (waitMatch.Success)
             {
                 result.IsProcessing = true;
                 result.IsWaitingForUser = true;
                 result.StatusText = "ユーザー確認待ち";
+                result.MatchedText = waitMatch.Value;
                 return true;
             }
 
@@ -89,6 +96,7 @@ namespace TerminalHub.Analyzers
             {
                 result.IsProcessing = true;
                 result.StatusText = processingMatch.Groups[1].Value.Trim();
+                result.MatchedText = processingMatch.Value;
                 return true;
             }
 

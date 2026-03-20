@@ -176,7 +176,11 @@
             {
                 claudeOptions = new SessionOptionsSelector.ClaudeCodeOptions
                 {
-                    BypassMode = options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true",
+                    PermissionMode = options.ContainsKey("permission-mode")
+                        ? options["permission-mode"]
+                        : (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
+                            ? "bypass"
+                            : "default",
                     Continue = options.ContainsKey("continue") && options["continue"] == "true",
                     ChromeMode = options.ContainsKey("chrome") && options["chrome"] == "true",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
