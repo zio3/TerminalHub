@@ -78,6 +78,14 @@
                         </small>
                     </div>
 
+                    <!-- ピン留め -->
+                    <div class="mb-3 form-check">
+                        <input class="form-check-input" type="checkbox" @bind="isPinned" id="isPinnedCheck">
+                        <label class="form-check-label" for="isPinnedCheck">
+                            <i class="bi bi-pin-fill me-1"></i>セッションをピン留め（常にリスト上部に表示）
+                        </label>
+                    </div>
+
                     <!-- メモ -->
                     <div class="mb-3">
                         <label class="form-label">メモ</label>
@@ -141,6 +149,7 @@
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
     private SessionOptionsSelector.CodexOptionsData codexOptions = new();
+    private bool isPinned = false;
     private string errorMessage = "";
     private bool restartSession = true;
 
@@ -163,6 +172,7 @@
             // 現在の設定を読み込む
             displayName = sessionInfo.DisplayName ?? "";
             memo = sessionInfo.Memo ?? "";
+            isPinned = sessionInfo.IsPinned;
             selectedType = sessionInfo.TerminalType;
 
             // オプションを解析
@@ -229,6 +239,9 @@
             
             // メモを更新
             sessionInfo.Memo = string.IsNullOrWhiteSpace(memo) ? string.Empty : memo;
+
+            // ピン留め状態を更新
+            sessionInfo.IsPinned = isPinned;
             
             // ターミナルタイプを更新
             sessionInfo.TerminalType = selectedType;

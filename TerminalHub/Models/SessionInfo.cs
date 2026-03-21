@@ -45,6 +45,9 @@ namespace TerminalHub.Models
         public Dictionary<string, string> Options { get; set; } = new();
         public string Memo { get; set; } = string.Empty;
 
+        // ピン留め状態
+        public bool IsPinned { get; set; } = false;
+
         // アーカイブ状態
         public bool IsArchived { get; set; } = false;
         public DateTime? ArchivedAt { get; set; }

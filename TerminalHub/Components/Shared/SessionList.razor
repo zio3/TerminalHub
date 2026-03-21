@@ -102,6 +102,12 @@
                                         <i class="bi @(session.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                                     </button>
                                 }
+                            @if (session.IsPinned)
+                            {
+                                <span class="text-muted me-1" title="ピン留め">
+                                    <i class="bi bi-pin-fill"></i>
+                                </span>
+                            }
                             @if (NotificationPendingSessions.Contains(session.SessionId))
                             {
                                 <span class="text-danger me-1" title="処理が完了しました">
@@ -207,7 +213,7 @@
     [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
     [Parameter] public Guid? ActiveSessionId { get; set; }
     [Parameter] public bool IsAddingSession { get; set; }
-    [Parameter] public string SortMode { get; set; } = "createdAt"; // "createdAt" or "lastAccessed"
+    [Parameter] public string SortMode { get; set; } = "lastAccessed"; // "createdAt" or "lastAccessed"
     [Parameter] public ISet<Guid> NotificationPendingSessions { get; set; } = new HashSet<Guid>();
     [Parameter] public bool ShowTerminalType { get; set; } = false;
     [Parameter] public bool ShowGitInfo { get; set; } = false;
@@ -264,17 +270,21 @@
         if (SortMode == "lastAccessed")
         {
             // 親セッションごとに、自分と子セッションの最大LastAccessedAtを計算
-            sortedParents = parentSessions.OrderByDescending(parent =>
-            {
-                var children = Sessions.Where(s => s.ParentSessionId == parent.SessionId);
-                var allDates = children.Select(c => c.LastAccessedAt).Append(parent.LastAccessedAt);
-                return allDates.Max();
-            });
+            sortedParents = parentSessions
+                .OrderByDescending(s => s.IsPinned)
+                .ThenByDescending(parent =>
+                {
+                    var children = Sessions.Where(s => s.ParentSessionId == parent.SessionId);
+                    var allDates = children.Select(c => c.LastAccessedAt).Append(parent.LastAccessedAt);
+                    return allDates.Max();
+                });
         }
         else
         {
             // 作成日時順（従来の動作）
-            sortedParents = parentSessions.OrderBy(s => s.CreatedAt);
+            sortedParents = parentSessions
+                .OrderByDescending(s => s.IsPinned)
+                .ThenBy(s => s.CreatedAt);
         }
 
         // 親セッションとその子セッションをグループ化

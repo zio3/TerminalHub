@@ -213,7 +213,7 @@
     private List<SessionInfo> sessions = new();
     private Guid? activeSessionId;
     private bool isAddingSession = false;
-    private string sessionSortMode = "createdAt"; // セッション一覧のソートモード
+    private string sessionSortMode = "lastAccessed"; // セッション一覧のソートモード
     private bool showTerminalType = false; // ターミナル種別を表示
     private bool showGitInfo = false; // Git情報を表示
     private bool hideInputPanel = false; // 入力パネルを非表示
