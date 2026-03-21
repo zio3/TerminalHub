@@ -80,6 +80,7 @@
     [Parameter] public EventCallback OnCtrlC { get; set; }
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }
+    [Parameter] public EventCallback OnAltV { get; set; }
 
     private string inputText
     {
@@ -98,6 +99,7 @@
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
     private bool isSending = false;
+    private bool isAltVPressed = false;
     private bool isVoiceRecording = false;
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
@@ -132,6 +134,16 @@
                 shouldPreventDefault = true;
                 await OnModeSwitchClick();
             }
+        }
+        // Ctrl+V: クリップボードに画像があればAlt+V（画像貼り付け）をターミナルに送信
+        else if (e.Key == "v" && e.CtrlKey && !e.AltKey && !e.ShiftKey)
+        {
+            if (ClipboardHelper.ContainsImage())
+            {
+                shouldPreventDefault = true;
+                await OnAltVClick();
+            }
+            // テキストの場合はshouldPreventDefault=falseのままブラウザのデフォルトペースト
         }
         // 履歴機能: 上矢印で前の履歴、下矢印で次の履歴
         else if (e.Key == "ArrowUp" && e.CtrlKey)
@@ -194,6 +206,14 @@
         await OnEscape.InvokeAsync();
         await Task.Delay(100);
         isEscapePressed = false;
+    }
+
+    private async Task OnAltVClick()
+    {
+        isAltVPressed = true;
+        await OnAltV.InvokeAsync();
+        await Task.Delay(100);
+        isAltVPressed = false;
     }
 
     private async Task OnModeSwitchClick()

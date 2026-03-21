@@ -179,7 +179,8 @@
                                                     OnSendInput="HandleTextInputSend"
                                                     OnCtrlC="SendCtrlC"
                                                     OnEscape="SendEscape"
-                                                    OnModeSwitch="SendModeSwitch" />
+                                                    OnModeSwitch="SendModeSwitch"
+                                                    OnAltV="SendAltV" />
                                 }
                                 else if (activeTab.Type == BottomPanelTabType.DosTerminal)
                                 {
@@ -1787,6 +1788,15 @@
 
         // Escキーを送信（\x1B はESCのエスケープシーケンス）
         await activeSession.WriteAsync("\x1B");
+    }
+
+    private async Task SendAltV()
+    {
+        if (activeSession == null)
+            return;
+
+        // Alt+Vを送信（ESC + v）
+        await activeSession.WriteAsync("\x1Bv");
     }
 
     private async Task SendModeSwitch()
