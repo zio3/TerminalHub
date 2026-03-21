@@ -7,6 +7,7 @@
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject IAppSettingsService AppSettingsService
+@inject IFolderPickerService FolderPicker
 @inject ISessionManager SessionManager
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IVersionCheckService VersionCheckService
@@ -20,7 +21,7 @@
                     <h5 class="modal-title">
                         <i class="bi bi-gear-fill me-2"></i>設定
                     </h5>
-                    <button type="button" class="btn-close" @onclick="Close"></button>
+                    <button type="button" class="btn-close" @onclick="SaveAndClose"></button>
                 </div>
                 <div class="modal-body">
                     <!-- タブナビゲーション -->
@@ -105,9 +106,15 @@
 
                                 <div class="mb-4">
                                     <label class="form-label">デフォルトフォルダパス</label>
-                                    <input type="text" class="form-control @(defaultFolderPathWarning != null ? "is-warning" : "")"
-                                           @bind="defaultFolderPath"
-                                           placeholder="@Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)" />
+                                    <div class="input-group">
+                                        <input type="text" class="form-control @(defaultFolderPathWarning != null ? "is-warning" : "")"
+                                               @bind="defaultFolderPath"
+                                               placeholder="@Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)" />
+                                        <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDefaultFolder"
+                                                title="フォルダを選択">
+                                            <i class="bi bi-folder-symlink"></i>
+                                        </button>
+                                    </div>
                                     @if (defaultFolderPathWarning != null)
                                     {
                                         <div class="text-warning small mt-1">
@@ -125,6 +132,10 @@
                                         <input type="text" class="form-control @(favoriteFolderError != null ? "is-invalid" : "")"
                                                @bind="newFavoriteFolder"
                                                placeholder="フォルダパスを入力" />
+                                        <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFavoriteFolder"
+                                                title="フォルダを選択">
+                                            <i class="bi bi-folder-symlink"></i>
+                                        </button>
                                         <button class="btn btn-outline-primary" type="button" @onclick="AddFavoriteFolder"
                                                 disabled="@string.IsNullOrWhiteSpace(newFavoriteFolder)">
                                             <i class="bi bi-plus-lg"></i> 追加
@@ -823,9 +834,8 @@
                     }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="Close">キャンセル</button>
-                    <button type="button" class="btn btn-primary" @onclick="SaveSettings">
-                        <i class="bi bi-save me-1"></i>保存
+                    <button type="button" class="btn btn-primary" @onclick="SaveAndClose">
+                        <i class="bi bi-check-circle me-1"></i>閉じる
                     </button>
                 </div>
             </div>
@@ -1246,6 +1256,29 @@
         favoriteFolders.Remove(folder);
     }
 
+    private async Task BrowseFavoriteFolder()
+    {
+        var selected = await FolderPicker.PickFolderAsync();
+        if (selected != null)
+        {
+            newFavoriteFolder = selected;
+            favoriteFolderError = null;
+            AddFavoriteFolder();
+            StateHasChanged();
+        }
+    }
+
+    private async Task BrowseDefaultFolder()
+    {
+        var selected = await FolderPicker.PickFolderAsync(defaultFolderPath);
+        if (selected != null)
+        {
+            defaultFolderPath = selected;
+            defaultFolderPathWarning = null;
+            StateHasChanged();
+        }
+    }
+
     private async Task OnSessionListScaleSliderInput(ChangeEventArgs e)
     {
         if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
@@ -1300,6 +1333,12 @@
     private async Task Close()
     {
         await IsVisibleChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveAndClose()
+    {
+        await SaveSettings();
+        await Close();
     }
     
     private async Task ExportSettings()

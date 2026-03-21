@@ -6,6 +6,7 @@
 @inject ILocalStorageService LocalStorage
 @inject ILogger<SessionCreateDialog> Logger
 @inject IAppSettingsService AppSettingsService
+@inject IFolderPickerService FolderPicker
 
 <div class="modal fade @(IsVisible && !showCreateFolderDialog ? "show" : "")" tabindex="-1" style="@(IsVisible && !showCreateFolderDialog ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
@@ -57,6 +58,12 @@
                                 <li>
                                     <button class="dropdown-item" type="button" @onclick="SelectUserHome">
                                         <i class="bi bi-house-fill text-primary me-2"></i>ユーザーホーム
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item" type="button" @onclick="OpenNativeFolderPicker">
+                                        <i class="bi bi-folder-symlink text-secondary me-2"></i>フォルダを選択...
                                     </button>
                                 </li>
                             </ul>
@@ -225,6 +232,16 @@
     private void SelectUserHome()
     {
         folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    private async Task OpenNativeFolderPicker()
+    {
+        var selected = await FolderPicker.PickFolderAsync(folderPath);
+        if (selected != null)
+        {
+            folderPath = selected;
+            StateHasChanged();
+        }
     }
 
     private string GetFolderName(string path)

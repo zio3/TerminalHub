@@ -30,7 +30,7 @@ public interface ISessionTimerService
 /// </summary>
 public class SessionTimerService : ISessionTimerService, IDisposable
 {
-    private readonly Dictionary<Guid, Timer> _sessionProcessingTimers = new();
+    private readonly Dictionary<Guid, System.Threading.Timer> _sessionProcessingTimers = new();
     private readonly object _timerLock = new();
     private Action<Guid>? _timeoutCallback;
     private volatile bool _disposed;
@@ -51,7 +51,7 @@ public class SessionTimerService : ISessionTimerService, IDisposable
             // 新しいタイマーを作成（8秒後にタイムアウト）
             // 新しいClaude CodeフォーマットではTask一覧やステータスバーの描画で
             // スピナー文字を含まないチャンクが続く場合があるため余裕を持たせる
-            var timer = new Timer(
+            var timer = new System.Threading.Timer(
                 (state) => CheckSessionTimeout(sessionId),
                 null,
                 TimeSpan.FromSeconds(8),

@@ -91,6 +91,9 @@ builder.Services.AddHttpClient();
 // AppSettingsServiceを登録（Singleton - ファイルベース）
 builder.Services.AddSingleton<IAppSettingsService, AppSettingsService>();
 
+// FolderPickerServiceを登録
+builder.Services.AddSingleton<IFolderPickerService, FolderPickerService>();
+
 // HookNotificationServiceを登録
 builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();
 
