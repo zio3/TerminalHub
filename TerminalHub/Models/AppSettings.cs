@@ -87,6 +87,7 @@ public class DevToolsSettings
 public class GeneralSettings
 {
     public string DefaultFolderPath { get; set; } = "";
+    public List<string> FavoriteFolders { get; set; } = new();
     public double SessionListScale { get; set; } = 1.0;
     public int TerminalFontSize { get; set; } = 14;
     public int TerminalHeightPercent { get; set; } = 70;

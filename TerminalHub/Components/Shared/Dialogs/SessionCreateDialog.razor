@@ -4,7 +4,6 @@
 @using System.IO
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorage
-@inject ISessionManager SessionManager
 @inject ILogger<SessionCreateDialog> Logger
 @inject IAppSettingsService AppSettingsService
 
@@ -21,33 +20,44 @@
                     <div class="input-group">
                         <input type="text" class="form-control" @bind="folderPath" placeholder="フォルダパスを入力または選択" />
                         <div class="dropdown">
-                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" @onclick="LoadRecentFolders">
+                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-folder-open"></i> 参照
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end" style="max-height: 300px; overflow-y: auto;">
-                                @if (recentFolders.Any())
+                                @if (favoriteFolders.Any())
                                 {
-                                    <li><h6 class="dropdown-header">最近使用したフォルダ</h6></li>
-                                    @foreach (var folder in recentFolders.Take(10))
+                                    <li><h6 class="dropdown-header">お気に入りフォルダ</h6></li>
+                                    @foreach (var folder in favoriteFolders)
                                     {
                                         <li>
-                                            <a class="dropdown-item d-flex align-items-center" href="#" @onclick="() => SelectFolder(folder)" @onclick:preventDefault="true">
+                                            <button class="dropdown-item d-flex align-items-center" type="button" @onclick="() => SelectFolder(folder)">
                                                 <i class="bi bi-folder-fill text-warning me-2"></i>
                                                 <div class="flex-grow-1 overflow-hidden">
                                                     <span class="text-truncate d-block" title="@folder">
-                                                        <strong>@Path.GetFileName(folder)</strong>
+                                                        <strong>@GetFolderName(folder)</strong>
                                                         <small class="text-muted ms-2">@folder</small>
                                                     </span>
                                                 </div>
-                                            </a>
+                                            </button>
                                         </li>
                                     }
                                     <li><hr class="dropdown-divider"></li>
                                 }
+                                @if (!string.IsNullOrWhiteSpace(_cachedDefaultFolderPath)
+                                    && !_cachedDefaultFolderPath.TrimEnd('\\', '/').Equals(
+                                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('\\', '/'),
+                                        StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <li>
+                                        <button class="dropdown-item" type="button" @onclick="() => SelectFolder(_cachedDefaultFolderPath)">
+                                            <i class="bi bi-folder-fill text-success me-2"></i>デフォルトフォルダ
+                                        </button>
+                                    </li>
+                                }
                                 <li>
-                                    <a class="dropdown-item" href="#" @onclick="SelectDefaultFolder" @onclick:preventDefault="true">
+                                    <button class="dropdown-item" type="button" @onclick="SelectUserHome">
                                         <i class="bi bi-house-fill text-primary me-2"></i>ユーザーホーム
-                                    </a>
+                                    </button>
                                 </li>
                             </ul>
                         </div>
@@ -109,16 +119,14 @@
 
     private SessionOptionsSelector? optionsSelector;
     private string folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    private string _cachedDefaultFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private string _cachedDefaultFolderPath = "";
     private TerminalType selectedType = TerminalType.Terminal;
     private string startupCommand = "";
 
     private SessionOptionsSelector.ClaudeCodeOptions claudeCodeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
-    private List<string> recentFolders = new();
-    private const string RECENT_FOLDERS_KEY = "recentFolders";
+    private List<string> favoriteFolders = new();
     private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
-    private const int MAX_RECENT_FOLDERS = 20;
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
 
@@ -138,29 +146,29 @@
         return Task.CompletedTask;
     }
 
-    protected override async Task OnParametersSetAsync()
+    protected override Task OnParametersSetAsync()
     {
-        // ダイアログが開かれたときにデフォルトパスを再読み込み
+        // ダイアログが開かれたときに設定を再読み込み
         if (IsVisible && !_wasVisible && _isInitialized)
         {
-            await LoadDefaultFolderPath();
+            LoadSettings();
         }
         _wasVisible = IsVisible;
+        return Task.CompletedTask;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            await LoadRecentFolders();
             await LoadLastSelectedTerminalType();
-            await LoadDefaultFolderPath();
+            LoadSettings();
             _isInitialized = true;
             StateHasChanged();
         }
     }
 
-    private Task LoadDefaultFolderPath()
+    private void LoadSettings()
     {
         try
         {
@@ -171,12 +179,14 @@
                 _cachedDefaultFolderPath = defaultPath;
                 folderPath = defaultPath;
             }
+            favoriteFolders = settings.General.FavoriteFolders
+                .Where(f => Directory.Exists(f))
+                .ToList();
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "デフォルトフォルダパスの読み込みに失敗");
+            Logger.LogWarning(ex, "設定の読み込みに失敗");
         }
-        return Task.CompletedTask;
     }
 
     private async Task LoadLastSelectedTerminalType()
@@ -207,65 +217,22 @@
         }
     }
 
-    private async Task LoadRecentFolders()
-    {
-        try
-        {
-            // LocalStorageから最近のフォルダを読み込む
-            var folders = await LocalStorage.GetAsync<List<string>>(RECENT_FOLDERS_KEY) ?? new List<string>();
-            
-            // 現在のセッションのフォルダも追加
-            var currentSessionFolders = SessionManager.GetAllSessions()
-                .Select(s => s.FolderPath)
-                .Where(f => !string.IsNullOrEmpty(f))
-                .Distinct();
-            
-            // 重複を排除して結合
-            recentFolders = folders.Union(currentSessionFolders)
-                .Where(f => Directory.Exists(f))
-                .Take(MAX_RECENT_FOLDERS)
-                .ToList();
-        }
-        catch
-        {
-            recentFolders = new List<string>();
-        }
-    }
-
-    private async Task SaveRecentFolder(string folderPath)
-    {
-        if (string.IsNullOrWhiteSpace(folderPath)) return;
-        
-        try
-        {
-            var folders = await LocalStorage.GetAsync<List<string>>(RECENT_FOLDERS_KEY) ?? new List<string>();
-            
-            // 既存の同じパスを削除して先頭に追加
-            folders.Remove(folderPath);
-            folders.Insert(0, folderPath);
-            
-            // 最大数を超えたら古いものを削除
-            if (folders.Count > MAX_RECENT_FOLDERS)
-            {
-                folders = folders.Take(MAX_RECENT_FOLDERS).ToList();
-            }
-            
-            await LocalStorage.SetAsync(RECENT_FOLDERS_KEY, folders);
-        }
-        catch
-        {
-            // エラーが発生しても継続
-        }
-    }
-
     private void SelectFolder(string folder)
     {
         folderPath = folder;
     }
 
-    private void SelectDefaultFolder()
+    private void SelectUserHome()
     {
-        folderPath = _cachedDefaultFolderPath;
+        folderPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    private string GetFolderName(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var trimmed = path.TrimEnd('\\', '/');
+        var lastSep = Math.Max(trimmed.LastIndexOf('\\'), trimmed.LastIndexOf('/'));
+        return lastSep >= 0 ? trimmed.Substring(lastSep + 1) : trimmed;
     }
 
     private async Task CreateSession()
@@ -291,9 +258,6 @@
             TerminalType = selectedType,
             Options = optionsSelector?.GetOptions() ?? new Dictionary<string, string>()
         };
-
-        // フォルダを最近使用したフォルダリストに保存
-        await SaveRecentFolder(folderPath);
 
         await OnSessionCreate.InvokeAsync(result);
         ResetForm();

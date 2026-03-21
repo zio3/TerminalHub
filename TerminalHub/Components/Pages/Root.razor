@@ -120,41 +120,39 @@
                             @foreach (var tab in bottomPanelTabs)
                             {
                                 <li class="nav-item">
-                                    <a class="nav-link @(activeBottomPanelTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
-                                       href="#"
-                                       @onclick:preventDefault="true"
+                                    <button class="nav-link @(activeBottomPanelTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
+                                       type="button"
                                        @onclick="async () => await SelectBottomPanelTab(tab.Id)">
                                         <i class="bi @GetBottomPanelTabIcon(tab.Type)"></i>
                                         <span>@tab.DisplayName</span>
                                         @if (!tab.IsDefault)
                                         {
                                             <button type="button" class="btn-close btn-close-white ms-1" style="font-size: 0.6rem; opacity: 0.7;"
-                                                    @onclick:preventDefault="true"
                                                     @onclick:stopPropagation="true"
                                                     @onclick="async () => await RemoveBottomPanelTab(tab.Id)"
                                                     title="タブを閉じる">
                                             </button>
                                         }
-                                    </a>
+                                    </button>
                                 </li>
                             }
                             <!-- タブ追加ドロップダウン -->
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" @onclick:preventDefault="true">
+                                <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                     <i class="bi bi-plus-lg"></i>
-                                </a>
+                                </button>
                                 <ul class="dropdown-menu">
                                     <li>
-                                        <a class="dropdown-item" href="#" @onclick:preventDefault="true"
+                                        <button class="dropdown-item" type="button"
                                            @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.TextInput)">
                                             <i class="bi bi-chat-left-text me-2"></i>テキスト入力を追加
-                                        </a>
+                                        </button>
                                     </li>
                                     <li>
-                                        <a class="dropdown-item" href="#" @onclick:preventDefault="true"
+                                        <button class="dropdown-item" type="button"
                                            @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.DosTerminal)">
                                             <i class="bi bi-terminal me-2"></i>DOSターミナルを追加
-                                        </a>
+                                        </button>
                                     </li>
                                 </ul>
                             </li>
