@@ -52,8 +52,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startmenuicon"; Description: "スタートメニューにショートカットを作成"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; publishフォルダの全ファイルをインストール
-Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; publishフォルダの全ファイルをインストール（app-settings.jsonは除外）
+Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "app-settings.json"
 
 ; 認証設定ファイル - 既存なら上書きしない
 Source: "..\TerminalHub\auth.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
