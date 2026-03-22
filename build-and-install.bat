@@ -80,8 +80,7 @@ echo.
 echo [4/4] インストーラーを実行中...
 
 :: .issファイルからバージョンを取得してインストーラーパスを決定
-set "INSTALLER_PATH="
-for /f "tokens=2 delims= " %%A in ('findstr /C:"#define MyAppVersion" installer\TerminalHub.iss') do (
+for /f "tokens=3 delims= " %%A in ('findstr /C:"#define MyAppVersion" installer\TerminalHub.iss') do (
     set "APP_VERSION=%%~A"
 )
 set "INSTALLER_PATH=installer\output\TerminalHub-Setup-!APP_VERSION!.exe"
