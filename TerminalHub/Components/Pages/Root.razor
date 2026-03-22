@@ -150,45 +150,58 @@
                                     </li>
                                     <li>
                                         <button class="dropdown-item" type="button"
-                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.DosTerminal)">
-                                            <i class="bi bi-terminal me-2"></i>DOSターミナルを追加
+                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.CommandPrompt)">
+                                            <i class="bi bi-terminal me-2"></i>コマンドプロンプトを追加
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button class="dropdown-item" type="button"
+                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.PowerShell)">
+                                            <i class="bi bi-terminal-fill me-2"></i>PowerShellを追加
                                         </button>
                                     </li>
                                 </ul>
                             </li>
                         </ul>
                         
-                        <!-- タブコンテンツ -->
-                        <div class="flex-grow-1" style="overflow-y: auto;">
-                            @{
-                                var activeTab = bottomPanelTabs.FirstOrDefault(t => t.Id == activeBottomPanelTabId);
-                            }
-                            @if (activeTab != null)
-                            {
-                                @if (activeTab.Type == BottomPanelTabType.TextInput)
+                        <!-- タブコンテンツ（全タブを常時描画、非アクティブはdisplay:noneで隠す） -->
+                        @foreach (var tab in bottomPanelTabs)
+                        {
+                            var isActive = tab.Id == activeBottomPanelTabId;
+                            <div class="flex-grow-1" style="overflow-y: auto; @(isActive ? "" : "display: none;")">
+                                @if (tab.Type == BottomPanelTabType.TextInput)
                                 {
-                                    <TextInputPanel PanelId="@activeTab.Id"
+                                    <TextInputPanel PanelId="@tab.Id"
                                                     TerminalType="@currentSession.TerminalType"
                                                     ClaudeModeSwitchKey="@claudeModeSwitchKey"
                                                     VoiceInputEnabled="@voiceInputEnabled"
                                                     PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
-                                                    Text="@GetTextInputPanelText(activeTab.Id)"
-                                                    TextChanged="@(text => SetTextInputPanelText(activeTab.Id, text))"
+                                                    Text="@GetTextInputPanelText(tab.Id)"
+                                                    TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
                                                     OnSendInput="HandleTextInputSend"
                                                     OnCtrlC="SendCtrlC"
                                                     OnEscape="SendEscape"
                                                     OnModeSwitch="SendModeSwitch"
                                                     OnAltV="SendAltV" />
                                 }
-                                else if (activeTab.Type == BottomPanelTabType.DosTerminal)
+                                else if (tab.Type == BottomPanelTabType.CommandPrompt)
                                 {
-                                    <DosTerminalPanel @ref="currentDosTerminalPanelRef"
-                                                      PanelId="@activeTab.Id"
-                                                      WorkingDirectory="@currentSession.FolderPath"
-                                                      DotNetRef="@dotNetRef" />
+                                    <ShellPanel PanelId="@tab.Id"
+                                                WorkingDirectory="@currentSession.FolderPath"
+                                                ShellExecutable="cmd.exe"
+                                                DotNetRef="@dotNetRef"
+                                                OnPanelReady="@(panel => shellPanelRefs[tab.Id] = panel)" />
                                 }
-                            }
-                        </div>
+                                else if (tab.Type == BottomPanelTabType.PowerShell)
+                                {
+                                    <ShellPanel PanelId="@tab.Id"
+                                                WorkingDirectory="@currentSession.FolderPath"
+                                                ShellExecutable="powershell.exe"
+                                                DotNetRef="@dotNetRef"
+                                                OnPanelReady="@(panel => shellPanelRefs[tab.Id] = panel)" />
+                                }
+                            </div>
+                        }
                     }
                 </div>
                 }
@@ -551,8 +564,6 @@
             }
         }
 
-        // DOSターミナルパネルの参照を保存
-        StoreDosTerminalPanelRef();
     }
 
     [JSInvokable]
@@ -648,22 +659,11 @@
         StateHasChanged();
     }
 
-    private async Task SwitchBottomPanelTab(BottomPanelTab tab)
+    private Task SwitchBottomPanelTab(BottomPanelTab tab)
     {
         bottomPanelTab = tab;
         StateHasChanged();
-
-        if (tab == BottomPanelTab.DosTerminal && activeSessionId != null)
-        {
-            // DOSターミナルタブに切り替え - 常に新しいXTermを作成
-            await CleanupSingleDosTerminal();
-            await InitializeSingleDosTerminal();
-        }
-        else if (tab == BottomPanelTab.TextInput)
-        {
-            // テキスト入力タブに切り替え - DOSターミナルをクリーンアップ
-            await CleanupSingleDosTerminal();
-        }
+        return Task.CompletedTask;
     }
 
     #region 下部パネルタブ管理
@@ -674,51 +674,22 @@
         bottomPanelTabs = new List<BottomPanelTabInfo>
         {
             new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true },
-            new() { Id = "default-dos", Type = BottomPanelTabType.DosTerminal, DisplayName = "DOSターミナル", IsDefault = true }
+            // デフォルトはテキスト入力のみ
         };
 
-        // LocalStorageから追加タブを復元
-        try
-        {
-            var savedTabs = await LocalStorageService.GetAsync<List<BottomPanelTabInfo>>("bottomPanelTabs");
-            if (savedTabs != null)
-            {
-                bottomPanelTabs.AddRange(savedTabs.Where(t => !t.IsDefault));
-            }
-
-            var savedActiveId = await LocalStorageService.GetAsync<string>("activeBottomPanelTabId");
-            if (!string.IsNullOrEmpty(savedActiveId) && bottomPanelTabs.Any(t => t.Id == savedActiveId))
-            {
-                activeBottomPanelTabId = savedActiveId;
-            }
-        }
-        catch
-        {
-            // エラー時はデフォルト値を使用
-        }
+        activeBottomPanelTabId = "default-text";
     }
 
-    private async Task SaveBottomPanelTabs()
-    {
-        try
-        {
-            // デフォルト以外のタブのみ保存
-            var tabsToSave = bottomPanelTabs.Where(t => !t.IsDefault).ToList();
-            await LocalStorageService.SetAsync("bottomPanelTabs", tabsToSave);
-            await LocalStorageService.SetAsync("activeBottomPanelTabId", activeBottomPanelTabId);
-        }
-        catch
-        {
-            // エラーは無視
-        }
-    }
-
-    private async Task AddBottomPanelTab(BottomPanelTabType type)
+    private Task AddBottomPanelTab(BottomPanelTabType type)
     {
         var count = bottomPanelTabs.Count(t => t.Type == type);
-        var displayName = type == BottomPanelTabType.TextInput
-            ? $"テキスト入力({count + 1})"
-            : $"DOSターミナル({count + 1})";
+        var displayName = type switch
+        {
+            BottomPanelTabType.TextInput => $"テキスト入力({count + 1})",
+            BottomPanelTabType.CommandPrompt => $"コマンドプロンプト({count + 1})",
+            BottomPanelTabType.PowerShell => $"PowerShell({count + 1})",
+            _ => $"タブ({count + 1})"
+        };
 
         var newTab = new BottomPanelTabInfo
         {
@@ -731,8 +702,8 @@
         bottomPanelTabs.Add(newTab);
         activeBottomPanelTabId = newTab.Id;
 
-        await SaveBottomPanelTabs();
         StateHasChanged();
+        return Task.CompletedTask;
     }
 
     private async Task RemoveBottomPanelTab(string tabId)
@@ -740,11 +711,11 @@
         var tab = bottomPanelTabs.FirstOrDefault(t => t.Id == tabId);
         if (tab == null || tab.IsDefault) return;
 
-        // DOSターミナルパネルの破棄
-        if (tab.Type == BottomPanelTabType.DosTerminal && dosTerminalPanelRefs.TryGetValue(tabId, out var panel))
+        // シェルパネルの破棄
+        if ((tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell) && shellPanelRefs.TryGetValue(tabId, out var panel))
         {
             await panel.DisposeAsync();
-            dosTerminalPanelRefs.Remove(tabId);
+            shellPanelRefs.Remove(tabId);
         }
 
         bottomPanelTabs.Remove(tab);
@@ -755,19 +726,31 @@
             activeBottomPanelTabId = bottomPanelTabs.FirstOrDefault()?.Id ?? "default-text";
         }
 
-        await SaveBottomPanelTabs();
         StateHasChanged();
     }
 
     private async Task SelectBottomPanelTab(string tabId)
     {
         activeBottomPanelTabId = tabId;
-        await SaveBottomPanelTabs();
+        StateHasChanged();
+
+        // シェルパネルの場合はフォーカスを再取得
+        if (shellPanelRefs.TryGetValue(tabId, out var panel))
+        {
+            // display切り替え後にDOMが更新されるのを待つ
+            await Task.Delay(50);
+            await panel.FocusAsync();
+        }
     }
 
     private string GetBottomPanelTabIcon(BottomPanelTabType type)
     {
-        return type == BottomPanelTabType.TextInput ? "bi-chat-left-text" : "bi-terminal";
+        return type switch
+        {
+            BottomPanelTabType.TextInput => "bi-chat-left-text",
+            BottomPanelTabType.PowerShell => "bi-terminal-fill",
+            _ => "bi-terminal"
+        };
     }
 
     private string GetTextInputPanelText(string panelId)
@@ -1041,13 +1024,7 @@
             // エラーは無視
         }
 
-        // 現在のタブに応じてターミナルを再作成
-        if (bottomPanelTab == BottomPanelTab.DosTerminal && selectedSession != null)
-        {
-            // 既存のDOSターミナルをクリーンアップして新しく作成
-            await CleanupSingleDosTerminal();
-            await InitializeSingleDosTerminal();
-        }
+        // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
     }
 
     private async Task InitializeTerminal(Guid sessionId)
@@ -1251,18 +1228,6 @@
             }
             
             // ConPtySessionのクリーンアップ
-            // 現在表示中のDOSターミナルを使用している場合はクリーンアップ
-            if (currentDosTerminalSessionId == sessionId)
-            {
-                await CleanupSingleDosTerminal();
-            }
-
-            // DOS ConPTYセッションのクリーンアップ（ハンドラー解除後に破棄）
-            CleanupDosTerminalHandlers(sessionId, sessionToRemove.DosTerminalConPtySession);
-            sessionToRemove.DosTerminalConPtySession?.Dispose();
-            sessionToRemove.DosTerminalConPtySession = null;
-
-            // ConPtySessionのクリーンアップ
             if (sessionToRemove.ConPtySession != null)
             {
                 sessionToRemove.ConPtySession.Dispose();
@@ -1335,12 +1300,6 @@
             return;
         }
         if (!confirmed) return;
-
-        // DOSターミナルのクリーンアップ
-        if (currentDosTerminalSessionId == sessionId)
-        {
-            await CleanupSingleDosTerminal();
-        }
 
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);
@@ -1440,26 +1399,13 @@
     [JSInvokable]
     public async Task SendInput(string sessionId, string data)
     {
-        // DOSターミナルからの入力を処理（singleDosTerminal用）
-        if (sessionId.StartsWith("dos-terminal-"))
+        // ShellPanelからの入力を処理
+        if (sessionId.StartsWith("shell-term-"))
         {
-            var guidStr = sessionId.Replace("dos-terminal-", "");
-            if (Guid.TryParse(guidStr, out var guid))
+            var panelId = sessionId.Replace("shell-term-", "");
+            if (shellPanelRefs.TryGetValue(panelId, out var shellPanel))
             {
-                var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (session?.DosTerminalConPtySession != null)
-                {
-                    await session.DosTerminalConPtySession.WriteAsync(data ?? string.Empty);
-                }
-            }
-        }
-        // DosTerminalPanelからの入力を処理
-        else if (sessionId.StartsWith("dos-term-"))
-        {
-            var panelId = sessionId.Replace("dos-term-", "");
-            if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
-            {
-                await dosPanel.WriteInput(data ?? string.Empty);
+                await shellPanel.WriteInput(data ?? string.Empty);
             }
         }
         else
@@ -1488,26 +1434,13 @@
                 cols, rows, source, detailInfo, dupInfo, shortId);
         }
 
-        // DOSターミナルのサイズ変更を処理（singleDosTerminal用）
-        if (sessionId.StartsWith("dos-terminal-"))
+        // ShellPanelのサイズ変更を処理
+        if (sessionId.StartsWith("shell-term-"))
         {
-            var guidStr = sessionId.Replace("dos-terminal-", "");
-            if (Guid.TryParse(guidStr, out var guid))
+            var panelId = sessionId.Replace("shell-term-", "");
+            if (shellPanelRefs.TryGetValue(panelId, out var shellPanel))
             {
-                var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (session?.DosTerminalConPtySession != null)
-                {
-                    session.DosTerminalConPtySession.Resize(cols, rows);
-                }
-            }
-        }
-        // DosTerminalPanelのサイズ変更を処理
-        else if (sessionId.StartsWith("dos-term-"))
-        {
-            var panelId = sessionId.Replace("dos-term-", "");
-            if (dosTerminalPanelRefs.TryGetValue(panelId, out var dosPanel))
-            {
-                dosPanel.SendResize(cols, rows);
+                shellPanel.SendResize(cols, rows);
             }
         }
         else
@@ -2403,9 +2336,6 @@
             // その他のエラーも無視
         }
         
-        // 単一DOSターミナルのクリーンアップ
-        await CleanupSingleDosTerminal();
-
         // HookNotificationServiceのイベントハンドラーを削除
         if (_hookNotificationHandler != null)
         {
@@ -2420,13 +2350,13 @@
             _sessionsChangedHandler = null;
         }
 
-        // 全セッションのDOS ConPTYセッションのクリーンアップ（ハンドラー解除後に破棄）
-        foreach (var session in sessions)
+        // ShellPanelの破棄（各パネルが自身のConPTYを管理）
+        foreach (var panel in shellPanelRefs.Values)
         {
-            CleanupDosTerminalHandlers(session.SessionId, session.DosTerminalConPtySession);
-            session.DosTerminalConPtySession?.Dispose();
+            try { await panel.DisposeAsync(); } catch { }
         }
-        
+        shellPanelRefs.Clear();
+
         // activeTerminalのDisposeを安全に処理
         if (activeTerminal != null)
         {

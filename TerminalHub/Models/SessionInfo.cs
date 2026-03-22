@@ -15,13 +15,15 @@ namespace TerminalHub.Models
     public enum BottomPanelTab
     {
         TextInput,
-        DosTerminal
+        CommandPrompt,
+        PowerShell
     }
 
     public enum BottomPanelTabType
     {
         TextInput,
-        DosTerminal
+        CommandPrompt,
+        PowerShell
     }
 
     public class BottomPanelTabInfo
@@ -103,10 +105,6 @@ namespace TerminalHub.Models
 
         [System.Text.Json.Serialization.JsonIgnore]
         public int LastKnownScrollPosition { get; set; } = 0;
-        
-        // DOSターミナル関連プロパティ
-        [System.Text.Json.Serialization.JsonIgnore]
-        public ConPtySession? DosTerminalConPtySession { get; set; }
         
         // Git関連プロパティ
         [System.Text.Json.Serialization.JsonIgnore]

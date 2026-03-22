@@ -37,6 +37,25 @@ npm run clean         # ビルド成果物をクリーン
 ./build-installer.bat   # Inno Setup 6 が必要
 ```
 
+### リリース手順
+リリース時は以下の手順で行う：
+1. `TerminalHub/TerminalHub.csproj` と `installer/TerminalHub.iss` のバージョンを更新
+2. バージョン更新をコミット・プッシュ
+3. `gh release create` でGitHubリリースを作成（`--notes` でリリースノートを記載）
+
+リリースノートは以下のフォーマットで日本語で記述する：
+```markdown
+## 新機能
+- 機能の説明
+
+## 改善
+- 改善の説明
+
+## バグ修正
+- 修正の説明
+```
+該当するセクションのみ記載する（例：バグ修正のみの場合は新機能・改善セクションは不要）。
+
 ### クリーン
 ```bash
 dotnet clean

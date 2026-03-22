@@ -934,7 +934,6 @@ namespace TerminalHub.Services
         {
             ConPtySession? conPtySessionToDispose = null;
             ConPtySession? sessionInfoConPtyToDispose = null;
-            ConPtySession? dosTerminalToDispose = null;
             SemaphoreSlim? initLockToDispose = null;
             bool shouldNotify = false;
 
@@ -969,12 +968,6 @@ namespace TerminalHub.Services
                     sessionInfo.ConPtySession = null;
                 }
 
-                if (sessionInfo.DosTerminalConPtySession != null)
-                {
-                    dosTerminalToDispose = sessionInfo.DosTerminalConPtySession;
-                    sessionInfo.DosTerminalConPtySession = null;
-                }
-
                 // 初期化ロックを削除
                 if (_initializationLocks.TryRemove(sessionId, out var initLock))
                 {
@@ -992,7 +985,6 @@ namespace TerminalHub.Services
             // ロック外でDispose（デッドロック防止）
             conPtySessionToDispose?.Dispose();
             sessionInfoConPtyToDispose?.Dispose();
-            dosTerminalToDispose?.Dispose();
             initLockToDispose?.Dispose();
 
             if (shouldNotify)
@@ -1049,7 +1041,6 @@ namespace TerminalHub.Services
         {
             ConPtySession? sessionToDispose = null;
             ConPtySession? sessionInfoConPtyToDispose = null;
-            ConPtySession? dosTerminalToDispose = null;
             SemaphoreSlim? initLockToDispose = null;
             bool deleted = false;
 
@@ -1072,12 +1063,6 @@ namespace TerminalHub.Services
                         sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
                     }
                     sessionInfo.ConPtySession = null;
-
-                    if (sessionInfo.DosTerminalConPtySession != null)
-                    {
-                        dosTerminalToDispose = sessionInfo.DosTerminalConPtySession;
-                        sessionInfo.DosTerminalConPtySession = null;
-                    }
                     deleted = true;
                 }
 
@@ -1097,7 +1082,6 @@ namespace TerminalHub.Services
             // ロック外でDispose（デッドロック防止）
             sessionToDispose?.Dispose();
             sessionInfoConPtyToDispose?.Dispose();
-            dosTerminalToDispose?.Dispose();
             initLockToDispose?.Dispose();
 
             if (deleted)
@@ -1130,11 +1114,10 @@ namespace TerminalHub.Services
             }
             _sessions.Clear();
 
-            // ConPtySession と DosTerminalConPtySession を破棄
+            // ConPtySessionを破棄
             foreach (var sessionInfo in _sessionInfos.Values)
             {
                 sessionInfo.ConPtySession?.Dispose();
-                sessionInfo.DosTerminalConPtySession?.Dispose();
             }
             _sessionInfos.Clear();
 
