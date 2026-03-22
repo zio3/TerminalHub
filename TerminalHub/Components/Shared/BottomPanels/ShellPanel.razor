@@ -161,6 +161,13 @@
     {
         try
         {
+            // イベントハンドラーを先に解除（Dispose中のデータ受信を防止）
+            if (shellSession != null)
+            {
+                shellSession.DataReceived -= OnDataReceived;
+                shellSession.ProcessExited -= OnProcessExited;
+            }
+
             // XTermの破棄
             if (terminal != null)
             {
@@ -182,8 +189,6 @@
             // ConPTYセッションの破棄
             if (shellSession != null)
             {
-                shellSession.DataReceived -= OnDataReceived;
-                shellSession.ProcessExited -= OnProcessExited;
                 shellSession.Dispose();
                 shellSession = null;
             }

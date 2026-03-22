@@ -184,19 +184,11 @@
                                                     OnModeSwitch="SendModeSwitch"
                                                     OnAltV="SendAltV" />
                                 }
-                                else if (tab.Type == BottomPanelTabType.CommandPrompt)
+                                else if (tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell)
                                 {
                                     <ShellPanel PanelId="@tab.Id"
                                                 WorkingDirectory="@currentSession.FolderPath"
-                                                ShellExecutable="cmd.exe"
-                                                DotNetRef="@dotNetRef"
-                                                OnPanelReady="@(panel => shellPanelRefs[tab.Id] = panel)" />
-                                }
-                                else if (tab.Type == BottomPanelTabType.PowerShell)
-                                {
-                                    <ShellPanel PanelId="@tab.Id"
-                                                WorkingDirectory="@currentSession.FolderPath"
-                                                ShellExecutable="powershell.exe"
+                                                ShellExecutable="@(tab.Type == BottomPanelTabType.PowerShell ? "powershell.exe" : "cmd.exe")"
                                                 DotNetRef="@dotNetRef"
                                                 OnPanelReady="@(panel => shellPanelRefs[tab.Id] = panel)" />
                                 }
@@ -239,7 +231,6 @@
     private DotNetObjectReference<Root>? dotNetRef;
     private Toast? toast;
     private string inputText = "";
-    private BottomPanelTab bottomPanelTab = BottomPanelTab.TextInput; // デフォルトはテキスト入力タブ（互換性維持）
 
     // 動的下部パネルタブ
     private List<BottomPanelTabInfo> bottomPanelTabs = new();
@@ -657,13 +648,6 @@
     {
         terminalHeightPercent = percent;
         StateHasChanged();
-    }
-
-    private Task SwitchBottomPanelTab(BottomPanelTab tab)
-    {
-        bottomPanelTab = tab;
-        StateHasChanged();
-        return Task.CompletedTask;
     }
 
     #region 下部パネルタブ管理

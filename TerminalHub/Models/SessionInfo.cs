@@ -12,13 +12,6 @@ namespace TerminalHub.Models
         CodexCLI
     }
 
-    public enum BottomPanelTab
-    {
-        TextInput,
-        CommandPrompt,
-        PowerShell
-    }
-
     public enum BottomPanelTabType
     {
         TextInput,
