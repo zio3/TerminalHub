@@ -52,3 +52,12 @@ if defined CHROME_PATH (
 ) else (
     start http://localhost:%HTTP_PORT%
 )
+
+echo.
+echo ========================================
+echo   TerminalHub 起動完了
+echo ========================================
+echo.
+echo   http://localhost:%HTTP_PORT%
+echo.
+pause
