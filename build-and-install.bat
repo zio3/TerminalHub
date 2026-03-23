@@ -13,7 +13,7 @@ echo ========================================
 echo.
 
 :: 1. Publish
-echo [1/4] アプリケーションをpublish中...
+echo [1/3] アプリケーションをpublish中...
 if exist "publish" (
     echo     古いpublishフォルダをクリーン中...
     rd /s /q "publish"
@@ -28,7 +28,7 @@ echo [OK] Publish完了
 echo.
 
 :: 2. Inno Setup のパスを探す
-echo [2/4] Inno Setup を検索中...
+echo [2/3] Inno Setup を検索中...
 
 set "ISCC_PATH="
 
@@ -50,23 +50,18 @@ if not defined ISCC_PATH (
 )
 
 if not defined ISCC_PATH (
-    echo [エラー] Inno Setup が見つかりません。
+    echo     Inno Setup が見つかりません。ファイルコピーでインストールします。
     echo.
-    echo Inno Setup をインストールしてください:
-    echo   https://jrsoftware.org/isdl.php
-    echo.
-    pause
-    exit /b 1
+    goto :direct_install
 )
 
 echo [OK] Inno Setup を検出: !ISCC_PATH!
 echo.
 
-:: 3. 出力ディレクトリを作成
+:: 3. インストーラーをビルド＆実行
 if not exist "installer\output" mkdir "installer\output"
 
-:: 4. インストーラーをビルド
-echo [3/4] インストーラーをビルド中...
+echo [3/3] インストーラーをビルド中...
 "!ISCC_PATH!" "installer\TerminalHub.iss"
 if !errorlevel! neq 0 (
     echo [エラー] インストーラーのビルドに失敗しました。
@@ -75,9 +70,6 @@ if !errorlevel! neq 0 (
 )
 echo [OK] インストーラービルド完了
 echo.
-
-:: 5. インストーラーを実行
-echo [4/4] インストーラーを実行中...
 
 :: .issファイルからバージョンを取得してインストーラーパスを決定
 for /f "tokens=3 delims= " %%A in ('findstr /C:"#define MyAppVersion" installer\TerminalHub.iss') do (
@@ -91,11 +83,8 @@ if not exist "!INSTALLER_PATH!" (
     exit /b 1
 )
 
-echo.
 echo インストーラーを起動します...
-echo （インストールウィザードが表示されます）
 echo.
-
 start "" "!INSTALLER_PATH!"
 
 echo ========================================
@@ -103,6 +92,68 @@ echo   完了！
 echo ========================================
 echo.
 echo インストールウィザードに従ってインストールしてください。
+echo.
+pause
+exit /b 0
+
+:: ==========================================
+:: Inno Setup なしの直接インストール
+:: ==========================================
+:direct_install
+set "INSTALL_DIR=%LOCALAPPDATA%\Programs\TerminalHub"
+
+echo [3/3] ファイルコピーでインストール中...
+echo     インストール先: !INSTALL_DIR!
+echo.
+
+:: インストール先を作成
+if not exist "!INSTALL_DIR!" mkdir "!INSTALL_DIR!"
+
+:: 既存のapp-settings.jsonをバックアップ
+if exist "!INSTALL_DIR!\app-settings.json" (
+    echo     既存の設定ファイルを保持します。
+    copy "!INSTALL_DIR!\app-settings.json" "!INSTALL_DIR!\app-settings.json.bak" >nul 2>&1
+)
+
+:: ファイルをコピー
+xcopy /E /Y /Q "publish\*" "!INSTALL_DIR!\" >nul
+if !errorlevel! neq 0 (
+    echo [エラー] ファイルのコピーに失敗しました。
+    pause
+    exit /b 1
+)
+
+:: app-settings.jsonを復元（バックアップがあれば）
+if exist "!INSTALL_DIR!\app-settings.json.bak" (
+    copy /Y "!INSTALL_DIR!\app-settings.json.bak" "!INSTALL_DIR!\app-settings.json" >nul 2>&1
+    del "!INSTALL_DIR!\app-settings.json.bak" >nul 2>&1
+)
+
+:: バッチファイルをコピー
+if exist "installer\TerminalHub.bat" (
+    copy /Y "installer\TerminalHub.bat" "!INSTALL_DIR!\" >nul 2>&1
+)
+if exist "installer\TerminalHub-App.bat" (
+    copy /Y "installer\TerminalHub-App.bat" "!INSTALL_DIR!\" >nul 2>&1
+)
+
+:: auth.jsonが未存在なら初期ファイルをコピー
+if not exist "!INSTALL_DIR!\auth.json" (
+    if exist "TerminalHub\auth.json" (
+        copy "TerminalHub\auth.json" "!INSTALL_DIR!\" >nul 2>&1
+    )
+)
+
+echo [OK] インストール完了
+echo.
+echo ========================================
+echo   完了！
+echo ========================================
+echo.
+echo インストール先: !INSTALL_DIR!
+echo.
+echo 起動方法:
+echo   !INSTALL_DIR!\TerminalHub.exe
 echo.
 pause
 exit /b 0
