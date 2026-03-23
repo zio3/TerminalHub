@@ -20,10 +20,11 @@ if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
     set "CHROME_PATH=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 )
 
-:: ポートが既に使用中かチェック（LISTENINGのみ - 2段階フィルタ）
+:: ポートが既に使用中かチェック（LISTENINGのみ - ローカルアドレス列で完全一致）
 set PORT_IN_USE=0
-for /f "tokens=*" %%a in ('netstat -an ^| findstr ":%HTTP_PORT% " ^| findstr "LISTENING" 2^>nul') do (
-    set PORT_IN_USE=1
+for /f "tokens=2" %%a in ('netstat -ano ^| findstr "LISTENING" 2^>nul') do (
+    echo %%a | findstr /E ":%HTTP_PORT%" >nul 2>&1
+    if !errorlevel!==0 set PORT_IN_USE=1
 )
 
 if !PORT_IN_USE!==1 (

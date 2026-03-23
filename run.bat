@@ -17,8 +17,9 @@ echo.
 
 :: ポートが既に使用中かチェック
 set PORT_IN_USE=0
-for /f "tokens=*" %%a in ('netstat -an ^| findstr ":%HTTP_PORT% " ^| findstr "LISTENING" 2^>nul') do (
-    set PORT_IN_USE=1
+for /f "tokens=2" %%a in ('netstat -ano ^| findstr "LISTENING" 2^>nul') do (
+    echo %%a | findstr /E ":%HTTP_PORT%" >nul 2>&1
+    if !errorlevel!==0 set PORT_IN_USE=1
 )
 
 if !PORT_IN_USE!==1 (
