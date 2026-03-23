@@ -36,10 +36,9 @@ echo [1/2] アプリケーションをビルド中...
 if exist "publish" (
     rd /s /q "publish"
 )
-dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish >nul 2>&1
+dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish
 if !errorlevel! neq 0 (
     echo [エラー] ビルドに失敗しました。
-    dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish
     pause
     exit /b 1
 )
