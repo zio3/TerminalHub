@@ -42,11 +42,12 @@ if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
     set "CHROME_PATH=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 )
 
-if defined CHROME_PATH (
-    start "" cmd /c "timeout /t 3 /nobreak >nul && start "" "%CHROME_PATH%" --app=http://localhost:%HTTP_PORT%"
-) else (
-    start "" cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:%HTTP_PORT%"
-)
-
-:: サーバー起動（既に起動中の場合はエラーで終了するが、ブラウザは開く）
+:: サーバー起動（既に起動中の場合はエラーで終了する）
 publish\TerminalHub.exe --urls "http://localhost:%HTTP_PORT%"
+
+:: サーバーが終了した後（正常終了・エラー問わず）ブラウザを開く
+if defined CHROME_PATH (
+    start "" "%CHROME_PATH%" --app=http://localhost:%HTTP_PORT%
+) else (
+    start http://localhost:%HTTP_PORT%
+)
