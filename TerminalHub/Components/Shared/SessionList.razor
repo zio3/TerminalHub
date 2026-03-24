@@ -233,11 +233,6 @@
     [Parameter] public EventCallback OnShowArchivedSessions { get; set; }
     [Parameter] public EventCallback OnMobileSidebarClose { get; set; }
 
-    protected override void OnParametersSet()
-    {
-        StateHasChanged();
-    }
-
     private string GetTerminalTypeBadge(TerminalType terminalType)
     {
         return terminalType switch

@@ -229,6 +229,7 @@
     private ConPtySession? activeSession;
 
     private DotNetObjectReference<Root>? dotNetRef;
+    private DotNetObjectReference<object>? terminalDotNetRef;
     private Toast? toast;
     private string inputText = "";
 
@@ -1013,7 +1014,8 @@
 
     private async Task InitializeTerminal(Guid sessionId)
     {
-        activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, DotNetObjectReference.Create<object>(this), terminalFontSize);
+        terminalDotNetRef ??= DotNetObjectReference.Create<object>(this);
+        activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, terminalDotNetRef, terminalFontSize);
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data)
@@ -2359,7 +2361,8 @@
         }
         
         dotNetRef?.Dispose();
-        
+        terminalDotNetRef?.Dispose();
+
         // JavaScriptのイベントリスナーをクリーンアップ
         try
         {

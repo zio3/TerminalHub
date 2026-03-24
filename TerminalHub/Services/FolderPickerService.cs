@@ -20,18 +20,25 @@ public class FolderPickerService : IFolderPickerService
 
         var thread = new Thread(() =>
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog
+            try
             {
-                ShowNewFolderButton = true
-            };
+                using var dialog = new System.Windows.Forms.FolderBrowserDialog
+                {
+                    ShowNewFolderButton = true
+                };
 
-            if (!string.IsNullOrEmpty(initialDirectory) && System.IO.Directory.Exists(initialDirectory))
-            {
-                dialog.InitialDirectory = initialDirectory;
+                if (!string.IsNullOrEmpty(initialDirectory) && System.IO.Directory.Exists(initialDirectory))
+                {
+                    dialog.InitialDirectory = initialDirectory;
+                }
+
+                var result = dialog.ShowDialog();
+                tcs.SetResult(result == System.Windows.Forms.DialogResult.OK ? dialog.SelectedPath : null);
             }
-
-            var result = dialog.ShowDialog();
-            tcs.SetResult(result == System.Windows.Forms.DialogResult.OK ? dialog.SelectedPath : null);
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
         });
 
         thread.SetApartmentState(ApartmentState.STA);
