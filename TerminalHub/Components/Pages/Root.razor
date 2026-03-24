@@ -115,85 +115,19 @@
                     }
                     @if (currentSession != null)
                     {
-                        <!-- タブヘッダー -->
-                        <ul class="nav nav-tabs px-3 pt-2" style="flex-shrink: 0;">
-                            @foreach (var tab in bottomPanelTabs)
-                            {
-                                <li class="nav-item">
-                                    <button class="nav-link @(activeBottomPanelTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
-                                       type="button"
-                                       @onclick="async () => await SelectBottomPanelTab(tab.Id)">
-                                        <i class="bi @GetBottomPanelTabIcon(tab.Type)"></i>
-                                        <span>@tab.DisplayName</span>
-                                        @if (!tab.IsDefault)
-                                        {
-                                            <button type="button" class="btn-close btn-close-white ms-1" style="font-size: 0.6rem; opacity: 0.7;"
-                                                    @onclick:stopPropagation="true"
-                                                    @onclick="async () => await RemoveBottomPanelTab(tab.Id)"
-                                                    title="タブを閉じる">
-                                            </button>
-                                        }
-                                    </button>
-                                </li>
-                            }
-                            <!-- タブ追加ドロップダウン -->
-                            <li class="nav-item dropdown">
-                                <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-plus-lg"></i>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li>
-                                        <button class="dropdown-item" type="button"
-                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.TextInput)">
-                                            <i class="bi bi-chat-left-text me-2"></i>テキスト入力を追加
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button class="dropdown-item" type="button"
-                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.CommandPrompt)">
-                                            <i class="bi bi-terminal me-2"></i>コマンドプロンプトを追加
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button class="dropdown-item" type="button"
-                                           @onclick="async () => await AddBottomPanelTab(BottomPanelTabType.PowerShell)">
-                                            <i class="bi bi-terminal-fill me-2"></i>PowerShellを追加
-                                        </button>
-                                    </li>
-                                </ul>
-                            </li>
-                        </ul>
-                        
-                        <!-- タブコンテンツ（全タブを常時描画、非アクティブはdisplay:noneで隠す） -->
-                        @foreach (var tab in bottomPanelTabs)
-                        {
-                            var isActive = tab.Id == activeBottomPanelTabId;
-                            <div class="flex-grow-1" style="overflow-y: auto; @(isActive ? "" : "display: none;")">
-                                @if (tab.Type == BottomPanelTabType.TextInput)
-                                {
-                                    <TextInputPanel PanelId="@tab.Id"
-                                                    TerminalType="@currentSession.TerminalType"
-                                                    ClaudeModeSwitchKey="@claudeModeSwitchKey"
-                                                    VoiceInputEnabled="@voiceInputEnabled"
-                                                    PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
-                                                    Text="@GetTextInputPanelText(tab.Id)"
-                                                    TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
-                                                    OnSendInput="HandleTextInputSend"
-                                                    OnCtrlC="SendCtrlC"
-                                                    OnEscape="SendEscape"
-                                                    OnModeSwitch="SendModeSwitch"
-                                                    OnAltV="SendAltV" />
-                                }
-                                else if (tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell)
-                                {
-                                    <ShellPanel PanelId="@tab.Id"
-                                                WorkingDirectory="@currentSession.FolderPath"
-                                                ShellExecutable="@(tab.Type == BottomPanelTabType.PowerShell ? "powershell.exe" : "cmd.exe")"
-                                                DotNetRef="@dotNetRef"
-                                                OnPanelReady="@(panel => shellPanelRefs[tab.Id] = panel)" />
-                                }
-                            </div>
-                        }
+                        <BottomPanel @ref="bottomPanel"
+                                     TerminalType="@currentSession.TerminalType"
+                                     ClaudeModeSwitchKey="@claudeModeSwitchKey"
+                                     VoiceInputEnabled="@voiceInputEnabled"
+                                     PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
+                                     WorkingDirectory="@currentSession.FolderPath"
+                                     DotNetRef="@dotNetRef"
+                                     ShellPanelRefs="@shellPanelRefs"
+                                     OnSendInput="HandleTextInputSend"
+                                     OnCtrlC="SendCtrlC"
+                                     OnEscape="SendEscape"
+                                     OnModeSwitch="SendModeSwitch"
+                                     OnAltV="SendAltV" />
                     }
                 </div>
                 }
@@ -232,11 +166,7 @@
     private DotNetObjectReference<object>? terminalDotNetRef;
     private Toast? toast;
     private string inputText = "";
-
-    // 動的下部パネルタブ
-    private List<BottomPanelTabInfo> bottomPanelTabs = new();
-    private string activeBottomPanelTabId = "default-text";
-    private Dictionary<string, string> textInputPanelTexts = new();
+    private BottomPanel? bottomPanel;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
@@ -404,9 +334,6 @@
             {
                 // エラー時はデフォルト値を使用
             }
-
-            // 下部パネルタブを初期化
-            await InitializeBottomPanelTabs();
 
             // ストレージサービスを初期化
             // SQLiteにセッションがあればSQLite、なければLocalStorageを使用
@@ -651,103 +578,6 @@
         StateHasChanged();
     }
 
-    #region 下部パネルタブ管理
-
-    private async Task InitializeBottomPanelTabs()
-    {
-        // デフォルトタブを設定
-        bottomPanelTabs = new List<BottomPanelTabInfo>
-        {
-            new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true },
-            // デフォルトはテキスト入力のみ
-        };
-
-        activeBottomPanelTabId = "default-text";
-    }
-
-    private Task AddBottomPanelTab(BottomPanelTabType type)
-    {
-        var count = bottomPanelTabs.Count(t => t.Type == type);
-        var displayName = type switch
-        {
-            BottomPanelTabType.TextInput => $"テキスト入力({count + 1})",
-            BottomPanelTabType.CommandPrompt => $"コマンドプロンプト({count + 1})",
-            BottomPanelTabType.PowerShell => $"PowerShell({count + 1})",
-            _ => $"タブ({count + 1})"
-        };
-
-        var newTab = new BottomPanelTabInfo
-        {
-            Id = Guid.NewGuid().ToString(),
-            Type = type,
-            DisplayName = displayName,
-            IsDefault = false
-        };
-
-        bottomPanelTabs.Add(newTab);
-        activeBottomPanelTabId = newTab.Id;
-
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
-    private async Task RemoveBottomPanelTab(string tabId)
-    {
-        var tab = bottomPanelTabs.FirstOrDefault(t => t.Id == tabId);
-        if (tab == null || tab.IsDefault) return;
-
-        // シェルパネルの破棄
-        if ((tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell) && shellPanelRefs.TryGetValue(tabId, out var panel))
-        {
-            await panel.DisposeAsync();
-            shellPanelRefs.Remove(tabId);
-        }
-
-        bottomPanelTabs.Remove(tab);
-
-        // アクティブタブが削除された場合は最初のタブを選択
-        if (activeBottomPanelTabId == tabId)
-        {
-            activeBottomPanelTabId = bottomPanelTabs.FirstOrDefault()?.Id ?? "default-text";
-        }
-
-        StateHasChanged();
-    }
-
-    private async Task SelectBottomPanelTab(string tabId)
-    {
-        activeBottomPanelTabId = tabId;
-        StateHasChanged();
-
-        // シェルパネルの場合はフォーカスを再取得
-        if (shellPanelRefs.TryGetValue(tabId, out var panel))
-        {
-            // display切り替え後にDOMが更新されるのを待つ
-            await Task.Delay(50);
-            await panel.FocusAsync();
-        }
-    }
-
-    private string GetBottomPanelTabIcon(BottomPanelTabType type)
-    {
-        return type switch
-        {
-            BottomPanelTabType.TextInput => "bi-chat-left-text",
-            BottomPanelTabType.PowerShell => "bi-terminal-fill",
-            _ => "bi-terminal"
-        };
-    }
-
-    private string GetTextInputPanelText(string panelId)
-    {
-        return textInputPanelTexts.TryGetValue(panelId, out var text) ? text : "";
-    }
-
-    private void SetTextInputPanelText(string panelId, string text)
-    {
-        textInputPanelTexts[panelId] = text;
-    }
-
     private async Task HandleTextInputSend(string text)
     {
         if (activeSession == null) return;
@@ -779,8 +609,6 @@
         // Enterキーを送信（空の場合でも送信）
         await SendEnterKeyDirect();
     }
-
-    #endregion
 
     private async Task OnSessionCreate(SessionCreateDialog.SessionCreateResult result)
     {
@@ -837,7 +665,10 @@
             return;
         }
 
-        // 前のセッションの処理は継続させるため、キャンセルしない
+        // 選択枠を即座に更新（UIのレスポンス向上）
+        activeSessionId = sessionId;
+        StateHasChanged();
+        await Task.Yield(); // UIスレッドを一旦開放しレンダリングを実行
 
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
@@ -858,7 +689,6 @@
 
         // セッションをアクティブに
         await SessionManager.SetActiveSessionAsync(sessionId);
-        activeSessionId = sessionId;
 
 
         // ディレクトリが存在しないセッションは接続を試みない
@@ -2336,12 +2166,11 @@
             _sessionsChangedHandler = null;
         }
 
-        // ShellPanelの破棄（各パネルが自身のConPTYを管理）
-        foreach (var panel in shellPanelRefs.Values)
+        // ShellPanelの破棄（BottomPanelコンポーネント経由）
+        if (bottomPanel != null)
         {
-            try { await panel.DisposeAsync(); } catch { }
+            try { await bottomPanel.DisposeAllShellPanels(); } catch { }
         }
-        shellPanelRefs.Clear();
 
         // activeTerminalのDisposeを安全に処理
         if (activeTerminal != null)

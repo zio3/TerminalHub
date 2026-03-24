@@ -1,0 +1,198 @@
+@using TerminalHub.Models
+@using TerminalHub.Components.Shared.BottomPanels
+
+<!-- タブヘッダー -->
+<ul class="nav nav-tabs px-3 pt-2" style="flex-shrink: 0;">
+    @foreach (var tab in Tabs)
+    {
+        <li class="nav-item">
+            <button class="nav-link @(ActiveTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
+               type="button"
+               @onclick="async () => await SelectTab(tab.Id)">
+                <i class="bi @GetTabIcon(tab.Type)"></i>
+                <span>@tab.DisplayName</span>
+                @if (!tab.IsDefault)
+                {
+                    <button type="button" class="btn-close btn-close-white ms-1" style="font-size: 0.6rem; opacity: 0.7;"
+                            @onclick:stopPropagation="true"
+                            @onclick="async () => await RemoveTab(tab.Id)"
+                            title="タブを閉じる">
+                    </button>
+                }
+            </button>
+        </li>
+    }
+    <!-- タブ追加ドロップダウン -->
+    <li class="nav-item dropdown">
+        <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="bi bi-plus-lg"></i>
+        </button>
+        <ul class="dropdown-menu">
+            <li>
+                <button class="dropdown-item" type="button"
+                   @onclick="() => AddTab(BottomPanelTabType.TextInput)">
+                    <i class="bi bi-chat-left-text me-2"></i>テキスト入力を追加
+                </button>
+            </li>
+            <li>
+                <button class="dropdown-item" type="button"
+                   @onclick="() => AddTab(BottomPanelTabType.CommandPrompt)">
+                    <i class="bi bi-terminal me-2"></i>コマンドプロンプトを追加
+                </button>
+            </li>
+            <li>
+                <button class="dropdown-item" type="button"
+                   @onclick="() => AddTab(BottomPanelTabType.PowerShell)">
+                    <i class="bi bi-terminal-fill me-2"></i>PowerShellを追加
+                </button>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<!-- タブコンテンツ（全タブを常時描画、非アクティブはdisplay:noneで隠す） -->
+@foreach (var tab in Tabs)
+{
+    var isActive = tab.Id == ActiveTabId;
+    <div class="flex-grow-1" style="overflow-y: auto; @(isActive ? "" : "display: none;")">
+        @if (tab.Type == BottomPanelTabType.TextInput)
+        {
+            <TextInputPanel PanelId="@tab.Id"
+                            TerminalType="@TerminalType"
+                            ClaudeModeSwitchKey="@ClaudeModeSwitchKey"
+                            VoiceInputEnabled="@VoiceInputEnabled"
+                            PlaceholderText="@PlaceholderText"
+                            Text="@GetTextInputPanelText(tab.Id)"
+                            TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
+                            OnSendInput="OnSendInput"
+                            OnCtrlC="OnCtrlC"
+                            OnEscape="OnEscape"
+                            OnModeSwitch="OnModeSwitch"
+                            OnAltV="OnAltV" />
+        }
+        else if (tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell)
+        {
+            <ShellPanel PanelId="@tab.Id"
+                        WorkingDirectory="@WorkingDirectory"
+                        ShellExecutable="@(tab.Type == BottomPanelTabType.PowerShell ? "powershell.exe" : "cmd.exe")"
+                        DotNetRef="@DotNetRef"
+                        OnPanelReady="@(panel => ShellPanelRefs[tab.Id] = panel)" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public TerminalType TerminalType { get; set; }
+    [Parameter] public string ClaudeModeSwitchKey { get; set; } = "";
+    [Parameter] public bool VoiceInputEnabled { get; set; }
+    [Parameter] public string PlaceholderText { get; set; } = "";
+    [Parameter] public string WorkingDirectory { get; set; } = "";
+    [Parameter] public object? DotNetRef { get; set; }
+    [Parameter] public Dictionary<string, ShellPanel> ShellPanelRefs { get; set; } = new();
+
+    // TextInputPanelのイベント
+    [Parameter] public EventCallback<string> OnSendInput { get; set; }
+    [Parameter] public EventCallback OnCtrlC { get; set; }
+    [Parameter] public EventCallback OnEscape { get; set; }
+    [Parameter] public EventCallback OnModeSwitch { get; set; }
+    [Parameter] public EventCallback OnAltV { get; set; }
+
+    private List<BottomPanelTabInfo> Tabs = new();
+    private string ActiveTabId = "default-text";
+    private Dictionary<string, string> textInputPanelTexts = new();
+
+    protected override void OnInitialized()
+    {
+        Tabs = new List<BottomPanelTabInfo>
+        {
+            new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true }
+        };
+        ActiveTabId = "default-text";
+    }
+
+    private void AddTab(BottomPanelTabType type)
+    {
+        var count = Tabs.Count(t => t.Type == type);
+        var displayName = type switch
+        {
+            BottomPanelTabType.TextInput => $"テキスト入力({count + 1})",
+            BottomPanelTabType.CommandPrompt => $"コマンドプロンプト({count + 1})",
+            BottomPanelTabType.PowerShell => $"PowerShell({count + 1})",
+            _ => $"タブ({count + 1})"
+        };
+
+        var newTab = new BottomPanelTabInfo
+        {
+            Id = Guid.NewGuid().ToString(),
+            Type = type,
+            DisplayName = displayName,
+            IsDefault = false
+        };
+
+        Tabs.Add(newTab);
+        ActiveTabId = newTab.Id;
+        StateHasChanged();
+    }
+
+    private async Task RemoveTab(string tabId)
+    {
+        var tab = Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tab == null || tab.IsDefault) return;
+
+        if ((tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell) && ShellPanelRefs.TryGetValue(tabId, out var panel))
+        {
+            await panel.DisposeAsync();
+            ShellPanelRefs.Remove(tabId);
+        }
+
+        Tabs.Remove(tab);
+
+        if (ActiveTabId == tabId)
+        {
+            ActiveTabId = Tabs.FirstOrDefault()?.Id ?? "default-text";
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SelectTab(string tabId)
+    {
+        ActiveTabId = tabId;
+        StateHasChanged();
+
+        if (ShellPanelRefs.TryGetValue(tabId, out var panel))
+        {
+            await Task.Delay(50);
+            await panel.FocusAsync();
+        }
+    }
+
+    private string GetTabIcon(BottomPanelTabType type)
+    {
+        return type switch
+        {
+            BottomPanelTabType.TextInput => "bi-chat-left-text",
+            BottomPanelTabType.PowerShell => "bi-terminal-fill",
+            _ => "bi-terminal"
+        };
+    }
+
+    private string GetTextInputPanelText(string panelId)
+    {
+        return textInputPanelTexts.TryGetValue(panelId, out var text) ? text : "";
+    }
+
+    private void SetTextInputPanelText(string panelId, string text)
+    {
+        textInputPanelTexts[panelId] = text;
+    }
+
+    public async ValueTask DisposeAllShellPanels()
+    {
+        foreach (var panel in ShellPanelRefs.Values)
+        {
+            try { await panel.DisposeAsync(); } catch { }
+        }
+        ShellPanelRefs.Clear();
+    }
+}
