@@ -344,11 +344,10 @@ window.terminalFunctions = {
             console.log(`[JS] createMultiSessionTerminal: multiSessionTerminals初期化`);
         }
 
-        // 既存のターミナルがあれば警告
+        // 既存のターミナルがあれば破棄してから再作成
         if (window.multiSessionTerminals[sessionId]) {
-            console.warn(`[JS] ★★★ 警告: セッション ${sessionId} のターミナルは既に存在します！`);
-            const existing = window.multiSessionTerminals[sessionId];
-            console.log(`[JS] 既存ターミナル状態: term=${!!existing.term}, disposed=${existing.disposed}`);
+            console.warn(`[JS] セッション ${sessionId} の既存ターミナルを破棄して再作成`);
+            this.cleanupTerminal(sessionId);
         }
 
         const Terminal = window.Terminal;
