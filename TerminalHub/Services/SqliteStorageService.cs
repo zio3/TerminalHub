@@ -144,7 +144,19 @@ namespace TerminalHub.Services
 
         public async Task<IStorageService> GetCurrentStorageServiceAsync()
         {
-            // LocalStorageのセッション数を確認
+            // SQLiteを先にチェック（LocalStorageの読み込みを回避）
+            if (SqliteDatabaseExists)
+            {
+                await _repository.InitializeAsync();
+
+                var sqliteSessionCount = await _repository.GetSessionCountAsync();
+                if (sqliteSessionCount > 0)
+                {
+                    return _sqliteStorageService;
+                }
+            }
+
+            // SQLiteが空または未作成の場合のみLocalStorageを確認
             int localStorageSessionCount = 0;
             try
             {
@@ -156,42 +168,17 @@ namespace TerminalHub.Services
                 _logger.LogWarning(ex, "LocalStorageのセッション確認に失敗");
             }
 
-            // セッション数ベースの判定
-            if (SqliteDatabaseExists)
-            {
-                // 既存DBのスキーママイグレーションを確認・実行
-                await _repository.InitializeAsync();
-
-                var sqliteSessionCount = await _repository.GetSessionCountAsync();
-                if (sqliteSessionCount > 0)
-                {
-                    // SQLiteにセッションがある → SQLite使用
-                    _logger.LogInformation("SQLiteを使用（セッション数: {Count}）", sqliteSessionCount);
-                    return _sqliteStorageService;
-                }
-
-                if (localStorageSessionCount > 0)
-                {
-                    // SQLiteは空、LocalStorageにセッションがある → LocalStorage使用（未移行ユーザー）
-                    _logger.LogInformation("LocalStorageを使用（LocalStorageにセッション {Count} 件あり）", localStorageSessionCount);
-                    return _localStorageAdapter;
-                }
-
-                // SQLiteは空、LocalStorageも空 → SQLite使用（新規ユーザー）
-                _logger.LogInformation("SQLiteを使用（新規ユーザー）");
-                return _sqliteStorageService;
-            }
-
-            // SQLite DBが存在しない
             if (localStorageSessionCount > 0)
             {
-                // LocalStorageにセッションがある → LocalStorage使用（既存ユーザー）
-                _logger.LogInformation("LocalStorageを使用（SQLite DB未作成、LocalStorageにセッション {Count} 件）", localStorageSessionCount);
+                // LocalStorageにセッションがある → LocalStorage返却（EnsureSqliteStorageAsyncで自動マイグレーション）
                 return _localStorageAdapter;
             }
 
-            // SQLite DBも存在せず、LocalStorageも空 → SQLiteを初期化して使用（新規ユーザー）
-            _logger.LogInformation("SQLiteを初期化（新規ユーザー）");
+            // 両方空 → SQLiteを初期化して使用（新規ユーザー）
+            if (!SqliteDatabaseExists)
+            {
+                await _repository.InitializeAsync();
+            }
             await _repository.InitializeAsync();
             return _sqliteStorageService;
         }
