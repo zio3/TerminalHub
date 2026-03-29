@@ -47,16 +47,6 @@
                                 <i class="bi bi-terminal me-1"></i>セッション
                             </button>
                         </li>
-                        @if (showMigrationTab)
-                        {
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link @(activeTab == "migration" ? "active" : "")"
-                                        type="button"
-                                        @onclick="@(() => activeTab = "migration")">
-                                    <i class="bi bi-database me-1"></i>データ移行
-                                </button>
-                            </li>
-                        }
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "export" ? "active" : "")"
                                     type="button"
@@ -468,93 +458,6 @@
                                 </div>
                             </div>
                         }
-                        else if (activeTab == "migration")
-                        {
-                            <div class="tab-pane fade show active">
-                                <h6 class="mb-3">データ移行</h6>
-
-                                <div class="mb-4">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <span class="me-2">現在のデータ保存先:</span>
-                                        <span class="badge @(currentStorageType == StorageType.SQLite ? "bg-success" : "bg-warning")">
-                                            @(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")
-                                        </span>
-                                    </div>
-
-                                    @if (currentStorageType == StorageType.SQLite)
-                                    {
-                                        <div class="alert alert-success">
-                                            <i class="bi bi-check-circle me-1"></i>
-                                            現在SQLiteを使用しています
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <p class="mb-1">SQLiteセッション数: <strong>@sqliteSessionCount</strong>件</p>
-                                            <p class="mb-1">データベースパス:</p>
-                                            <code class="small">@sqliteDbPath</code>
-                                        </div>
-                                    }
-
-                                    @if (localStorageSessionCount > 0)
-                                    {
-                                        <div class="@(currentStorageType == StorageType.SQLite ? "mt-4 pt-3 border-top" : "")">
-                                            <h6 class="mb-2">
-                                                <i class="bi bi-hdd me-1"></i>LocalStorageのデータ
-                                            </h6>
-                                            <div class="mb-3">
-                                                <p class="mb-1">セッション数: <strong>@localStorageSessionCount</strong>件</p>
-                                                <p class="mb-1">データサイズ: 約 <strong>@FormatBytes(localStorageDataSize)</strong></p>
-                                            </div>
-
-                                            @if (currentStorageType == StorageType.LocalStorage)
-                                            {
-                                                <div class="alert alert-info">
-                                                    <h6 class="alert-heading"><i class="bi bi-info-circle me-1"></i>SQLiteに移行すると</h6>
-                                                    <ul class="mb-0 small">
-                                                        <li>セッション切り替えが高速化</li>
-                                                        <li>データの部分更新が可能に</li>
-                                                        <li>アプリ再インストール時もデータ保持</li>
-                                                    </ul>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="alert alert-warning">
-                                                    <i class="bi bi-exclamation-triangle me-1"></i>
-                                                    再移行するとSQLiteの現在のデータが上書きされます
-                                                </div>
-                                            }
-
-                                            <button class="btn @(currentStorageType == StorageType.SQLite ? "btn-warning" : "btn-primary")"
-                                                    @onclick="MigrateToSqlite" disabled="@isMigrating">
-                                                @if (isMigrating)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                                    <span>移行中...</span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-database-fill-up me-1"></i>
-                                                    <span>@(currentStorageType == StorageType.SQLite ? "LocalStorageから再移行" : "SQLiteに移行する")</span>
-                                                }
-                                            </button>
-
-                                            <p class="text-muted small mt-2">
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                移行後もLocalStorageのデータはバックアップとして残ります
-                                            </p>
-                                        </div>
-                                    }
-                                    else if (currentStorageType == StorageType.LocalStorage)
-                                    {
-                                        <div class="alert alert-secondary">
-                                            <i class="bi bi-info-circle me-1"></i>
-                                            LocalStorageにセッションデータがありません
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        }
                         else if (activeTab == "export")
                         {
                             <div class="tab-pane fade show active">
@@ -564,17 +467,17 @@
                                 <div class="mb-4">
                                     <h6 class="mb-2">エクスポート</h6>
                                     <p class="text-muted small">
-                                        現在のストレージ（@(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")）からセッション情報をJSONファイルとしてダウンロードします。
+                                        現在のストレージ（@("SQLite")）からセッション情報をJSONファイルとしてダウンロードします。
                                     </p>
 
                                     <div class="alert alert-secondary mb-3">
                                         <small>
                                             <i class="bi bi-info-circle me-1"></i>
-                                            エクスポート対象: セッション情報（@currentStorageSessionCount 件）
+                                            エクスポート対象: セッション情報（@SessionManager.GetAllSessions().Count() 件）
                                         </small>
                                     </div>
 
-                                    <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(currentStorageSessionCount == 0)">
+                                    <button class="btn btn-primary btn-sm" @onclick="ExportSettings" disabled="@(SessionManager.GetAllSessions().Count() == 0)">
                                         <i class="bi bi-download me-1"></i>エクスポート
                                     </button>
                                 </div>
@@ -586,7 +489,7 @@
                                     <h6 class="mb-2">インポート</h6>
                                     <p class="text-muted small">
                                         JSONファイルを選択してセッション情報をインポートします。
-                                        現在のストレージ（@(currentStorageType == StorageType.SQLite ? "SQLite" : "LocalStorage")）に追加されます。
+                                        現在のストレージ（@("SQLite")）に追加されます。
                                     </p>
 
                                     <div class="mb-3">
@@ -975,15 +878,6 @@
     private int testElapsedSeconds = 10;
     private string notificationTestResult = "テスト結果がここに表示されます";
 
-    // データ移行関連
-    private bool showMigrationTab = false;
-    private StorageType currentStorageType = StorageType.LocalStorage;
-    private int localStorageSessionCount = 0;
-    private int localStorageDataSize = 0;
-    private int sqliteSessionCount = 0;
-    private string sqliteDbPath = "";
-    private bool isMigrating = false;
-
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "lastAccessed";
     [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
@@ -998,7 +892,6 @@
     private bool _settingsLoaded = false;
 
     // エクスポート/インポート用
-    private int currentStorageSessionCount = 0;
     private int importSessionCount = 0;
     private List<SessionInfo>? importSessions = null;
 
@@ -1022,9 +915,6 @@
     {
         try
         {
-            // データ移行タブの状態を更新
-            await LoadMigrationTabState();
-
             // ファイルから設定を読み込み
             var settings = AppSettingsService.GetSettings();
 
@@ -1486,7 +1376,7 @@
                 {
                     exportedAt = DateTime.Now,
                     version = "2.0",
-                    storageType = currentStorageType.ToString(),
+                    storageType = "SQLite",
                     sessionCount = sessions.Count
                 }
             };
@@ -1584,8 +1474,6 @@
             importSessions = null;
             importSessionCount = 0;
 
-            // 状態を更新
-            await LoadMigrationTabState();
         }
         catch (Exception ex)
         {
@@ -1860,98 +1748,4 @@
         }
     }
 
-    // データ移行関連メソッド
-    private async Task LoadMigrationTabState()
-    {
-        try
-        {
-            // SQLite DBの存在チェック
-            var sqliteExists = StorageServiceFactory.SqliteDatabaseExists;
-
-            // SQLiteのパスを設定
-            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            sqliteDbPath = Path.Combine(appDataPath, "TerminalHub", "sessions.db");
-
-            // 常にLocalStorageのデータを読み込む（再移行用）
-            try
-            {
-                var localSessions = await LocalStorageService.LoadSessionsAsync();
-                localStorageSessionCount = localSessions.Count;
-
-                // データサイズを概算（JSON形式のサイズ）
-                var json = System.Text.Json.JsonSerializer.Serialize(localSessions);
-                localStorageDataSize = System.Text.Encoding.UTF8.GetByteCount(json);
-            }
-            catch
-            {
-                localStorageSessionCount = 0;
-                localStorageDataSize = 0;
-            }
-
-            if (sqliteExists)
-            {
-                // SQLite使用中
-                currentStorageType = StorageType.SQLite;
-                sqliteSessionCount = await StorageServiceFactory.GetSqliteSessionCountAsync();
-                currentStorageSessionCount = sqliteSessionCount;
-                // SQLite使用中でも、LocalStorageにデータがあれば再移行可能なのでタブを表示
-                showMigrationTab = true;
-            }
-            else
-            {
-                // LocalStorage使用中
-                currentStorageType = StorageType.LocalStorage;
-                currentStorageSessionCount = localStorageSessionCount;
-                // LocalStorageにセッションがある場合のみ移行タブを表示
-                showMigrationTab = localStorageSessionCount > 0;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"データ移行状態の読み込みエラー: {ex.Message}");
-            showMigrationTab = false;
-        }
-    }
-
-    private async Task MigrateToSqlite()
-    {
-        if (isMigrating) return;
-
-        isMigrating = true;
-        StateHasChanged();
-
-        try
-        {
-            // LocalStorageからデータを取得
-            var sessions = await LocalStorageService.LoadSessionsAsync();
-            var activeSessionId = await LocalStorageService.LoadActiveSessionIdAsync();
-            var expandedStates = await LocalStorageService.LoadSessionExpandedStatesAsync();
-
-            // SQLiteに移行
-            var success = await StorageServiceFactory.MigrateToSqliteAsync(sessions, activeSessionId, expandedStates);
-
-            if (success)
-            {
-                saveMessage = "SQLiteへの移行が完了しました。ページを再読み込みしてください。";
-                saveSuccess = true;
-                currentStorageType = StorageType.SQLite;
-                sqliteSessionCount = sessions.Count;
-            }
-            else
-            {
-                saveMessage = "SQLiteへの移行に失敗しました";
-                saveSuccess = false;
-            }
-        }
-        catch (Exception ex)
-        {
-            saveMessage = $"移行エラー: {ex.Message}";
-            saveSuccess = false;
-        }
-        finally
-        {
-            isMigrating = false;
-            StateHasChanged();
-        }
-    }
 }
