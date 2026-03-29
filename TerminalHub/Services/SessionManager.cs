@@ -242,8 +242,6 @@ namespace TerminalHub.Services
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
                 _initializationLocks[sessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                _logger.LogInformation($"Session info created successfully: {sessionInfo.SessionId} ({terminalType})");
-
                 NotifySessionsChanged();
                 return sessionInfo;
             }
@@ -922,8 +920,6 @@ namespace TerminalHub.Services
             }
 
             _sessionInfos[sessionInfo.SessionId] = sessionInfo;
-            _logger.LogInformation("アーカイブセッションを追加しました: {SessionId}", sessionInfo.SessionId);
-
             NotifySessionsChanged();
         }
 
