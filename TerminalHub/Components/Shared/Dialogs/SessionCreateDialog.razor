@@ -186,9 +186,7 @@
                 _cachedDefaultFolderPath = defaultPath;
                 folderPath = defaultPath;
             }
-            favoriteFolders = settings.General.FavoriteFolders
-                .Where(f => Directory.Exists(f))
-                .ToList();
+            favoriteFolders = new List<string>(settings.General.FavoriteFolders);
         }
         catch (Exception ex)
         {
