@@ -130,7 +130,7 @@
                                     <label class="form-label">お気に入りフォルダ</label>
                                     <div class="input-group mb-2">
                                         <input type="text" class="form-control @(favoriteFolderError != null ? "is-invalid" : "")"
-                                               @bind="newFavoriteFolder"
+                                               @bind="newFavoriteFolder" @bind:event="oninput"
                                                placeholder="フォルダパスを入力" />
                                         <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFavoriteFolder"
                                                 title="フォルダを選択">
