@@ -13,17 +13,20 @@ namespace TerminalHub.Services
         private readonly INotificationService _notificationService;
         private readonly IOutputAnalyzerFactory _analyzerFactory;
         private readonly ISessionTimerService _sessionTimerService;
+        private readonly ISessionRepository _sessionRepository;
 
         public OutputAnalyzerService(
             ILogger<OutputAnalyzerService> logger,
             INotificationService notificationService,
             IOutputAnalyzerFactory analyzerFactory,
-            ISessionTimerService sessionTimerService)
+            ISessionTimerService sessionTimerService,
+            ISessionRepository sessionRepository)
         {
             _logger = logger;
             _notificationService = notificationService;
             _analyzerFactory = analyzerFactory;
             _sessionTimerService = sessionTimerService;
+            _sessionRepository = sessionRepository;
         }
 
         public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?>? updateStatus)
@@ -214,6 +217,7 @@ namespace TerminalHub.Services
                     // 最終利用時刻を更新（ソート用）
                     _logger.LogInformation("[LastAccessedAt更新] きっかけ: OutputAnalyzerService(処理完了検出), セッション: {SessionName}", session.GetDisplayName());
                     session.LastAccessedAt = DateTime.Now;
+                    try { _ = _sessionRepository.SaveSessionAsync(session); } catch { }
 
                     // セッション情報をクリア
                     session.ProcessingStartTime = null;

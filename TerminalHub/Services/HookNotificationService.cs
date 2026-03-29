@@ -41,6 +41,7 @@ public class HookNotificationService : IHookNotificationService
     private readonly ISessionManager _sessionManager;
     private readonly IAppSettingsService _appSettingsService;
     private readonly ISessionTimerService _sessionTimerService;
+    private readonly ISessionRepository _sessionRepository;
 
     public event EventHandler<HookNotificationEventArgs>? OnHookNotification;
 
@@ -48,12 +49,14 @@ public class HookNotificationService : IHookNotificationService
         ILogger<HookNotificationService> logger,
         ISessionManager sessionManager,
         IAppSettingsService appSettingsService,
-        ISessionTimerService sessionTimerService)
+        ISessionTimerService sessionTimerService,
+        ISessionRepository sessionRepository)
     {
         _logger = logger;
         _sessionManager = sessionManager;
         _appSettingsService = appSettingsService;
         _sessionTimerService = sessionTimerService;
+        _sessionRepository = sessionRepository;
     }
 
     public async Task HandleHookNotificationAsync(HookNotification notification)
@@ -134,6 +137,7 @@ public class HookNotificationService : IHookNotificationService
         // 最終利用時刻を更新（ソート用）
         _logger.LogInformation("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
         session.LastAccessedAt = DateTime.Now;
+        try { await _sessionRepository.SaveSessionAsync(session); } catch { }
 
         // 処理状態を完全にリセット（SessionTimeoutと同じ項目をクリア）
         _logger.LogInformation(

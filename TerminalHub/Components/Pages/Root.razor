@@ -202,18 +202,58 @@
     private IStorageService? _storageService;
 
     /// <summary>
-    /// セッションをストレージに保存（SQLiteの場合は部分更新、LocalStorageの場合は全体更新）
+    /// SQLiteストレージを確保し、LocalStorageにデータがあれば自動マイグレーション
     /// </summary>
-    private async Task SaveSessionsToStorageAsync()
+    private async Task EnsureSqliteStorageAsync()
+    {
+        _storageService = await StorageServiceFactory.GetCurrentStorageServiceAsync();
+
+        if (_storageService.CurrentStorageType == StorageType.LocalStorage)
+        {
+            Logger.LogInformation("LocalStorageからSQLiteへの自動マイグレーションを開始");
+            try
+            {
+                var localSessions = await _storageService.LoadSessionsAsync();
+                var localActiveId = await _storageService.LoadActiveSessionIdAsync();
+                var localExpanded = await _storageService.LoadSessionExpandedStatesAsync();
+
+                var success = await StorageServiceFactory.MigrateToSqliteAsync(localSessions, localActiveId, localExpanded);
+                if (success)
+                {
+                    _storageService = StorageServiceFactory.GetSqliteStorageService();
+                    Logger.LogInformation("LocalStorageからSQLiteへの自動マイグレーション完了（{Count}件）", localSessions.Count);
+                }
+                else
+                {
+                    Logger.LogWarning("自動マイグレーション失敗、LocalStorageを継続使用");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "自動マイグレーション中にエラー");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 単一セッションをストレージに保存
+    /// </summary>
+    private async Task SaveSessionToStorageAsync(SessionInfo session)
     {
         if (_storageService != null)
         {
-            await _storageService.SaveSessionsAsync(sessions);
+            await _storageService.SaveSessionAsync(session);
         }
-        else
+    }
+
+    /// <summary>
+    /// セッションをストレージから削除
+    /// </summary>
+    private async Task DeleteSessionFromStorageAsync(Guid sessionId)
+    {
+        if (_storageService != null)
         {
-            // フォールバック: LocalStorageServiceを直接使用
-            await LocalStorageService.SaveSessionsAsync(sessions);
+            await _storageService.DeleteSessionAsync(sessionId);
         }
     }
 
@@ -226,10 +266,6 @@
         {
             await _storageService.SaveActiveSessionIdAsync(sessionId);
         }
-        else
-        {
-            await LocalStorageService.SaveActiveSessionIdAsync(sessionId);
-        }
     }
 
     /// <summary>
@@ -240,10 +276,6 @@
         if (_storageService != null)
         {
             await _storageService.SaveSessionExpandedStatesAsync(expandedStates);
-        }
-        else
-        {
-            await LocalStorageService.SaveSessionExpandedStatesAsync(expandedStates);
         }
     }
 
@@ -336,10 +368,10 @@
                 // エラー時はデフォルト値を使用
             }
 
-            // ストレージサービスを初期化
-            // SQLiteにセッションがあればSQLite、なければLocalStorageを使用
-            _storageService = await StorageServiceFactory.GetCurrentStorageServiceAsync();
-            Logger.LogInformation("ストレージタイプ: {StorageType}", _storageService.CurrentStorageType);
+            // ストレージサービスを初期化（SQLite強制）
+            // LocalStorageにセッションが残っていれば自動マイグレーション
+            await EnsureSqliteStorageAsync();
+            Logger.LogInformation("ストレージタイプ: {StorageType}", _storageService!.CurrentStorageType);
 
             // SessionManagerにセッションが存在するかチェック
             // 存在する場合は他のブラウザが既に起動しているため、ストレージからの読み込みはスキップ
@@ -603,7 +635,8 @@
                 {
                     Logger.LogInformation("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                     sessionInfo.LastAccessedAt = DateTime.Now;
-                    StateHasChanged(); // セッションリストのソート順を更新
+                    await SaveSessionToStorageAsync(sessionInfo);
+                    StateHasChanged();
                 }
             }
 
@@ -631,7 +664,7 @@
             sessions = SessionManager.GetAllSessions().ToList();
 
             // ローカルストレージに保存
-            await SaveSessionsToStorageAsync();
+            await SaveSessionToStorageAsync(sessionInfo);
 
             // 新しいセッションをConPtyConnectionServiceに登録
             // 注意: LastConnectionTimeは設定しない（新規セッションにはバッファがないため）
@@ -1019,7 +1052,7 @@
         {
             session.Memo = memo;
             // ローカルストレージを更新
-            await SaveSessionsToStorageAsync();
+            await SaveSessionToStorageAsync(session);
         }
     }
 
@@ -1073,10 +1106,8 @@
         // ターミナルのクリーンアップはdestroyTerminalで処理される
 
         await SessionManager.RemoveSessionAsync(sessionId);
+        await DeleteSessionFromStorageAsync(sessionId);
         sessions = SessionManager.GetAllSessions().ToList();
-
-        // ローカルストレージを更新
-        await SaveSessionsToStorageAsync();
 
         if (activeSessionId == sessionId)
         {
@@ -1137,10 +1168,12 @@
 
         // SessionManagerでアーカイブ処理（ConPtySessionの破棄含む）
         SessionManager.ArchiveSession(sessionId);
+        if (_storageService != null)
+        {
+            await _storageService.UpdateArchivedStateAsync(sessionId, true, DateTime.Now);
+        }
 
-        // ローカルストレージを更新（再起動時の復元用）
         sessions = SessionManager.GetAllSessions().ToList();
-        await SaveSessionsToStorageAsync();
 
         if (activeSessionId == sessionId)
         {
@@ -1175,7 +1208,7 @@
             sessions = SessionManager.GetAllSessions().ToList();
 
             // ローカルストレージを更新
-            await SaveSessionsToStorageAsync();
+            await SaveSessionToStorageAsync(restoredSession);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -1186,29 +1219,23 @@
 
     private async Task DeleteArchivedSession(Guid sessionId)
     {
-        // SessionManagerから完全削除
         SessionManager.DeleteSession(sessionId);
+        await DeleteSessionFromStorageAsync(sessionId);
 
-        // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
-
-        await SaveSessionsToStorageAsync();
         StateHasChanged();
     }
 
     private async Task DeleteAllArchivedSessions()
     {
-        // アーカイブされた全セッションを削除
         var archivedSessions = SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
         foreach (var session in archivedSessions)
         {
             SessionManager.DeleteSession(session.SessionId);
+            await DeleteSessionFromStorageAsync(session.SessionId);
         }
 
-        // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
-
-        await SaveSessionsToStorageAsync();
         StateHasChanged();
     }
 
@@ -1453,7 +1480,8 @@
                 {
                     Logger.LogInformation("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                     sessionInfo.LastAccessedAt = DateTime.Now;
-                    StateHasChanged(); // セッションリストのソート順を更新
+                    await SaveSessionToStorageAsync(sessionInfo);
+                    StateHasChanged();
                 }
             }
 
@@ -1655,7 +1683,7 @@
                 sessions = SessionManager.GetAllSessions().ToList();
 
                 // ローカルストレージに保存
-                await SaveSessionsToStorageAsync();
+                await SaveSessionToStorageAsync(newSession);
 
                 // 新しいセッションを選択
                 await SelectSession(newSession.SessionId);
@@ -1963,7 +1991,16 @@
         showSessionSettingsDialog = false;
         // セッション一覧を更新
         sessions = SessionManager.GetAllSessions().ToList();
-        await SaveSessionsToStorageAsync();
+
+        // 変更されたセッションをDBに保存
+        if (settingsSessionId.HasValue)
+        {
+            var savedSession = SessionManager.GetSessionInfo(settingsSessionId.Value);
+            if (savedSession != null)
+            {
+                await SaveSessionToStorageAsync(savedSession);
+            }
+        }
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
         if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)
@@ -2001,7 +2038,7 @@
                 sessionInfo.HasUncommittedChanges = gitInfo.HasUncommittedChanges;
                 sessionInfo.IsWorktree = gitInfo.IsWorktree;
 
-                await SaveSessionsToStorageAsync();
+                await SaveSessionToStorageAsync(sessionInfo);
                 StateHasChanged();
             }
         }
@@ -2039,9 +2076,9 @@
                 
                 // セッション一覧を更新（最新のConPtySession参照を含む）
                 sessions = SessionManager.GetAllSessions().ToList();
-                
+
                 // ローカルストレージに保存
-                await SaveSessionsToStorageAsync();
+                await SaveSessionToStorageAsync(sessionInfo);
                 
                 // 強制的にセッションを再初期化するため、一旦nullにする
                 activeSessionId = null;

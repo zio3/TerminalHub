@@ -53,6 +53,11 @@ namespace TerminalHub.Services
         Task UpdateArchivedStateAsync(Guid sessionId, bool isArchived, DateTime? archivedAt);
 
         /// <summary>
+        /// セッションを削除
+        /// </summary>
+        Task DeleteSessionAsync(Guid sessionId);
+
+        /// <summary>
         /// アクティブセッションIDを保存
         /// </summary>
         Task SaveActiveSessionIdAsync(Guid? sessionId);
