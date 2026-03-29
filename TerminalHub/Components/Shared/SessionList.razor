@@ -261,12 +261,15 @@
             .ToList();
 
         // ソート用のキーを計算（lastAccessedの場合は子セッションの最終アクセス日時も考慮）
+        // ソート: ピン留め → ピン優先度 → ユーザー設定のソート
         IOrderedEnumerable<SessionInfo> sortedParents;
+        var pinSorted = parentSessions
+            .OrderByDescending(s => s.IsPinned)
+            .ThenBy(s => s.IsPinned && s.PinPriority.HasValue ? s.PinPriority.Value : int.MaxValue);
+
         if (SortMode == "lastAccessed")
         {
-            // 親セッションごとに、自分と子セッションの最大LastAccessedAtを計算
-            sortedParents = parentSessions
-                .OrderByDescending(s => s.IsPinned)
+            sortedParents = pinSorted
                 .ThenByDescending(parent =>
                 {
                     var children = Sessions.Where(s => s.ParentSessionId == parent.SessionId);
@@ -274,11 +277,14 @@
                     return allDates.Max();
                 });
         }
+        else if (SortMode == "name")
+        {
+            sortedParents = pinSorted
+                .ThenBy(s => s.GetDisplayName(), StringComparer.CurrentCultureIgnoreCase);
+        }
         else
         {
-            // 作成日時順（従来の動作）
-            sortedParents = parentSessions
-                .OrderByDescending(s => s.IsPinned)
+            sortedParents = pinSorted
                 .ThenBy(s => s.CreatedAt);
         }
 

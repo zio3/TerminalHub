@@ -13,6 +13,7 @@ public class AppSettings
     public DevToolsSettings DevTools { get; set; } = new();
     public GeneralSettings General { get; set; } = new();
     public GeminiSettings Gemini { get; set; } = new();
+    public CustomCommandSettings Commands { get; set; } = new();
 }
 
 /// <summary>
@@ -100,4 +101,21 @@ public class GeneralSettings
 public class GeminiSettings
 {
     public List<string> Models { get; set; } = new();
+}
+
+/// <summary>
+/// カスタムコマンド設定
+/// </summary>
+public class CustomCommandSettings
+{
+    public Dictionary<string, List<CustomCommand>> CommandsByTerminalType { get; set; } = new();
+}
+
+/// <summary>
+/// カスタムコマンド
+/// </summary>
+public class CustomCommand
+{
+    public string? Title { get; set; }
+    public string CommandText { get; set; } = "";
 }

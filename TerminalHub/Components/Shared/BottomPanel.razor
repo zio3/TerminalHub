@@ -68,7 +68,8 @@
                             OnCtrlC="OnCtrlC"
                             OnEscape="OnEscape"
                             OnModeSwitch="OnModeSwitch"
-                            OnAltV="OnAltV" />
+                            OnAltV="OnAltV"
+                            CustomCommands="CustomCommands" />
         }
         else if (tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell)
         {
@@ -96,6 +97,7 @@
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }
     [Parameter] public EventCallback OnAltV { get; set; }
+    [Parameter] public List<CustomCommand> CustomCommands { get; set; } = new();
 
     private List<BottomPanelTabInfo> Tabs = new();
     private string ActiveTabId = "default-text";

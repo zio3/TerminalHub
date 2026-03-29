@@ -123,6 +123,7 @@
                                      WorkingDirectory="@currentSession.FolderPath"
                                      DotNetRef="@dotNetRef"
                                      ShellPanelRefs="@shellPanelRefs"
+                                     CustomCommands="@GetCustomCommandsForSession(currentSession.TerminalType)"
                                      OnSendInput="HandleTextInputSend"
                                      OnCtrlC="SendCtrlC"
                                      OnEscape="SendEscape"
@@ -400,6 +401,10 @@
                             {
                                 createdSession.ParentSessionId = sessionInfo.ParentSessionId;
                             }
+
+                            // ピン留め状態を復元
+                            createdSession.IsPinned = sessionInfo.IsPinned;
+                            createdSession.PinPriority = sessionInfo.PinPriority;
 
                             await SessionManager.SaveSessionInfoAsync(createdSession);
                         }
@@ -1514,6 +1519,15 @@
             TerminalType.GeminiCLI => "Gemini CLIへのメッセージを入力...",
             _ => "コマンドを入力..."
         };
+    }
+
+    private List<CustomCommand> GetCustomCommandsForSession(TerminalType terminalType)
+    {
+        var settings = AppSettingsService.GetSettings();
+        var key = terminalType.ToString();
+        if (settings.Commands.CommandsByTerminalType.TryGetValue(key, out var commands))
+            return commands;
+        return new();
     }
 
     private string claudeModeSwitchKey = "altM";

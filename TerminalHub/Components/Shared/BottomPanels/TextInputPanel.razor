@@ -45,6 +45,16 @@
                         <i class="bi bi-arrow-repeat d-none d-md-inline"></i> @GetModeSwitchLabel()
                     </button>
                 }
+                @foreach (var (cmd, index) in CustomCommands.Select((c, i) => (c, i)))
+                {
+                    var idx = index;
+                    <button class="btn btn-secondary @(pressedCommandIndex == idx ? "active" : "")"
+                            @onclick="() => OnCustomCommandClick(idx)"
+                            title="@cmd.CommandText"
+                            style="@(pressedCommandIndex == idx ? "transform: scale(0.95);" : "")">
+                        @(string.IsNullOrEmpty(cmd.Title) ? cmd.CommandText : cmd.Title)
+                    </button>
+                }
                 @if (VoiceInputEnabled)
                 {
                     <button class="btn btn-secondary @(isVoiceRecording ? "btn-danger active" : "")"
@@ -81,6 +91,7 @@
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }
     [Parameter] public EventCallback OnAltV { get; set; }
+    [Parameter] public List<CustomCommand> CustomCommands { get; set; } = new();
 
     private string inputText
     {
@@ -190,6 +201,18 @@
     private async Task OnSendClick()
     {
         await SendInput();
+    }
+
+    private int? pressedCommandIndex = null;
+
+    private async Task OnCustomCommandClick(int index)
+    {
+        pressedCommandIndex = index;
+        StateHasChanged();
+        await OnSendInput.InvokeAsync(CustomCommands[index].CommandText);
+        await Task.Delay(100);
+        pressedCommandIndex = null;
+        StateHasChanged();
     }
 
     private async Task OnCtrlCClick()

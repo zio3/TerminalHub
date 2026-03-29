@@ -58,7 +58,7 @@
                         </div>
                     </div>
 
-                    @if (!sessionInfo.IsWorktree)
+                    @if (!sessionInfo.ParentSessionId.HasValue)
                     {
                         <div class="mt-3">
                             <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
@@ -78,13 +78,26 @@
                         </small>
                     </div>
 
-                    <!-- ピン留め -->
-                    <div class="mb-3 form-check">
-                        <input class="form-check-input" type="checkbox" @bind="isPinned" id="isPinnedCheck">
-                        <label class="form-check-label" for="isPinnedCheck">
-                            <i class="bi bi-pin-fill me-1"></i>セッションをピン留め（常にリスト上部に表示）
-                        </label>
-                    </div>
+                    @if (!sessionInfo.ParentSessionId.HasValue)
+                    {
+                        <!-- ピン留め -->
+                        <div class="mb-3">
+                            <div class="form-check d-inline-block">
+                                <input class="form-check-input" type="checkbox" @bind="isPinned" id="isPinnedCheck">
+                                <label class="form-check-label" for="isPinnedCheck">
+                                    <i class="bi bi-pin-fill me-1"></i>セッションをピン留め
+                                </label>
+                            </div>
+                            @if (isPinned)
+                            {
+                                <div class="d-inline-block ms-3">
+                                    <label class="form-label mb-0 me-1 small">優先度:</label>
+                                    <input type="number" class="form-control form-control-sm d-inline-block" style="width: 80px;"
+                                           @bind="pinPriority" placeholder="--" />
+                                </div>
+                            }
+                        </div>
+                    }
 
                     <!-- メモ -->
                     <div class="mb-3">
@@ -150,6 +163,7 @@
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
     private SessionOptionsSelector.CodexOptionsData codexOptions = new();
     private bool isPinned = false;
+    private int? pinPriority = null;
     private string errorMessage = "";
     private bool restartSession = true;
 
@@ -173,6 +187,7 @@
             displayName = sessionInfo.DisplayName ?? "";
             memo = sessionInfo.Memo ?? "";
             isPinned = sessionInfo.IsPinned;
+            pinPriority = sessionInfo.PinPriority;
             selectedType = sessionInfo.TerminalType;
 
             // オプションを解析
@@ -242,6 +257,9 @@
 
             // ピン留め状態を更新
             sessionInfo.IsPinned = isPinned;
+            sessionInfo.PinPriority = isPinned ? pinPriority : null;
+            Logger.LogInformation("[SessionSettings] SaveSettings: SessionId={SessionId} IsPinned={IsPinned} PinPriority={PinPriority}",
+                sessionInfo.SessionId, sessionInfo.IsPinned, sessionInfo.PinPriority);
             
             // ターミナルタイプを更新
             sessionInfo.TerminalType = selectedType;

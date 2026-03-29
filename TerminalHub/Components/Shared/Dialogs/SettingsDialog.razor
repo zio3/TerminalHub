@@ -65,6 +65,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "commands" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "commands")">
+                                <i class="bi bi-play-btn me-1"></i>コマンド
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "special" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "special")">
@@ -405,6 +412,14 @@
                                             <span class="text-muted small">（最近使用したセッションが上に表示）</span>
                                         </label>
                                     </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="sessionSortMode"
+                                               id="sortByName" value="name" checked="@(sessionSortMode == "name")"
+                                               @onchange="@(() => sessionSortMode = "name")">
+                                        <label class="form-check-label" for="sortByName">
+                                            <i class="bi bi-sort-alpha-down me-1"></i>名前順
+                                        </label>
+                                    </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
                                         「最終利用日時順」では、子セッション（Worktree）の利用も親セッションの順序に反映されます。
@@ -592,6 +607,72 @@
                                         </button>
                                     }
                                 </div>
+                            </div>
+                        }
+                        else if (activeTab == "commands")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">カスタムコマンド</h6>
+                                <small class="text-muted d-block mb-3">
+                                    ターミナル種別ごとにボタンバーに表示するコマンドを登録できます。
+                                </small>
+
+                                @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
+                                {
+                                    var type = terminalType;
+                                    var displayName = type switch
+                                    {
+                                        "ClaudeCode" => "Claude Code",
+                                        "GeminiCLI" => "Gemini CLI",
+                                        "CodexCLI" => "Codex CLI",
+                                        _ => "Terminal"
+                                    };
+
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">@displayName</label>
+                                        <div class="input-group input-group-sm mb-2">
+                                            <input type="text" class="form-control"
+                                                   @bind="newCommandTitles[type]" @bind:event="oninput"
+                                                   placeholder="タイトル（省略可）" style="max-width: 120px;" />
+                                            <input type="text" class="form-control"
+                                                   @bind="newCommandTexts[type]" @bind:event="oninput"
+                                                   placeholder="コマンド（例: /plan）" />
+                                            <button class="btn btn-outline-primary" type="button"
+                                                    @onclick="() => AddCommand(type)"
+                                                    disabled="@string.IsNullOrWhiteSpace(newCommandTexts.GetValueOrDefault(type))">
+                                                <i class="bi bi-plus-lg"></i>
+                                            </button>
+                                        </div>
+                                        @if (editingCommands.ContainsKey(type) && editingCommands[type].Any())
+                                        {
+                                            <ul class="list-group list-group-sm">
+                                                @for (var i = 0; i < editingCommands[type].Count; i++)
+                                                {
+                                                    var idx = i;
+                                                    var cmd = editingCommands[type][i];
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
+                                                        <small>
+                                                            @if (!string.IsNullOrEmpty(cmd.Title))
+                                                            {
+                                                                <strong>@cmd.Title</strong>
+                                                                <span class="text-muted ms-2">@cmd.CommandText</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span>@cmd.CommandText</span>
+                                                            }
+                                                        </small>
+                                                        <button class="btn btn-outline-danger btn-sm border-0" type="button"
+                                                                @onclick="() => RemoveCommand(type, idx)"
+                                                                style="font-size: 0.7rem;">
+                                                            <i class="bi bi-x-lg"></i>
+                                                        </button>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+                                    </div>
+                                }
                             </div>
                         }
                         else if (activeTab == "special")
@@ -858,6 +939,9 @@
     private bool hookEventNotification = true;
     private string saveMessage = "";
     private bool saveSuccess = false;
+    private Dictionary<string, List<CustomCommand>> editingCommands = new();
+    private Dictionary<string, string> newCommandTitles = new();
+    private Dictionary<string, string> newCommandTexts = new();
     private string activeTab = "general";
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
@@ -978,6 +1062,19 @@
             terminalFontSize = settings.General.TerminalFontSize;
             terminalHeightPercent = settings.General.TerminalHeightPercent;
             theme = settings.General.Theme;
+
+            // カスタムコマンド
+            editingCommands = settings.Commands.CommandsByTerminalType
+                .ToDictionary(kv => kv.Key, kv => new List<CustomCommand>(kv.Value));
+            foreach (var type in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
+            {
+                if (!editingCommands.ContainsKey(type))
+                    editingCommands[type] = new();
+                if (!newCommandTitles.ContainsKey(type))
+                    newCommandTitles[type] = "";
+                if (!newCommandTexts.ContainsKey(type))
+                    newCommandTexts[type] = "";
+            }
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1177,6 +1274,11 @@
                     TerminalFontSize = terminalFontSize,
                     TerminalHeightPercent = terminalHeightPercent,
                     Theme = theme
+                },
+                Commands = new CustomCommandSettings
+                {
+                    CommandsByTerminalType = editingCommands
+                        .ToDictionary(kv => kv.Key, kv => new List<CustomCommand>(kv.Value))
                 }
             };
             AppSettingsService.SaveSettings(settings);
@@ -1254,6 +1356,32 @@
     private void RemoveFavoriteFolder(string folder)
     {
         favoriteFolders.Remove(folder);
+    }
+
+    private void AddCommand(string terminalType)
+    {
+        var text = newCommandTexts.GetValueOrDefault(terminalType, "");
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        if (!editingCommands.ContainsKey(terminalType))
+            editingCommands[terminalType] = new();
+
+        editingCommands[terminalType].Add(new CustomCommand
+        {
+            Title = string.IsNullOrWhiteSpace(newCommandTitles.GetValueOrDefault(terminalType)) ? null : newCommandTitles[terminalType].Trim(),
+            CommandText = text.Trim()
+        });
+
+        newCommandTitles[terminalType] = "";
+        newCommandTexts[terminalType] = "";
+    }
+
+    private void RemoveCommand(string terminalType, int index)
+    {
+        if (editingCommands.ContainsKey(terminalType) && index < editingCommands[terminalType].Count)
+        {
+            editingCommands[terminalType].RemoveAt(index);
+        }
     }
 
     private async Task BrowseFavoriteFolder()

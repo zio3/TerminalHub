@@ -42,6 +42,7 @@ namespace TerminalHub.Models
 
         // ピン留め状態
         public bool IsPinned { get; set; } = false;
+        public int? PinPriority { get; set; }
 
         // アーカイブ状態
         public bool IsArchived { get; set; } = false;

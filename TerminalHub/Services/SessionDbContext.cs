@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 2;
+        private const int CurrentSchemaVersion = 3;
 
         public SessionDbContext(string dbPath, ILogger<SessionDbContext> logger)
         {
@@ -59,6 +59,17 @@ namespace TerminalHub.Services
                 await CreateInputHistoryTableAsync();
                 await SetSchemaVersionAsync(2);
                 _logger.LogInformation("スキーマ v2 を作成（入力履歴テーブル追加）");
+            }
+
+            if (currentVersion < 3)
+            {
+                // v3: ピン留め・優先度カラムを追加
+                await using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+                await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN IsPinned INTEGER DEFAULT 0");
+                await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN PinPriority INTEGER");
+                await SetSchemaVersionAsync(3);
+                _logger.LogInformation("スキーマ v3 を作成（IsPinned, PinPriority カラム追加）");
             }
         }
 
@@ -127,6 +138,8 @@ namespace TerminalHub.Services
                     IsArchived INTEGER DEFAULT 0,
                     ArchivedAt TEXT,
                     ParentSessionId TEXT,
+                    IsPinned INTEGER DEFAULT 0,
+                    PinPriority INTEGER,
                     FOREIGN KEY(ParentSessionId) REFERENCES Sessions(SessionId)
                 );
 

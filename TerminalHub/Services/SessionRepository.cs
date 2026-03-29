@@ -36,7 +36,8 @@ namespace TerminalHub.Services
             // セッション取得
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
-                       IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId
+                       IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
+                       IsPinned, PinPriority
                 FROM Sessions
                 ORDER BY LastAccessedAt DESC");
 
@@ -55,9 +56,20 @@ namespace TerminalHub.Services
                     Memo = reader.IsDBNull(8) ? "" : reader.GetString(8),
                     IsArchived = reader.GetInt64(9) == 1,
                     ArchivedAt = reader.IsDBNull(10) ? null : DateTime.Parse(reader.GetString(10)),
-                    ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11))
+                    ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11)),
+                    IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
+                    PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13)
                 };
                 sessions.Add(session);
+            }
+
+            // ピン留めセッションをログ出力
+            var pinnedSessions = sessions.Where(s => s.IsPinned).ToList();
+            _logger.LogInformation("[LoadSessions] Total={Total} Pinned={Pinned}", sessions.Count, pinnedSessions.Count);
+            foreach (var p in pinnedSessions)
+            {
+                _logger.LogInformation("[LoadSessions] Pinned: SessionId={SessionId} DisplayName={DisplayName} PinPriority={PinPriority}",
+                    p.SessionId, p.GetDisplayName(), p.PinPriority);
             }
 
             // オプションを取得
@@ -77,7 +89,8 @@ namespace TerminalHub.Services
 
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
-                       IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId
+                       IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
+                       IsPinned, PinPriority
                 FROM Sessions
                 WHERE SessionId = @sessionId",
                 ("@sessionId", sessionId.ToString()));
@@ -100,7 +113,9 @@ namespace TerminalHub.Services
                 Memo = reader.IsDBNull(8) ? "" : reader.GetString(8),
                 IsArchived = reader.GetInt64(9) == 1,
                 ArchivedAt = reader.IsDBNull(10) ? null : DateTime.Parse(reader.GetString(10)),
-                ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11))
+                ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11)),
+                IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
+                PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13)
             };
 
             await reader.CloseAsync();
@@ -113,6 +128,9 @@ namespace TerminalHub.Services
 
         public async Task SaveSessionAsync(SessionInfo session)
         {
+            _logger.LogInformation("[SaveSession] SessionId={SessionId} DisplayName={DisplayName} IsPinned={IsPinned} PinPriority={PinPriority}",
+                session.SessionId, session.GetDisplayName(), session.IsPinned, session.PinPriority);
+
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
@@ -124,9 +142,11 @@ namespace TerminalHub.Services
                 await connection.ExecuteNonQueryAsync(@"
                     INSERT OR REPLACE INTO Sessions
                     (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
-                     IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId)
+                     IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
+                     IsPinned, PinPriority)
                     VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
-                            @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId)",
+                            @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
+                            @isPinned, @pinPriority)",
                     ("@sessionId", session.SessionId.ToString()),
                     ("@displayName", session.DisplayName),
                     ("@folderPath", session.FolderPath),
@@ -138,7 +158,9 @@ namespace TerminalHub.Services
                     ("@memo", session.Memo),
                     ("@isArchived", session.IsArchived ? 1 : 0),
                     ("@archivedAt", session.ArchivedAt?.ToString("o")),
-                    ("@parentSessionId", session.ParentSessionId?.ToString()));
+                    ("@parentSessionId", session.ParentSessionId?.ToString()),
+                    ("@isPinned", session.IsPinned ? 1 : 0),
+                    ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value));
 
                 // オプションを保存
                 await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
@@ -311,9 +333,11 @@ namespace TerminalHub.Services
                     await connection.ExecuteNonQueryAsync(@"
                         INSERT OR REPLACE INTO Sessions
                         (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
-                         IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId)
+                         IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
+                         IsPinned, PinPriority)
                         VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
-                                @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId)",
+                                @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
+                                @isPinned, @pinPriority)",
                         ("@sessionId", session.SessionId.ToString()),
                         ("@displayName", session.DisplayName),
                         ("@folderPath", session.FolderPath),
@@ -325,7 +349,9 @@ namespace TerminalHub.Services
                         ("@memo", session.Memo),
                         ("@isArchived", session.IsArchived ? 1 : 0),
                         ("@archivedAt", session.ArchivedAt?.ToString("o")),
-                        ("@parentSessionId", session.ParentSessionId?.ToString()));
+                        ("@parentSessionId", session.ParentSessionId?.ToString()),
+                        ("@isPinned", session.IsPinned ? 1 : 0),
+                        ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value));
 
                     // オプションを保存
                     await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
