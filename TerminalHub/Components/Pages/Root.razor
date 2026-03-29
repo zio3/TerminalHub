@@ -247,6 +247,17 @@
     }
 
     /// <summary>
+    /// セッションをストレージから削除
+    /// </summary>
+    private async Task DeleteSessionFromStorageAsync(Guid sessionId)
+    {
+        if (_storageService != null)
+        {
+            await _storageService.DeleteSessionAsync(sessionId);
+        }
+    }
+
+    /// <summary>
     /// アクティブセッションIDをストレージに保存
     /// </summary>
     private async Task SaveActiveSessionIdToStorageAsync(Guid? sessionId)
@@ -1095,6 +1106,7 @@
         // ターミナルのクリーンアップはdestroyTerminalで処理される
 
         await SessionManager.RemoveSessionAsync(sessionId);
+        await DeleteSessionFromStorageAsync(sessionId);
         sessions = SessionManager.GetAllSessions().ToList();
 
         if (activeSessionId == sessionId)
@@ -1156,6 +1168,10 @@
 
         // SessionManagerでアーカイブ処理（ConPtySessionの破棄含む）
         SessionManager.ArchiveSession(sessionId);
+        if (_storageService != null)
+        {
+            await _storageService.UpdateArchivedStateAsync(sessionId, true, DateTime.Now);
+        }
 
         sessions = SessionManager.GetAllSessions().ToList();
 
@@ -1203,25 +1219,22 @@
 
     private async Task DeleteArchivedSession(Guid sessionId)
     {
-        // SessionManagerから完全削除
         SessionManager.DeleteSession(sessionId);
+        await DeleteSessionFromStorageAsync(sessionId);
 
-        // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
-
         StateHasChanged();
     }
 
     private async Task DeleteAllArchivedSessions()
     {
-        // アーカイブされた全セッションを削除
         var archivedSessions = SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
         foreach (var session in archivedSessions)
         {
             SessionManager.DeleteSession(session.SessionId);
+            await DeleteSessionFromStorageAsync(session.SessionId);
         }
 
-        // SessionManagerから最新のセッションリストを取得
         sessions = SessionManager.GetAllSessions().ToList();
         StateHasChanged();
     }
@@ -1978,6 +1991,16 @@
         showSessionSettingsDialog = false;
         // セッション一覧を更新
         sessions = SessionManager.GetAllSessions().ToList();
+
+        // 変更されたセッションをDBに保存
+        if (settingsSessionId.HasValue)
+        {
+            var savedSession = SessionManager.GetSessionInfo(settingsSessionId.Value);
+            if (savedSession != null)
+            {
+                await SaveSessionToStorageAsync(savedSession);
+            }
+        }
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
         if (settingsSessionId.HasValue && settingsSessionId.Value == activeSessionId)

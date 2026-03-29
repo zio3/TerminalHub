@@ -52,6 +52,11 @@ namespace TerminalHub.Services
             await _repository.UpdateArchivedStateAsync(sessionId, isArchived, archivedAt);
         }
 
+        public async Task DeleteSessionAsync(Guid sessionId)
+        {
+            await _repository.DeleteSessionAsync(sessionId);
+        }
+
         public async Task SaveActiveSessionIdAsync(Guid? sessionId)
         {
             await _repository.SetActiveSessionIdAsync(sessionId);

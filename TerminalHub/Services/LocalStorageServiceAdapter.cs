@@ -107,6 +107,16 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task DeleteSessionAsync(Guid sessionId)
+        {
+            if (_cachedSessions == null)
+            {
+                _cachedSessions = await _localStorageService.LoadSessionsAsync();
+            }
+            _cachedSessions.RemoveAll(s => s.SessionId == sessionId);
+            await _localStorageService.SaveSessionsAsync(_cachedSessions);
+        }
+
         public async Task SaveActiveSessionIdAsync(Guid? sessionId)
         {
             await _localStorageService.SaveActiveSessionIdAsync(sessionId);
