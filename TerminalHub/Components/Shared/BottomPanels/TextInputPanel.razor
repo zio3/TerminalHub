@@ -110,7 +110,6 @@
     private bool isEscapePressed = false;
     private bool isModeSwitchPressed = false;
     private bool isSending = false;
-    private bool isAltVPressed = false;
     private bool isVoiceRecording = false;
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
@@ -233,10 +232,7 @@
 
     private async Task OnAltVClick()
     {
-        isAltVPressed = true;
         await OnAltV.InvokeAsync();
-        await Task.Delay(100);
-        isAltVPressed = false;
     }
 
     private async Task OnModeSwitchClick()
