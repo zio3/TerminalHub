@@ -258,9 +258,7 @@
             // ピン留め状態を更新
             sessionInfo.IsPinned = isPinned;
             sessionInfo.PinPriority = isPinned ? pinPriority : null;
-            Logger.LogInformation("[SessionSettings] SaveSettings: SessionId={SessionId} IsPinned={IsPinned} PinPriority={PinPriority}",
-                sessionInfo.SessionId, sessionInfo.IsPinned, sessionInfo.PinPriority);
-            
+
             // ターミナルタイプを更新
             sessionInfo.TerminalType = selectedType;
             

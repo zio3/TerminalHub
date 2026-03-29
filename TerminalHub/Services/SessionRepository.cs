@@ -63,15 +63,6 @@ namespace TerminalHub.Services
                 sessions.Add(session);
             }
 
-            // ピン留めセッションをログ出力
-            var pinnedSessions = sessions.Where(s => s.IsPinned).ToList();
-            _logger.LogInformation("[LoadSessions] Total={Total} Pinned={Pinned}", sessions.Count, pinnedSessions.Count);
-            foreach (var p in pinnedSessions)
-            {
-                _logger.LogInformation("[LoadSessions] Pinned: SessionId={SessionId} DisplayName={DisplayName} PinPriority={PinPriority}",
-                    p.SessionId, p.GetDisplayName(), p.PinPriority);
-            }
-
             // オプションを取得
             foreach (var session in sessions)
             {
@@ -128,9 +119,6 @@ namespace TerminalHub.Services
 
         public async Task SaveSessionAsync(SessionInfo session)
         {
-            _logger.LogInformation("[SaveSession] SessionId={SessionId} DisplayName={DisplayName} IsPinned={IsPinned} PinPriority={PinPriority}",
-                session.SessionId, session.GetDisplayName(), session.IsPinned, session.PinPriority);
-
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
