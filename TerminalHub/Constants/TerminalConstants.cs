@@ -92,6 +92,11 @@ namespace TerminalHub.Constants
                 args.Add("--chrome");
             }
 
+            if (options.ContainsKey("remote-control") && options["remote-control"] == "true")
+            {
+                args.Add("--remote-control");
+            }
+
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {
                 args.Add(extraArgs.Trim());

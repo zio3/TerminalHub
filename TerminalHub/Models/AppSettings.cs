@@ -14,6 +14,7 @@ public class AppSettings
     public GeneralSettings General { get; set; } = new();
     public GeminiSettings Gemini { get; set; } = new();
     public CustomCommandSettings Commands { get; set; } = new();
+    public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
 }
 
 /// <summary>
@@ -118,4 +119,14 @@ public class CustomCommand
 {
     public string? Title { get; set; }
     public string CommandText { get; set; } = "";
+}
+
+/// <summary>
+/// リモート起動設定
+/// </summary>
+public class RemoteLaunchSettings
+{
+    public bool Enabled { get; set; }
+    public string TopicGuid { get; set; } = "";
+    public string? PasswordHash { get; set; }
 }
