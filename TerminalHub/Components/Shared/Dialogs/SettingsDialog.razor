@@ -11,6 +11,7 @@
 @inject ISessionManager SessionManager
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IVersionCheckService VersionCheckService
+@inject MqttService MqttService
 
 @if (IsVisible)
 {
@@ -603,8 +604,8 @@
                                     外出先のスマートフォンからClaude Codeセッションを起動し、Remote Control URLを取得できます。
                                 </small>
 
-                                <div class="mb-3 form-check">
-                                    <input class="form-check-input" type="checkbox" @bind="remoteLaunchEnabled"
+                                <div class="mb-3 form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" @bind="remoteLaunchEnabled"
                                            @bind:after="OnRemoteLaunchEnabledChanged" id="remoteLaunchEnabled">
                                     <label class="form-check-label" for="remoteLaunchEnabled">
                                         リモート起動を有効にする
@@ -1395,11 +1396,21 @@
         remoteLaunchTopicGuid = Guid.NewGuid().ToString();
     }
 
-    private void OnRemoteLaunchEnabledChanged()
+    private async Task OnRemoteLaunchEnabledChanged()
     {
         if (remoteLaunchEnabled && string.IsNullOrEmpty(remoteLaunchTopicGuid))
         {
             remoteLaunchTopicGuid = Guid.NewGuid().ToString();
+        }
+
+        // トグル切り替え時にMQTT接続/切断を即座に実行
+        if (remoteLaunchEnabled && !string.IsNullOrEmpty(remoteLaunchTopicGuid))
+        {
+            await MqttService.ConnectAsync(remoteLaunchTopicGuid);
+        }
+        else
+        {
+            await MqttService.DisconnectAsync();
         }
     }
 
