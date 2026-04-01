@@ -12,7 +12,7 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 ```
 
 - `TopicGUID`: TerminalHubの設定画面で有効化時に自動生成されるGUID
-- ブローカー: `vps3.zio3.net:1883`（TCP）/ `:9001`（WebSocket）
+- ブローカー: `vps3.zio3.net:1883`（TCP）
 
 ## 認証
 
@@ -46,12 +46,26 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 {
   "action": "list",
   "sessions": [
-    { "id": "guid", "name": "TerminalHub", "folder": "C:\\...", "type": "ClaudeCode" }
+    {
+      "id": "guid",
+      "name": "TerminalHub",
+      "memo": "メモ内容またはnull",
+      "type": "ClaudeCode",
+      "remoteControlUrl": "https://claude.ai/code/...またはnull"
+    }
   ]
 }
 ```
 
-※ ClaudeCodeセッションのみ返却
+| フィールド | 型 | 説明 |
+|-----------|------|------|
+| `id` | string | セッションGUID |
+| `name` | string | 表示名（未設定時はフォルダ名） |
+| `memo` | string? | セッションのメモ（未設定時はnull） |
+| `type` | string | "ClaudeCode"固定 |
+| `remoteControlUrl` | string? | Remote Control URL（起動済みの場合のみ、未起動時はnull） |
+
+※ ClaudeCodeセッションのみ返却。ソート順はユーザー設定に準拠（ピン留め優先→ソートモード）。
 
 ### 起動開始
 

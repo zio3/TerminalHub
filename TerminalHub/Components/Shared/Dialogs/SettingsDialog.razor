@@ -608,8 +608,10 @@
                                         <div class="mb-3">
                                             <label class="form-label">アクセスURL</label>
                                             <div class="input-group">
-                                                <input type="text" class="form-control font-monospace"
-                                                       value="@GetRemoteLaunchAccessUrl()" readonly />
+                                                <a href="@GetRemoteLaunchAccessUrl()" target="_blank" class="form-control font-monospace text-decoration-none"
+                                                   style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @GetRemoteLaunchAccessUrl()
+                                                </a>
                                                 <button class="btn btn-outline-secondary" type="button"
                                                         @onclick="() => CopyToClipboardText(GetRemoteLaunchAccessUrl())"
                                                         title="URLをコピー">
@@ -625,8 +627,17 @@
 
                                     <div class="mb-3">
                                         <label class="form-label">パスワード（任意）</label>
-                                        <input type="password" class="form-control" @bind="remoteLaunchPassword" @bind:event="oninput"
-                                               placeholder="設定するとアクセス時にパスワードが必要になります" />
+                                        <div class="input-group">
+                                            <input type="password" class="form-control" @bind="remoteLaunchPassword" @bind:event="oninput"
+                                                   placeholder="設定するとアクセス時にパスワードが必要になります" />
+                                            @if (remoteLaunchPassword == "********")
+                                            {
+                                                <button class="btn btn-outline-danger" type="button"
+                                                        @onclick="ClearRemoteLaunchPassword">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            }
+                                        </div>
                                         <small class="text-muted">
                                             空欄の場合はURLのみでアクセスできます。
                                         </small>
@@ -634,8 +645,16 @@
 
                                     <div class="mb-3">
                                         <label class="form-label small text-muted">トピックGUID</label>
-                                        <input type="text" class="form-control form-control-sm font-monospace text-muted"
-                                               value="@remoteLaunchTopicGuid" readonly />
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control font-monospace text-muted"
+                                                   value="@remoteLaunchTopicGuid" readonly />
+                                            <button class="btn btn-outline-warning" type="button"
+                                                    @onclick="RegenerateTopicGuid"
+                                                    title="GUIDを再発行（既存のアクセスURLが無効になります）">
+                                                <i class="bi bi-arrow-clockwise"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">再発行すると既存のアクセスURLが無効になります。</small>
                                     </div>
                                 }
                             </div>
@@ -911,6 +930,7 @@
     private bool remoteLaunchEnabled = false;
     private string remoteLaunchTopicGuid = "";
     private string remoteLaunchPassword = "";
+    private bool remoteLaunchPasswordCleared = false;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
     private string sessionSortMode = "lastAccessed";
@@ -1034,7 +1054,7 @@
             // リモート起動設定
             remoteLaunchEnabled = settings.RemoteLaunch.Enabled;
             remoteLaunchTopicGuid = settings.RemoteLaunch.TopicGuid;
-            remoteLaunchPassword = "";
+            remoteLaunchPassword = string.IsNullOrEmpty(settings.RemoteLaunch.PasswordHash) ? "" : "********";
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1244,9 +1264,11 @@
                 {
                     Enabled = remoteLaunchEnabled,
                     TopicGuid = remoteLaunchTopicGuid,
-                    PasswordHash = string.IsNullOrEmpty(remoteLaunchPassword)
-                        ? AppSettingsService.GetSettings().RemoteLaunch.PasswordHash
-                        : MqttService.ComputePasswordHash(remoteLaunchPassword)
+                    PasswordHash = remoteLaunchPasswordCleared
+                        ? null
+                        : remoteLaunchPassword == "********" || string.IsNullOrEmpty(remoteLaunchPassword)
+                            ? AppSettingsService.GetSettings().RemoteLaunch.PasswordHash
+                            : MqttService.ComputePasswordHash(remoteLaunchPassword)
                 }
             };
             AppSettingsService.SaveSettings(settings);
@@ -1350,6 +1372,17 @@
         {
             editingCommands[terminalType].RemoveAt(index);
         }
+    }
+
+    private void ClearRemoteLaunchPassword()
+    {
+        remoteLaunchPassword = "";
+        remoteLaunchPasswordCleared = true;
+    }
+
+    private void RegenerateTopicGuid()
+    {
+        remoteLaunchTopicGuid = Guid.NewGuid().ToString();
     }
 
     private void OnRemoteLaunchEnabledChanged()

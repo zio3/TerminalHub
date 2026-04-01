@@ -138,6 +138,7 @@ public class MqttService : IHostedService, IDisposable
             // パスワード認証チェック
             if (!ValidatePassword(request.PasswordHash))
             {
+                _logger.LogWarning("[MQTT] 認証失敗: action={Action}", request.Action);
                 await PublishResponseAsync(new { action = "error", message = "unauthorized" });
                 return;
             }
@@ -173,6 +174,7 @@ public class MqttService : IHostedService, IDisposable
         if (string.IsNullOrEmpty(settings.PasswordHash))
             return true;
 
+
         // パスワード設定済みだがリクエストにハッシュがない
         if (string.IsNullOrEmpty(requestPasswordHash))
             return false;
@@ -182,14 +184,28 @@ public class MqttService : IHostedService, IDisposable
 
     private async Task HandleListAsync()
     {
-        var sessions = _sessionManager.GetActiveSessions()
-            .Where(s => s.TerminalType == TerminalType.ClaudeCode)
-            .Select(s => new
+        var sortMode = _appSettingsService.GetSettings().Sessions.SortMode;
+        var claudeSessions = _sessionManager.GetActiveSessions()
+            .Where(s => s.TerminalType == TerminalType.ClaudeCode);
+
+        var pinSorted = claudeSessions
+            .OrderByDescending(s => s.IsPinned)
+            .ThenBy(s => s.IsPinned && s.PinPriority.HasValue ? s.PinPriority.Value : int.MaxValue);
+
+        IOrderedEnumerable<SessionInfo> sorted = sortMode switch
+        {
+            "name" => pinSorted.ThenBy(s => s.GetDisplayName(), StringComparer.CurrentCultureIgnoreCase),
+            "createdAt" => pinSorted.ThenBy(s => s.CreatedAt),
+            _ => pinSorted.ThenByDescending(s => s.LastAccessedAt)
+        };
+
+        var sessions = sorted.Select(s => new
             {
                 id = s.SessionId.ToString(),
                 name = s.GetDisplayName(),
-                folder = s.FolderPath,
-                type = s.TerminalType.ToString()
+                memo = string.IsNullOrEmpty(s.Memo) ? null : s.Memo,
+                type = s.TerminalType.ToString(),
+                remoteControlUrl = s.RemoteControlUrl
             })
             .ToList();
 
