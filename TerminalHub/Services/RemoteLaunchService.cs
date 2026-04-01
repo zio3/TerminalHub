@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.RegularExpressions;
 using TerminalHub.Models;
 
@@ -51,18 +50,9 @@ public class RemoteLaunchService : IRemoteLaunchService
 
         _logger.LogInformation("[RemoteLaunch] [状態: STARTING] セッション起動開始: {SessionId} ({Name})", sessionId, sessionInfo.GetDisplayName());
 
-        // ログファイル準備
-        var logsDir = Path.Combine(AppContext.BaseDirectory, "logs", "remote-launch");
-        Directory.CreateDirectory(logsDir);
-        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        var logPath = Path.Combine(logsDir, $"launch-{timestamp}-{sessionId.ToString()[..8]}.log");
-        var rawBuffer = new StringBuilder();
-
-        _logger.LogInformation("[RemoteLaunch] ConPTY出力ログ: {LogPath}", logPath);
-
         try
         {
-            // 既存オプションを引き継ぎ、--remote-controlを追加（extra-argsは除外）
+            // 既存オプションを引き継ぎ、--remote-controlを追加
             var options = new Dictionary<string, string>(sessionInfo.Options)
             {
                 ["remote-control"] = "true"
@@ -88,28 +78,27 @@ public class RemoteLaunchService : IRemoteLaunchService
             // URL検知を待機
             var urlTcs = new TaskCompletionSource<string?>();
             var cleanBuffer = "";
+            var urlDetected = false;
 
             void OnDataReceived(object? sender, DataReceivedEventArgs e)
             {
-                // 生データをバッファに蓄積
-                rawBuffer.Append(e.Data);
+                if (urlDetected) return;
 
                 var clean = AnsiEscapePattern.Replace(e.Data, " ");
                 cleanBuffer += clean;
 
-                // クリーンデータの断片をログに出力（長い場合は先頭100文字）
-                var fragment = clean.Length > 100 ? clean[..100] + "..." : clean;
-                if (!string.IsNullOrWhiteSpace(fragment))
-                {
-                    _logger.LogDebug("[RemoteLaunch] [出力] {Fragment}", fragment.Trim());
-                }
-
                 var match = RemoteControlUrlPattern.Match(cleanBuffer);
                 if (match.Success)
                 {
+                    urlDetected = true;
                     var url = match.Value.TrimEnd(')', ']', '}', '>');
                     _logger.LogInformation("[RemoteLaunch] [状態: URL_DETECTED] URL検知: {Url}", url);
                     sessionInfo.RemoteControlUrl = url;
+
+                    // URL検知後はイベントハンドラーを即座に解除
+                    conPtySession.DataReceived -= OnDataReceived;
+                    conPtySession.ProcessExited -= OnProcessExited;
+
                     urlTcs.TrySetResult(url);
                 }
             }
@@ -136,25 +125,16 @@ public class RemoteLaunchService : IRemoteLaunchService
 
             var url = await urlTcs.Task;
 
-            // イベントハンドラー解除
-            conPtySession.DataReceived -= OnDataReceived;
-            conPtySession.ProcessExited -= OnProcessExited;
-
-            // 生データをファイルに書き出し
-            try
+            // タイムアウト時のイベントハンドラー解除
+            if (!urlDetected)
             {
-                await File.WriteAllTextAsync(logPath, rawBuffer.ToString());
-                _logger.LogInformation("[RemoteLaunch] ConPTY出力ログ書き込み完了: {Size}bytes", rawBuffer.Length);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[RemoteLaunch] ログファイル書き込み失敗");
+                conPtySession.DataReceived -= OnDataReceived;
+                conPtySession.ProcessExited -= OnProcessExited;
             }
 
             if (url == null)
             {
                 _logger.LogWarning("[RemoteLaunch] [状態: FAILED] URL検知タイムアウト({Timeout}秒): {SessionId}", timeoutSeconds, sessionId);
-                // クリーンバッファの末尾をログに出力（デバッグ用）
                 var tail = cleanBuffer.Length > 500 ? cleanBuffer[^500..] : cleanBuffer;
                 _logger.LogWarning("[RemoteLaunch] クリーンバッファ末尾: {Tail}", tail);
             }
@@ -168,14 +148,6 @@ public class RemoteLaunchService : IRemoteLaunchService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[RemoteLaunch] [状態: ERROR] 起動エラー: {SessionId}", sessionId);
-
-            // エラー時もバッファをファイルに書き出し
-            try
-            {
-                await File.WriteAllTextAsync(logPath, rawBuffer.ToString());
-            }
-            catch { }
-
             return null;
         }
     }
