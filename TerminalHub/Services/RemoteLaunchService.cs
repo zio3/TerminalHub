@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using TerminalHub.Models;
@@ -15,7 +16,7 @@ public class RemoteLaunchService : IRemoteLaunchService
     private readonly ILogger<RemoteLaunchService> _logger;
 
     /// <summary>リモート起動したConPTYセッションを保持（GC防止）</summary>
-    private readonly Dictionary<Guid, ConPtySession> _activeRemoteSessions = new();
+    private readonly ConcurrentDictionary<Guid, ConPtySession> _activeRemoteSessions = new();
 
     private static readonly Regex RemoteControlUrlPattern = new(
         @"https://claude\.ai/code/[a-zA-Z0-9\-_/]+",
@@ -66,8 +67,8 @@ public class RemoteLaunchService : IRemoteLaunchService
             {
                 ["remote-control"] = "true"
             };
+            // extra-argsはリモート起動時に除外（予期しない確認画面の回避）
             options.Remove("extra-args");
-            options.Remove("chrome");
 
             _logger.LogInformation("[RemoteLaunch] [状態: CREATING_SESSION] オプション: {Options}",
                 string.Join(", ", options.Select(kv => $"{kv.Key}={kv.Value}")));
@@ -81,7 +82,7 @@ public class RemoteLaunchService : IRemoteLaunchService
             }
 
             // セッションを保持（GC防止）
-            _activeRemoteSessions[sessionId] = conPtySession;
+            _activeRemoteSessions.TryAdd(sessionId, conPtySession);
             _logger.LogInformation("[RemoteLaunch] [状態: WAITING_URL] ConPTYセッション作成完了、URL検知待機中...（アクティブ: {Count}件）", _activeRemoteSessions.Count);
 
             // URL検知を待機

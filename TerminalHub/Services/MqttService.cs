@@ -13,6 +13,7 @@ public class MqttService : IHostedService, IDisposable
     private readonly IAppSettingsService _appSettingsService;
     private readonly ISessionManager _sessionManager;
     private readonly IRemoteLaunchService _remoteLaunchService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _mqttClient;
     private string? _currentTopicGuid;
@@ -26,11 +27,13 @@ public class MqttService : IHostedService, IDisposable
         IAppSettingsService appSettingsService,
         ISessionManager sessionManager,
         IRemoteLaunchService remoteLaunchService,
+        IConfiguration configuration,
         ILogger<MqttService> logger)
     {
         _appSettingsService = appSettingsService;
         _sessionManager = sessionManager;
         _remoteLaunchService = remoteLaunchService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -60,12 +63,22 @@ public class MqttService : IHostedService, IDisposable
         var factory = new MqttClientFactory();
         _mqttClient = factory.CreateMqttClient();
 
-        var options = new MqttClientOptionsBuilder()
-            .WithTcpServer(MqttConstants.BrokerHost, MqttConstants.TcpPort)
+        var mqttHost = _configuration.GetValue<string>("Mqtt:Host") ?? "vps3.zio3.net";
+        var mqttPort = _configuration.GetValue<int>("Mqtt:Port", 1883);
+        var mqttUsername = _configuration.GetValue<string>("Mqtt:Username");
+        var mqttPassword = _configuration.GetValue<string>("Mqtt:Password");
+
+        var optionsBuilder = new MqttClientOptionsBuilder()
+            .WithTcpServer(mqttHost, mqttPort)
             .WithClientId($"terminalhub-{topicGuid[..8]}")
-            .WithCredentials(MqttConstants.BrokerUsername, MqttConstants.BrokerPassword)
-            .WithCleanSession(true)
-            .Build();
+            .WithCleanSession(true);
+
+        if (!string.IsNullOrEmpty(mqttUsername))
+        {
+            optionsBuilder.WithCredentials(mqttUsername, mqttPassword);
+        }
+
+        var options = optionsBuilder.Build();
 
         _mqttClient.ApplicationMessageReceivedAsync += OnMessageReceivedAsync;
         _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
@@ -73,7 +86,7 @@ public class MqttService : IHostedService, IDisposable
         try
         {
             await _mqttClient.ConnectAsync(options, cancellationToken);
-            _logger.LogInformation("[MQTT] ブローカーに接続: {Host}:{Port}", MqttConstants.BrokerHost, MqttConstants.TcpPort);
+            _logger.LogInformation("[MQTT] ブローカーに接続: {Host}:{Port}", mqttHost, mqttPort);
 
             var requestTopic = $"{MqttConstants.TopicPrefix}/{topicGuid}/request";
             await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce, cancellationToken);
@@ -173,7 +186,6 @@ public class MqttService : IHostedService, IDisposable
         // パスワード未設定なら認証不要
         if (string.IsNullOrEmpty(settings.PasswordHash))
             return true;
-
 
         // パスワード設定済みだがリクエストにハッシュがない
         if (string.IsNullOrEmpty(requestPasswordHash))

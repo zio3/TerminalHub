@@ -640,7 +640,7 @@
                                         <div class="input-group">
                                             <input type="password" class="form-control" @bind="remoteLaunchPassword" @bind:event="oninput"
                                                    placeholder="設定するとアクセス時にパスワードが必要になります" />
-                                            @if (remoteLaunchPassword == "********")
+                                            @if (remoteLaunchPassword == Constants.MqttConstants.PasswordDummy)
                                             {
                                                 <button class="btn btn-outline-danger" type="button"
                                                         @onclick="ClearRemoteLaunchPassword">
@@ -1064,7 +1064,7 @@
             // リモート起動設定
             remoteLaunchEnabled = settings.RemoteLaunch.Enabled;
             remoteLaunchTopicGuid = settings.RemoteLaunch.TopicGuid;
-            remoteLaunchPassword = string.IsNullOrEmpty(settings.RemoteLaunch.PasswordHash) ? "" : "********";
+            remoteLaunchPassword = string.IsNullOrEmpty(settings.RemoteLaunch.PasswordHash) ? "" : Constants.MqttConstants.PasswordDummy;
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1276,7 +1276,7 @@
                     TopicGuid = remoteLaunchTopicGuid,
                     PasswordHash = remoteLaunchPasswordCleared
                         ? null
-                        : remoteLaunchPassword == "********" || string.IsNullOrEmpty(remoteLaunchPassword)
+                        : remoteLaunchPassword == Constants.MqttConstants.PasswordDummy || string.IsNullOrEmpty(remoteLaunchPassword)
                             ? AppSettingsService.GetSettings().RemoteLaunch.PasswordHash
                             : MqttService.ComputePasswordHash(remoteLaunchPassword)
                 }
