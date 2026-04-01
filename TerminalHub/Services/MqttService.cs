@@ -63,6 +63,7 @@ public class MqttService : IHostedService, IDisposable
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(MqttConstants.BrokerHost, MqttConstants.TcpPort)
             .WithClientId($"terminalhub-{topicGuid[..8]}")
+            .WithCredentials(MqttConstants.BrokerUsername, MqttConstants.BrokerPassword)
             .WithCleanSession(true)
             .Build();
 
