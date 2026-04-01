@@ -5,7 +5,7 @@
 ; 3. Compile (Ctrl+F9) を実行
 
 #define MyAppName "TerminalHub"
-#define MyAppVersion "1.0.41"
+#define MyAppVersion "1.0.42"
 #define MyAppPublisher "TerminalHub"
 #define MyAppURL "https://github.com/your-repo/TerminalHub"
 #define MyAppExeName "TerminalHub.exe"
