@@ -94,6 +94,11 @@ builder.Services.AddSingleton<IAppSettingsService, AppSettingsService>();
 // FolderPickerServiceを登録
 builder.Services.AddSingleton<IFolderPickerService, FolderPickerService>();
 
+// リモート起動サービスを登録
+builder.Services.AddSingleton<IRemoteLaunchService, RemoteLaunchService>();
+builder.Services.AddSingleton<MqttService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttService>());
+
 // HookNotificationServiceを登録
 builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();
 

@@ -78,6 +78,9 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? LastConnectionTime { get; set; }
 
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? RemoteControlUrl { get; set; }
+
         /// <summary>
         /// 接続直後（5秒以内）かどうかを判定
         /// 過去バッファの誤検出を防ぐために使用

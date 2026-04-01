@@ -13,6 +13,9 @@ nul
 # Claude Code local settings
 .claude/settings.local.json
 
+# MCP設定（Bot Tokenなど秘密情報を含む）
+.mcp.json
+
 # User-specific files
 *.rsuser
 *.suo

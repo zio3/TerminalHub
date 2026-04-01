@@ -53,6 +53,11 @@ namespace TerminalHub.Services
         Task<bool> RestartSessionAsync(Guid sessionId);
 
         /// <summary>
+        /// リモート起動用のConPTYセッションを作成（既存セッション情報のフォルダでClaude Codeを起動）
+        /// </summary>
+        Task<ConPtySession?> GetOrCreateRemoteControlSessionAsync(Guid sessionId, Dictionary<string, string> options);
+
+        /// <summary>
         /// セッションが存在するかどうか
         /// </summary>
         bool HasSessions();
@@ -490,6 +495,23 @@ namespace TerminalHub.Services
             {
                 return _activeSessionId;
             }
+        }
+
+        public async Task<ConPtySession?> GetOrCreateRemoteControlSessionAsync(Guid sessionId, Dictionary<string, string> options)
+        {
+            SessionInfo? sessionInfo;
+            lock (_lockObject)
+            {
+                if (!_sessionInfos.TryGetValue(sessionId, out sessionInfo))
+                    return null;
+            }
+
+            var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+            var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+            var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+            var conPtySession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+            return conPtySession;
         }
 
         public Task SaveSessionInfoAsync(SessionInfo sessionInfo)

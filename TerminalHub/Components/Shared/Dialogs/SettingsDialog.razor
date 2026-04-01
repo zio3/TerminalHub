@@ -62,6 +62,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "remoteLaunch" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "remoteLaunch")">
+                                <i class="bi bi-phone me-1"></i>リモート起動
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "special" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "special")">
@@ -269,6 +276,16 @@
                                             <i class="bi bi-exclamation-triangle me-1"></i>@versionCheckError
                                         </div>
                                     }
+                                </div>
+
+                                <div class="mt-4 pt-3 border-top">
+                                    <h6 class="mb-2">コミュニティ</h6>
+                                    <a href="https://discord.gg/juCcFNXJg7" target="_blank" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-discord me-1"></i>Discord サーバーに参加
+                                    </a>
+                                    <small class="text-muted d-block mt-1">
+                                        バグ報告、機能リクエスト、質問などはこちらで受け付けています。
+                                    </small>
                                 </div>
                             </div>
                         }
@@ -578,6 +595,80 @@
                                 }
                             </div>
                         }
+                        else if (activeTab == "remoteLaunch")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">リモート起動</h6>
+                                <small class="text-muted d-block mb-3">
+                                    外出先のスマートフォンからClaude Codeセッションを起動し、Remote Control URLを取得できます。
+                                </small>
+
+                                <div class="mb-3 form-check">
+                                    <input class="form-check-input" type="checkbox" @bind="remoteLaunchEnabled"
+                                           @bind:after="OnRemoteLaunchEnabledChanged" id="remoteLaunchEnabled">
+                                    <label class="form-check-label" for="remoteLaunchEnabled">
+                                        リモート起動を有効にする
+                                    </label>
+                                </div>
+
+                                @if (remoteLaunchEnabled)
+                                {
+                                    @if (!string.IsNullOrEmpty(remoteLaunchTopicGuid))
+                                    {
+                                        <div class="mb-3">
+                                            <label class="form-label">アクセスURL</label>
+                                            <div class="input-group">
+                                                <a href="@GetRemoteLaunchAccessUrl()" target="_blank" class="form-control font-monospace text-decoration-none"
+                                                   style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @GetRemoteLaunchAccessUrl()
+                                                </a>
+                                                <button class="btn btn-outline-secondary" type="button"
+                                                        @onclick="() => CopyToClipboardText(GetRemoteLaunchAccessUrl())"
+                                                        title="URLをコピー">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </div>
+                                            <div class="alert alert-warning mt-2 py-2">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                <small>このURLは他人に公開しないでください。URLを知っている人がセッションを起動できます。</small>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <div class="mb-3">
+                                        <label class="form-label">パスワード（任意）</label>
+                                        <div class="input-group">
+                                            <input type="password" class="form-control" @bind="remoteLaunchPassword" @bind:event="oninput"
+                                                   placeholder="設定するとアクセス時にパスワードが必要になります" />
+                                            @if (remoteLaunchPassword == Constants.MqttConstants.PasswordDummy)
+                                            {
+                                                <button class="btn btn-outline-danger" type="button"
+                                                        @onclick="ClearRemoteLaunchPassword">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                        <small class="text-muted">
+                                            空欄の場合はURLのみでアクセスできます。
+                                        </small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small text-muted">トピックGUID</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control font-monospace text-muted"
+                                                   value="@remoteLaunchTopicGuid" readonly />
+                                            <button class="btn btn-outline-warning" type="button"
+                                                    @onclick="RegenerateTopicGuid"
+                                                    title="GUIDを再発行（既存のアクセスURLが無効になります）">
+                                                <i class="bi bi-arrow-clockwise"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">再発行すると既存のアクセスURLが無効になります。</small>
+                                    </div>
+                                }
+                            </div>
+                        }
                         else if (activeTab == "special")
                         {
                             <div class="tab-pane fade show active">
@@ -846,6 +937,10 @@
     private Dictionary<string, string> newCommandTitles = new();
     private Dictionary<string, string> newCommandTexts = new();
     private string activeTab = "general";
+    private bool remoteLaunchEnabled = false;
+    private string remoteLaunchTopicGuid = "";
+    private string remoteLaunchPassword = "";
+    private bool remoteLaunchPasswordCleared = false;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
     private string sessionSortMode = "lastAccessed";
@@ -965,6 +1060,11 @@
                 if (!newCommandTexts.ContainsKey(type))
                     newCommandTexts[type] = "";
             }
+
+            // リモート起動設定
+            remoteLaunchEnabled = settings.RemoteLaunch.Enabled;
+            remoteLaunchTopicGuid = settings.RemoteLaunch.TopicGuid;
+            remoteLaunchPassword = string.IsNullOrEmpty(settings.RemoteLaunch.PasswordHash) ? "" : Constants.MqttConstants.PasswordDummy;
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
@@ -1169,6 +1269,16 @@
                 {
                     CommandsByTerminalType = editingCommands
                         .ToDictionary(kv => kv.Key, kv => new List<CustomCommand>(kv.Value))
+                },
+                RemoteLaunch = new RemoteLaunchSettings
+                {
+                    Enabled = remoteLaunchEnabled,
+                    TopicGuid = remoteLaunchTopicGuid,
+                    PasswordHash = remoteLaunchPasswordCleared
+                        ? null
+                        : remoteLaunchPassword == Constants.MqttConstants.PasswordDummy || string.IsNullOrEmpty(remoteLaunchPassword)
+                            ? AppSettingsService.GetSettings().RemoteLaunch.PasswordHash
+                            : MqttService.ComputePasswordHash(remoteLaunchPassword)
                 }
             };
             AppSettingsService.SaveSettings(settings);
@@ -1272,6 +1382,41 @@
         {
             editingCommands[terminalType].RemoveAt(index);
         }
+    }
+
+    private void ClearRemoteLaunchPassword()
+    {
+        remoteLaunchPassword = "";
+        remoteLaunchPasswordCleared = true;
+    }
+
+    private void RegenerateTopicGuid()
+    {
+        remoteLaunchTopicGuid = Guid.NewGuid().ToString();
+    }
+
+    private void OnRemoteLaunchEnabledChanged()
+    {
+        if (remoteLaunchEnabled && string.IsNullOrEmpty(remoteLaunchTopicGuid))
+        {
+            remoteLaunchTopicGuid = Guid.NewGuid().ToString();
+        }
+    }
+
+    private string GetRemoteLaunchAccessUrl()
+    {
+        if (string.IsNullOrEmpty(Constants.MqttConstants.WebUiBaseUrl))
+            return remoteLaunchTopicGuid;
+        return $"{Constants.MqttConstants.WebUiBaseUrl}/{remoteLaunchTopicGuid}";
+    }
+
+    private async Task CopyToClipboardText(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
+        catch { }
     }
 
     private async Task BrowseFavoriteFolder()
