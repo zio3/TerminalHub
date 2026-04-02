@@ -14,15 +14,30 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 - `TopicGUID`: TerminalHubの設定画面で有効化時に自動生成されるGUID
 - ブローカー: `vps3.zio3.net:1883`（TCP）
 
-## 認証
+## セキュリティ
+
+### MQTTブローカーのACL
+
+ブローカー（`vps3.zio3.net`）では `ClaudeLauncher` ユーザーに対しトピックACLが設定されており、`claude/#` 配下のトピックのみアクセス可能。それ以外のトピックへのpub/subは拒否される。
+
+### 認証
 
 - パスワード未設定（`PasswordHash`がnull）→ 認証なし、全リクエスト通過
 - パスワード設定済み → リクエストの`passwordHash`とサーバー側の`PasswordHash`をSHA256で比較
 - 不一致 → `{"action":"error","message":"unauthorized"}`
+- **`ping` アクションのみ認証不要**（疎通確認用途のため）
 
 パスワードハッシュの生成: `SHA256(パスワード文字列)` → 小文字16進数
 
 ## リクエスト（request）
+
+### 疎通確認（認証不要）
+
+```json
+{ "action": "ping" }
+```
+
+TerminalHubがMQTT接続中であれば `{"action":"pong"}` を返す。認証不要のため、Webアプリ側でアクセス時に最初にこれを送り、応答の有無でTerminalHubのオンライン状態を判定できる。
 
 ### セッション一覧取得
 
@@ -79,6 +94,12 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 { "action": "launch", "status": "ready", "sessionId": "guid", "url": "https://claude.ai/code/..." }
 ```
 
+### 疎通確認応答
+
+```json
+{ "action": "pong" }
+```
+
 ### エラー
 
 ```json
@@ -97,6 +118,12 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 
 ```
 クライアント                    MQTT                    TerminalHub
+    │                           │                           │
+    │  {"action":"ping"}        │                           │
+    ├──────────────────────────►│──────────────────────────►│
+    │                           │◄──────────────────────────┤
+    │  {"action":"pong"}        │                           │
+    │◄──────────────────────────┤                           │
     │                           │                           │
     │  {"action":"list"}        │                           │
     ├──────────────────────────►│──────────────────────────►│

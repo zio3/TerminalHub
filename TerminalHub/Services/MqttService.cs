@@ -148,6 +148,13 @@ public class MqttService : IHostedService, IDisposable
             var request = JsonSerializer.Deserialize<MqttRequest>(payload, JsonOptions);
             if (request == null) return;
 
+            // pingは認証不要（接続確認用）
+            if (string.Equals(request.Action, "ping", StringComparison.OrdinalIgnoreCase))
+            {
+                await PublishResponseAsync(new { action = "pong" });
+                return;
+            }
+
             // パスワード認証チェック
             if (!ValidatePassword(request.PasswordHash))
             {
