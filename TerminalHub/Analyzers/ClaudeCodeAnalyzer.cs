@@ -55,6 +55,14 @@ namespace TerminalHub.Analyzers
                 return true;
             }
 
+            // スピナーアニメーション中のカーソル位置上書きがANSI除去で壊れたテキストを除外
+            // 正常: "✻ Compacting conversation…" → スピナー1個
+            // 異常: "✻✶*✢· CoC mpo  a✢ m cp t..." → スピナー複数（上書きフレームが連結）
+            if (CountSpinnerCharacters(cleanedData) >= 2)
+            {
+                return false;
+            }
+
             // 処理中パターンをチェック（完全形を優先）
             var match = ProcessingPatternFull.Match(cleanedData);
             if (match.Success)
@@ -113,6 +121,17 @@ namespace TerminalHub.Analyzers
             }
 
             return false;
+        }
+
+        private static int CountSpinnerCharacters(string data)
+        {
+            var count = 0;
+            foreach (var c in data)
+            {
+                if (Array.IndexOf(SpinnerCharacters, c) >= 0)
+                    count++;
+            }
+            return count;
         }
 
         /// <summary>

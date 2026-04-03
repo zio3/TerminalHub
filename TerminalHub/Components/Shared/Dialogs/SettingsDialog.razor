@@ -1308,6 +1308,13 @@
             // テーマの変更を通知
             await OnThemeChanged.InvokeAsync(theme);
 
+            // MQTT: TopicGuidが変更された場合は再接続（再生成ボタン以外でGUIDが変わるケースのガード）
+            if (remoteLaunchEnabled && !string.IsNullOrEmpty(remoteLaunchTopicGuid)
+                && MqttService is MqttService mqtt && mqtt.CurrentTopicGuid != remoteLaunchTopicGuid)
+            {
+                await MqttService.ConnectAsync(remoteLaunchTopicGuid);
+            }
+
             saveMessage = "設定を保存しました";
             saveSuccess = true;
 
@@ -1391,9 +1398,15 @@
         remoteLaunchPasswordCleared = true;
     }
 
-    private void RegenerateTopicGuid()
+    private async Task RegenerateTopicGuid()
     {
         remoteLaunchTopicGuid = Guid.NewGuid().ToString();
+
+        // 旧トピックを即切断し、新トピックに接続
+        if (remoteLaunchEnabled)
+        {
+            await MqttService.ConnectAsync(remoteLaunchTopicGuid);
+        }
     }
 
     private async Task OnRemoteLaunchEnabledChanged()

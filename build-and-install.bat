@@ -121,12 +121,6 @@ if exist "installer\TerminalHub-App.bat" (
     copy /Y "installer\TerminalHub-App.bat" "!INSTALL_DIR!\" >nul 2>&1
 )
 
-if not exist "!INSTALL_DIR!\auth.json" (
-    if exist "TerminalHub\auth.json" (
-        copy "TerminalHub\auth.json" "!INSTALL_DIR!\" >nul 2>&1
-    )
-)
-
 echo [OK] Install complete
 echo.
 echo ========================================

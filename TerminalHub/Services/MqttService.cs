@@ -17,6 +17,10 @@ public class MqttService : IHostedService, IDisposable
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _mqttClient;
     private string? _currentTopicGuid;
+    private volatile bool _intentionalDisconnect;
+
+    /// <summary>現在購読中のトピックGUID</summary>
+    public string? CurrentTopicGuid => _currentTopicGuid;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -58,6 +62,7 @@ public class MqttService : IHostedService, IDisposable
     {
         await DisconnectAsync();
 
+        _intentionalDisconnect = false;
         _currentTopicGuid = topicGuid;
 
         var factory = new MqttClientFactory();
@@ -90,7 +95,7 @@ public class MqttService : IHostedService, IDisposable
 
             var requestTopic = $"{MqttConstants.TopicPrefix}/{topicGuid}/request";
             await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce, cancellationToken);
-            _logger.LogInformation("[MQTT] トピック購読: {Topic}", requestTopic);
+            _logger.LogInformation("[MQTT] トピック購読完了");
         }
         catch (Exception ex)
         {
@@ -100,6 +105,7 @@ public class MqttService : IHostedService, IDisposable
 
     public async Task DisconnectAsync()
     {
+        _intentionalDisconnect = true;
         if (_mqttClient?.IsConnected == true)
         {
             try
@@ -118,17 +124,20 @@ public class MqttService : IHostedService, IDisposable
 
     private async Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs e)
     {
-        if (e.ClientWasConnected)
+        if (e.ClientWasConnected && !_intentionalDisconnect)
         {
             _logger.LogWarning("[MQTT] 接続が切断されました。5秒後に再接続を試みます...");
             await Task.Delay(5000);
 
-            var settings = _appSettingsService.GetSettings().RemoteLaunch;
-            if (settings.Enabled && !string.IsNullOrEmpty(settings.TopicGuid))
+            // 意図的な切断（ConnectAsync/DisconnectAsync呼び出し）の場合は再接続しない
+            if (_intentionalDisconnect) return;
+
+            var topicGuid = _currentTopicGuid;
+            if (!string.IsNullOrEmpty(topicGuid))
             {
                 try
                 {
-                    await ConnectAsync(settings.TopicGuid);
+                    await ConnectAsync(topicGuid);
                 }
                 catch (Exception ex)
                 {
@@ -143,10 +152,12 @@ public class MqttService : IHostedService, IDisposable
         try
         {
             var payload = e.ApplicationMessage.ConvertPayloadToString();
-            _logger.LogInformation("[MQTT] メッセージ受信: {Payload}", payload);
+            _logger.LogDebug("[MQTT] メッセージ受信: {Payload}", payload);
 
             var request = JsonSerializer.Deserialize<MqttRequest>(payload, JsonOptions);
             if (request == null) return;
+
+            _logger.LogInformation("[MQTT] メッセージ受信: action={Action}, sessionId={SessionId}", request.Action, request.SessionId);
 
             // pingは認証不要（接続確認用）
             if (string.Equals(request.Action, "ping", StringComparison.OrdinalIgnoreCase))
@@ -171,6 +182,12 @@ public class MqttService : IHostedService, IDisposable
                 case "launch":
                     if (request.SessionId.HasValue)
                         await HandleLaunchAsync(request.SessionId.Value);
+                    else
+                        await PublishResponseAsync(new { action = "error", message = "sessionId required" });
+                    break;
+                case "disconnect":
+                    if (request.SessionId.HasValue)
+                        await HandleDisconnectAsync(request.SessionId.Value);
                     else
                         await PublishResponseAsync(new { action = "error", message = "sessionId required" });
                     break;
@@ -246,6 +263,13 @@ public class MqttService : IHostedService, IDisposable
         {
             await PublishResponseAsync(new { action = "error", message = "launch failed or timeout" });
         }
+    }
+
+    private async Task HandleDisconnectAsync(Guid sessionId)
+    {
+        _remoteLaunchService.DisconnectRemoteSession(sessionId);
+        await PublishResponseAsync(new { action = "disconnect", status = "ok", sessionId = sessionId.ToString() });
+        _logger.LogInformation("[MQTT] リモートセッション切断: {SessionId}", sessionId);
     }
 
     private async Task PublishResponseAsync(object payload)

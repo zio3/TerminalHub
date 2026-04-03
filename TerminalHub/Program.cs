@@ -2,7 +2,6 @@ using TerminalHub.Services;
 using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;
-using TerminalHub.Middleware;
 using System.Text.Json;
 using Serilog;
 
@@ -108,30 +107,6 @@ builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 // VersionCheckServiceを登録
 builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
-// ExternalAuthSettings を登録（外部アクセス時のBasic認証用）
-// auth.json から読み込む（インストールフォルダに配置、更新時に上書きされない）
-var authFilePath = Path.Combine(AppContext.BaseDirectory, "auth.json");
-if (File.Exists(authFilePath))
-{
-    try
-    {
-        var authJson = File.ReadAllText(authFilePath);
-        var authSettings = JsonSerializer.Deserialize<ExternalAuthSettings>(authJson);
-        builder.Services.Configure<ExternalAuthSettings>(options =>
-        {
-            options.Username = authSettings?.Username;
-            options.Password = authSettings?.Password;
-        });
-    }
-    catch
-    {
-        builder.Services.Configure<ExternalAuthSettings>(_ => { });
-    }
-}
-else
-{
-    builder.Services.Configure<ExternalAuthSettings>(_ => { });
-}
 
 var app = builder.Build();
 
@@ -144,9 +119,6 @@ if (!app.Environment.IsDevelopment())
 
 // HTTPSリダイレクトは無効化（ローカル環境での使用を想定）
 // app.UseHttpsRedirection();
-
-// 外部アクセス時のBasic認証（X-Forwarded-Forヘッダーがある場合のみ）
-app.UseExternalAuth();
 
 app.UseAntiforgery();
 

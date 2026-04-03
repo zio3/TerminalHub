@@ -430,6 +430,15 @@ namespace TerminalHub.Services
             }
             catch (Exception ex)
             {
+                // 接続処理中フラグをリセット（UIが「接続中...」のまま残るのを防止）
+                lock (_lockObject)
+                {
+                    if (_sessionInfos.TryGetValue(sessionId, out var failedSession))
+                    {
+                        failedSession.IsConnecting = false;
+                    }
+                }
+                NotifySessionsChanged();
                 _logger.LogError(ex, "Failed to initialize ConPty session on-demand for {SessionId}", sessionId);
                 throw;
             }

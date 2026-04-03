@@ -1,5 +1,6 @@
 @using TerminalHub.Models
 @using TerminalHub.Components.Shared.BottomPanels
+@implements IAsyncDisposable
 
 <!-- タブヘッダー -->
 <ul class="nav nav-tabs px-3 pt-2" style="flex-shrink: 0;">
@@ -196,5 +197,10 @@
             try { await panel.DisposeAsync(); } catch { }
         }
         ShellPanelRefs.Clear();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeAllShellPanels();
     }
 }
