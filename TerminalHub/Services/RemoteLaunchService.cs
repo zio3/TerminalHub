@@ -205,6 +205,13 @@ public class RemoteLaunchService : IRemoteLaunchService
 
     public void DisconnectRemoteSession(Guid sessionId)
     {
+        // SessionInfoのRemoteControlUrlをクリア
+        var sessionInfo = _sessionManager.GetSessionInfo(sessionId);
+        if (sessionInfo != null)
+        {
+            sessionInfo.RemoteControlUrl = null;
+        }
+
         if (_activeRemoteSessions.TryRemove(sessionId, out var session))
         {
             try

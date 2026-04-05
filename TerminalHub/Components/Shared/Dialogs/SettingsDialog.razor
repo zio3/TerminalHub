@@ -28,15 +28,22 @@
                     <!-- タブナビゲーション -->
                     <ul class="nav nav-tabs mb-3" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @(activeTab == "general" ? "active" : "")" 
-                                    type="button" 
+                            <button class="nav-link @(activeTab == "general" ? "active" : "")"
+                                    type="button"
                                     @onclick="@(() => activeTab = "general")">
                                 <i class="bi bi-gear me-1"></i>一般
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @(activeTab == "notifications" ? "active" : "")" 
-                                    type="button" 
+                            <button class="nav-link @(activeTab == "display" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "display")">
+                                <i class="bi bi-palette me-1"></i>表示
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "notifications" ? "active" : "")"
+                                    type="button"
                                     @onclick="@(() => activeTab = "notifications")">
                                 <i class="bi bi-bell me-1"></i>通知
                             </button>
@@ -176,72 +183,6 @@
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">セッションリスト表示倍率</label>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <input type="range" class="form-range flex-grow-1"
-                                               min="0.5" max="1.5" step="0.05"
-                                               value="@sessionListScale"
-                                               @oninput="OnSessionListScaleSliderInput" />
-                                        <span class="badge bg-secondary" style="min-width: 50px;">@((sessionListScale * 100).ToString("0"))%</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        セッションリストの表示倍率を調整します（50%〜150%）。
-                                    </small>
-                                </div>
-
-                                <div class="mb-4">
-                                    <label class="form-label">ターミナルフォントサイズ</label>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <input type="range" class="form-range flex-grow-1"
-                                               min="8" max="28" step="1"
-                                               value="@terminalFontSize"
-                                               @oninput="OnTerminalFontSizeSliderInput" />
-                                        <span class="badge bg-secondary" style="min-width: 50px;">@(terminalFontSize)px</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        ターミナルのフォントサイズを調整します（8px〜28px）。
-                                    </small>
-                                </div>
-
-                                <div class="mb-4">
-                                    <label class="form-label">ターミナル / 入力パネル比率</label>
-                                    <div class="d-flex align-items-center gap-3">
-                                        <input type="range" class="form-range flex-grow-1"
-                                               min="50" max="90" step="5"
-                                               value="@terminalHeightPercent"
-                                               @oninput="OnTerminalHeightPercentSliderInput" />
-                                        <span class="badge bg-secondary" style="min-width: 80px;">@(terminalHeightPercent) / @(100 - terminalHeightPercent)</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。
-                                    </small>
-                                </div>
-
-                                <hr />
-
-                                <div class="mb-4">
-                                    <label class="form-label">テーマ</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="themeMode"
-                                               id="themeLight" value="light" checked="@(theme == "light")"
-                                               @onchange="@(() => OnThemePreviewChange("light"))">
-                                        <label class="form-check-label" for="themeLight">
-                                            <i class="bi bi-sun me-1"></i>ライト
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="themeMode"
-                                               id="themeDark" value="dark" checked="@(theme == "dark")"
-                                               @onchange="@(() => OnThemePreviewChange("dark"))">
-                                        <label class="form-check-label" for="themeDark">
-                                            <i class="bi bi-moon-stars me-1"></i>ダーク
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <hr />
-
-                                <div class="mb-4">
                                     <h6 class="mb-2">バージョン情報</h6>
                                     <div class="d-flex align-items-center mb-2">
                                         <span class="me-2">現在のバージョン:</span>
@@ -286,6 +227,74 @@
                                     </a>
                                     <small class="text-muted d-block mt-1">
                                         バグ報告、機能リクエスト、質問などはこちらで受け付けています。
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "display")
+                        {
+                            <div class="tab-pane fade show active">
+                                <h6 class="mb-3">表示設定</h6>
+
+                                <div class="mb-4">
+                                    <label class="form-label">テーマ</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="themeMode"
+                                               id="themeLight" value="light" checked="@(theme == "light")"
+                                               @onchange="@(() => OnThemePreviewChange("light"))">
+                                        <label class="form-check-label" for="themeLight">
+                                            <i class="bi bi-sun me-1"></i>ライト
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="themeMode"
+                                               id="themeDark" value="dark" checked="@(theme == "dark")"
+                                               @onchange="@(() => OnThemePreviewChange("dark"))">
+                                        <label class="form-check-label" for="themeDark">
+                                            <i class="bi bi-moon-stars me-1"></i>ダーク
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">セッションリスト表示倍率</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="0.5" max="1.5" step="0.05"
+                                               value="@sessionListScale"
+                                               @oninput="OnSessionListScaleSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 50px;">@((sessionListScale * 100).ToString("0"))%</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        セッションリストの表示倍率を調整します（50%〜150%）。
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">ターミナルフォントサイズ</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="8" max="28" step="1"
+                                               value="@terminalFontSize"
+                                               @oninput="OnTerminalFontSizeSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 50px;">@(terminalFontSize)px</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        ターミナルのフォントサイズを調整します（8px〜28px）。
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">ターミナル / 入力パネル比率</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="50" max="90" step="5"
+                                               value="@terminalHeightPercent"
+                                               @oninput="OnTerminalHeightPercentSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 80px;">@(terminalHeightPercent) / @(100 - terminalHeightPercent)</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。
                                     </small>
                                 </div>
                             </div>
@@ -618,12 +627,12 @@
                                     {
                                         <div class="mb-3">
                                             <label class="form-label">アクセスURL</label>
-                                            <div class="input-group">
-                                                <a href="@GetRemoteLaunchAccessUrl()" target="_blank" class="form-control font-monospace text-decoration-none"
-                                                   style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                    @GetRemoteLaunchAccessUrl()
+                                            <div class="d-flex align-items-center gap-2">
+                                                <a href="@GetRemoteLaunchAccessUrl()" target="_blank"
+                                                   class="text-truncate" title="@GetRemoteLaunchAccessUrl()">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>@GetRemoteLaunchAccessUrl()
                                                 </a>
-                                                <button class="btn btn-outline-secondary" type="button"
+                                                <button class="btn btn-outline-secondary btn-sm" type="button"
                                                         @onclick="() => CopyToClipboardText(GetRemoteLaunchAccessUrl())"
                                                         title="URLをコピー">
                                                     <i class="bi bi-clipboard"></i>
@@ -639,7 +648,8 @@
                                     <div class="mb-3">
                                         <label class="form-label">パスワード（任意）</label>
                                         <div class="input-group">
-                                            <input type="password" class="form-control" @bind="remoteLaunchPassword" @bind:event="oninput"
+                                            <input type="password" class="form-control" value="@remoteLaunchPassword"
+                                                   @oninput="OnRemoteLaunchPasswordInput"
                                                    placeholder="設定するとアクセス時にパスワードが必要になります" />
                                             @if (remoteLaunchPassword == Constants.MqttConstants.PasswordDummy)
                                             {
@@ -1392,10 +1402,29 @@
         }
     }
 
+    private void OnRemoteLaunchPasswordInput(ChangeEventArgs e)
+    {
+        remoteLaunchPassword = e.Value?.ToString() ?? "";
+        remoteLaunchPasswordCleared = false;
+
+        // パスワード変更を即座に設定に反映
+        if (!string.IsNullOrEmpty(remoteLaunchPassword) && remoteLaunchPassword != Constants.MqttConstants.PasswordDummy)
+        {
+            var settings = AppSettingsService.GetSettings();
+            settings.RemoteLaunch.PasswordHash = MqttService.ComputePasswordHash(remoteLaunchPassword);
+            AppSettingsService.SaveSettings(settings);
+        }
+    }
+
     private void ClearRemoteLaunchPassword()
     {
         remoteLaunchPassword = "";
         remoteLaunchPasswordCleared = true;
+
+        // クリアも即座に反映
+        var settings = AppSettingsService.GetSettings();
+        settings.RemoteLaunch.PasswordHash = null;
+        AppSettingsService.SaveSettings(settings);
     }
 
     private async Task RegenerateTopicGuid()

@@ -325,6 +325,8 @@ public class MqttService : IHostedService, IDisposable
             return;
         }
 
+        _logger.LogDebug("[MQTT] 復号後ペイロード: {PlainJson}", plainJson);
+
         var request = JsonSerializer.Deserialize<MqttRequest>(plainJson, JsonOptions);
         if (request == null)
         {
@@ -388,15 +390,28 @@ public class MqttService : IHostedService, IDisposable
     {
         var settings = _appSettingsService.GetSettings().RemoteLaunch;
 
-        // パスワード未設定なら検証不要
-        if (string.IsNullOrEmpty(settings.PasswordHash))
+        // パスワード未設定でリクエストにもハッシュがない → OK
+        if (string.IsNullOrEmpty(settings.PasswordHash) && string.IsNullOrEmpty(requestPasswordHash))
             return true;
+
+        // パスワード未設定だがリクエストにハッシュがある → 不一致
+        if (string.IsNullOrEmpty(settings.PasswordHash))
+        {
+            _logger.LogDebug("[MQTT] パスワード検証: サーバー未設定だがリクエストにpasswordHashあり");
+            return false;
+        }
 
         // パスワード設定済みだがリクエストにハッシュがない
         if (string.IsNullOrEmpty(requestPasswordHash))
+        {
+            _logger.LogDebug("[MQTT] パスワード検証: リクエストにpasswordHashなし（サーバー側は設定済み）");
             return false;
+        }
 
-        return string.Equals(settings.PasswordHash, requestPasswordHash, StringComparison.OrdinalIgnoreCase);
+        var match = string.Equals(settings.PasswordHash, requestPasswordHash, StringComparison.OrdinalIgnoreCase);
+        _logger.LogDebug("[MQTT] パスワード検証: サーバー={ServerHash}, リクエスト={RequestHash}, 一致={Match}",
+            settings.PasswordHash, requestPasswordHash, match);
+        return match;
     }
 
     #endregion
