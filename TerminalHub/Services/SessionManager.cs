@@ -190,6 +190,13 @@ namespace TerminalHub.Services
                         : $"/k codex {codexArgs}";
                     return ("cmd.exe", codexArgsString);
 
+                case TerminalType.CopilotCLI:
+                    var copilotArgs = TerminalConstants.BuildCopilotArgs(options);
+                    var copilotArgsString = string.IsNullOrWhiteSpace(copilotArgs)
+                        ? "/k copilot"
+                        : $"/k copilot {copilotArgs}";
+                    return ("cmd.exe", copilotArgsString);
+
                 default:
                     if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
                     {
@@ -265,6 +272,7 @@ namespace TerminalHub.Services
                     TerminalType.ClaudeCode => $"Claude Codeの起動に失敗しました。Claude Codeがインストールされているか確認してください。",
                     TerminalType.GeminiCLI => $"Gemini CLIの起動に失敗しました。Gemini CLIがインストールされているか確認してください。",
                     TerminalType.CodexCLI => $"Codex CLIの起動に失敗しました。Codex CLIがインストールされているか確認してください。",
+                    TerminalType.CopilotCLI => $"GitHub Copilot CLIの起動に失敗しました。npm install -g @github/copilot でインストールされているか確認してください。",
                     _ => $"ターミナルの起動に失敗しました。"
                 };
                 
@@ -725,6 +733,7 @@ namespace TerminalHub.Services
                     TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
                     TerminalType.GeminiCLI => $"{sessionInfo.FolderName} (Gemini)",
                     TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
+                    TerminalType.CopilotCLI => $"{sessionInfo.FolderName} (Copilot)",
                     _ => sessionInfo.FolderName
                 };
 

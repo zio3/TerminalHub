@@ -17,7 +17,8 @@ namespace TerminalHub.Analyzers
             {
                 { TerminalType.ClaudeCode, new ClaudeCodeAnalyzer() },
                 { TerminalType.GeminiCLI, new GeminiCliAnalyzer() },
-                { TerminalType.CodexCLI, new CodexCliAnalyzer() }
+                { TerminalType.CodexCLI, new CodexCliAnalyzer() },
+                { TerminalType.CopilotCLI, new CopilotCliAnalyzer() }
                 // TerminalType.Terminal には解析器を設定しない
             };
         }

@@ -65,6 +65,19 @@ namespace TerminalHub.Constants
             return (false, nativePath, "not installed");
         }
 
+        /// <summary>
+        /// GitHub Copilot CLI のパス（npm版）
+        /// </summary>
+        public static string GetDefaultCopilotCmdPath()
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var npmPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "copilot.cmd");
+            if (File.Exists(npmPath))
+                return npmPath;
+
+            return npmPath;
+        }
+
         // コマンドライン引数の構築ヘルパー
         public static string BuildClaudeCodeArgs(Dictionary<string, string> options)
         {
@@ -216,6 +229,46 @@ namespace TerminalHub.Constants
                 {
                     var networkAccessEnabled = networkAccess == "enabled" ? "true" : "false";
                     args.Add($"-c sandbox_workspace_write.network_access={networkAccessEnabled}");
+                }
+            }
+
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
+            {
+                args.Add(extraArgs.Trim());
+            }
+
+            return string.Join(" ", args);
+        }
+
+        public static string BuildCopilotArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+
+            if (options.ContainsKey("resume") && options["resume"] == "true")
+            {
+                args.Add("--resume");
+            }
+
+            // 承認モードに応じて --allow-tool を付与
+            if (options.TryGetValue("approval-mode", out var approvalMode))
+            {
+                switch (approvalMode)
+                {
+                    case "auto":
+                        // git・npm などよく使うツールを自動許可
+                        args.Add("--allow-tool=\"shell(git:*)\"");
+                        args.Add("--allow-tool=\"shell(npm run:*)\"");
+                        args.Add("--allow-tool=\"shell(npx:*)\"");
+                        break;
+                    case "yolo":
+                        // ファイル書き込み含む全操作を自動許可
+                        args.Add("--allow-tool=\"shell(git:*)\"");
+                        args.Add("--allow-tool=\"shell(npm run:*)\"");
+                        args.Add("--allow-tool=\"shell(npx:*)\"");
+                        args.Add("--allow-tool=write");
+                        args.Add("--allow-tool=read");
+                        break;
+                    // "default" はオプションなし
                 }
             }
 

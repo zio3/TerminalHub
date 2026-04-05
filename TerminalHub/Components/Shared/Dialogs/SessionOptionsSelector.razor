@@ -45,6 +45,16 @@
                     <i class="bi bi-braces"></i> Codex CLI
                 </label>
             }
+
+            @if (Configuration.GetValue<bool>("ExternalTools:UseCopilotCli", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType5{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.CopilotCLI)"
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.CopilotCLI)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType5{UniqueId}")">
+                    <i class="bi bi-github"></i> Copilot CLI
+                </label>
+            }
         </div>
     </div>
 
@@ -370,6 +380,60 @@
             </div>
         </div>
     }
+    else if (SelectedType == TerminalType.CopilotCLI && Configuration.GetValue<bool>("ExternalTools:UseCopilotCli", true))
+    {
+        <div class="mb-3">
+            <label class="form-label">GitHub Copilot CLI オプション</label>
+
+            <!-- 承認モード -->
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">承認モード</label>
+                <div class="btn-group d-flex" role="group">
+                    <input type="radio" class="btn-check" name="@($"copilotMode{UniqueId}")" id="@($"copilotModeDefault{UniqueId}")"
+                           checked="@(CopilotOptions.ApprovalMode == "default")"
+                           @onchange="@(() => CopilotOptions.ApprovalMode = "default")" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"copilotModeDefault{UniqueId}")" title="全操作で都度確認を求めます">
+                        デフォルト
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"copilotMode{UniqueId}")" id="@($"copilotModeAuto{UniqueId}")"
+                           checked="@(CopilotOptions.ApprovalMode == "auto")"
+                           @onchange="@(() => CopilotOptions.ApprovalMode = "auto")" autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="@($"copilotModeAuto{UniqueId}")" title="git・npm などよく使うツールを自動許可">
+                        オートモード
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"copilotMode{UniqueId}")" id="@($"copilotModeYolo{UniqueId}")"
+                           checked="@(CopilotOptions.ApprovalMode == "yolo")"
+                           @onchange="@(() => CopilotOptions.ApprovalMode = "yolo")" autocomplete="off">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"copilotModeYolo{UniqueId}")" title="ファイル書き込み含む全操作を自動許可（危険）">
+                        フルオート
+                    </label>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(GetCopilotApprovalModeHelp()))
+                {
+                    <div class="form-text small mt-1">@GetCopilotApprovalModeHelp()</div>
+                }
+            </div>
+
+            @if (!DisableContinueOption)
+            {
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" @bind="CopilotOptions.Resume" id="@($"copilotResume{UniqueId}")">
+                    <label class="form-check-label" for="@($"copilotResume{UniqueId}")">
+                        前回セッションを再開 (--resume)
+                    </label>
+                </div>
+            }
+
+            <div class="mt-3">
+                <label class="form-label small text-muted mb-1">追加引数</label>
+                <input type="text" class="form-control form-control-sm" @bind="CopilotOptions.ExtraArgs"
+                       placeholder="例: --no-telemetry" />
+                <div class="form-text small">そのままGitHub Copilot CLIに渡します</div>
+            </div>
+        </div>
+    }
     else
     {
         <div class="mb-3">
@@ -387,6 +451,7 @@
     [Parameter] public ClaudeCodeOptions ClaudeOptions { get; set; } = new();
     [Parameter] public GeminiOptionsData GeminiOptions { get; set; } = new();
     [Parameter] public CodexOptionsData CodexOptions { get; set; } = new();
+    [Parameter] public CopilotOptionsData CopilotOptions { get; set; } = new();
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
@@ -593,9 +658,31 @@
                     options["extra-args"] = CodexOptions.ExtraArgs.Trim();
                 }
                 break;
+
+            case TerminalType.CopilotCLI:
+                if (CopilotOptions.ApprovalMode != "default")
+                {
+                    options["approval-mode"] = CopilotOptions.ApprovalMode;
+                }
+                if (CopilotOptions.Resume && !DisableContinueOption)
+                {
+                    options["resume"] = "true";
+                }
+                if (!string.IsNullOrWhiteSpace(CopilotOptions.ExtraArgs))
+                {
+                    options["extra-args"] = CopilotOptions.ExtraArgs.Trim();
+                }
+                break;
         }
 
         return options;
+    }
+
+    public class CopilotOptionsData
+    {
+        public string ApprovalMode { get; set; } = "default"; // "default" | "auto" | "yolo"
+        public bool Resume { get; set; } = false;
+        public string ExtraArgs { get; set; } = "";
     }
 
     public class ClaudeCodeOptions
@@ -692,6 +779,17 @@
         {
             "enabled" => "ネットワークアクセスを許可します。",
             "restricted" => "ネットワークアクセスを制限します。",
+            _ => ""
+        };
+    }
+
+    private string GetCopilotApprovalModeHelp()
+    {
+        return CopilotOptions.ApprovalMode switch
+        {
+            "default" => "全ての操作で都度確認を求めます。",
+            "auto" => "git・npm run などよく使うツールを自動許可します（--allow-tool）。",
+            "yolo" => "ファイル書き込み含む全操作を自動許可します（危険）。",
             _ => ""
         };
     }
