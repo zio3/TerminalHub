@@ -364,8 +364,12 @@ window.terminalHubHelpers = {
             dragType = null;
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            const percent = parseInt(activeSplitter?.dataset.percent || '0');
+            const rawPercent = activeSplitter?.dataset.percent;
             activeSplitter = null;
+
+            // mousemoveなしでmouseupした場合は何もしない
+            if (!rawPercent) return;
+            const percent = parseInt(rawPercent);
 
             if (type === 'vertical') {
                 dotNetRef.invokeMethodAsync('OnSplitterDragEnd', percent);

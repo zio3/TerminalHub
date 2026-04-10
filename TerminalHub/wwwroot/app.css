@@ -317,10 +317,9 @@ h1:focus {
     border: 1px solid var(--th-border);
     border-left: 3px solid var(--th-border);
     border-radius: 0;
-    margin-top: -1px;
+    margin: -1px 0 0 0;
     transition: background-color var(--th-transition-fast), border-color var(--th-transition-fast), transform var(--th-transition-fast);
     padding: 0.625rem 0.75rem;
-    margin: 0;
     background-color: transparent;
 }
 
@@ -332,10 +331,8 @@ h1:focus {
 .session-list-sidebar .list-group-item.active-session {
     border-left-color: var(--th-active-border) !important;
     background-color: var(--th-active-bg) !important;
-    border-top: none !important;
-    border-right: none !important;
-    border-bottom: none !important;
-    border-width: 3px !important;
+    border-color: transparent !important;
+    border-left-color: var(--th-active-border) !important;
 }
 
 .session-list-sidebar .list-group-item.active-session:hover {
@@ -487,6 +484,11 @@ h1:focus {
     /* 全体のフォントサイズを2/3に */
     html {
         font-size: 10.67px; /* 16px * 2/3 = 10.67px */
+    }
+
+    /* サイドバースプリッター非表示 */
+    .sidebar-splitter {
+        display: none;
     }
 
     /* モバイルサイドバートグルボタン */
