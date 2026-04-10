@@ -391,6 +391,73 @@ h1:focus {
     color: var(--th-accent-muted);
 }
 
+/* ===========================================
+   スプリッター（ターミナル / ボトムパネル境界）
+   =========================================== */
+
+.panel-splitter {
+    height: 5px;
+    background-color: var(--th-border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background-color var(--th-transition-fast);
+    z-index: 10;
+}
+
+.panel-splitter:hover,
+.panel-splitter:active {
+    background-color: var(--th-accent);
+}
+
+.panel-splitter::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 3px;
+    border-top: 1px solid var(--th-text-muted);
+    border-bottom: 1px solid var(--th-text-muted);
+}
+
+.panel-splitter:hover::after {
+    border-color: white;
+}
+
+/* サイドバースプリッター（横方向） */
+.sidebar-splitter {
+    width: 5px;
+    background-color: var(--th-border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background-color var(--th-transition-fast);
+    z-index: 10;
+}
+
+.sidebar-splitter:hover,
+.sidebar-splitter:active {
+    background-color: var(--th-accent);
+}
+
+.sidebar-splitter::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 32px;
+    width: 3px;
+    border-left: 1px solid var(--th-text-muted);
+    border-right: 1px solid var(--th-text-muted);
+}
+
+.sidebar-splitter:hover::after {
+    border-color: white;
+}
+
 /* xterm.js IME positioning fix - 一旦削除してデフォルトの挙動に戻す */
 /* IMEは右端からの入力になるが、コンテキストメニューは正常に動作する */
 

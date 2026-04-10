@@ -16,7 +16,7 @@
 @if (IsVisible)
 {
     <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: var(--th-surface-overlay);">
-        <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
@@ -26,7 +26,7 @@
                 </div>
                 <div class="modal-body">
                     <!-- タブナビゲーション -->
-                    <ul class="nav nav-tabs mb-3" role="tablist">
+                    <ul class="nav nav-tabs mb-3 flex-wrap" role="tablist">
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "general" ? "active" : "")"
                                     type="button"
@@ -108,7 +108,7 @@
                             </li>
                         }
                     </ul>
-                    
+
                     <!-- タブコンテンツ -->
                     <div class="tab-content">
                         @if (activeTab == "general")
@@ -285,16 +285,30 @@
                                 </div>
 
                                 <div class="mb-4">
+                                    <label class="form-label">サイドバー幅</label>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               min="15" max="40" step="1"
+                                               value="@sidebarWidthPercent"
+                                               @oninput="OnSidebarWidthPercentSliderInput" />
+                                        <span class="badge bg-secondary" style="min-width: 60px;">@(sidebarWidthPercent)%</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        セッションリストの幅を調整します（15%〜40%）。境界線のドラッグでも変更できます。
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
                                     <label class="form-label">ターミナル / 入力パネル比率</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
-                                               min="50" max="90" step="5"
+                                               min="20" max="90" step="1"
                                                value="@terminalHeightPercent"
                                                @oninput="OnTerminalHeightPercentSliderInput" />
                                         <span class="badge bg-secondary" style="min-width: 80px;">@(terminalHeightPercent) / @(100 - terminalHeightPercent)</span>
                                     </div>
                                     <small class="text-muted">
-                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。
+                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。境界線のドラッグでも変更できます。
                                     </small>
                                 </div>
                             </div>
@@ -966,6 +980,7 @@
     private double sessionListScale = 1.0;
     private int terminalFontSize = 14;
     private int terminalHeightPercent = 70;
+    private int sidebarWidthPercent = 25;
     private string theme = "light";
 
     // バージョンチェック関連
@@ -991,6 +1006,7 @@
     [Parameter] public EventCallback<double> OnSessionListScaleChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalFontSizeChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
+    [Parameter] public EventCallback<int> OnSidebarWidthPercentChanged { get; set; }
     [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
@@ -1057,6 +1073,7 @@
             sessionListScale = settings.General.SessionListScale;
             terminalFontSize = settings.General.TerminalFontSize;
             terminalHeightPercent = settings.General.TerminalHeightPercent;
+            sidebarWidthPercent = settings.General.SidebarWidthPercent;
             theme = settings.General.Theme;
 
             // カスタムコマンド
@@ -1274,6 +1291,7 @@
                     SessionListScale = sessionListScale,
                     TerminalFontSize = terminalFontSize,
                     TerminalHeightPercent = terminalHeightPercent,
+                    SidebarWidthPercent = sidebarWidthPercent,
                     Theme = theme
                 },
                 Commands = new CustomCommandSettings
@@ -1311,6 +1329,9 @@
 
             // ターミナル高さ比率の変更を通知
             await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
+
+            // サイドバー幅の変更を通知
+            await OnSidebarWidthPercentChanged.InvokeAsync(sidebarWidthPercent);
 
             // 音声入力設定の変更を通知
             await OnVoiceInputEnabledChanged.InvokeAsync(voiceInputEnabled);
@@ -1519,6 +1540,15 @@
         {
             terminalHeightPercent = value;
             await OnTerminalHeightPercentChanged.InvokeAsync(terminalHeightPercent);
+        }
+    }
+
+    private async Task OnSidebarWidthPercentSliderInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            sidebarWidthPercent = value;
+            await OnSidebarWidthPercentChanged.InvokeAsync(sidebarWidthPercent);
         }
     }
 

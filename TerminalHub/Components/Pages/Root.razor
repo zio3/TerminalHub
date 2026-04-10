@@ -44,6 +44,7 @@
                 OnSessionListScaleChanged="HandleSessionListScaleChanged"
                 OnTerminalFontSizeChanged="HandleTerminalFontSizeChanged"
                 OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged"
+                OnSidebarWidthPercentChanged="HandleSidebarWidthPercentChanged"
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
                 OnThemeChanged="HandleThemeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
@@ -66,7 +67,7 @@
                         OnClose="() => showArchivedSessionsDialog = false" />
 
 <div class="container-fluid main-container">
-    <div class="row h-100 main-layout">
+    <div class="d-flex h-100 main-layout">
         <!-- モバイル用サイドバートグルボタン -->
         <button class="mobile-sidebar-toggle" @onclick="ToggleMobileSidebar">
             <i class="bi @(isMobileSidebarOpen ? "bi-x-lg" : "bi-list")"></i>
@@ -80,6 +81,7 @@
                      ShowGitInfo=@showGitInfo
                      IsMobileOpen=@isMobileSidebarOpen
                      Scale=@sessionListScale
+                     WidthPercent=@sidebarWidthPercent
                      NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
                      OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
@@ -92,7 +94,10 @@
                      OnShowArchivedSessions="() => showArchivedSessionsDialog = true"
                      OnMobileSidebarClose="CloseMobileSidebar" />
 
-        <div class="col-md-9 p-0 position-relative terminal-main-area" style="height: 100%; display: flex; flex-direction: column;">
+        <!-- サイドバースプリッター -->
+        <div id="sidebar-splitter" class="sidebar-splitter"></div>
+
+        <div class="p-0 position-relative terminal-main-area" style="height: 100%; flex: 1; min-width: 0; display: flex; flex-direction: column;">
             @if (activeSessionId != null)
             {
                 <!-- ターミナル部分 -->
@@ -108,8 +113,10 @@
 
                 @if (!hideInputPanel)
                 {
+                <!-- スプリッター -->
+                <div id="panel-splitter" class="panel-splitter"></div>
                 <!-- WebUI部分 -->
-                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid var(--th-border); background-color: var(--th-surface-raised); display: flex; flex-direction: column;">
+                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; background-color: var(--th-surface-raised); display: flex; flex-direction: column;">
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
@@ -159,6 +166,7 @@
     private double sessionListScale = 1.0; // セッションリスト表示倍率
     private int terminalFontSize = 14; // ターミナルフォントサイズ
     private int terminalHeightPercent = 70; // ターミナル高さ比率
+    private int sidebarWidthPercent = 25; // サイドバー幅比率
     private bool showCreateDialog = false;
     private IJSObjectReference? activeTerminal;
     private ConPtySession? activeSession;
@@ -329,6 +337,8 @@
                 await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setDotNetRef", dotNetRef);
                 // モバイルキーボード表示時のハンバーガーメニュー位置補正
                 await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setupMobileKeyboardHandler");
+                // スプリッター初期化
+                await JSRuntime.InvokeVoidAsync("terminalHubHelpers.initSplitter", dotNetRef);
             }
             catch (JSDisconnectedException)
             {
@@ -355,6 +365,7 @@
                 sessionListScale = appSettings.General.SessionListScale;
                 terminalFontSize = appSettings.General.TerminalFontSize;
                 terminalHeightPercent = appSettings.General.TerminalHeightPercent;
+                sidebarWidthPercent = appSettings.General.SidebarWidthPercent;
 
                 // テーマを適用
                 var theme = appSettings.General.Theme;
@@ -613,6 +624,54 @@
     {
         terminalHeightPercent = percent;
         StateHasChanged();
+    }
+
+    private void HandleSidebarWidthPercentChanged(int percent)
+    {
+        sidebarWidthPercent = percent;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task OnSplitterDragEnd(int percent)
+    {
+        terminalHeightPercent = percent;
+        StateHasChanged();
+
+        // 設定に保存
+        try
+        {
+            var appSettings = AppSettingsService.GetSettings();
+            appSettings.General.TerminalHeightPercent = percent;
+            AppSettingsService.SaveSettings(appSettings);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "スプリッター位置の保存に失敗");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnSidebarSplitterDragEnd(int percent)
+    {
+        sidebarWidthPercent = percent;
+        StateHasChanged();
+
+        // 設定に保存
+        try
+        {
+            var appSettings = AppSettingsService.GetSettings();
+            appSettings.General.SidebarWidthPercent = percent;
+            AppSettingsService.SaveSettings(appSettings);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "サイドバー幅の保存に失敗");
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task HandleTextInputSend(string text)
