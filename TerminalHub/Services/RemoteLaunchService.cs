@@ -140,12 +140,13 @@ public class RemoteLaunchService : IRemoteLaunchService
                 return;
             }
 
-            var match = RemoteControlUrlPattern.Match(cleanBuffer);
-            if (match.Success)
+            // 最後にマッチしたURLを採用（過去の会話ログにURLが含まれる場合の誤検知防止）
+            var matches = RemoteControlUrlPattern.Matches(cleanBuffer);
+            if (matches.Count > 0)
             {
                 urlDetected = true;
-                var url = match.Value.TrimEnd(')', ']', '}', '>');
-                _logger.LogInformation("[RemoteLaunch] [状態: URL_DETECTED] URL検知: {Url}", url);
+                var url = matches[^1].Value.TrimEnd(')', ']', '}', '>');
+                _logger.LogInformation("[RemoteLaunch] [状態: URL_DETECTED] URL検知: {Url}（マッチ{Count}件中最後）", url, matches.Count);
                 sessionInfo.RemoteControlUrl = url;
 
                 // URL検知後はイベントハンドラーを即座に解除

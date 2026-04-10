@@ -1774,6 +1774,12 @@
                 return null;
             }
 
+            // 相対パスの場合は親セッションのフォルダを基準に解決
+            if (!Path.IsPathRooted(folderPath) && !string.IsNullOrEmpty(parentSession.FolderPath))
+            {
+                folderPath = Path.GetFullPath(Path.Combine(parentSession.FolderPath, folderPath));
+            }
+
             // フォルダが存在しない場合は作成
             if (!Directory.Exists(folderPath))
             {
