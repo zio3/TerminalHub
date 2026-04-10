@@ -35,6 +35,15 @@ jobs:
           $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
           Set-Content $issPath $content -NoNewline
 
+      - name: Inject MQTT credentials
+        shell: pwsh
+        run: |
+          $settingsPath = "TerminalHub/appsettings.json"
+          $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+          $json.Mqtt.Username = "${{ secrets.MQTT_USERNAME }}"
+          $json.Mqtt.Password = "${{ secrets.MQTT_PASSWORD }}"
+          $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -NoNewline
+
       - name: Publish application
         run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
 

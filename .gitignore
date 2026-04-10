@@ -7,6 +7,9 @@
 .dotnet-process.json
 .portconfig.json
 
+# ローカル開発設定（認証情報を含む）
+**/appsettings.Development.json
+
 # Windows null device file (誤って作成されたファイル)
 nul
 
