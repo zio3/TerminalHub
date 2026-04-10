@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'  # v1.0.0 などのタグがプッシュされたときに実行
+  workflow_dispatch:  # 手動実行用（ビルド確認のみ、リリース作成なし）
 
 permissions:
   contents: write  # リリース作成に必要
@@ -24,9 +25,15 @@ jobs:
       - name: Get version from tag
         id: get_version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=0.0.0-dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update version in installer script
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $version = "${{ steps.get_version.outputs.VERSION }}"
@@ -48,6 +55,7 @@ jobs:
         run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
 
       - name: Install Inno Setup
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           # Inno Setupをダウンロード
@@ -59,6 +67,7 @@ jobs:
           Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
 
       - name: Build installer
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           # 出力ディレクトリを作成
@@ -68,6 +77,7 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer/TerminalHub.iss"
 
       - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: installer/output/*.exe
