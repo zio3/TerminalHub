@@ -329,7 +329,6 @@ h1:focus {
 }
 
 .session-list-sidebar .list-group-item.active-session {
-    border-left-color: var(--th-active-border) !important;
     background-color: var(--th-active-bg) !important;
     border-color: transparent !important;
     border-left-color: var(--th-active-border) !important;
