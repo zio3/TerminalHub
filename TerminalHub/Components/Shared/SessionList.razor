@@ -3,27 +3,6 @@
 @using TerminalHub.Constants
 
 <style>
-    .active-session {
-        border: 2px solid #0d6efd !important;
-        background-color: #e7f1ff !important;
-    }
-
-    .active-session:hover {
-        background-color: #d7e9ff !important;
-    }
-
-    [data-bs-theme="dark"] .active-session {
-        background-color: #1a3a5c !important;
-    }
-
-    [data-bs-theme="dark"] .active-session:hover {
-        background-color: #1f4670 !important;
-    }
-
-    [data-bs-theme="dark"] .session-list-sidebar {
-        background-color: var(--bs-body-bg) !important;
-    }
-
     @@keyframes bell-ring {
         0% { transform: rotate(0); }
         10% { transform: rotate(14deg); }
@@ -46,7 +25,7 @@
     <div class="mobile-sidebar-overlay" @onclick="CloseMobileSidebar"></div>
 }
 
-<div class="col-md-3 border-end bg-light p-3 d-flex flex-column session-list-sidebar @(IsMobileOpen ? "mobile-open" : "")" style="height: 100%; @GetScaleStyle()">
+<div class="col-md-3 p-3 d-flex flex-column session-list-sidebar @(IsMobileOpen ? "mobile-open" : "")" style="height: 100%; @GetScaleStyle()">
 
     <div class="mb-2">
         <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
@@ -188,7 +167,7 @@
                 {
                     <div class="mt-2">
                         <div class="text-muted small"
-                             style="font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background-color: rgba(0,0,0,0.03); white-space: pre-line;">
+                             style="font-size: 0.875rem; padding: 0.25rem 0.5rem; border-radius: var(--th-radius-sm); background-color: var(--th-border-subtle); white-space: pre-line;">
                             @session.Memo
                         </div>
                     </div>

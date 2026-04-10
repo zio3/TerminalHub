@@ -109,7 +109,7 @@
                 @if (!hideInputPanel)
                 {
                 <!-- WebUI部分 -->
-                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid var(--bs-border-color); background-color: var(--bs-tertiary-bg); display: flex; flex-direction: column;">
+                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; border-top: 1px solid var(--th-border); background-color: var(--th-surface-raised); display: flex; flex-direction: column;">
                     @{
                         var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
                     }
