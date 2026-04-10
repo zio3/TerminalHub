@@ -135,6 +135,12 @@
                                     }
                                 </span>
                             }
+                            @if (!string.IsNullOrEmpty(session.RemoteControlUrl))
+                            {
+                                <span class="badge bg-info ms-1" title="リモートコントロール接続中">
+                                    <i class="bi bi-phone-fill"></i>
+                                </span>
+                            }
                             @if (!session.ParentSessionId.HasValue && HasChildren(session) && !session.IsExpanded)
                             {
                                 <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">

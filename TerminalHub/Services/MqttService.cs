@@ -409,8 +409,7 @@ public class MqttService : IHostedService, IDisposable
         }
 
         var match = string.Equals(settings.PasswordHash, requestPasswordHash, StringComparison.OrdinalIgnoreCase);
-        _logger.LogDebug("[MQTT] パスワード検証: サーバー={ServerHash}, リクエスト={RequestHash}, 一致={Match}",
-            settings.PasswordHash, requestPasswordHash, match);
+        _logger.LogDebug("[MQTT] パスワード検証: 一致={Match}", match);
         return match;
     }
 

@@ -89,6 +89,23 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "シェルパネルの初期化エラー: {PanelId}", PanelId);
+
+            // JS初期化失敗時に起動済みConPTYを片付ける
+            if (shellSession != null)
+            {
+                try
+                {
+                    shellSession.DataReceived -= OnDataReceived;
+                    shellSession.ProcessExited -= OnProcessExited;
+                    shellSession.Dispose();
+                    Logger.LogInformation("初期化失敗のため起動済みConPTYを破棄: {PanelId}", PanelId);
+                }
+                catch (Exception disposeEx)
+                {
+                    Logger.LogWarning(disposeEx, "ConPTY破棄エラー: {PanelId}", PanelId);
+                }
+                shellSession = null;
+            }
         }
     }
 
