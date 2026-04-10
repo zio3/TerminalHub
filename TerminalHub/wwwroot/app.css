@@ -16,9 +16,9 @@
     --th-sidebar-hover: #f1f5f9;
 
     /* アクティブセッション */
-    --th-active-bg: #eff6ff;
+    --th-active-bg: #e0ecff;
     --th-active-border: #3b82f6;
-    --th-active-hover: #dbeafe;
+    --th-active-hover: #cde4fe;
 
     /* サーフェス */
     --th-surface: #ffffff;
@@ -311,6 +311,7 @@ h1:focus {
 
 .session-list-sidebar .list-group {
     gap: 0;
+    overflow-x: hidden;
 }
 
 .session-list-sidebar .list-group-item {
