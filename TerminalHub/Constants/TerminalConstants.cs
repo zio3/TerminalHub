@@ -154,7 +154,7 @@ namespace TerminalHub.Constants
             if ((options.ContainsKey("resume-picker") && options["resume-picker"] == "true")
                 || (options.ContainsKey("resume-last") && options["resume-last"] == "true"))
             {
-                args.Add("resume --last --all");
+                args.Add("resume");
             }
 
             if (options.ContainsKey("search") && options["search"] == "true")

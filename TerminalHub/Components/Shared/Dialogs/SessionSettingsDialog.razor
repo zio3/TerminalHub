@@ -228,7 +228,7 @@
                 codexOptions = new SessionOptionsSelector.CodexOptionsData
                 {
                     Mode = options.ContainsKey("mode") ? options["mode"] : "auto",
-                    ResumeLast = (options.ContainsKey("resume-picker") && options["resume-picker"] == "true")
+                    ResumePicker = (options.ContainsKey("resume-picker") && options["resume-picker"] == "true")
                         || (options.ContainsKey("resume-last") && options["resume-last"] == "true"),
                     SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "",
                     ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
