@@ -300,6 +300,94 @@ window.terminalHubHelpers = {
         }
     },
 
+    // スプリッタードラッグ初期化（イベント委譲方式 - DOM存在前でもOK）
+    initSplitter: function(dotNetRef) {
+        if (window._splitterInitialized) return;
+        window._splitterInitialized = true;
+
+        let isDragging = false;
+        let dragType = null; // 'vertical' or 'horizontal'
+        let activeSplitter = null;
+
+        document.addEventListener('mousedown', (e) => {
+            if (!e.target) return;
+            if (e.target.id === 'panel-splitter') {
+                isDragging = true;
+                dragType = 'vertical';
+                activeSplitter = e.target;
+                document.body.style.cursor = 'row-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            } else if (e.target.id === 'sidebar-splitter') {
+                isDragging = true;
+                dragType = 'horizontal';
+                activeSplitter = e.target;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging || !activeSplitter) return;
+            e.preventDefault();
+
+            if (dragType === 'vertical') {
+                const container = activeSplitter.parentElement;
+                const rect = container.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                let percent = Math.round((y / rect.height) * 100);
+                percent = Math.max(20, Math.min(90, percent));
+
+                const terminalSection = container.querySelector('.terminal-section');
+                const bottomSection = container.querySelector('.bottom-panel-section');
+                if (terminalSection) terminalSection.style.height = percent + '%';
+                if (bottomSection) bottomSection.style.height = (100 - percent) + '%';
+                activeSplitter.dataset.percent = percent;
+            } else if (dragType === 'horizontal') {
+                const container = activeSplitter.parentElement;
+                const rect = container.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                let percent = Math.round((x / rect.width) * 100);
+                percent = Math.max(15, Math.min(40, percent));
+
+                const sidebar = container.querySelector('.session-list-sidebar');
+                if (sidebar) sidebar.style.width = percent + '%';
+                activeSplitter.dataset.percent = percent;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            const type = dragType;
+            isDragging = false;
+            dragType = null;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            const rawPercent = activeSplitter?.dataset.percent;
+            activeSplitter = null;
+
+            // mousemoveなしでmouseupした場合は何もしない
+            if (!rawPercent) return;
+            const percent = parseInt(rawPercent);
+
+            if (type === 'vertical') {
+                dotNetRef.invokeMethodAsync('OnSplitterDragEnd', percent);
+            } else if (type === 'horizontal') {
+                dotNetRef.invokeMethodAsync('OnSidebarSplitterDragEnd', percent);
+            }
+
+            // ターミナルをリサイズ
+            if (window.multiSessionTerminals) {
+                Object.values(window.multiSessionTerminals).forEach(t => {
+                    if (t && t.fitAddon) {
+                        try { t.fitAddon.fit(); } catch(e) {}
+                    }
+                });
+            }
+        });
+    },
+
     // テーマ切替
     setTheme: function(theme) {
         document.documentElement.setAttribute('data-bs-theme', theme);

@@ -9,7 +9,7 @@
 @inject IFolderPickerService FolderPicker
 
 <div class="modal fade @(IsVisible && !showCreateFolderDialog ? "show" : "")" tabindex="-1" style="@(IsVisible && !showCreateFolderDialog ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
-    <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">新しいセッションを作成</h5>
