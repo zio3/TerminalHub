@@ -151,7 +151,8 @@ namespace TerminalHub.Constants
                 args.Add($"--model {model.Trim()}");
             }
 
-            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
+            if ((options.ContainsKey("resume-picker") && options["resume-picker"] == "true")
+                || (options.ContainsKey("resume-last") && options["resume-last"] == "true"))
             {
                 args.Add("resume --last --all");
             }

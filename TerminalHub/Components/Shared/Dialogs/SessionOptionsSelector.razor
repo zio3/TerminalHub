@@ -491,11 +491,11 @@
     {
         CodexOptions.SandboxMode = mode switch
         {
-            CodexSandbox.None => "none",
+            CodexSandbox.None => "",
             CodexSandbox.ReadOnly => "read-only",
             CodexSandbox.WorkspaceWrite => "workspace-write",
             CodexSandbox.FullAccess => "danger-full-access",
-            _ => "workspace-write"
+            _ => ""
         };
     }
 
@@ -558,7 +558,7 @@
                 options["mode"] = CodexOptions.Mode;
                 if (CodexOptions.ResumeLast)
                 {
-                    options["resume-last"] = "true";
+                    options["resume-picker"] = "true";
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.SandboxMode))
                 {
@@ -620,9 +620,9 @@
     {
         public string Mode { get; set; } = "auto"; // auto, standard, yolo
         public bool ResumeLast { get; set; } = false;
-        public string SandboxMode { get; set; } = "workspace-write"; // "", read-only, workspace-write, danger-full-access
+        public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
-        public string NetworkAccess { get; set; } = "enabled";
+        public string NetworkAccess { get; set; } = "";
         public string Profile { get; set; } = "";
         public string Model { get; set; } = "";
         public bool SearchEnabled { get; set; }
