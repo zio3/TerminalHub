@@ -1,3 +1,112 @@
+/* ===========================================
+   TerminalHub Design System
+   =========================================== */
+
+/* --- カスタムカラーパレット（ライトテーマ） --- */
+:root {
+    /* アクセントカラー */
+    --th-accent: #3b82f6;
+    --th-accent-hover: #2563eb;
+    --th-accent-subtle: #dbeafe;
+    --th-accent-muted: #93bbfd;
+
+    /* サイドバー */
+    --th-sidebar-bg: #f8fafc;
+    --th-sidebar-border: #e2e8f0;
+    --th-sidebar-hover: #f1f5f9;
+
+    /* アクティブセッション */
+    --th-active-bg: #e0ecff;
+    --th-active-border: #3b82f6;
+    --th-active-hover: #cde4fe;
+
+    /* サーフェス */
+    --th-surface: #ffffff;
+    --th-surface-raised: #f8fafc;
+    --th-surface-overlay: rgba(0, 0, 0, 0.4);
+
+    /* テキスト */
+    --th-text-primary: #1e293b;
+    --th-text-secondary: #64748b;
+    --th-text-muted: #94a3b8;
+
+    /* ボーダー */
+    --th-border: #e2e8f0;
+    --th-border-subtle: #f1f5f9;
+
+    /* ターミナル */
+    --th-terminal-bg: #0f172a;
+
+    /* シャドウ */
+    --th-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --th-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --th-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --th-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+
+    /* トランジション */
+    --th-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --th-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --th-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* 角丸 */
+    --th-radius-sm: 0.375rem;
+    --th-radius-md: 0.5rem;
+    --th-radius-lg: 0.75rem;
+    --th-radius-xl: 1rem;
+}
+
+/* --- ダークテーマ --- */
+[data-bs-theme="dark"] {
+    --th-accent: #60a5fa;
+    --th-accent-hover: #93bbfd;
+    --th-accent-subtle: #1e3a5f;
+    --th-accent-muted: #3b6cb5;
+
+    --th-sidebar-bg: #0f172a;
+    --th-sidebar-border: #1e293b;
+    --th-sidebar-hover: #1e293b;
+
+    --th-active-bg: #172554;
+    --th-active-border: #60a5fa;
+    --th-active-hover: #1e3a5f;
+
+    --th-surface: #0f172a;
+    --th-surface-raised: #1e293b;
+    --th-surface-overlay: rgba(0, 0, 0, 0.6);
+
+    --th-text-primary: #f1f5f9;
+    --th-text-secondary: #94a3b8;
+    --th-text-muted: #64748b;
+
+    --th-border: #334155;
+    --th-border-subtle: #1e293b;
+
+    --th-terminal-bg: #020617;
+
+    --th-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --th-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+    --th-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    --th-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}
+
+/* --- グローバルフォント --- */
+body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, kbd, .form-control[type="text"],
+textarea.form-control,
+.terminal-container,
+.input-group-text {
+    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+}
+
+/* ===========================================
+   基本要素
+   =========================================== */
+
 h1:focus {
     outline: none;
 }
@@ -44,11 +153,14 @@ h1:focus {
     text-align: start;
 }
 
-/* Terminal styles from Root.razor */
+/* ===========================================
+   ターミナル
+   =========================================== */
+
 .terminal-wrapper {
     flex: 1;
     overflow: auto;
-    background-color: #000;
+    background-color: var(--th-terminal-bg);
 }
 
 .terminal-container {
@@ -57,13 +169,291 @@ h1:focus {
     min-height: 400px;
 }
 
+/* ===========================================
+   ボタン
+   =========================================== */
+
 .btn {
-    transition: transform 0.1s ease-in-out;
+    transition: transform var(--th-transition-fast), box-shadow var(--th-transition-fast), background-color var(--th-transition-fast);
+    border-radius: var(--th-radius-sm);
 }
 
-    .btn:active {
-        transform: scale(0.95);
+.btn:active {
+    transform: scale(0.95);
+}
+
+.btn:hover {
+    box-shadow: var(--th-shadow-sm);
+}
+
+.btn-primary {
+    background-color: var(--th-accent);
+    border-color: var(--th-accent);
+}
+
+.btn-primary:hover {
+    background-color: var(--th-accent-hover);
+    border-color: var(--th-accent-hover);
+}
+
+/* ===========================================
+   モーダル / ダイアログ
+   =========================================== */
+
+.modal.fade.show {
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+}
+
+.modal-content {
+    border: 1px solid var(--th-border);
+    border-radius: var(--th-radius-xl);
+    box-shadow: var(--th-shadow-xl);
+    overflow: hidden;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--th-border);
+    background-color: var(--th-surface-raised);
+    padding: 1rem 1.25rem;
+}
+
+.modal-header .modal-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+.modal-body {
+    padding: 1.25rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--th-border);
+    background-color: var(--th-surface-raised);
+    padding: 0.875rem 1.25rem;
+}
+
+/* ===========================================
+   トースト通知
+   =========================================== */
+
+.toast {
+    border-radius: var(--th-radius-lg);
+    box-shadow: var(--th-shadow-lg);
+    border-width: 2px;
+    overflow: hidden;
+    animation: toast-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes toast-slide-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
     }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast-header {
+    font-weight: 500;
+    border-bottom: 1px solid var(--th-border-subtle);
+}
+
+.toast-body {
+    font-size: 0.9rem;
+}
+
+/* ===========================================
+   ナビゲーションタブ（ボトムパネル）
+   =========================================== */
+
+.nav-tabs {
+    border-bottom: 2px solid var(--th-border);
+    gap: 0.125rem;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--th-text-secondary);
+    transition: color var(--th-transition-fast), border-color var(--th-transition-fast), background-color var(--th-transition-fast);
+    border-radius: var(--th-radius-sm) var(--th-radius-sm) 0 0;
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--th-text-primary);
+    background-color: var(--th-sidebar-hover);
+    border-bottom-color: var(--th-accent-muted);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--th-accent);
+    border-bottom-color: var(--th-accent);
+    background-color: transparent;
+    font-weight: 600;
+}
+
+/* ===========================================
+   セッションリスト（サイドバー）
+   =========================================== */
+
+.session-list-sidebar {
+    background-color: var(--th-sidebar-bg) !important;
+    border-right: 1px solid var(--th-sidebar-border) !important;
+}
+
+.session-list-sidebar .list-group {
+    gap: 0;
+    overflow-x: hidden;
+}
+
+.session-list-sidebar .list-group-item {
+    border: 1px solid var(--th-border);
+    border-left: 3px solid var(--th-border);
+    border-radius: 0;
+    margin: -1px 0 0 0;
+    transition: background-color var(--th-transition-fast), border-color var(--th-transition-fast), transform var(--th-transition-fast);
+    padding: 0.625rem 0.75rem;
+    background-color: transparent;
+}
+
+.session-list-sidebar .list-group-item:hover {
+    background-color: var(--th-sidebar-hover);
+    transform: translateX(2px);
+}
+
+.session-list-sidebar .list-group-item.active-session {
+    background-color: var(--th-active-bg) !important;
+    border-color: transparent !important;
+    border-left-color: var(--th-active-border) !important;
+}
+
+.session-list-sidebar .list-group-item.active-session:hover {
+    background-color: var(--th-active-hover) !important;
+}
+
+/* セッション名 */
+.session-list-sidebar h6 {
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+}
+
+/* バッジ */
+.session-list-sidebar .badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--th-radius-sm);
+}
+
+/* 設定ボタン（フッター） */
+.sidebar-footer {
+    background-color: var(--th-surface-raised);
+    border-top: 1px solid var(--th-border) !important;
+}
+
+/* メモ表示 */
+.session-list-sidebar .text-muted.small {
+    background-color: var(--th-border-subtle) !important;
+    border-radius: var(--th-radius-sm);
+}
+
+/* ===========================================
+   フォーム要素
+   =========================================== */
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--th-accent);
+    box-shadow: 0 0 0 3px var(--th-accent-subtle);
+}
+
+.input-group .form-control {
+    border-radius: var(--th-radius-sm);
+}
+
+/* ===========================================
+   空状態
+   =========================================== */
+
+.text-center.text-muted .bi-terminal {
+    opacity: 0.3;
+    color: var(--th-accent-muted);
+}
+
+/* ===========================================
+   スプリッター（ターミナル / ボトムパネル境界）
+   =========================================== */
+
+.panel-splitter {
+    height: 5px;
+    background-color: var(--th-border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background-color var(--th-transition-fast);
+    z-index: 10;
+}
+
+.panel-splitter:hover,
+.panel-splitter:active {
+    background-color: var(--th-accent);
+}
+
+.panel-splitter::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 3px;
+    border-top: 1px solid var(--th-text-muted);
+    border-bottom: 1px solid var(--th-text-muted);
+}
+
+.panel-splitter:hover::after {
+    border-color: white;
+}
+
+/* サイドバースプリッター（横方向） */
+.sidebar-splitter {
+    width: 5px;
+    background-color: var(--th-border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background-color var(--th-transition-fast);
+    z-index: 10;
+}
+
+.sidebar-splitter:hover,
+.sidebar-splitter:active {
+    background-color: var(--th-accent);
+}
+
+.sidebar-splitter::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 32px;
+    width: 3px;
+    border-left: 1px solid var(--th-text-muted);
+    border-right: 1px solid var(--th-text-muted);
+}
+
+.sidebar-splitter:hover::after {
+    border-color: white;
+}
 
 /* xterm.js IME positioning fix - 一旦削除してデフォルトの挙動に戻す */
 /* IMEは右端からの入力になるが、コンテキストメニューは正常に動作する */
@@ -96,6 +486,11 @@ h1:focus {
         font-size: 10.67px; /* 16px * 2/3 = 10.67px */
     }
 
+    /* サイドバースプリッター非表示 */
+    .sidebar-splitter {
+        display: none;
+    }
+
     /* モバイルサイドバートグルボタン */
     .mobile-sidebar-toggle {
         display: flex;
@@ -108,17 +503,17 @@ h1:focus {
         width: 44px;
         height: 44px;
         border: none;
-        border-radius: 8px;
-        background-color: #0d6efd;
+        border-radius: var(--th-radius-md);
+        background-color: var(--th-accent);
         color: white;
         font-size: 1.5rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: var(--th-shadow-md);
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: background-color var(--th-transition-fast);
     }
 
     .mobile-sidebar-toggle:hover {
-        background-color: #0b5ed7;
+        background-color: var(--th-accent-hover);
     }
 
     .mobile-sidebar-toggle:active {
@@ -133,7 +528,7 @@ h1:focus {
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: rgba(0, 0, 0, 0.5);
+        background-color: var(--th-surface-overlay);
         z-index: 999;
     }
 
@@ -149,7 +544,7 @@ h1:focus {
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
         padding: 0.75rem;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        box-shadow: var(--th-shadow-xl);
     }
 
     .session-list-sidebar.mobile-open {

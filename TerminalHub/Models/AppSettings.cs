@@ -93,6 +93,7 @@ public class GeneralSettings
     public double SessionListScale { get; set; } = 1.0;
     public int TerminalFontSize { get; set; } = 14;
     public int TerminalHeightPercent { get; set; } = 70;
+    public int SidebarWidthPercent { get; set; } = 25;
     public string Theme { get; set; } = "light";
 }
 
