@@ -78,7 +78,8 @@
                                       SelectedTypeChanged="OnTerminalTypeChanged"
                                       @bind-StartupCommand="startupCommand"
                                       ClaudeOptions="claudeCodeOptions"
-                                      GeminiOptions="geminiOptions" />
+                                      GeminiOptions="geminiOptions"
+                                      CodexOptions="codexOptions" />
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="Cancel">キャンセル</button>
@@ -132,6 +133,7 @@
 
     private SessionOptionsSelector.ClaudeCodeOptions claudeCodeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
+    private SessionOptionsSelector.CodexOptionsData codexOptions = new();
     private List<string> favoriteFolders = new();
     private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
     private bool showCreateFolderDialog = false;
@@ -345,6 +347,7 @@
         startupCommand = "";
         claudeCodeOptions = new();
         geminiOptions = new();
+        codexOptions = new();
         showCreateFolderDialog = false;
         pendingSessionCreation = false;
     }

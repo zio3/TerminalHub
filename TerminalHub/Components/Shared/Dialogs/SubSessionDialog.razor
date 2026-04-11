@@ -144,6 +144,7 @@
                                                   @bind-StartupCommand="startupCommand"
                                                   ClaudeOptions="claudeOptions"
                                                   GeminiOptions="geminiOptions"
+                                                  CodexOptions="codexOptions"
                                                   DisableContinueOption="false" />
                             }
                         </div>
@@ -207,7 +208,8 @@
                                                           SelectedTypeChanged="OnTerminalTypeChanged"
                                                           @bind-StartupCommand="startupCommand"
                                                           ClaudeOptions="claudeOptions"
-                                                          GeminiOptions="geminiOptions" />
+                                                          GeminiOptions="geminiOptions"
+                                                          CodexOptions="codexOptions" />
                                 </div>
                             }
                             }
@@ -223,7 +225,8 @@
                                                   SelectedTypeChanged="OnTerminalTypeChanged"
                                                   @bind-StartupCommand="startupCommand"
                                                   ClaudeOptions="claudeOptions"
-                                                  GeminiOptions="geminiOptions" />
+                                                  GeminiOptions="geminiOptions"
+                                                  CodexOptions="codexOptions" />
                             
                             @if (ParentSessionName != null)
                             {
@@ -265,7 +268,8 @@
                                                           SelectedTypeChanged="OnTerminalTypeChanged"
                                                           @bind-StartupCommand="startupCommand"
                                                           ClaudeOptions="claudeOptions"
-                                                          GeminiOptions="geminiOptions" />
+                                                          GeminiOptions="geminiOptions"
+                                                          CodexOptions="codexOptions" />
                                 </div>
                                 
                                 <div class="alert alert-info mt-3">
@@ -332,6 +336,7 @@
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
+    private SessionOptionsSelector.CodexOptionsData codexOptions = new();
 
     private bool CanProcess
     {
@@ -377,6 +382,7 @@
             startupCommand = "";
             claudeOptions = new();
             geminiOptions = new();
+            codexOptions = new();
             newFolderPath = "";
             
             // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
