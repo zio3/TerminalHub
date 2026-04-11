@@ -19,6 +19,9 @@ nul
 # MCP設定（Bot Tokenなど秘密情報を含む）
 .mcp.json
 
+# Codex CLI 作業ディレクトリ
+.tmp-codex/
+
 # User-specific files
 *.rsuser
 *.suo
