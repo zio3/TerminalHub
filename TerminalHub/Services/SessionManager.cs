@@ -648,7 +648,9 @@ namespace TerminalHub.Services
                 {
                     parentPath = parentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 }
-                var worktreeName = $"{Path.GetFileName(parentPath)}-{branchName}";
+                // ブランチ名の "/" はフォルダ名として不正なので "-" に置換する（feature/hoge → feature-hoge）
+                var safeBranchName = branchName.Replace('/', '-').Replace('\\', '-');
+                var worktreeName = $"{Path.GetFileName(parentPath)}-{safeBranchName}";
                 // 親ディレクトリと同じ階層に作成（親ディレクトリが取得できない場合は、親の親を使用）
                 var parentDir = Path.GetDirectoryName(parentPath);
                 if (string.IsNullOrEmpty(parentDir))
