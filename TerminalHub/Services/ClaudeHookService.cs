@@ -106,6 +106,8 @@ public class ClaudeHookService : IClaudeHookService
 
     /// <summary>
     /// Claude Code の type:"http" hook エントリを生成する
+    /// 注: TerminalHub は現状 HTTP バインド前提 (Program.cs の UseHttpsRedirection はコメントアウト済み)。
+    /// HTTPS バインドに変更する場合はこの URL スキームも合わせて変更する必要がある。
     /// </summary>
     private JsonObject BuildHookEntry(Guid sessionId, int port)
     {
@@ -119,18 +121,19 @@ public class ClaudeHookService : IClaudeHookService
 
     /// <summary>
     /// TerminalHub 由来の hook エントリかを判定する
-    /// 旧形式（command 型で --notify --session を含む）と新形式（http 型で /api/hook/claude/ を URL に含む）の両方をチェック
+    /// - 旧形式: type:"command" で --notify --session を含む
+    /// - 新形式: type:"http" で URL に /api/hook/claude/ を含む（TerminalHub 専用パスに限定）
     /// </summary>
     private static bool IsTerminalHubHook(JsonObject hookObj)
     {
         var type = hookObj["type"]?.GetValue<string>();
 
-        // 新形式: type:"http" で URL に /api/hook/claude/ を含む
+        // 新形式: TerminalHub 専用の /api/hook/claude/ パスのみを対象とする。
+        // 汎用の /api/hook を含む URL（他ツール向けに手書きされた hook 等）は誤削除しない。
         if (type == "http")
         {
             var url = hookObj["url"]?.GetValue<string>() ?? "";
-            if (url.Contains("/api/hook/claude/", StringComparison.OrdinalIgnoreCase) ||
-                url.Contains("/api/hook", StringComparison.OrdinalIgnoreCase))
+            if (url.Contains("/api/hook/claude/", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

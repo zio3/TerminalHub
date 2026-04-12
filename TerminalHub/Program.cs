@@ -146,7 +146,8 @@ app.MapPost("/api/hook/claude/{sessionId:guid}",
         Timestamp = DateTime.UtcNow
     };
     await hookService.HandleHookNotificationAsync(notification);
-    return Results.Ok(new { success = true });
+    // Claude Code 仕様: 2xx 空ボディ = 成功扱い。JSON を返すと構造化判定として解析されるため空で返す。
+    return Results.NoContent();
 });
 
 app.Run();
