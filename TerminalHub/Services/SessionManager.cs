@@ -113,37 +113,49 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// サーバーのポート番号を取得する
+        /// サーバーのベース URL を取得する（スキーム + ホスト + ポート）
+        /// 複数アドレスがある場合は HTTP を優先する（Claude Code hook は自己署名 HTTPS 証明書を扱えないケースがあるため）
+        /// 0.0.0.0 等のワイルドカードホストは localhost に置換する（LAN バインド対策）
         /// </summary>
-        private int GetServerPort()
+        private string GetServerBaseUrl()
         {
-            const int defaultPort = 5081;
+            const string defaultUrl = "http://localhost:5081";
 
             if (_server == null)
             {
-                _logger.LogWarning("IServer が利用できません。デフォルトポート {Port} を使用します", defaultPort);
-                return defaultPort;
+                _logger.LogWarning("IServer が利用できません。デフォルト URL {Url} を使用します", defaultUrl);
+                return defaultUrl;
             }
 
             var addressesFeature = _server.Features.Get<IServerAddressesFeature>();
             if (addressesFeature == null || !addressesFeature.Addresses.Any())
             {
-                _logger.LogWarning("サーバーアドレスが取得できません。デフォルトポート {Port} を使用します", defaultPort);
-                return defaultPort;
+                _logger.LogWarning("サーバーアドレスが取得できません。デフォルト URL {Url} を使用します", defaultUrl);
+                return defaultUrl;
             }
 
-            // 最初のアドレスからポートを取得（http://localhost:5081 形式）
-            var address = addressesFeature.Addresses.First();
+            // HTTP を優先して選ぶ。HTTPS しかなければ HTTPS を使う
+            var address = addressesFeature.Addresses
+                .OrderBy(a => a.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                .First();
+
             try
             {
                 var uri = new Uri(address);
-                _logger.LogDebug("サーバーポートを取得: {Port} (from {Address})", uri.Port, address);
-                return uri.Port;
+                // 0.0.0.0, +, *, [::] などのワイルドカードホストは localhost に置換
+                var host = uri.Host;
+                if (host == "0.0.0.0" || host == "+" || host == "*" || host == "[::]" || string.IsNullOrEmpty(host))
+                {
+                    host = "localhost";
+                }
+                var baseUrl = $"{uri.Scheme}://{host}:{uri.Port}";
+                _logger.LogDebug("サーバー URL を取得: {BaseUrl} (from {Address})", baseUrl, address);
+                return baseUrl;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "アドレスからポートを解析できません: {Address}。デフォルトポート {Port} を使用します", address, defaultPort);
-                return defaultPort;
+                _logger.LogWarning(ex, "アドレスから URL を解析できません: {Address}。デフォルト URL {Url} を使用します", address, defaultUrl);
+                return defaultUrl;
             }
         }
         
@@ -802,11 +814,11 @@ namespace TerminalHub.Services
 
             try
             {
-                var port = GetServerPort();
-                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                var baseUrl = GetServerBaseUrl();
+                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
                 sessionInfo.HookConfigured = true;
                 var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogInformation($"Hook 設定を{action}: SessionId={{SessionId}}, Port={{Port}}", sessionInfo.SessionId, port);
+                _logger.LogInformation($"Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
             }
             catch (Exception ex)
             {

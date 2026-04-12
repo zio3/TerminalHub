@@ -126,11 +126,28 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Hook 通知 API エンドポイント
+// Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作 JSON、--notify CLI モードや他ツール向けに維持）
 app.MapPost("/api/hook", async (HookNotification notification, IHookNotificationService hookService) =>
 {
     await hookService.HandleHookNotificationAsync(notification);
     return Results.Ok(new { success = true });
+});
+
+// Hook 通知 API エンドポイント（Claude Code 専用: type:"http" hook が直接送信するネイティブ JSON を受信）
+// TerminalHub のセッションIDは URL パスから取得する（Claude Code の session_id は Claude 側のIDで別物のため）
+app.MapPost("/api/hook/claude/{sessionId:guid}",
+    async (Guid sessionId, ClaudeHookPayload payload, IHookNotificationService hookService) =>
+{
+    // 既存 HookNotification 形式へ変換し、既存サービスに委譲
+    var notification = new HookNotification
+    {
+        SessionId = sessionId,
+        Event = payload.HookEventName ?? "",
+        Timestamp = DateTime.UtcNow
+    };
+    await hookService.HandleHookNotificationAsync(notification);
+    // Claude Code 仕様: 2xx 空ボディ = 成功扱い。JSON を返すと構造化判定として解析されるため空で返す。
+    return Results.NoContent();
 });
 
 app.Run();
