@@ -22,7 +22,9 @@ public interface IClaudeHookService
     /// <summary>
     /// セッション用の hook 設定をセットアップする
     /// </summary>
-    Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null);
+    /// <param name="baseUrl">TerminalHub サーバーのベース URL（例: http://localhost:5081）。
+    /// hook の送信先 URL に使われる</param>
+    Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl, HookEventSettings? eventSettings = null);
 }
 
 /// <summary>
@@ -38,7 +40,7 @@ public class ClaudeHookService : IClaudeHookService
         _logger = logger;
     }
 
-    public async Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null)
+    public async Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl, HookEventSettings? eventSettings = null)
     {
         // デフォルト設定を使用
         eventSettings ??= new HookEventSettings();
@@ -83,7 +85,7 @@ public class ClaudeHookService : IClaudeHookService
 
             foreach (var eventName in enabledEvents)
             {
-                var hookEntry = BuildHookEntry(sessionId, port);
+                var hookEntry = BuildHookEntry(sessionId, baseUrl);
                 AddOrUpdateHook(hooks, eventName, hookEntry);
             }
 
@@ -106,15 +108,16 @@ public class ClaudeHookService : IClaudeHookService
 
     /// <summary>
     /// Claude Code の type:"http" hook エントリを生成する
-    /// 注: TerminalHub は現状 HTTP バインド前提 (Program.cs の UseHttpsRedirection はコメントアウト済み)。
-    /// HTTPS バインドに変更する場合はこの URL スキームも合わせて変更する必要がある。
+    /// baseUrl は呼び出し元が IServerAddressesFeature から取得した実際のバインド URL（HTTP 優先）
     /// </summary>
-    private JsonObject BuildHookEntry(Guid sessionId, int port)
+    private JsonObject BuildHookEntry(Guid sessionId, string baseUrl)
     {
+        // 末尾スラッシュがある場合は除去してから結合
+        var trimmedBase = baseUrl.TrimEnd('/');
         return new JsonObject
         {
             ["type"] = "http",
-            ["url"] = $"http://localhost:{port}/api/hook/claude/{sessionId}",
+            ["url"] = $"{trimmedBase}/api/hook/claude/{sessionId}",
             ["timeout"] = 5
         };
     }
