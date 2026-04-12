@@ -92,6 +92,7 @@ namespace TerminalHub.Services
         private readonly ILogger<SessionManager> _logger;
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
+        private readonly IAppSettingsService _appSettingsService;
         private readonly IClaudeHookService? _claudeHookService;
         private readonly IServer? _server;
         private Guid? _activeSessionId;
@@ -102,12 +103,13 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IServer? server = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IAppSettingsService appSettingsService, IClaudeHookService? claudeHookService = null, IServer? server = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
             _configuration = configuration;
             _gitService = gitService;
+            _appSettingsService = appSettingsService;
             _claudeHookService = claudeHookService;
             _server = server;
         }
@@ -153,8 +155,9 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
-        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options)
+        private (string command, string args) BuildTerminalCommand(SessionInfo sessionInfo, Dictionary<string, string> options)
         {
+            var terminalType = sessionInfo.TerminalType;
             switch (terminalType)
             {
                 case TerminalType.ClaudeCode:
@@ -185,6 +188,14 @@ namespace TerminalHub.Services
 
                 case TerminalType.CodexCLI:
                     var codexArgs = TerminalConstants.BuildCodexArgs(options);
+                    var codexNotifyConfigArg = BuildCodexNotifyConfigArg(sessionInfo);
+                    if (!string.IsNullOrWhiteSpace(codexNotifyConfigArg))
+                    {
+                        codexArgs = string.IsNullOrWhiteSpace(codexArgs)
+                            ? codexNotifyConfigArg
+                            : $"{codexNotifyConfigArg} {codexArgs}";
+                        sessionInfo.HookConfigured = true;
+                    }
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";
@@ -200,6 +211,49 @@ namespace TerminalHub.Services
                         return (TerminalConstants.DefaultShell, "");
                     }
             }
+        }
+
+        private string GetTerminalHubExecutablePath()
+        {
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (exePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                {
+                    exePath = Path.ChangeExtension(exePath, ".exe");
+                }
+            }
+            return exePath ?? "TerminalHub.exe";
+        }
+
+        private static string ToTomlLiteralString(string value)
+        {
+            return $"'{value.Replace("'", "''")}'";
+        }
+
+        private string BuildCodexNotifyConfigArg(SessionInfo sessionInfo)
+        {
+            if (!_appSettingsService.GetSettings().CodexNotify.Enabled)
+            {
+                return string.Empty;
+            }
+
+            var exePath = GetTerminalHubExecutablePath();
+            var port = GetServerPort();
+            var notifyArgs = new[]
+            {
+                ToTomlLiteralString(exePath),
+                ToTomlLiteralString("--notify"),
+                ToTomlLiteralString("--event"),
+                ToTomlLiteralString("CodexComplete"),
+                ToTomlLiteralString("--session"),
+                ToTomlLiteralString(sessionInfo.SessionId.ToString()),
+                ToTomlLiteralString("--port"),
+                ToTomlLiteralString(port.ToString())
+            };
+
+            return $"-c \"notify=[{string.Join(",", notifyArgs)}]\"";
         }
 
 
@@ -397,7 +451,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
+                var (command, args) = BuildTerminalCommand(sessionInfo, sessionInfo.Options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
@@ -515,7 +569,7 @@ namespace TerminalHub.Services
                     return null;
             }
 
-            var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+            var (command, args) = BuildTerminalCommand(sessionInfo, options);
             var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
             var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
@@ -796,6 +850,10 @@ namespace TerminalHub.Services
             if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
                 return;
 
+            var settings = _appSettingsService.GetSettings();
+            if (!settings.ClaudeHook.Enabled)
+                return;
+
             // 初回セットアップの場合は既に設定済みならスキップ
             if (!isResetup && sessionInfo.HookConfigured)
                 return;
@@ -803,7 +861,13 @@ namespace TerminalHub.Services
             try
             {
                 var port = GetServerPort();
-                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port);
+                var eventSettings = new HookEventSettings
+                {
+                    Stop = settings.ClaudeHook.Events.Stop,
+                    UserPromptSubmit = settings.ClaudeHook.Events.UserPromptSubmit,
+                    Notification = settings.ClaudeHook.Events.Notification
+                };
+                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, port, eventSettings);
                 sessionInfo.HookConfigured = true;
                 var action = isResetup ? "再セットアップ" : "セットアップ";
                 _logger.LogInformation($"Hook 設定を{action}: SessionId={{SessionId}}, Port={{Port}}", sessionInfo.SessionId, port);
@@ -858,7 +922,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var (command, args) = BuildTerminalCommand(sessionInfo, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
@@ -909,7 +973,7 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var (command, args) = BuildTerminalCommand(sessionInfo, options);
 
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);

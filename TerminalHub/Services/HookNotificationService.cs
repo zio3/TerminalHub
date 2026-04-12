@@ -86,6 +86,7 @@ public class HookNotificationService : IHookNotificationService
         switch (eventType)
         {
             case HookEventType.Stop:
+            case HookEventType.CodexComplete:
                 await HandleStopEventAsync(session, notification);
                 break;
 

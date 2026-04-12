@@ -7,6 +7,8 @@ public enum HookEventType
 {
     /// <summary>処理完了</summary>
     Stop,
+    /// <summary>Codex 完了通知</summary>
+    CodexComplete,
     /// <summary>ユーザーがプロンプトを送信</summary>
     UserPromptSubmit,
     /// <summary>通知発生</summary>
@@ -33,6 +35,7 @@ public class HookNotification
         return Event?.ToLowerInvariant() switch
         {
             "stop" => HookEventType.Stop,
+            "codexcomplete" => HookEventType.CodexComplete,
             "userpromptsubmit" => HookEventType.UserPromptSubmit,
             "notification" => HookEventType.Notification,
             _ => null

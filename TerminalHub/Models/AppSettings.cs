@@ -8,6 +8,7 @@ public class AppSettings
     public NotificationSettings Notifications { get; set; } = new();
     public WebhookSettings Webhook { get; set; } = new();
     public ClaudeHookSettings ClaudeHook { get; set; } = new();
+    public CodexNotifySettings CodexNotify { get; set; } = new();
     public SpecialSettings Special { get; set; } = new();
     public SessionDisplaySettings Sessions { get; set; } = new();
     public DevToolsSettings DevTools { get; set; } = new();
@@ -53,6 +54,14 @@ public class ClaudeHookEvents
     public bool Stop { get; set; } = true;
     public bool UserPromptSubmit { get; set; } = true;
     public bool Notification { get; set; } = true;
+}
+
+/// <summary>
+/// Codex 完了通知設定
+/// </summary>
+public class CodexNotifySettings
+{
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

@@ -1989,9 +1989,11 @@
         switch (eventType)
         {
             case HookEventType.Stop:
+            case HookEventType.CodexComplete:
                 // ステータスをクリア（Root.razorのsessionsリスト内のオブジェクトをクリア）
                 Logger.LogInformation(
-                    "[ステータスクリア] きっかけ: OnHookNotification(Stop), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+                    "[ステータスクリア] きっかけ: OnHookNotification({EventType}), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+                    eventType,
                     session.GetDisplayName(),
                     session.ProcessingStatus ?? "(なし)");
 

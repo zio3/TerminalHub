@@ -378,42 +378,79 @@
 
                     <hr />
 
-                    <h6 class="mb-3">Claude Code Hook設定</h6>
-                    <p class="text-muted small mb-3">
-                        Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。
-                        セッション作成時に自動的に <code>.claude/settings.local.json</code> に設定が追加されます。
-                    </p>
+                    <h6 class="mb-3">ツール別通知設定</h6>
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item">
+                            <button type="button" class="nav-link @(notificationProviderTab == "claude" ? "active" : "")"
+                                    @onclick='() => notificationProviderTab = "claude"'>
+                                Claude Code
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button" class="nav-link @(notificationProviderTab == "codex" ? "active" : "")"
+                                    @onclick='() => notificationProviderTab = "codex"'>
+                                Codex CLI
+                            </button>
+                        </li>
+                    </ul>
 
-                    <div class="mb-3">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" @bind="claudeHookEnabled" id="claudeHookSwitch">
-                            <label class="form-check-label" for="claudeHookSwitch">
-                                Claude Code Hook を有効にする
-                            </label>
-                        </div>
-                    </div>
-
-                    @if (claudeHookEnabled)
+                    @if (notificationProviderTab == "claude")
                     {
+                        <p class="text-muted small mb-3">
+                            Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。
+                            セッション作成時に自動的に <code>.claude/settings.local.json</code> に設定が追加されます。
+                        </p>
+
                         <div class="mb-3">
-                            <label class="form-label">通知するイベント</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventStop" id="hookEventStop">
-                                <label class="form-check-label" for="hookEventStop">
-                                    Stop（処理完了時）
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="claudeHookEnabled" id="claudeHookSwitch">
+                                <label class="form-check-label" for="claudeHookSwitch">
+                                    Claude Code Hook を有効にする
                                 </label>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventUserPromptSubmit" id="hookEventUserPromptSubmit">
-                                <label class="form-check-label" for="hookEventUserPromptSubmit">
-                                    UserPromptSubmit（ユーザー入力時）
+                        </div>
+
+                        @if (claudeHookEnabled)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">通知するイベント</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" @bind="hookEventStop" id="hookEventStop">
+                                    <label class="form-check-label" for="hookEventStop">
+                                        Stop（処理完了時）
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" @bind="hookEventUserPromptSubmit" id="hookEventUserPromptSubmit">
+                                    <label class="form-check-label" for="hookEventUserPromptSubmit">
+                                        UserPromptSubmit（ユーザー入力時）
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" @bind="hookEventNotification" id="hookEventNotification">
+                                    <label class="form-check-label" for="hookEventNotification">
+                                        Notification（通知発生時）
+                                    </label>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else if (notificationProviderTab == "codex")
+                    {
+                        <p class="text-muted small mb-3">
+                            Codex CLI の <code>notify</code> を使って、ターン完了時に TerminalHub へ完了通知を返します。
+                            フォルダごとの hook ファイルは不要で、起動引数に一時設定を注入して動作します。
+                        </p>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="codexNotifyEnabled" id="codexNotifySwitch">
+                                <label class="form-check-label" for="codexNotifySwitch">
+                                    Codex 完了通知を有効にする
                                 </label>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventNotification" id="hookEventNotification">
-                                <label class="form-check-label" for="hookEventNotification">
-                                    Notification（通知発生時）
-                                </label>
+                            <div class="form-text">
+                                有効にすると、処理完了時に通知アイコン表示、ステータス更新、外部 WebHook 送信が hook ベースで行われます。
                             </div>
                         </div>
                     }
@@ -952,7 +989,9 @@
     private bool browserNotificationEnabled = true;
     private bool webHookEnabled = false;
     private string webHookUrl = "";
+    private string notificationProviderTab = "claude";
     private bool claudeHookEnabled = true;
+    private bool codexNotifyEnabled = true;
     private bool hookEventStop = true;
     private bool hookEventUserPromptSubmit = true;
     private bool hookEventNotification = true;
@@ -1053,6 +1092,7 @@
             hookEventStop = settings.ClaudeHook.Events.Stop;
             hookEventUserPromptSubmit = settings.ClaudeHook.Events.UserPromptSubmit;
             hookEventNotification = settings.ClaudeHook.Events.Notification;
+            codexNotifyEnabled = settings.CodexNotify.Enabled;
 
             // 特殊設定
             claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
@@ -1267,6 +1307,10 @@
                         UserPromptSubmit = hookEventUserPromptSubmit,
                         Notification = hookEventNotification
                     }
+                },
+                CodexNotify = new CodexNotifySettings
+                {
+                    Enabled = codexNotifyEnabled
                 },
                 Special = new SpecialSettings
                 {

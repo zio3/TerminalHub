@@ -139,13 +139,39 @@ return 0;
 // CLI モード: Hook 通知を送信
 static async Task<int> RunNotifyModeAsync(string[] args)
 {
+    const int NotifyRequestTimeoutSeconds = 5;
+
+    static string GetNotifyDebugLogPath()
+    {
+        return Path.Combine(AppContext.BaseDirectory, "logs", "notify-debug.log");
+    }
+
+    static void WriteNotifyDebugLog(string message)
+    {
+        try
+        {
+            var logPath = GetNotifyDebugLogPath();
+            var logDir = Path.GetDirectoryName(logPath);
+            if (!string.IsNullOrEmpty(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+            }
+
+            File.AppendAllText(logPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // notify デバッグログの失敗で hook 実行を妨げない
+        }
+    }
+
     var eventType = GetArgValue(args, "--event") ?? "";
     var sessionIdStr = GetArgValue(args, "--session") ?? "";
     var portStr = GetArgValue(args, "--port") ?? "5081";
 
     if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(sessionIdStr))
     {
-        Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|UserPromptSubmit|PermissionRequest> --session <sessionId> [--port <port>]");
+        Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|CodexComplete|UserPromptSubmit|Notification> --session <sessionId> [--port <port>]");
         return 1;
     }
 
@@ -167,6 +193,8 @@ static async Task<int> RunNotifyModeAsync(string[] args)
         Timestamp = DateTime.UtcNow
     };
 
+    WriteNotifyDebugLog($"START event={eventType} session={sessionId} port={port} timeoutSeconds={NotifyRequestTimeoutSeconds}");
+
     try
     {
         using var handler = new HttpClientHandler
@@ -175,36 +203,46 @@ static async Task<int> RunNotifyModeAsync(string[] args)
             ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
         };
         using var client = new HttpClient(handler);
-        client.Timeout = TimeSpan.FromSeconds(5);
+        client.Timeout = TimeSpan.FromSeconds(NotifyRequestTimeoutSeconds);
 
         var json = JsonSerializer.Serialize(notification);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        var httpUrl = $"http://localhost:{port}/api/hook";
+        var httpsUrl = $"https://localhost:{port}/api/hook";
 
         // まず HTTP を試す
         try
         {
-            var response = await client.PostAsync($"http://localhost:{port}/api/hook", content);
+            WriteNotifyDebugLog($"POST {httpUrl} body={json}");
+            var response = await client.PostAsync(httpUrl, content);
+            WriteNotifyDebugLog($"HTTP {httpUrl} status={(int)response.StatusCode} {response.StatusCode}");
             if (response.IsSuccessStatusCode)
             {
+                WriteNotifyDebugLog($"SUCCESS via HTTP event={eventType} session={sessionId}");
                 return 0;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            WriteNotifyDebugLog($"HTTP ERROR {httpUrl} {ex.GetType().Name}: {ex.Message}");
             // HTTP 失敗時は HTTPS を試す
         }
 
         // HTTPS を試す
         content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-        var httpsResponse = await client.PostAsync($"https://localhost:{port}/api/hook", content);
+        WriteNotifyDebugLog($"POST {httpsUrl} body={json}");
+        var httpsResponse = await client.PostAsync(httpsUrl, content);
+        WriteNotifyDebugLog($"HTTPS {httpsUrl} status={(int)httpsResponse.StatusCode} {httpsResponse.StatusCode}");
 
         if (httpsResponse.IsSuccessStatusCode)
         {
+            WriteNotifyDebugLog($"SUCCESS via HTTPS event={eventType} session={sessionId}");
             return 0;
         }
         else
         {
             Console.Error.WriteLine($"Failed to send notification: {httpsResponse.StatusCode}");
+            WriteNotifyDebugLog($"FAILED event={eventType} session={sessionId} status={(int)httpsResponse.StatusCode} {httpsResponse.StatusCode}");
             return 1;
         }
     }
@@ -212,6 +250,7 @@ static async Task<int> RunNotifyModeAsync(string[] args)
     {
         // 接続失敗時はサイレントに終了（hook 実行をブロックしない）
         Console.Error.WriteLine($"Error: {ex.Message}");
+        WriteNotifyDebugLog($"EXCEPTION event={eventType} session={sessionId} {ex.GetType().Name}: {ex.Message}");
         return 0; // 成功扱いで終了
     }
 }
