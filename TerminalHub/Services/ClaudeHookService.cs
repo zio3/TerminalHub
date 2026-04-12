@@ -23,11 +23,6 @@ public interface IClaudeHookService
     /// セッション用の hook 設定をセットアップする
     /// </summary>
     Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null);
-
-    /// <summary>
-    /// TerminalHub.exe のパスを取得する
-    /// </summary>
-    string GetExecutablePath();
 }
 
 /// <summary>
@@ -41,22 +36,6 @@ public class ClaudeHookService : IClaudeHookService
     public ClaudeHookService(ILogger<ClaudeHookService> logger)
     {
         _logger = logger;
-    }
-
-    public string GetExecutablePath()
-    {
-        // 現在の実行ファイルのパスを取得
-        var exePath = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(exePath))
-        {
-            exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            // .dll の場合は .exe に変換
-            if (exePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            {
-                exePath = Path.ChangeExtension(exePath, ".exe");
-            }
-        }
-        return exePath;
     }
 
     public async Task SetupHooksAsync(Guid sessionId, string folderPath, int port = 5081, HookEventSettings? eventSettings = null)
@@ -96,8 +75,6 @@ public class ClaudeHookService : IClaudeHookService
                 settings["hooks"] = hooks;
             }
 
-            var exePath = GetExecutablePath();
-
             // 有効なイベントのみ hook を追加
             var enabledEvents = new List<string>();
             if (eventSettings.Stop) enabledEvents.Add("Stop");
@@ -106,8 +83,8 @@ public class ClaudeHookService : IClaudeHookService
 
             foreach (var eventName in enabledEvents)
             {
-                var hookCommand = BuildHookCommand(exePath, eventName, sessionId, port);
-                AddOrUpdateHook(hooks, eventName, hookCommand);
+                var hookEntry = BuildHookEntry(sessionId, port);
+                AddOrUpdateHook(hooks, eventName, hookEntry);
             }
 
             // 設定を保存
@@ -127,14 +104,49 @@ public class ClaudeHookService : IClaudeHookService
         }
     }
 
-    private string BuildHookCommand(string exePath, string eventName, Guid sessionId, int port)
+    /// <summary>
+    /// Claude Code の type:"http" hook エントリを生成する
+    /// </summary>
+    private JsonObject BuildHookEntry(Guid sessionId, int port)
     {
-        // Windows パスのエスケープ（JSON 内でバックスラッシュをエスケープ）
-        var escapedPath = exePath.Replace("\\", "/");
-        return $"\"{escapedPath}\" --notify --event {eventName} --session {sessionId} --port {port}";
+        return new JsonObject
+        {
+            ["type"] = "http",
+            ["url"] = $"http://localhost:{port}/api/hook/claude/{sessionId}",
+            ["timeout"] = 5
+        };
     }
 
-    private void AddOrUpdateHook(JsonObject hooks, string eventName, string command)
+    /// <summary>
+    /// TerminalHub 由来の hook エントリかを判定する
+    /// 旧形式（command 型で --notify --session を含む）と新形式（http 型で /api/hook/claude/ を URL に含む）の両方をチェック
+    /// </summary>
+    private static bool IsTerminalHubHook(JsonObject hookObj)
+    {
+        var type = hookObj["type"]?.GetValue<string>();
+
+        // 新形式: type:"http" で URL に /api/hook/claude/ を含む
+        if (type == "http")
+        {
+            var url = hookObj["url"]?.GetValue<string>() ?? "";
+            if (url.Contains("/api/hook/claude/", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains("/api/hook", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        // 旧形式: type:"command" で --notify --session を含む
+        var command = hookObj["command"]?.GetValue<string>() ?? "";
+        if (command.Contains("--notify") && command.Contains("--session"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void AddOrUpdateHook(JsonObject hooks, string eventName, JsonObject newHook)
     {
         // イベントの hook 配列を取得または作成
         if (hooks[eventName] is not JsonArray hookArray)
@@ -150,27 +162,22 @@ public class ClaudeHookService : IClaudeHookService
         {
             if (hookArray[i] is JsonObject entryObj)
             {
-                // 形式1: 直接形式 {"type": "command", "command": "..."}
-                var directCmd = entryObj["command"]?.GetValue<string>() ?? "";
-                if (directCmd.Contains("--notify") && directCmd.Contains("--session"))
+                // 形式1: 直接形式 {"type": "command"|"http", ...}
+                if (IsTerminalHubHook(entryObj))
                 {
                     indicesToRemove.Add(i);
                     continue;
                 }
 
-                // 形式2: 入れ子形式 {"hooks": [{"type": "command", "command": "..."}]}
+                // 形式2: 入れ子形式 {"hooks": [{"type": "command"|"http", ...}]}
                 if (entryObj["hooks"] is JsonArray entryHooks)
                 {
                     for (int j = 0; j < entryHooks.Count; j++)
                     {
-                        if (entryHooks[j] is JsonObject hookObj)
+                        if (entryHooks[j] is JsonObject hookObj && IsTerminalHubHook(hookObj))
                         {
-                            var nestedCmd = hookObj["command"]?.GetValue<string>() ?? "";
-                            if (nestedCmd.Contains("--notify") && nestedCmd.Contains("--session"))
-                            {
-                                indicesToRemove.Add(i);
-                                break;
-                            }
+                            indicesToRemove.Add(i);
+                            break;
                         }
                     }
                 }
@@ -184,21 +191,14 @@ public class ClaudeHookService : IClaudeHookService
         }
 
         // 入れ子形式で hook を追加（Claude Code の新仕様に準拠）
-        // 形式: {"hooks": [{"type": "command", "command": "..."}]}
+        // 形式: {"hooks": [{"type": "http", "url": "...", "timeout": 5}]}
         // matcher は省略可能（すべてのイベントにマッチ）
         var newHookEntry = new JsonObject
         {
-            ["hooks"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = command
-                }
-            }
+            ["hooks"] = new JsonArray { newHook }
         };
         hookArray.Add(newHookEntry);
 
-        _logger.LogDebug("Hook を追加: {EventName} -> {Command}", eventName, command);
+        _logger.LogDebug("Hook を追加: {EventName} -> {Url}", eventName, newHook["url"]?.GetValue<string>() ?? "");
     }
 }
