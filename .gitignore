@@ -22,6 +22,10 @@ nul
 # Codex CLI 作業ディレクトリ
 .tmp-codex/
 
+# 一時ディレクトリ
+tmp/
+tools/
+
 # User-specific files
 *.rsuser
 *.suo
