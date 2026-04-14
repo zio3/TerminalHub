@@ -131,6 +131,8 @@
                                      DotNetRef="@dotNetRef"
                                      ShellPanelRefs="@shellPanelRefs"
                                      CustomCommands="@GetCustomCommandsForSession(currentSession.TerminalType)"
+                                     Text="@inputText"
+                                     TextChanged="@((string t) => inputText = t)"
                                      OnSendInput="HandleTextInputSend"
                                      OnCtrlC="SendCtrlC"
                                      OnEscape="SendEscape"

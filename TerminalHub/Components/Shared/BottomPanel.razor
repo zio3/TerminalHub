@@ -63,8 +63,8 @@
                             ClaudeModeSwitchKey="@ClaudeModeSwitchKey"
                             VoiceInputEnabled="@VoiceInputEnabled"
                             PlaceholderText="@PlaceholderText"
-                            Text="@GetTextInputPanelText(tab.Id)"
-                            TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
+                            Text="@Text"
+                            TextChanged="TextChanged"
                             OnSendInput="OnSendInput"
                             OnCtrlC="OnCtrlC"
                             OnEscape="OnEscape"
@@ -92,6 +92,10 @@
     [Parameter] public object? DotNetRef { get; set; }
     [Parameter] public Dictionary<string, ShellPanel> ShellPanelRefs { get; set; } = new();
 
+    // TextInputPanelのテキスト（親コンポーネントが保持、破棄・再生成時も入力が失われない）
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public EventCallback<string> TextChanged { get; set; }
+
     // TextInputPanelのイベント
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
     [Parameter] public EventCallback OnCtrlC { get; set; }
@@ -102,7 +106,6 @@
 
     private List<BottomPanelTabInfo> Tabs = new();
     private string ActiveTabId = "default-text";
-    private Dictionary<string, string> textInputPanelTexts = new();
 
     protected override void OnInitialized()
     {
@@ -178,16 +181,6 @@
             BottomPanelTabType.PowerShell => "bi-terminal-fill",
             _ => "bi-terminal"
         };
-    }
-
-    private string GetTextInputPanelText(string panelId)
-    {
-        return textInputPanelTexts.TryGetValue(panelId, out var text) ? text : "";
-    }
-
-    private void SetTextInputPanelText(string panelId, string text)
-    {
-        textInputPanelTexts[panelId] = text;
     }
 
     public async ValueTask DisposeAllShellPanels()
