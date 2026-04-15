@@ -252,7 +252,7 @@
         {
             // 表示名を更新
             sessionInfo.DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
-            
+
             // メモを更新
             sessionInfo.Memo = string.IsNullOrWhiteSpace(memo) ? string.Empty : memo;
 
@@ -262,13 +262,13 @@
 
             // ターミナルタイプを更新
             sessionInfo.TerminalType = selectedType;
-            
+
             // オプションを更新
             sessionInfo.Options = optionsSelector.GetOptions();
-            
+
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
-            
+
             // セッションを再起動する場合
             if (restartSession && SessionId.HasValue)
             {
@@ -278,7 +278,7 @@
                     errorMessage = "設定は保存されましたが、セッションの再起動に失敗しました。";
                 }
             }
-            
+
             await OnSettingsSaved.InvokeAsync();
             if (string.IsNullOrEmpty(errorMessage))
             {

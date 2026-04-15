@@ -98,57 +98,73 @@
         <div id="sidebar-splitter" class="sidebar-splitter"></div>
 
         <div class="p-0 position-relative terminal-main-area" style="height: 100%; flex: 1; min-width: 0; display: flex; flex-direction: column;">
-            @if (activeSessionId != null)
-            {
-                <!-- ターミナル部分 -->
-                <div class="terminal-section @(hideInputPanel ? "terminal-fullscreen" : "")" style="height: @(hideInputPanel ? "100%" : $"{terminalHeightPercent}%"); overflow: hidden;">
-                    <div class="terminal-wrapper h-100">
-                        @foreach (var session in sessions)
-                        {
-                            <div id="terminal-@session.SessionId" class="terminal-container"
-                                 style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
-                        }
-                    </div>
-                </div>
-
-                @if (!hideInputPanel)
+            @{
+                // BottomPanel を @if で囲うと activeSessionId が一時的に null になった際に
+                // インスタンスごと破棄され、配下の ShellPanel タブや TextInput 状態が消失する。
+                // そのため可視性は CSS(display) で切り替え、一度描画した BottomPanel は
+                // 最後に有効だった currentSession (bottomPanelSession) のパラメータで生存させ続ける。
+                var currentSession = activeSessionId != null
+                    ? sessions.FirstOrDefault(s => s.SessionId == activeSessionId)
+                    : null;
+                if (currentSession != null)
                 {
-                <!-- スプリッター -->
-                <div id="panel-splitter" class="panel-splitter"></div>
-                <!-- WebUI部分 -->
-                <div class="bottom-panel-section" style="height: @(100 - terminalHeightPercent)%; background-color: var(--th-surface-raised); display: flex; flex-direction: column;">
-                    @{
-                        var currentSession = sessions.FirstOrDefault(s => s.SessionId == activeSessionId);
-                    }
-                    @if (currentSession != null)
-                    {
-                        <BottomPanel @ref="bottomPanel"
-                                     TerminalType="@currentSession.TerminalType"
-                                     ClaudeModeSwitchKey="@claudeModeSwitchKey"
-                                     VoiceInputEnabled="@voiceInputEnabled"
-                                     PlaceholderText="@GetPlaceholderText(currentSession.TerminalType)"
-                                     WorkingDirectory="@currentSession.FolderPath"
-                                     DotNetRef="@dotNetRef"
-                                     ShellPanelRefs="@shellPanelRefs"
-                                     CustomCommands="@GetCustomCommandsForSession(currentSession.TerminalType)"
-                                     OnSendInput="HandleTextInputSend"
-                                     OnCtrlC="SendCtrlC"
-                                     OnEscape="SendEscape"
-                                     OnModeSwitch="SendModeSwitch"
-                                     OnAltV="SendAltV" />
-                    }
-                </div>
+                    bottomPanelSession = currentSession;
                 }
+                // キャッシュ中のセッションが削除/アーカイブされていたら参照を解放する
+                else if (bottomPanelSession != null && !sessions.Any(s => s.SessionId == bottomPanelSession.SessionId))
+                {
+                    bottomPanelSession = null;
+                }
+                var hasActiveSession = activeSessionId != null;
+                var showBottomPanel = hasActiveSession && !hideInputPanel;
             }
-            else
-            {
-                <div class="d-flex align-items-center justify-content-center h-100">
-                    <div class="text-center text-muted">
-                        <i class="bi bi-terminal" style="font-size: 4rem;"></i>
-                        <p class="mt-3">左側からセッションを選択してください</p>
-                    </div>
+
+            <!-- ターミナル部分 -->
+            <div class="terminal-section @(hideInputPanel ? "terminal-fullscreen" : "")"
+                 style="display: @(hasActiveSession ? "block" : "none"); height: @(hideInputPanel ? "100%" : $"{terminalHeightPercent}%"); overflow: hidden;">
+                <div class="terminal-wrapper h-100">
+                    @foreach (var session in sessions)
+                    {
+                        <div id="terminal-@session.SessionId" class="terminal-container"
+                             style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
+                    }
                 </div>
-            }
+            </div>
+
+            <!-- スプリッター -->
+            <div id="panel-splitter" class="panel-splitter"
+                 style="display: @(showBottomPanel ? "block" : "none");"></div>
+
+            <!-- WebUI部分（BottomPanel は破棄させないため常時描画し、CSS で可視性を制御） -->
+            <div class="bottom-panel-section"
+                 style="display: @(showBottomPanel ? "flex" : "none"); height: @(100 - terminalHeightPercent)%; background-color: var(--th-surface-raised); flex-direction: column;">
+                @if (bottomPanelSession != null)
+                {
+                    <BottomPanel @ref="bottomPanel"
+                                 TerminalType="@bottomPanelSession.TerminalType"
+                                 ClaudeModeSwitchKey="@claudeModeSwitchKey"
+                                 VoiceInputEnabled="@voiceInputEnabled"
+                                 PlaceholderText="@GetPlaceholderText(bottomPanelSession.TerminalType)"
+                                 WorkingDirectory="@bottomPanelSession.FolderPath"
+                                 DotNetRef="@dotNetRef"
+                                 ShellPanelRefs="@shellPanelRefs"
+                                 CustomCommands="@GetCustomCommandsForSession(bottomPanelSession.TerminalType)"
+                                 OnSendInput="HandleTextInputSend"
+                                 OnCtrlC="SendCtrlC"
+                                 OnEscape="SendEscape"
+                                 OnModeSwitch="SendModeSwitch"
+                                 OnAltV="SendAltV" />
+                }
+            </div>
+
+            <!-- セッション未選択時のプレースホルダー（Bootstrap の d-flex は !important なのでインラインで display 切替する） -->
+            <div class="align-items-center justify-content-center h-100"
+                 style="display: @(hasActiveSession ? "none" : "flex");">
+                <div class="text-center text-muted">
+                    <i class="bi bi-terminal" style="font-size: 4rem;"></i>
+                    <p class="mt-3">左側からセッションを選択してください</p>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -176,6 +192,9 @@
     private Toast? toast;
     private string inputText = "";
     private BottomPanel? bottomPanel;
+    // BottomPanel に渡す最後に有効だった SessionInfo。activeSessionId が一時的に null や
+    // 欠落になっても BottomPanel を生存させ続けるためのキャッシュ。
+    private SessionInfo? bottomPanelSession;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
     private string? subSessionParentSessionName = null;
@@ -755,9 +774,12 @@
     }
 
 
-    private async Task SelectSession(Guid sessionId)
+    private async Task SelectSession(Guid sessionId, bool forceReinit = false)
     {
-        if (activeSessionId == sessionId)
+        // forceReinit=true の場合は同一セッションでも再初期化を通す。
+        // これにより activeSessionId を一時的に null にする「null ダンス」を避け、
+        // BottomPanel（および配下の ShellPanel タブ）が破棄されないようにする。
+        if (activeSessionId == sessionId && !forceReinit)
         {
             return;
         }
@@ -2075,12 +2097,8 @@
             // セッション設定による再起動時も既存の購読を解除
             ConPtyConnection.UnsubscribeFromSession(sessionId);
 
-            // 一旦nullにして再選択することで、ターミナルコンポーネントを再作成
-            activeSessionId = null;
-            activeSession = null;
-            StateHasChanged();
-            await Task.Delay(100); // UIの更新を待つ
-            await SelectSession(sessionId);
+            // forceReinit で強制再初期化（activeSessionId を null にしないので BottomPanel は保持される）
+            await SelectSession(sessionId, forceReinit: true);
         }
         else
         {
@@ -2145,14 +2163,8 @@
                 // ローカルストレージに保存
                 await SaveSessionToStorageAsync(sessionInfo);
                 
-                // 強制的にセッションを再初期化するため、一旦nullにする
-                activeSessionId = null;
-                activeSession = null;
-                StateHasChanged();
-                await Task.Delay(100); // UIの更新を待つ
-                
-                // 再作成後のセッションを選択
-                await SelectSession(sessionId);
+                // forceReinit で強制再初期化（activeSessionId を null にしないので BottomPanel は保持される）
+                await SelectSession(sessionId, forceReinit: true);
                 
                 toast?.ShowInfo("--continueオプションなしでセッションを再作成しました");
             }
