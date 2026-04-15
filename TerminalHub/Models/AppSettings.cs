@@ -38,21 +38,11 @@ public class WebhookSettings
 
 /// <summary>
 /// Claude Code Hook設定
+/// 個別イベントのトグルは実装していない (Stop / UserPromptSubmit / Notification は常に一括で有効化/削除する)。
 /// </summary>
 public class ClaudeHookSettings
 {
     public bool Enabled { get; set; } = true;
-    public ClaudeHookEvents Events { get; set; } = new();
-}
-
-/// <summary>
-/// Claude Code Hookイベント設定
-/// </summary>
-public class ClaudeHookEvents
-{
-    public bool Stop { get; set; } = true;
-    public bool UserPromptSubmit { get; set; } = true;
-    public bool Notification { get; set; } = true;
 }
 
 /// <summary>

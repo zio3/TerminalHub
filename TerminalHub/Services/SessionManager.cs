@@ -93,6 +93,7 @@ namespace TerminalHub.Services
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
         private readonly IClaudeHookService? _claudeHookService;
+        private readonly IAppSettingsService? _appSettingsService;
         private readonly IServer? _server;
         private Guid? _activeSessionId;
         private readonly object _lockObject = new();
@@ -102,13 +103,14 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IServer? server = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
             _configuration = configuration;
             _gitService = gitService;
             _claudeHookService = claudeHookService;
+            _appSettingsService = appSettingsService;
             _server = server;
         }
 
@@ -801,7 +803,13 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// ClaudeCode セッションの Hook 設定をセットアップする共通処理
+        /// ClaudeCode セッション初期化／再起動の直前に呼び出し、
+        /// AppSettings.ClaudeHook.Enabled に応じて <c>.claude/settings.local.json</c> を更新する共通処理。
+        ///
+        /// 反映タイミング: このメソッドはセッション初期化・再作成・再起動の 3 箇所からしか
+        /// 呼ばれないので、設定トグルを切り替えた瞬間には反映されない。
+        /// 各ワークスペースは対応するセッションが次に起動／再起動された時点で追従する。
+        /// UI 側 (SettingsDialog) でもその旨を利用者に告知している。
         /// </summary>
         /// <param name="sessionInfo">セッション情報</param>
         /// <param name="isResetup">再セットアップかどうか（true: 常に実行、false: HookConfigured が false の場合のみ実行）</param>
@@ -809,6 +817,23 @@ namespace TerminalHub.Services
         {
             if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
                 return;
+
+            // AppSettings で Hook が無効化されている場合は既存 hook を削除してから return
+            var hookEnabled = _appSettingsService?.GetSettings().ClaudeHook.Enabled ?? true;
+            if (!hookEnabled)
+            {
+                try
+                {
+                    await _claudeHookService.RemoveHooksAsync(sessionInfo.FolderPath);
+                    sessionInfo.HookConfigured = false;
+                    _logger.LogInformation("Hook は無効のため既存 hook を削除: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Hook 削除に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+                return;
+            }
 
             // 初回セットアップの場合は既に設定済みならスキップ
             if (!isResetup && sessionInfo.HookConfigured)

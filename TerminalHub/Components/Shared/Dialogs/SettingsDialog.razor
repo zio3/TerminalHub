@@ -391,32 +391,13 @@
                                 Claude Code Hook を有効にする
                             </label>
                         </div>
+                        <small class="text-muted d-block mt-1">
+                            <i class="bi bi-info-circle me-1"></i>
+                            この設定は各セッションが次に起動／再起動されたタイミングで <code>.claude/settings.local.json</code> に反映されます。
+                            既に起動中のセッションや、TerminalHub 管理外のワークスペースには即時適用されません。
+                        </small>
                     </div>
 
-                    @if (claudeHookEnabled)
-                    {
-                        <div class="mb-3">
-                            <label class="form-label">通知するイベント</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventStop" id="hookEventStop">
-                                <label class="form-check-label" for="hookEventStop">
-                                    Stop（処理完了時）
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventUserPromptSubmit" id="hookEventUserPromptSubmit">
-                                <label class="form-check-label" for="hookEventUserPromptSubmit">
-                                    UserPromptSubmit（ユーザー入力時）
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" @bind="hookEventNotification" id="hookEventNotification">
-                                <label class="form-check-label" for="hookEventNotification">
-                                    Notification（通知発生時）
-                                </label>
-                            </div>
-                        </div>
-                    }
                             </div>
                         }
                         else if (activeTab == "sessions")
@@ -982,9 +963,6 @@
     private bool webHookEnabled = false;
     private string webHookUrl = "";
     private bool claudeHookEnabled = true;
-    private bool hookEventStop = true;
-    private bool hookEventUserPromptSubmit = true;
-    private bool hookEventNotification = true;
     private string saveMessage = "";
     private bool saveSuccess = false;
     private Dictionary<string, List<CustomCommand>> editingCommands = new();
@@ -1081,9 +1059,6 @@
 
             // Claude Hook設定
             claudeHookEnabled = settings.ClaudeHook.Enabled;
-            hookEventStop = settings.ClaudeHook.Events.Stop;
-            hookEventUserPromptSubmit = settings.ClaudeHook.Events.UserPromptSubmit;
-            hookEventNotification = settings.ClaudeHook.Events.Notification;
 
             // 特殊設定
             claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
@@ -1295,13 +1270,7 @@
                 },
                 ClaudeHook = new ClaudeHookSettings
                 {
-                    Enabled = claudeHookEnabled,
-                    Events = new ClaudeHookEvents
-                    {
-                        Stop = hookEventStop,
-                        UserPromptSubmit = hookEventUserPromptSubmit,
-                        Notification = hookEventNotification
-                    }
+                    Enabled = claudeHookEnabled
                 },
                 Special = new SpecialSettings
                 {

@@ -162,6 +162,10 @@ static async Task<int> RunNotifyModeAsync(string[] args)
 
     if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(sessionIdStr))
     {
+        // "PermissionRequest" は過去の CLI 互換のためヘルプに残置しているのみ。
+        // 実際に HookNotification.GetEventType が受理するのは
+        // Stop / UserPromptSubmit / Notification の 3 種だけで、
+        // PermissionRequest を渡しても null 扱いになる。
         Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|UserPromptSubmit|PermissionRequest> --session <sessionId> [--port <port>]");
         return 1;
     }
@@ -192,6 +196,9 @@ static async Task<int> RunNotifyModeAsync(string[] args)
             ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
         };
         using var client = new HttpClient(handler);
+        // 5 秒固定。Claude Code の hook timeout (ClaudeHookService.BuildHookEntry) と揃える。
+        // 長くすると Claude Code 側が hook の完了を待つ分、Stop / UserPromptSubmit 等の
+        // 発火に遅延が乗り、ユーザー体感の処理完了通知が遅れるため短めを維持。
         client.Timeout = TimeSpan.FromSeconds(5);
 
         var json = JsonSerializer.Serialize(notification);
