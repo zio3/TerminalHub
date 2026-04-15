@@ -5,26 +5,22 @@ using Microsoft.Extensions.Logging;
 namespace TerminalHub.Services;
 
 /// <summary>
-/// Hook イベント設定
-/// </summary>
-public class HookEventSettings
-{
-    public bool Stop { get; set; } = true;
-    public bool UserPromptSubmit { get; set; } = true;
-    public bool Notification { get; set; } = true;
-}
-
-/// <summary>
 /// Claude Code の hook 設定を管理するサービス
 /// </summary>
 public interface IClaudeHookService
 {
     /// <summary>
-    /// セッション用の hook 設定をセットアップする
+    /// セッション用の hook 設定をセットアップする (Stop / UserPromptSubmit / Notification の 3 イベントを一括登録)
     /// </summary>
     /// <param name="baseUrl">TerminalHub サーバーのベース URL（例: http://localhost:5081）。
     /// hook の送信先 URL に使われる</param>
-    Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl, HookEventSettings? eventSettings = null);
+    Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl);
+
+    /// <summary>
+    /// 既存の TerminalHub 由来の hook エントリを .claude/settings.local.json から削除する
+    /// (Hook 設定を無効化したときのクリーンアップ用途)
+    /// </summary>
+    Task RemoveHooksAsync(string folderPath);
 }
 
 /// <summary>
@@ -40,11 +36,11 @@ public class ClaudeHookService : IClaudeHookService
         _logger = logger;
     }
 
-    public async Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl, HookEventSettings? eventSettings = null)
-    {
-        // デフォルト設定を使用
-        eventSettings ??= new HookEventSettings();
+    // TerminalHub が登録する Claude Code hook イベント (一括で有効化/削除)
+    private static readonly string[] HookEventNames = { "Stop", "UserPromptSubmit", "Notification" };
 
+    public async Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl)
+    {
         try
         {
             var settingsPath = Path.Combine(folderPath, SettingsFileName);
@@ -77,13 +73,7 @@ public class ClaudeHookService : IClaudeHookService
                 settings["hooks"] = hooks;
             }
 
-            // 有効なイベントのみ hook を追加
-            var enabledEvents = new List<string>();
-            if (eventSettings.Stop) enabledEvents.Add("Stop");
-            if (eventSettings.UserPromptSubmit) enabledEvents.Add("UserPromptSubmit");
-            if (eventSettings.Notification) enabledEvents.Add("Notification");
-
-            foreach (var eventName in enabledEvents)
+            foreach (var eventName in HookEventNames)
             {
                 var hookEntry = BuildHookEntry(sessionId, baseUrl);
                 AddOrUpdateHook(hooks, eventName, hookEntry);
@@ -106,6 +96,55 @@ public class ClaudeHookService : IClaudeHookService
         }
     }
 
+    public async Task RemoveHooksAsync(string folderPath)
+    {
+        try
+        {
+            var settingsPath = Path.Combine(folderPath, SettingsFileName);
+            if (!File.Exists(settingsPath))
+            {
+                return;
+            }
+
+            var existingJson = await File.ReadAllTextAsync(settingsPath);
+            var settings = JsonNode.Parse(existingJson)?.AsObject();
+            if (settings == null || settings["hooks"] is not JsonObject hooks)
+            {
+                return;
+            }
+
+            bool modified = false;
+            foreach (var eventName in HookEventNames)
+            {
+                if (hooks[eventName] is JsonArray hookArray)
+                {
+                    var removed = RemoveTerminalHubHooksFromArray(hookArray);
+                    if (removed > 0) modified = true;
+
+                    // 空になった配列はキーごと除去
+                    if (hookArray.Count == 0)
+                    {
+                        hooks.Remove(eventName);
+                    }
+                }
+            }
+
+            if (!modified)
+            {
+                return;
+            }
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            await File.WriteAllTextAsync(settingsPath, settings.ToJsonString(options));
+            _logger.LogInformation("TerminalHub 由来の hook を削除: {Path}", settingsPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Hook 削除に失敗: {FolderPath}", folderPath);
+            throw;
+        }
+    }
+
     /// <summary>
     /// Claude Code の type:"http" hook エントリを生成する
     /// baseUrl は呼び出し元が IServerAddressesFeature から取得した実際のバインド URL（HTTP 優先）
@@ -118,6 +157,9 @@ public class ClaudeHookService : IClaudeHookService
         {
             ["type"] = "http",
             ["url"] = $"{trimmedBase}/api/hook/claude/{sessionId}",
+            // 5 秒固定。長くすると Claude Code 側が hook の完了を待つ分、
+            // Stop / UserPromptSubmit 等の発火に遅延が乗ってしまう
+            // (= ユーザー体感の処理完了通知が遅れる)。短めを維持する。
             ["timeout"] = 5
         };
     }
@@ -161,40 +203,7 @@ public class ClaudeHookService : IClaudeHookService
             hooks[eventName] = hookArray;
         }
 
-        // 既存の TerminalHub hook エントリをすべて探して削除
-        // 両方の形式をチェック：直接形式と入れ子形式
-        var indicesToRemove = new List<int>();
-        for (int i = 0; i < hookArray.Count; i++)
-        {
-            if (hookArray[i] is JsonObject entryObj)
-            {
-                // 形式1: 直接形式 {"type": "command"|"http", ...}
-                if (IsTerminalHubHook(entryObj))
-                {
-                    indicesToRemove.Add(i);
-                    continue;
-                }
-
-                // 形式2: 入れ子形式 {"hooks": [{"type": "command"|"http", ...}]}
-                if (entryObj["hooks"] is JsonArray entryHooks)
-                {
-                    for (int j = 0; j < entryHooks.Count; j++)
-                    {
-                        if (entryHooks[j] is JsonObject hookObj && IsTerminalHubHook(hookObj))
-                        {
-                            indicesToRemove.Add(i);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // インデックスを降順でソートして削除（後ろから削除しないとインデックスがずれる）
-        foreach (var index in indicesToRemove.OrderByDescending(i => i))
-        {
-            hookArray.RemoveAt(index);
-        }
+        RemoveTerminalHubHooksFromArray(hookArray);
 
         // 入れ子形式で hook を追加（Claude Code の新仕様に準拠）
         // 形式: {"hooks": [{"type": "http", "url": "...", "timeout": 5}]}
@@ -206,5 +215,45 @@ public class ClaudeHookService : IClaudeHookService
         hookArray.Add(newHookEntry);
 
         _logger.LogDebug("Hook を追加: {EventName} -> {Url}", eventName, newHook["url"]?.GetValue<string>() ?? "");
+    }
+
+    /// <summary>
+    /// hook 配列から TerminalHub 由来のエントリを全て取り除く。戻り値は削除件数。
+    /// 直接形式 {"type": "..."} と入れ子形式 {"hooks": [...]} の両方をチェックする。
+    /// </summary>
+    private static int RemoveTerminalHubHooksFromArray(JsonArray hookArray)
+    {
+        var indicesToRemove = new List<int>();
+        for (int i = 0; i < hookArray.Count; i++)
+        {
+            if (hookArray[i] is not JsonObject entryObj) continue;
+
+            // 形式1: 直接形式 {"type": "command"|"http", ...}
+            if (IsTerminalHubHook(entryObj))
+            {
+                indicesToRemove.Add(i);
+                continue;
+            }
+
+            // 形式2: 入れ子形式 {"hooks": [{"type": "command"|"http", ...}]}
+            if (entryObj["hooks"] is JsonArray entryHooks)
+            {
+                for (int j = 0; j < entryHooks.Count; j++)
+                {
+                    if (entryHooks[j] is JsonObject hookObj && IsTerminalHubHook(hookObj))
+                    {
+                        indicesToRemove.Add(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // インデックスを降順でソートして削除（後ろから削除しないとインデックスがずれる）
+        foreach (var index in indicesToRemove.OrderByDescending(i => i))
+        {
+            hookArray.RemoveAt(index);
+        }
+        return indicesToRemove.Count;
     }
 }
