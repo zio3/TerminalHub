@@ -603,17 +603,17 @@ namespace TerminalHub.Services
             // セマフォを破棄
             _outputSemaphore?.Dispose();
 
-            // プロセスを終了
+            // プロセスを終了（bun など孫プロセスが残らないようプロセスツリーごと kill）
             if (_process != null && !_process.HasExited)
             {
                 try
                 {
-                    _process.Kill();
+                    _process.Kill(entireProcessTree: true);
                     _process.WaitForExit(1000); // 1秒待機
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to terminate process");
+                    _logger.LogWarning(ex, "Failed to terminate process tree");
                 }
             }
 
