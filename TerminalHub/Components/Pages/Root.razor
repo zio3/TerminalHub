@@ -110,6 +110,11 @@
                 {
                     bottomPanelSession = currentSession;
                 }
+                // キャッシュ中のセッションが削除/アーカイブされていたら参照を解放する
+                else if (bottomPanelSession != null && !sessions.Any(s => s.SessionId == bottomPanelSession.SessionId))
+                {
+                    bottomPanelSession = null;
+                }
                 var hasActiveSession = activeSessionId != null;
                 var showBottomPanel = hasActiveSession && !hideInputPanel;
             }
@@ -771,16 +776,11 @@
 
     private async Task SelectSession(Guid sessionId, bool forceReinit = false)
     {
-        var swSel = System.Diagnostics.Stopwatch.StartNew();
-        Logger.LogInformation("[SelectSession] ▼ 開始 sessionId={SessionId} forceReinit={ForceReinit} currentActive={Active}",
-            sessionId, forceReinit, activeSessionId);
-
         // forceReinit=true の場合は同一セッションでも再初期化を通す。
         // これにより activeSessionId を一時的に null にする「null ダンス」を避け、
         // BottomPanel（および配下の ShellPanel タブ）が破棄されないようにする。
         if (activeSessionId == sessionId && !forceReinit)
         {
-            Logger.LogInformation("[SelectSession]  同一セッションかつforceReinit=false → 早期return");
             return;
         }
 
@@ -788,12 +788,10 @@
         activeSessionId = sessionId;
         StateHasChanged();
         await Task.Yield(); // UIスレッドを一旦開放しレンダリングを実行
-        Logger.LogInformation("[SelectSession]  StateHasChanged+Yield 完了 elapsed={Elapsed}ms", swSel.ElapsedMilliseconds);
 
         // 既存のアクティブターミナルを破棄
         if (activeTerminal != null)
         {
-            var swDispose = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 await activeTerminal.DisposeAsync();
@@ -803,25 +801,13 @@
                 // Ignore terminal disposal errors
             }
             activeTerminal = null;
-            Logger.LogInformation("[SelectSession]  activeTerminal.DisposeAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                swDispose.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
-        }
-        else
-        {
-            Logger.LogInformation("[SelectSession]  activeTerminal は null スキップ elapsed={Elapsed}ms", swSel.ElapsedMilliseconds);
         }
 
         // すべてのターミナルを非表示にする（JavaScriptで直接制御）
-        var swHide = System.Diagnostics.Stopwatch.StartNew();
         await TerminalService.HideAllTerminalsAsync();
-        Logger.LogInformation("[SelectSession]  HideAllTerminalsAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-            swHide.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
 
         // セッションをアクティブに
-        var swSetActive = System.Diagnostics.Stopwatch.StartNew();
         await SessionManager.SetActiveSessionAsync(sessionId);
-        Logger.LogInformation("[SelectSession]  SetActiveSessionAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-            swSetActive.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
 
 
         // ディレクトリが存在しないセッションは接続を試みない
@@ -835,12 +821,9 @@
         }
 
         // 再起動後の新しいセッションを確実に取得
-        var swGet = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             activeSession = await SessionManager.GetSessionAsync(sessionId);
-            Logger.LogInformation("[SelectSession]  GetSessionAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                swGet.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -877,24 +860,15 @@
         try
         {
             // ターミナルdivが存在するか確認し、表示する
-            var swCheck = System.Diagnostics.Stopwatch.StartNew();
             var divExists = await TerminalService.CheckElementExistsAsync($"terminal-{sessionId}");
-            Logger.LogInformation("[SelectSession]  CheckElementExistsAsync 完了 exists={Exists} took={Took}ms elapsed={Elapsed}ms",
-                divExists, swCheck.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
             if (divExists)
             {
                 // 新しいターミナルを表示
-                var swShow = System.Diagnostics.Stopwatch.StartNew();
                 await TerminalService.ShowTerminalAsync(sessionId);
-                Logger.LogInformation("[SelectSession]  ShowTerminalAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                    swShow.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
             }
 
             // ターミナルを初期化
-            var swInit = System.Diagnostics.Stopwatch.StartNew();
             await InitializeTerminal(sessionId);
-            Logger.LogInformation("[SelectSession]  InitializeTerminal 完了 took={Took}ms elapsed={Elapsed}ms",
-                swInit.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
 
             // メモリ上のバッファから復元（リサイズトリックの代わり）
             if (selectedSession != null && activeTerminal != null)
@@ -934,28 +908,19 @@
                         Logger.LogDebug("[SelectSession] バッファ末尾500文字: {Tail}", tailEscaped);
                     }
 
-                    var swWrite = System.Diagnostics.Stopwatch.StartNew();
                     await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
-                    Logger.LogInformation("[SelectSession]  バッファ書き込み完了 took={Took}ms elapsed={Elapsed}ms",
-                        swWrite.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
+                    Logger.LogInformation("[SelectSession] バッファ書き込み完了");
                 }
 
                 await Task.Delay(50);
-                Logger.LogInformation("[SelectSession]  Task.Delay(50) 完了 elapsed={Elapsed}ms", swSel.ElapsedMilliseconds);
             }
 
             // 最終リサイズ: スキップを解除してからfit()を実行し、正しいサイズをConPTYに通知
             _skipConPtyResize = false;
             if (activeTerminal != null)
             {
-                var swResize = System.Diagnostics.Stopwatch.StartNew();
                 await TerminalService.ResizeTerminalAsync(activeTerminal);
-                Logger.LogInformation("[SelectSession]  ResizeTerminalAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                    swResize.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
-                var swRefresh = System.Diagnostics.Stopwatch.StartNew();
                 await TerminalService.RefreshTerminalAsync(sessionId);
-                Logger.LogInformation("[SelectSession]  RefreshTerminalAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                    swRefresh.ElapsedMilliseconds, swSel.ElapsedMilliseconds);
             }
         }
         finally
@@ -993,17 +958,13 @@
             // エラーは無視
         }
 
-        Logger.LogInformation("[SelectSession] ▲ 終了 sessionId={SessionId} totalElapsed={Elapsed}ms", sessionId, swSel.ElapsedMilliseconds);
         // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
     }
 
     private async Task InitializeTerminal(Guid sessionId)
     {
-        var swInit = System.Diagnostics.Stopwatch.StartNew();
-        Logger.LogInformation("[InitializeTerminal] ▼ 開始 sessionId={SessionId} fontSize={FontSize}", sessionId, terminalFontSize);
         terminalDotNetRef ??= DotNetObjectReference.Create<object>(this);
         activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, terminalDotNetRef, terminalFontSize);
-        Logger.LogInformation("[InitializeTerminal] ▲ 終了 sessionId={SessionId} took={Took}ms", sessionId, swInit.ElapsedMilliseconds);
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data)
@@ -2114,15 +2075,9 @@
 
     private async Task OnSessionSettingsSaved()
     {
-        var swTotal = System.Diagnostics.Stopwatch.StartNew();
-        Logger.LogInformation("[SettingsSaved] ▼ 開始 settingsSessionId={SettingsSessionId} activeSessionId={ActiveSessionId}",
-            settingsSessionId, activeSessionId);
-
         showSessionSettingsDialog = false;
         // セッション一覧を更新
         sessions = SessionManager.GetAllSessions().ToList();
-        Logger.LogInformation("[SettingsSaved]  GetAllSessions 完了 sessions={Count} elapsed={Elapsed}ms",
-            sessions.Count, swTotal.ElapsedMilliseconds);
 
         // 変更されたセッションをDBに保存
         if (settingsSessionId.HasValue)
@@ -2130,10 +2085,7 @@
             var savedSession = SessionManager.GetSessionInfo(settingsSessionId.Value);
             if (savedSession != null)
             {
-                var swSave = System.Diagnostics.Stopwatch.StartNew();
                 await SaveSessionToStorageAsync(savedSession);
-                Logger.LogInformation("[SettingsSaved]  SaveSessionToStorage 完了 took={Took}ms totalElapsed={Elapsed}ms",
-                    swSave.ElapsedMilliseconds, swTotal.ElapsedMilliseconds);
             }
         }
 
@@ -2143,18 +2095,10 @@
             var sessionId = settingsSessionId.Value;
 
             // セッション設定による再起動時も既存の購読を解除
-            var swUnsub = System.Diagnostics.Stopwatch.StartNew();
             ConPtyConnection.UnsubscribeFromSession(sessionId);
-            Logger.LogInformation("[SettingsSaved]  UnsubscribeFromSession 完了 took={Took}ms totalElapsed={Elapsed}ms",
-                swUnsub.ElapsedMilliseconds, swTotal.ElapsedMilliseconds);
 
             // forceReinit で強制再初期化（activeSessionId を null にしないので BottomPanel は保持される）
-            Logger.LogInformation("[SettingsSaved]  SelectSession(forceReinit=true) 呼び出し前 totalElapsed={Elapsed}ms",
-                swTotal.ElapsedMilliseconds);
-            var swSelect = System.Diagnostics.Stopwatch.StartNew();
             await SelectSession(sessionId, forceReinit: true);
-            Logger.LogInformation("[SettingsSaved]  SelectSession 完了 took={Took}ms totalElapsed={Elapsed}ms",
-                swSelect.ElapsedMilliseconds, swTotal.ElapsedMilliseconds);
         }
         else
         {
@@ -2162,7 +2106,6 @@
         }
 
         toast?.ShowSuccess("セッション設定を保存しました");
-        Logger.LogInformation("[SettingsSaved] ▲ 終了 totalElapsed={Elapsed}ms", swTotal.ElapsedMilliseconds);
     }
 
     private async Task RefreshGitStatus(Guid sessionId)

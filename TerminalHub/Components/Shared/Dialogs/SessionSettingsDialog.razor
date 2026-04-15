@@ -250,10 +250,6 @@
 
         try
         {
-            var swSave = Stopwatch.StartNew();
-            Logger.LogInformation("[SessionSettingsDialog.Save] ▼ 開始 sessionId={SessionId} restartSession={Restart}",
-                SessionId, restartSession);
-
             // 表示名を更新
             sessionInfo.DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
 
@@ -271,29 +267,19 @@
             sessionInfo.Options = optionsSelector.GetOptions();
 
             // 保存
-            var swSaveInfo = Stopwatch.StartNew();
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
-            Logger.LogInformation("[SessionSettingsDialog.Save]  SaveSessionInfoAsync 完了 took={Took}ms elapsed={Elapsed}ms",
-                swSaveInfo.ElapsedMilliseconds, swSave.ElapsedMilliseconds);
 
             // セッションを再起動する場合
             if (restartSession && SessionId.HasValue)
             {
-                var swRestart = Stopwatch.StartNew();
                 var success = await SessionManager.RestartSessionAsync(SessionId.Value);
-                Logger.LogInformation("[SessionSettingsDialog.Save]  RestartSessionAsync 完了 success={Success} took={Took}ms elapsed={Elapsed}ms",
-                    success, swRestart.ElapsedMilliseconds, swSave.ElapsedMilliseconds);
                 if (!success)
                 {
                     errorMessage = "設定は保存されましたが、セッションの再起動に失敗しました。";
                 }
             }
 
-            var swInvoke = Stopwatch.StartNew();
             await OnSettingsSaved.InvokeAsync();
-            Logger.LogInformation("[SessionSettingsDialog.Save]  OnSettingsSaved.InvokeAsync 完了 took={Took}ms totalElapsed={Elapsed}ms",
-                swInvoke.ElapsedMilliseconds, swSave.ElapsedMilliseconds);
-            Logger.LogInformation("[SessionSettingsDialog.Save] ▲ 終了 totalElapsed={Elapsed}ms", swSave.ElapsedMilliseconds);
             if (string.IsNullOrEmpty(errorMessage))
             {
                 errorMessage = "";
