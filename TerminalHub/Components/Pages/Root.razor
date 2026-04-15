@@ -1646,7 +1646,7 @@
     private async Task SendCustomKey(string keyName)
     {
         if (activeSession == null) return;
-        if (KeySequencePresets.All.TryGetValue(keyName, out var preset))
+        if (KeySequencePresets.TryGet(keyName, out var preset))
         {
             await activeSession.WriteAsync(preset.EscapeSequence);
         }

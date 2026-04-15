@@ -1121,7 +1121,7 @@
                 if (!newCommandTypes.ContainsKey(type))
                     newCommandTypes[type] = CustomCommandType.Text;
                 if (!newCommandKeyNames.ContainsKey(type))
-                    newCommandKeyNames[type] = KeySequencePresets.All.Keys.First();
+                    newCommandKeyNames[type] = KeySequencePresets.DefaultKey;
             }
 
             // リモート起動設定
@@ -1444,7 +1444,7 @@
         if (type == CustomCommandType.KeySequence)
         {
             var keyName = newCommandKeyNames.GetValueOrDefault(terminalType, "");
-            if (string.IsNullOrEmpty(keyName) || !KeySequencePresets.All.ContainsKey(keyName)) return;
+            if (!KeySequencePresets.Contains(keyName)) return;
 
             editingCommands[terminalType].Add(new CustomCommand
             {
