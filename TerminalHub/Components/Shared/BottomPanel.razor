@@ -66,6 +66,7 @@
                             Text="@GetTextInputPanelText(tab.Id)"
                             TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
                             OnSendInput="OnSendInput"
+                            OnSendCustomKey="OnSendCustomKey"
                             OnCtrlC="OnCtrlC"
                             OnEscape="OnEscape"
                             OnModeSwitch="OnModeSwitch"
@@ -94,6 +95,7 @@
 
     // TextInputPanelのイベント
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
+    [Parameter] public EventCallback<string> OnSendCustomKey { get; set; }
     [Parameter] public EventCallback OnCtrlC { get; set; }
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }

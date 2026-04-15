@@ -114,12 +114,26 @@ public class CustomCommandSettings
 }
 
 /// <summary>
+/// カスタムコマンドの種別
+/// </summary>
+public enum CustomCommandType
+{
+    /// <summary>テキスト送信（末尾に Enter を自動付与）</summary>
+    Text = 0,
+    /// <summary>プリセットキーのエスケープシーケンス送信（Enter は付与しない）</summary>
+    KeySequence = 1
+}
+
+/// <summary>
 /// カスタムコマンド
 /// </summary>
 public class CustomCommand
 {
     public string? Title { get; set; }
     public string CommandText { get; set; } = "";
+    public CustomCommandType Type { get; set; } = CustomCommandType.Text;
+    /// <summary>KeySequence 時に参照するプリセットキー名（KeySequencePresets.All のキー）</summary>
+    public string? KeyName { get; set; }
 }
 
 /// <summary>

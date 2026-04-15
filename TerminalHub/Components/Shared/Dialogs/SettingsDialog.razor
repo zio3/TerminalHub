@@ -575,17 +575,38 @@
                                     <div class="mb-4">
                                         <label class="form-label fw-bold">@displayName</label>
                                         <div class="input-group input-group-sm mb-2">
+                                            <select class="form-select" style="max-width: 110px;"
+                                                    @bind="newCommandTypes[type]">
+                                                <option value="@CustomCommandType.Text">テキスト</option>
+                                                <option value="@CustomCommandType.KeySequence">キー</option>
+                                            </select>
                                             <input type="text" class="form-control"
                                                    @bind="newCommandTitles[type]" @bind:event="oninput"
-                                                   placeholder="タイトル（省略可）" style="max-width: 120px;" />
-                                            <input type="text" class="form-control"
-                                                   @bind="newCommandTexts[type]" @bind:event="oninput"
-                                                   placeholder="コマンド（例: /plan）" />
-                                            <button class="btn btn-outline-primary" type="button"
-                                                    @onclick="() => AddCommand(type)"
-                                                    disabled="@string.IsNullOrWhiteSpace(newCommandTexts.GetValueOrDefault(type))">
-                                                <i class="bi bi-plus-lg"></i>
-                                            </button>
+                                                   placeholder="タイトル（省略可）" style="max-width: 140px;" />
+                                            @if (newCommandTypes.GetValueOrDefault(type, CustomCommandType.Text) == CustomCommandType.KeySequence)
+                                            {
+                                                <select class="form-select" @bind="newCommandKeyNames[type]">
+                                                    @foreach (var preset in KeySequencePresets.All)
+                                                    {
+                                                        <option value="@preset.Key">@preset.Value.DisplayName</option>
+                                                    }
+                                                </select>
+                                                <button class="btn btn-outline-primary" type="button"
+                                                        @onclick="() => AddCommand(type)">
+                                                    <i class="bi bi-plus-lg"></i>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <input type="text" class="form-control"
+                                                       @bind="newCommandTexts[type]" @bind:event="oninput"
+                                                       placeholder="コマンド（例: /plan）" />
+                                                <button class="btn btn-outline-primary" type="button"
+                                                        @onclick="() => AddCommand(type)"
+                                                        disabled="@string.IsNullOrWhiteSpace(newCommandTexts.GetValueOrDefault(type))">
+                                                    <i class="bi bi-plus-lg"></i>
+                                                </button>
+                                            }
                                         </div>
                                         @if (editingCommands.ContainsKey(type) && editingCommands[type].Any())
                                         {
@@ -594,16 +615,24 @@
                                                 {
                                                     var idx = i;
                                                     var cmd = editingCommands[type][i];
+                                                    var isKey = cmd.Type == CustomCommandType.KeySequence;
+                                                    var bodyText = isKey
+                                                        ? (KeySequencePresets.GetDisplayName(cmd.KeyName) ?? cmd.KeyName ?? "?")
+                                                        : cmd.CommandText;
                                                     <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
                                                         <small>
+                                                            @if (isKey)
+                                                            {
+                                                                <i class="bi bi-keyboard me-1 text-muted"></i>
+                                                            }
                                                             @if (!string.IsNullOrEmpty(cmd.Title))
                                                             {
                                                                 <strong>@cmd.Title</strong>
-                                                                <span class="text-muted ms-2">@cmd.CommandText</span>
+                                                                <span class="text-muted ms-2">@bodyText</span>
                                                             }
                                                             else
                                                             {
-                                                                <span>@cmd.CommandText</span>
+                                                                <span>@bodyText</span>
                                                             }
                                                         </small>
                                                         <button class="btn btn-outline-danger btn-sm border-0" type="button"
@@ -961,6 +990,8 @@
     private Dictionary<string, List<CustomCommand>> editingCommands = new();
     private Dictionary<string, string> newCommandTitles = new();
     private Dictionary<string, string> newCommandTexts = new();
+    private Dictionary<string, CustomCommandType> newCommandTypes = new();
+    private Dictionary<string, string> newCommandKeyNames = new();
     private string activeTab = "general";
     private bool remoteLaunchEnabled = false;
     private string remoteLaunchTopicGuid = "";
@@ -1087,6 +1118,10 @@
                     newCommandTitles[type] = "";
                 if (!newCommandTexts.ContainsKey(type))
                     newCommandTexts[type] = "";
+                if (!newCommandTypes.ContainsKey(type))
+                    newCommandTypes[type] = CustomCommandType.Text;
+                if (!newCommandKeyNames.ContainsKey(type))
+                    newCommandKeyNames[type] = KeySequencePresets.All.Keys.First();
             }
 
             // リモート起動設定
@@ -1399,17 +1434,38 @@
 
     private void AddCommand(string terminalType)
     {
-        var text = newCommandTexts.GetValueOrDefault(terminalType, "");
-        if (string.IsNullOrWhiteSpace(text)) return;
-
         if (!editingCommands.ContainsKey(terminalType))
             editingCommands[terminalType] = new();
 
-        editingCommands[terminalType].Add(new CustomCommand
+        var type = newCommandTypes.GetValueOrDefault(terminalType, CustomCommandType.Text);
+        var rawTitle = newCommandTitles.GetValueOrDefault(terminalType, "").Trim();
+        var title = string.IsNullOrWhiteSpace(rawTitle) ? null : rawTitle;
+
+        if (type == CustomCommandType.KeySequence)
         {
-            Title = string.IsNullOrWhiteSpace(newCommandTitles.GetValueOrDefault(terminalType)) ? null : newCommandTitles[terminalType].Trim(),
-            CommandText = text.Trim()
-        });
+            var keyName = newCommandKeyNames.GetValueOrDefault(terminalType, "");
+            if (string.IsNullOrEmpty(keyName) || !KeySequencePresets.All.ContainsKey(keyName)) return;
+
+            editingCommands[terminalType].Add(new CustomCommand
+            {
+                Type = CustomCommandType.KeySequence,
+                Title = title,
+                KeyName = keyName,
+                CommandText = ""
+            });
+        }
+        else
+        {
+            var text = newCommandTexts.GetValueOrDefault(terminalType, "");
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            editingCommands[terminalType].Add(new CustomCommand
+            {
+                Type = CustomCommandType.Text,
+                Title = title,
+                CommandText = text.Trim()
+            });
+        }
 
         newCommandTitles[terminalType] = "";
         newCommandTexts[terminalType] = "";
