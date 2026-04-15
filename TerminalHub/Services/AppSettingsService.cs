@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using TerminalHub.Models;
 
@@ -38,7 +39,10 @@ public class AppSettingsService : IAppSettingsService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        // enum は文字列で保存する (JSON を直接開いた時の可読性と、enum 値の並び替え耐性のため)。
+        // allowIntegerValues=true で既存の数値表記の JSON も引き続き読める。
+        Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase, allowIntegerValues: true) }
     };
 
     public AppSettingsService(
