@@ -803,19 +803,16 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// ClaudeCode セッションの Hook 設定をセットアップする共通処理
-        /// </summary>
-        /// <param name="sessionInfo">セッション情報</param>
-        /// <param name="isResetup">再セットアップかどうか（true: 常に実行、false: HookConfigured が false の場合のみ実行）</param>
-        /// <summary>
         /// ClaudeCode セッション初期化／再起動の直前に呼び出し、
-        /// AppSettings.ClaudeHook.Enabled に応じて <c>.claude/settings.local.json</c> を更新する。
+        /// AppSettings.ClaudeHook.Enabled に応じて <c>.claude/settings.local.json</c> を更新する共通処理。
         ///
-        /// 反映タイミング: このメソッドは **セッション初期化・再作成・再起動** の 3 箇所からしか
+        /// 反映タイミング: このメソッドはセッション初期化・再作成・再起動の 3 箇所からしか
         /// 呼ばれないので、設定トグルを切り替えた瞬間には反映されない。
         /// 各ワークスペースは対応するセッションが次に起動／再起動された時点で追従する。
         /// UI 側 (SettingsDialog) でもその旨を利用者に告知している。
         /// </summary>
+        /// <param name="sessionInfo">セッション情報</param>
+        /// <param name="isResetup">再セットアップかどうか（true: 常に実行、false: HookConfigured が false の場合のみ実行）</param>
         private async Task SetupClaudeHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
         {
             if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)

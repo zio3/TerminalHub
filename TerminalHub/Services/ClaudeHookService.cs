@@ -31,13 +31,13 @@ public class ClaudeHookService : IClaudeHookService
     private readonly ILogger<ClaudeHookService> _logger;
     private const string SettingsFileName = ".claude/settings.local.json";
 
+    // TerminalHub が登録する Claude Code hook イベント (一括で有効化/削除)
+    private static readonly string[] HookEventNames = { "Stop", "UserPromptSubmit", "Notification" };
+
     public ClaudeHookService(ILogger<ClaudeHookService> logger)
     {
         _logger = logger;
     }
-
-    // TerminalHub が登録する Claude Code hook イベント (一括で有効化/削除)
-    private static readonly string[] HookEventNames = { "Stop", "UserPromptSubmit", "Notification" };
 
     public async Task SetupHooksAsync(Guid sessionId, string folderPath, string baseUrl)
     {
@@ -116,16 +116,18 @@ public class ClaudeHookService : IClaudeHookService
             bool modified = false;
             foreach (var eventName in HookEventNames)
             {
-                if (hooks[eventName] is JsonArray hookArray)
-                {
-                    var removed = RemoveTerminalHubHooksFromArray(hookArray);
-                    if (removed > 0) modified = true;
+                if (hooks[eventName] is not JsonArray hookArray) continue;
 
-                    // 空になった配列はキーごと除去
-                    if (hookArray.Count == 0)
-                    {
-                        hooks.Remove(eventName);
-                    }
+                if (RemoveTerminalHubHooksFromArray(hookArray) > 0)
+                {
+                    modified = true;
+                }
+
+                // 空になった配列はキーごと除去（modified もこの時点で true にして書き戻し対象にする）
+                if (hookArray.Count == 0)
+                {
+                    hooks.Remove(eventName);
+                    modified = true;
                 }
             }
 
