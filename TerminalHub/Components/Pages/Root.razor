@@ -150,6 +150,7 @@
                                  ShellPanelRefs="@shellPanelRefs"
                                  CustomCommands="@GetCustomCommandsForSession(bottomPanelSession.TerminalType)"
                                  OnSendInput="HandleTextInputSend"
+                                 OnSendCustomKey="SendCustomKey"
                                  OnCtrlC="SendCtrlC"
                                  OnEscape="SendEscape"
                                  OnModeSwitch="SendModeSwitch"
@@ -1641,6 +1642,19 @@
 
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
+
+    private async Task SendCustomKey(string keyName)
+    {
+        if (activeSession == null) return;
+        if (KeySequencePresets.All.TryGetValue(keyName, out var preset))
+        {
+            await activeSession.WriteAsync(preset.EscapeSequence);
+        }
+        else
+        {
+            Logger.LogWarning("未定義のキーシーケンスプリセットが指定されました: {KeyName}", keyName);
+        }
+    }
 
     private async Task SendCtrlC()
     {

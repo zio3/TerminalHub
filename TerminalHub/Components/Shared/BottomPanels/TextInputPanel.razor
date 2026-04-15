@@ -48,11 +48,21 @@
                 @foreach (var (cmd, index) in CustomCommands.Select((c, i) => (c, i)))
                 {
                     var idx = index;
+                    var isKey = cmd.Type == CustomCommandType.KeySequence;
+                    var keyDisplay = isKey ? KeySequencePresets.GetDisplayName(cmd.KeyName) : null;
+                    var label = !string.IsNullOrEmpty(cmd.Title) ? cmd.Title
+                                : isKey ? (keyDisplay ?? cmd.KeyName ?? "?")
+                                : cmd.CommandText;
+                    var tooltip = isKey ? (keyDisplay ?? cmd.KeyName ?? "") : cmd.CommandText;
                     <button class="btn btn-secondary @(pressedCommandIndex == idx ? "active" : "")"
                             @onclick="() => OnCustomCommandClick(idx)"
-                            title="@cmd.CommandText"
+                            title="@tooltip"
                             style="@(pressedCommandIndex == idx ? "transform: scale(0.95);" : "")">
-                        @(string.IsNullOrEmpty(cmd.Title) ? cmd.CommandText : cmd.Title)
+                        @if (isKey)
+                        {
+                            <i class="bi bi-keyboard d-none d-md-inline me-1"></i>
+                        }
+                        @label
                     </button>
                 }
                 @if (VoiceInputEnabled)
@@ -87,6 +97,7 @@
     [Parameter] public EventCallback<string> TextChanged { get; set; }
 
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
+    [Parameter] public EventCallback<string> OnSendCustomKey { get; set; }
     [Parameter] public EventCallback OnCtrlC { get; set; }
     [Parameter] public EventCallback OnEscape { get; set; }
     [Parameter] public EventCallback OnModeSwitch { get; set; }
@@ -208,7 +219,15 @@
     {
         pressedCommandIndex = index;
         StateHasChanged();
-        await OnSendInput.InvokeAsync(CustomCommands[index].CommandText);
+        var cmd = CustomCommands[index];
+        if (cmd.Type == CustomCommandType.KeySequence && !string.IsNullOrEmpty(cmd.KeyName))
+        {
+            await OnSendCustomKey.InvokeAsync(cmd.KeyName);
+        }
+        else
+        {
+            await OnSendInput.InvokeAsync(cmd.CommandText);
+        }
         await Task.Delay(100);
         pressedCommandIndex = null;
         StateHasChanged();
