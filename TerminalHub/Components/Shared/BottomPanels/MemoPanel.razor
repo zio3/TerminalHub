@@ -1,0 +1,104 @@
+@using TerminalHub.Models
+@implements IAsyncDisposable
+
+<div class="p-3 h-100 d-flex flex-column">
+    <textarea id="@($"memoText-{MemoId}")"
+              class="form-control flex-grow-1"
+              @bind="bodyText"
+              @bind:event="oninput"
+              placeholder="メモ... (Enter で改行、自動保存)"
+              style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
+    </textarea>
+</div>
+
+@code {
+    [Parameter] public Guid MemoId { get; set; }
+    [Parameter] public string Body { get; set; } = "";
+    [Parameter] public EventCallback<string> BodyChanged { get; set; }
+
+    // デバウンス間隔 (ms)。短すぎると毎入力で I/O が走る、長すぎるとアプリ終了時の消失リスクが増える。
+    private const int DebounceMs = 1000;
+
+    private string bodyText
+    {
+        get => Body;
+        set
+        {
+            if (Body == value) return;
+            Body = value;
+            ScheduleFlush(value);
+        }
+    }
+
+    private CancellationTokenSource? _debounceCts;
+    private string? _pendingBody;
+    private Guid _lastMemoId;
+
+    protected override void OnParametersSet()
+    {
+        // MemoId が切り替わった (= 別タブへ) 場合は、保留中の保存を先にフラッシュしてから差し替える
+        if (_lastMemoId != Guid.Empty && _lastMemoId != MemoId)
+        {
+            _ = FlushNowAsync(_lastMemoId);
+        }
+        _lastMemoId = MemoId;
+    }
+
+    private void ScheduleFlush(string value)
+    {
+        _pendingBody = value;
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+        var targetMemoId = MemoId;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(DebounceMs, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+            if (token.IsCancellationRequested) return;
+            await InvokeAsync(async () =>
+            {
+                if (_pendingBody == null || targetMemoId != MemoId) return;
+                var bodyToFlush = _pendingBody;
+                _pendingBody = null;
+                await BodyChanged.InvokeAsync(bodyToFlush);
+            });
+        });
+    }
+
+    private async Task FlushNowAsync(Guid forMemoId)
+    {
+        _debounceCts?.Cancel();
+        if (_pendingBody != null && forMemoId == _lastMemoId)
+        {
+            var bodyToFlush = _pendingBody;
+            _pendingBody = null;
+            await BodyChanged.InvokeAsync(bodyToFlush);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceCts?.Cancel();
+        if (_pendingBody != null)
+        {
+            var bodyToFlush = _pendingBody;
+            _pendingBody = null;
+            try
+            {
+                await BodyChanged.InvokeAsync(bodyToFlush);
+            }
+            catch
+            {
+                // dispose 経由のフラッシュ失敗は黙殺
+            }
+        }
+    }
+}

@@ -142,6 +142,7 @@
                 {
                     <BottomPanel @ref="bottomPanel"
                                  TerminalType="@bottomPanelSession.TerminalType"
+                                 CurrentSessionId="@bottomPanelSession.SessionId"
                                  ClaudeModeSwitchKey="@claudeModeSwitchKey"
                                  VoiceInputEnabled="@voiceInputEnabled"
                                  PlaceholderText="@GetPlaceholderText(bottomPanelSession.TerminalType)"
@@ -1303,6 +1304,7 @@
     {
         SessionManager.DeleteSession(sessionId);
         await DeleteSessionFromStorageAsync(sessionId);
+        bottomPanel?.RemoveMemoTabsForSession(sessionId);
 
         sessions = SessionManager.GetAllSessions().ToList();
         StateHasChanged();
@@ -1315,6 +1317,7 @@
         {
             SessionManager.DeleteSession(session.SessionId);
             await DeleteSessionFromStorageAsync(session.SessionId);
+            bottomPanel?.RemoveMemoTabsForSession(session.SessionId);
         }
 
         sessions = SessionManager.GetAllSessions().ToList();

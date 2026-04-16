@@ -16,7 +16,8 @@ namespace TerminalHub.Models
     {
         TextInput,
         CommandPrompt,
-        PowerShell
+        PowerShell,
+        Memo
     }
 
     public class BottomPanelTabInfo
@@ -25,6 +26,10 @@ namespace TerminalHub.Models
         public BottomPanelTabType Type { get; set; }
         public string DisplayName { get; set; } = "";
         public bool IsDefault { get; set; } = false;
+        /// <summary>Memo タブ用: 属するセッション (null なら全セッション共通タブ)</summary>
+        public Guid? SessionId { get; set; }
+        /// <summary>Memo タブ用: 対応する SessionMemo.MemoId</summary>
+        public Guid? MemoId { get; set; }
     }
 
     public class SessionInfo
