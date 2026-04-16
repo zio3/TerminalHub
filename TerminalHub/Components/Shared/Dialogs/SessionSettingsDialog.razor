@@ -324,10 +324,11 @@
         {
             if (Directory.Exists(path))
             {
-                // Windows の explorer.exe はスラッシュをオプションとして解釈するため、
-                // バックスラッシュに正規化してから渡す
-                var normalizedPath = path.Replace('/', '\\');
-                Process.Start("explorer.exe", $"\"{normalizedPath}\"");
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = path.Replace('/', '\\'),
+                    UseShellExecute = true,
+                });
             }
         }
         catch (Exception ex)

@@ -1208,7 +1208,11 @@
             {
                 Directory.CreateDirectory(logPath);
             }
-            System.Diagnostics.Process.Start("explorer.exe", logPath);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = logPath,
+                UseShellExecute = true,
+            });
         }
         catch (Exception ex)
         {
