@@ -126,15 +126,32 @@ namespace TerminalHub.Services
 
             try
             {
-                // UPSERT (INSERT OR REPLACE)
+                // INSERT ... ON CONFLICT DO UPDATE (UPSERT):
+                // INSERT OR REPLACE を使うと PK 衝突時に内部 DELETE が走り、FK の
+                // ON DELETE CASCADE が発動して関連する SessionMemos 等が巻き添えで消える。
+                // UPSERT なら物理 UPDATE なので CASCADE は発動しない。
                 await connection.ExecuteNonQueryAsync(@"
-                    INSERT OR REPLACE INTO Sessions
+                    INSERT INTO Sessions
                     (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                      IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
                      IsPinned, PinPriority)
                     VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                             @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                            @isPinned, @pinPriority)",
+                            @isPinned, @pinPriority)
+                    ON CONFLICT(SessionId) DO UPDATE SET
+                        DisplayName = excluded.DisplayName,
+                        FolderPath = excluded.FolderPath,
+                        FolderName = excluded.FolderName,
+                        CreatedAt = excluded.CreatedAt,
+                        LastAccessedAt = excluded.LastAccessedAt,
+                        IsActive = excluded.IsActive,
+                        TerminalType = excluded.TerminalType,
+                        Memo = excluded.Memo,
+                        IsArchived = excluded.IsArchived,
+                        ArchivedAt = excluded.ArchivedAt,
+                        ParentSessionId = excluded.ParentSessionId,
+                        IsPinned = excluded.IsPinned,
+                        PinPriority = excluded.PinPriority",
                     ("@sessionId", session.SessionId.ToString()),
                     ("@displayName", session.DisplayName),
                     ("@folderPath", session.FolderPath),
@@ -207,10 +224,11 @@ namespace TerminalHub.Services
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
-            // 外部キー制約でオプションとスクリプトも自動削除
+            // 外部キー PRAGMA に依存せず明示的に関連レコードを削除
             await connection.ExecuteNonQueryAsync(@"
                 DELETE FROM SessionOptions WHERE SessionId = @sessionId;
                 DELETE FROM CheckedScripts WHERE SessionId = @sessionId;
+                DELETE FROM SessionMemos WHERE SessionId = @sessionId;
                 DELETE FROM Sessions WHERE SessionId = @sessionId;",
                 ("@sessionId", sessionId.ToString()));
         }

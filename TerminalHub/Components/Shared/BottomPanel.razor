@@ -1,17 +1,37 @@
 @using TerminalHub.Models
+@using TerminalHub.Services
 @using TerminalHub.Components.Shared.BottomPanels
+@inject ISessionMemoRepository MemoRepository
+@inject IJSRuntime JSRuntime
+@inject ILogger<BottomPanel> Logger
 @implements IAsyncDisposable
 
 <!-- タブヘッダー -->
 <ul class="nav nav-tabs px-3 pt-2" style="flex-shrink: 0;">
-    @foreach (var tab in Tabs)
+    @foreach (var tab in Tabs.Where(IsTabVisible))
     {
+        var isEditing = editingTabId == tab.Id;
         <li class="nav-item">
             <button class="nav-link @(ActiveTabId == tab.Id ? "active" : "") d-flex align-items-center gap-1"
                type="button"
                @onclick="async () => await SelectTab(tab.Id)">
                 <i class="bi @GetTabIcon(tab.Type)"></i>
-                <span>@tab.DisplayName</span>
+                @if (isEditing && tab.Type == BottomPanelTabType.Memo)
+                {
+                    <input type="text" class="form-control form-control-sm"
+                           style="width: 140px; font-size: 0.85rem;"
+                           @ref="editingInputRef"
+                           @bind="editingTitle"
+                           @bind:event="oninput"
+                           @onkeydown="@(async (e) => await OnTitleEditKeyDown(e, tab))"
+                           @onclick:stopPropagation="true"
+                           @onblur="@(async () => await CommitTitleEdit(tab))" />
+                }
+                else
+                {
+                    <span @ondblclick="@(() => StartTitleEdit(tab))"
+                          @ondblclick:stopPropagation="true">@tab.DisplayName</span>
+                }
                 @if (!tab.IsDefault)
                 {
                     <button type="button" class="btn-close ms-1" style="font-size: 0.6rem; opacity: 0.7;"
@@ -47,12 +67,18 @@
                     <i class="bi bi-terminal-fill me-2"></i>PowerShellを追加
                 </button>
             </li>
+            <li>
+                <button class="dropdown-item" type="button"
+                   @onclick="AddMemoTab">
+                    <i class="bi bi-journal-text me-2"></i>メモを追加
+                </button>
+            </li>
         </ul>
     </li>
 </ul>
 
 <!-- タブコンテンツ（全タブを常時描画、非アクティブはdisplay:noneで隠す） -->
-@foreach (var tab in Tabs)
+@foreach (var tab in Tabs.Where(IsTabVisible))
 {
     var isActive = tab.Id == ActiveTabId;
     <div class="flex-grow-1" style="overflow-y: auto; @(isActive ? "" : "display: none;")">
@@ -81,6 +107,12 @@
                         DotNetRef="@DotNetRef"
                         OnPanelReady="@(panel => ShellPanelRefs[tab.Id] = panel)" />
         }
+        else if (tab.Type == BottomPanelTabType.Memo && tab.MemoId is Guid memoId)
+        {
+            <MemoPanel MemoId="@memoId"
+                       Body="@GetMemoBody(memoId)"
+                       BodyChanged="@(body => OnMemoBodyChanged(memoId, body))" />
+        }
     </div>
 }
 
@@ -92,6 +124,7 @@
     [Parameter] public string WorkingDirectory { get; set; } = "";
     [Parameter] public object? DotNetRef { get; set; }
     [Parameter] public Dictionary<string, ShellPanel> ShellPanelRefs { get; set; } = new();
+    [Parameter] public Guid? CurrentSessionId { get; set; }
 
     // TextInputPanelのイベント
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
@@ -105,6 +138,15 @@
     private List<BottomPanelTabInfo> Tabs = new();
     private string ActiveTabId = "default-text";
     private Dictionary<string, string> textInputPanelTexts = new();
+    private Dictionary<Guid, string> memoBodies = new();
+    private HashSet<Guid> loadedMemoSessions = new();
+    private Guid? _previousLoadedSessionId;
+
+    // タブタイトル編集用の state
+    private string? editingTabId;
+    private string editingTitle = "";
+    private ElementReference editingInputRef;
+    private bool _focusEditingInput;
 
     protected override void OnInitialized()
     {
@@ -113,6 +155,70 @@
             new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true }
         };
         ActiveTabId = "default-text";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CurrentSessionId.HasValue && _previousLoadedSessionId != CurrentSessionId)
+        {
+            _previousLoadedSessionId = CurrentSessionId;
+            await LoadMemoTabsForSessionAsync(CurrentSessionId.Value);
+
+            // 切替後、アクティブタブが別セッション固有タブ(Memo)で非表示になった場合は
+            // デフォルト(default-text)に戻す。そのままだとコンテンツ領域が空白になる。
+            var activeTab = Tabs.FirstOrDefault(t => t.Id == ActiveTabId);
+            if (activeTab == null || !IsTabVisible(activeTab))
+            {
+                ActiveTabId = "default-text";
+                StateHasChanged();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusEditingInput)
+        {
+            _focusEditingInput = false;
+            try { await editingInputRef.FocusAsync(); } catch { }
+        }
+    }
+
+    private bool IsTabVisible(BottomPanelTabInfo tab)
+    {
+        if (tab.Type != BottomPanelTabType.Memo) return true;
+        return tab.SessionId.HasValue && tab.SessionId == CurrentSessionId;
+    }
+
+    private async Task LoadMemoTabsForSessionAsync(Guid sessionId)
+    {
+        if (loadedMemoSessions.Contains(sessionId)) return;
+
+        try
+        {
+            var memos = await MemoRepository.GetBySessionAsync(sessionId);
+            foreach (var memo in memos)
+            {
+                if (Tabs.Any(t => t.MemoId == memo.MemoId)) continue;
+
+                Tabs.Add(new BottomPanelTabInfo
+                {
+                    Id = memo.MemoId.ToString(),
+                    Type = BottomPanelTabType.Memo,
+                    DisplayName = memo.Title,
+                    IsDefault = false,
+                    SessionId = memo.SessionId,
+                    MemoId = memo.MemoId
+                });
+                memoBodies[memo.MemoId] = memo.Body;
+            }
+            loadedMemoSessions.Add(sessionId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[BottomPanel] LoadMemoTabsForSessionAsync 失敗: SessionId={SessionId}", sessionId);
+        }
     }
 
     private void AddTab(BottomPanelTabType type)
@@ -139,6 +245,47 @@
         StateHasChanged();
     }
 
+    private async Task AddMemoTab()
+    {
+        if (!CurrentSessionId.HasValue) return;
+
+        var sessionId = CurrentSessionId.Value;
+        var visibleMemoCount = Tabs.Count(t => t.Type == BottomPanelTabType.Memo && t.SessionId == sessionId);
+        var memo = new SessionMemo
+        {
+            MemoId = Guid.NewGuid(),
+            SessionId = sessionId,
+            Title = $"メモ({visibleMemoCount + 1})",
+            Body = "",
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now,
+            SortOrder = visibleMemoCount
+        };
+
+        try
+        {
+            await MemoRepository.InsertAsync(memo);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[BottomPanel] AddMemoTab で InsertAsync 失敗: MemoId={MemoId}", memo.MemoId);
+            return;
+        }
+
+        Tabs.Add(new BottomPanelTabInfo
+        {
+            Id = memo.MemoId.ToString(),
+            Type = BottomPanelTabType.Memo,
+            DisplayName = memo.Title,
+            IsDefault = false,
+            SessionId = memo.SessionId,
+            MemoId = memo.MemoId
+        });
+        memoBodies[memo.MemoId] = memo.Body;
+        ActiveTabId = memo.MemoId.ToString();
+        StateHasChanged();
+    }
+
     private async Task RemoveTab(string tabId)
     {
         var tab = Tabs.FirstOrDefault(t => t.Id == tabId);
@@ -149,12 +296,18 @@
             await panel.DisposeAsync();
             ShellPanelRefs.Remove(tabId);
         }
+        else if (tab.Type == BottomPanelTabType.Memo && tab.MemoId is Guid memoId)
+        {
+            try { await MemoRepository.DeleteAsync(memoId); } catch { }
+            memoBodies.Remove(memoId);
+        }
 
         Tabs.Remove(tab);
 
         if (ActiveTabId == tabId)
         {
-            ActiveTabId = Tabs.FirstOrDefault()?.Id ?? "default-text";
+            var firstVisible = Tabs.FirstOrDefault(IsTabVisible);
+            ActiveTabId = firstVisible?.Id ?? "default-text";
         }
 
         StateHasChanged();
@@ -178,6 +331,7 @@
         {
             BottomPanelTabType.TextInput => "bi-chat-left-text",
             BottomPanelTabType.PowerShell => "bi-terminal-fill",
+            BottomPanelTabType.Memo => "bi-journal-text",
             _ => "bi-terminal"
         };
     }
@@ -190,6 +344,71 @@
     private void SetTextInputPanelText(string panelId, string text)
     {
         textInputPanelTexts[panelId] = text;
+    }
+
+    private string GetMemoBody(Guid memoId)
+    {
+        return memoBodies.TryGetValue(memoId, out var body) ? body : "";
+    }
+
+    private async Task OnMemoBodyChanged(Guid memoId, string body)
+    {
+        memoBodies[memoId] = body;
+        try { await MemoRepository.UpdateBodyAsync(memoId, body ?? ""); }
+        catch (Exception ex) { Logger.LogError(ex, "[BottomPanel] UpdateBodyAsync 失敗: MemoId={MemoId}", memoId); }
+    }
+
+    private void StartTitleEdit(BottomPanelTabInfo tab)
+    {
+        if (tab.Type != BottomPanelTabType.Memo) return;
+        editingTabId = tab.Id;
+        editingTitle = tab.DisplayName;
+        _focusEditingInput = true;
+    }
+
+    private async Task OnTitleEditKeyDown(KeyboardEventArgs e, BottomPanelTabInfo tab)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitTitleEdit(tab);
+        }
+        else if (e.Key == "Escape")
+        {
+            editingTabId = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CommitTitleEdit(BottomPanelTabInfo tab)
+    {
+        if (editingTabId != tab.Id) return;
+        var newTitle = string.IsNullOrWhiteSpace(editingTitle) ? tab.DisplayName : editingTitle.Trim();
+        editingTabId = null;
+
+        if (tab.MemoId is Guid memoId && newTitle != tab.DisplayName)
+        {
+            tab.DisplayName = newTitle;
+            try { await MemoRepository.UpdateTitleAsync(memoId, newTitle); } catch { }
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 指定セッションに紐づくメモタブを Tabs リストから除去する (セッション削除時に Root から呼ばれる)。
+    /// DB からは Root 側 (SessionRepository.DeleteSessionAsync 経由) で消えているので追加の DB 操作はしない。
+    /// </summary>
+    public void RemoveMemoTabsForSession(Guid sessionId)
+    {
+        var removed = Tabs.RemoveAll(t => t.Type == BottomPanelTabType.Memo && t.SessionId == sessionId);
+        if (removed > 0)
+        {
+            loadedMemoSessions.Remove(sessionId);
+            if (ActiveTabId != "default-text" && !Tabs.Any(t => t.Id == ActiveTabId && IsTabVisible(t)))
+            {
+                ActiveTabId = "default-text";
+            }
+            StateHasChanged();
+        }
     }
 
     public async ValueTask DisposeAllShellPanels()

@@ -58,6 +58,7 @@ builder.Services.AddSingleton<SessionDbContext>(sp =>
     return new SessionDbContext(dbPath, logger);
 });
 builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
+builder.Services.AddSingleton<ISessionMemoRepository, SessionMemoRepository>();
 builder.Services.AddScoped<IStorageServiceFactory, StorageServiceFactory>();
 
 // NotificationServiceを登録

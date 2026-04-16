@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 3;
+        private const int CurrentSchemaVersion = 4;
 
         public SessionDbContext(string dbPath, ILogger<SessionDbContext> logger)
         {
@@ -70,6 +70,14 @@ namespace TerminalHub.Services
                 await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN PinPriority INTEGER");
                 await SetSchemaVersionAsync(3);
                 _logger.LogInformation("スキーマ v3 を作成（IsPinned, PinPriority カラム追加）");
+            }
+
+            if (currentVersion < 4)
+            {
+                // v4: セッション紐づきメモテーブルを追加
+                await CreateSessionMemosTableAsync();
+                await SetSchemaVersionAsync(4);
+                _logger.LogInformation("スキーマ v4 を作成（SessionMemos テーブル追加）");
             }
         }
 
@@ -188,6 +196,31 @@ namespace TerminalHub.Services
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_inputhistory_createdat ON InputHistory(CreatedAt DESC);
+            ";
+
+            await connection.ExecuteNonQueryAsync(sql);
+        }
+
+        private async Task CreateSessionMemosTableAsync()
+        {
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            // 既存の SessionOptions / CheckedScripts と同様、ON DELETE CASCADE を宣言しつつ
+            // PRAGMA foreign_keys の状態に依存しないよう DeleteSessionAsync 側で明示削除する方針。
+            var sql = @"
+                CREATE TABLE IF NOT EXISTS SessionMemos (
+                    MemoId TEXT PRIMARY KEY,
+                    SessionId TEXT NOT NULL,
+                    Title TEXT NOT NULL DEFAULT '',
+                    Body TEXT NOT NULL DEFAULT '',
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    SortOrder INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(SessionId) REFERENCES Sessions(SessionId) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_session_memos_session ON SessionMemos(SessionId, SortOrder, CreatedAt);
             ";
 
             await connection.ExecuteNonQueryAsync(sql);
