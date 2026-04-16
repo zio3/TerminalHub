@@ -52,24 +52,34 @@
         var token = _debounceCts.Token;
         var targetMemoId = MemoId;
 
+        // fire-and-forget の Task.Run 内で未観測例外にならないよう全体を try/catch で包む。
+        // Circuit 切断中に InvokeAsync が JSDisconnectedException をスローするケース等を想定。
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(DebounceMs, token);
+                try
+                {
+                    await Task.Delay(DebounceMs, token);
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+                if (token.IsCancellationRequested) return;
+                await InvokeAsync(async () =>
+                {
+                    if (_pendingBody == null || targetMemoId != MemoId) return;
+                    var bodyToFlush = _pendingBody;
+                    _pendingBody = null;
+                    await BodyChanged.InvokeAsync(bodyToFlush);
+                });
             }
-            catch (TaskCanceledException)
+            catch (Exception)
             {
-                return;
+                // Circuit 切断や BodyChanged 側の未捕捉例外はここで握る。
+                // 呼び出し側 (BottomPanel.OnMemoBodyChanged) が DB 書き込み失敗を LogError する前提。
             }
-            if (token.IsCancellationRequested) return;
-            await InvokeAsync(async () =>
-            {
-                if (_pendingBody == null || targetMemoId != MemoId) return;
-                var bodyToFlush = _pendingBody;
-                _pendingBody = null;
-                await BodyChanged.InvokeAsync(bodyToFlush);
-            });
         });
     }
 
@@ -80,7 +90,15 @@
         {
             var bodyToFlush = _pendingBody;
             _pendingBody = null;
-            await BodyChanged.InvokeAsync(bodyToFlush);
+            try
+            {
+                await BodyChanged.InvokeAsync(bodyToFlush);
+            }
+            catch
+            {
+                // OnParametersSet からの fire-and-forget 経路で未観測例外にならないよう握る。
+                // 書き込み失敗は呼び出し側 (BottomPanel.OnMemoBodyChanged) で LogError 済み。
+            }
         }
     }
 
