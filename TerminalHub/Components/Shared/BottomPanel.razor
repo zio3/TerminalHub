@@ -139,6 +139,9 @@
     private string ActiveTabId = "default-text";
     private Dictionary<string, string> textInputPanelTexts = new();
     private Dictionary<Guid, string> memoBodies = new();
+    // 読み込み済みセッションの集合。同セッションへの再切替で DB を再 fetch しないキャッシュ。
+    // 注意: 外部プロセスや直接 SQL からの変更は検知しないため、将来的に同期機能や
+    // 多重編集を入れる場合は無効化 or 再読み込みトリガを検討。
     private HashSet<Guid> loadedMemoSessions = new();
     private Guid? _previousLoadedSessionId;
 
@@ -298,7 +301,8 @@
         }
         else if (tab.Type == BottomPanelTabType.Memo && tab.MemoId is Guid memoId)
         {
-            try { await MemoRepository.DeleteAsync(memoId); } catch { }
+            try { await MemoRepository.DeleteAsync(memoId); }
+            catch (Exception ex) { Logger.LogError(ex, "[BottomPanel] Memo DeleteAsync 失敗: MemoId={MemoId}", memoId); }
             memoBodies.Remove(memoId);
         }
 
@@ -387,8 +391,17 @@
 
         if (tab.MemoId is Guid memoId && newTitle != tab.DisplayName)
         {
+            var oldTitle = tab.DisplayName;
             tab.DisplayName = newTitle;
-            try { await MemoRepository.UpdateTitleAsync(memoId, newTitle); } catch { }
+            try
+            {
+                await MemoRepository.UpdateTitleAsync(memoId, newTitle);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "[BottomPanel] Memo UpdateTitleAsync 失敗: MemoId={MemoId}", memoId);
+                tab.DisplayName = oldTitle;
+            }
         }
         StateHasChanged();
     }

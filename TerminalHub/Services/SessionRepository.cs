@@ -142,7 +142,7 @@ namespace TerminalHub.Services
                         DisplayName = excluded.DisplayName,
                         FolderPath = excluded.FolderPath,
                         FolderName = excluded.FolderName,
-                        CreatedAt = excluded.CreatedAt,
+                        -- CreatedAt は INSERT 時のみ確定する値なので UPDATE 経路では上書きしない
                         LastAccessedAt = excluded.LastAccessedAt,
                         IsActive = excluded.IsActive,
                         TerminalType = excluded.TerminalType,
