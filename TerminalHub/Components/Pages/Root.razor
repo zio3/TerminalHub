@@ -391,12 +391,8 @@
                 terminalHeightPercent = appSettings.General.TerminalHeightPercent;
                 sidebarWidthPercent = appSettings.General.SidebarWidthPercent;
 
-                // テーマを適用
-                var theme = appSettings.General.Theme;
-                if (!string.IsNullOrEmpty(theme))
-                {
-                    await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setTheme", theme);
-                }
+                // テーマは App.razor でサーバーレンダー時に <html data-bs-theme> に
+                // 埋め込み済みのため、ここでは JS での再適用は行わない（フラッシュ防止）。
             }
             catch
             {
