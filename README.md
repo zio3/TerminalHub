@@ -5,9 +5,11 @@
 
 **Windows ネイティブで動く、AI CLI セッション管理 GUI ツール**
 
+🌐 **[ランディングページ](https://zio3.github.io/TerminalHub/landing/)** · 📥 **[ダウンロード](https://github.com/zio3/TerminalHub/releases/latest)** · 💬 **[Discord](https://discord.gg/juCcFNXJg7)**
+
 TerminalHub は、Claude Code / Gemini CLI / Codex CLI の複数セッションを GUI で一元管理できる Windows デスクトップアプリケーションです。Windows ConPTY API を使用し、tmux なしでセッション管理・状態監視・通知を実現します。
 
-**[最新版をダウンロード](https://github.com/zio3/TerminalHub/releases/latest)** | インストーラーを実行するだけで使用できます（.NET のインストール不要）
+インストーラーを実行するだけで使用できます（.NET のインストール不要）
 
 ---
 
