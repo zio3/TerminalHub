@@ -227,6 +227,7 @@ window.voiceInputManager = {
         let holdTimer = null;
         let imeActive = false;       // IME 変換中フラグ（compositionstart/end で追跡）
         let lastCompositionEndAt = 0; // IME 確定直後の grace period 用
+        let pressKind = null;        // 'space' | 'ctrlSpace' — 追跡中の押下種別
 
         const insertSpaceAtCursor = () => {
             // textarea.value + execCommand は古いが、Blazor のバインディング
@@ -244,32 +245,54 @@ window.voiceInputManager = {
         };
 
         const thresholdMs = this._spaceHoldThresholdMs;
-        // 毎回読み取って、DevTools で後からフラグを切り替えられるようにする。
-        // 使い方: voiceInputManager._spacePttDebug = true
-        const isDebug = () => !!(window.voiceInputManager && window.voiceInputManager._spacePttDebug);
 
-        const onKeyDown = (e) => {
-            // 判定材料を全部ログに出す（debug 有効時）
-            if (isDebug()) {
-                console.log('[SpacePTT] keydown check:',
-                    'key=', JSON.stringify(e.key),
-                    'code=', e.code,
-                    'keyCode=', e.keyCode,
-                    'isComposing=', e.isComposing,
-                    'imeActive=', imeActive,
-                    'msSinceCompEnd=', Date.now() - lastCompositionEndAt,
-                    'repeat=', e.repeat);
+        const beginTracking = (kind) => {
+            if (isLongPress) return;
+            if (tracking) return; // repeat / 連続 keydown は既に追跡中
+            tracking = true;
+            pressKind = kind;
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+
+            // Ctrl+Space は曖昧性がない（"スペース入力" との競合がない）ので
+            // 閾値待ちなしで即座に録音開始する。
+            if (kind === 'ctrlSpace') {
+                isLongPress = true;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
+                }
+                return;
             }
 
+            // プレーンスペースは閾値タイマーで短押しと区別する
+            holdTimer = setTimeout(() => {
+                if (!tracking) return;
+                isLongPress = true;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
+                }
+            }, thresholdMs);
+        };
+
+        const onKeyDown = (e) => {
+            // --- Ctrl+Space: IME スキップなしで常に PTT 対象 ---
+            // 物理的な Space キーを code で判定（IME中は key="Process" になるため key では拾えない）
+            const isSpaceLike = (e.code === 'Space' || e.keyCode === 32);
+            const isCtrlSpace = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && isSpaceLike;
+
+            if (isCtrlSpace) {
+                // IME チェックをバイパスして即座に intercept
+                e.preventDefault();
+                e.stopPropagation();
+                beginTracking('ctrlSpace');
+                return;
+            }
+
+            // --- プレーンなスペース: 従来通り IME スキップあり ---
             // IME 変換中は IME に委ねる（日本語変換候補の確定などを壊さない）
-            // - e.isComposing: 標準プロパティ
-            // - keyCode === 229: 古い挙動の保険（IME中は 229 になるブラウザあり）
-            // - imeActive: compositionstart/end で追跡する自前フラグ
-            // - lastCompositionEndAt: IME 確定直後 (50ms) はまだ IME が消化中の可能性があるので grace period
-            if (imeActive) { if (isDebug()) console.log('[SpacePTT]   → skip: imeActive'); return; }
-            if (e.isComposing) { if (isDebug()) console.log('[SpacePTT]   → skip: isComposing'); return; }
-            if (e.keyCode === 229) { if (isDebug()) console.log('[SpacePTT]   → skip: keyCode=229'); return; }
-            if (Date.now() - lastCompositionEndAt < 50) { if (isDebug()) console.log('[SpacePTT]   → skip: recent compositionend'); return; }
+            if (imeActive) return;
+            if (e.isComposing) return;
+            if (e.keyCode === 229) return;
+            if (Date.now() - lastCompositionEndAt < 50) return;
 
             // スペース以外 / 修飾キー併用は対象外
             if (e.key !== ' ') return;
@@ -281,31 +304,27 @@ window.voiceInputManager = {
             e.preventDefault();
             e.stopPropagation();
 
-            if (isDebug()) console.log('[SpacePTT]   → INTERCEPT (preventDefault) repeat=', e.repeat, 'tracking=', tracking, 'longPress=', isLongPress);
-
-            if (isLongPress) return;
-            if (tracking) return; // repeat / 連続 keydown は既に追跡中
-
-            // 初回押下: 閾値タイマーを開始
-            tracking = true;
-            if (holdTimer) clearTimeout(holdTimer);
-            holdTimer = setTimeout(() => {
-                if (!tracking) return;
-                isLongPress = true;
-                if (isDebug()) console.log('[SpacePTT] threshold reached → recording start');
-                if (dotNetRef) {
-                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
-                }
-            }, thresholdMs);
+            beginTracking('space');
         };
 
         const onKeyUp = (e) => {
-            if (imeActive || e.isComposing || e.keyCode === 229) return;
-            if (e.key !== ' ') return;
+            // 物理的な Space キーで離されたら stop する。修飾キーの有無は問わない
+            // （Ctrl+Space 押下後、Ctrl→Space の順に離すケースにも対応）
+            const isSpaceLike = (e.code === 'Space' || e.keyCode === 32 || e.key === ' ');
+            if (!isSpaceLike) return;
+
+            // IME 処理中の keyup は無視（229 / isComposing）。
+            // ただし Ctrl+Space 追跡中（pressKind='ctrlSpace'）は IME スキップを適用しない。
+            if (pressKind !== 'ctrlSpace') {
+                if (imeActive || e.isComposing || e.keyCode === 229) return;
+            }
+
             if (!tracking && !isLongPress) return;
 
             if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            const wasKind = pressKind;
             tracking = false;
+            pressKind = null;
 
             if (isLongPress) {
                 isLongPress = false;
@@ -313,8 +332,12 @@ window.voiceInputManager = {
                     try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
                 }
             } else {
-                // 閾値未満で離された → 通常のスペース入力を挿入
-                insertSpaceAtCursor();
+                // 閾値未満で離された
+                // - プレーンスペース: 通常のスペース入力として挿入する
+                // - Ctrl+Space: 何もしない（ユーザーの意図的短押しはキャンセル扱い）
+                if (wasKind === 'space') {
+                    insertSpaceAtCursor();
+                }
             }
         };
 
@@ -324,6 +347,7 @@ window.voiceInputManager = {
             const wasLongPress = isLongPress;
             tracking = false;
             isLongPress = false;
+            pressKind = null;
             if (wasLongPress && dotNetRef) {
                 try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
             }
@@ -332,21 +356,23 @@ window.voiceInputManager = {
         // IME 変換開始: 以降 keydown 介入を停止する
         const onCompositionStart = () => {
             imeActive = true;
-            // 追跡中だったら安全に解除（先にタイマーが動いてたら止める）
+            // Ctrl+Space による録音中は IME にガードを効かせない（ユーザーが明示的に
+            // 録音ショートカットを押しているため、IME 発火は無視して継続）。
+            if (pressKind === 'ctrlSpace') return;
+            // 通常のスペース追跡中だったら安全に解除
             if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
             tracking = false;
+            pressKind = null;
             if (isLongPress) {
                 isLongPress = false;
                 if (dotNetRef) {
                     try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
                 }
             }
-            if (isDebug()) console.log('[SpacePTT] compositionstart → IME active');
         };
         const onCompositionEnd = () => {
             imeActive = false;
             lastCompositionEndAt = Date.now();
-            if (isDebug()) console.log('[SpacePTT] compositionend');
         };
 
         // capture=true でバブリング前に受け取り、Blazor の @onkeydown より先に
@@ -356,8 +382,6 @@ window.voiceInputManager = {
         el.addEventListener('blur', onBlur);
         el.addEventListener('compositionstart', onCompositionStart);
         el.addEventListener('compositionend', onCompositionEnd);
-
-        if (isDebug()) console.log('[SpacePTT] bound to', textAreaId);
 
         this._spaceBindings.set(textAreaId, {
             el, onKeyDown, onKeyUp, onBlur, onCompositionStart, onCompositionEnd
