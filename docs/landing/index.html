@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TerminalHub - マルチセッションターミナル</title>
-    <meta name="description" content="複数のターミナルセッションを一画面で管理。Claude Code / Gemini CLI / Codex CLI 対応のWebベースターミナル。" />
+    <meta name="description" content="Windows 専用。Claude Code / Gemini CLI / Codex CLI の複数セッションを一画面で管理するターミナルハブ。" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -20,12 +20,12 @@
                 <h1 class="hero-title">Terminal<span class="text-accent">Hub</span></h1>
                 <p class="hero-subtitle">複数のターミナルセッションを、ひとつの画面で。</p>
                 <p class="hero-description">
-                    Claude Code / Gemini CLI / Codex CLI / 通常ターミナルをタブで管理。<br>
+                    Claude Code / Gemini CLI / Codex CLI をタブで管理。<br>
                     セッションの保存・復元、並列作業、処理通知まで。
                 </p>
                 <div class="hero-actions">
                     <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg">
-                        <i class="bi bi-download"></i> ダウンロード
+                        <i class="bi bi-windows"></i> Windows 版をダウンロード
                     </a>
                     <a href="https://github.com/zio3/TerminalHub" class="btn btn-outline-light btn-lg">
                         <i class="bi bi-github"></i> GitHub
@@ -150,23 +150,15 @@
             <h2 class="section-title text-center">主な機能</h2>
             <p class="section-description text-center text-muted">クリックするとスクリーンショットを表示します</p>
             <div class="row g-4 mt-3 justify-content-center">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="feature-card" data-screenshot="assets/multi-session.png">
                         <div class="feature-icon"><i class="bi bi-window-stack"></i></div>
                         <h3>マルチセッション管理</h3>
-                        <p>複数のターミナルをタブで切り替え。AI CLI と通常ターミナルを自由に組み合わせて並列作業できます。</p>
+                        <p>複数の AI CLI セッションを簡単に切り替え。並列作業がひとつのウィンドウにまとまります。セッション構成は自動保存され、再起動後もそのまま復元。</p>
                         <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="feature-card" data-screenshot="assets/session-restore.png">
-                        <div class="feature-icon"><i class="bi bi-arrow-repeat"></i></div>
-                        <h3>セッション保存・復元</h3>
-                        <p>セッション構成をDBに永続化。アプリを再起動しても、前回の作業状態をそのまま復元できます。</p>
-                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
-                    </div>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="feature-card" data-screenshot="assets/ai-cli-setup.png">
                         <div class="feature-icon"><i class="bi bi-rocket-takeoff"></i></div>
                         <h3>AI CLI かんたん起動</h3>
@@ -196,9 +188,9 @@
     <section class="cta-section text-center">
         <div class="container">
             <h2>TerminalHub を始めよう</h2>
-            <p class="text-muted mb-4">Windows 対応 / 無料 / オープンソース</p>
+            <p class="text-muted mb-4">Windows 専用 / 無料 / オープンソース</p>
             <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg">
-                <i class="bi bi-download"></i> 最新版をダウンロード
+                <i class="bi bi-windows"></i> Windows 版をダウンロード
             </a>
         </div>
     </section>

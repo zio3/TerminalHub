@@ -27,15 +27,6 @@ const sessions = [
         notification: false,
         memo: '',
     },
-    {
-        id: 'terminal-general',
-        name: 'Workspace',
-        type: 'terminal',
-        branch: null,
-        status: null,
-        notification: false,
-        memo: '',
-    },
 ];
 
 // Terminal scenarios - pre-recorded output for each session
@@ -147,33 +138,6 @@ const terminalScenarios = {
             '\x1b[33m⟳ Processing...\x1b[0m \x1b[2m(1:42 elapsed)\x1b[0m',
         ],
         responses: {},
-    },
-    'terminal-general': {
-        initial: [
-            'Microsoft Windows [Version 10.0.26200.5570]',
-            '(c) Microsoft Corporation. All rights reserved.',
-            '',
-            'C:\\Users\\dev\\source\\workspace>',
-        ],
-        responses: {
-            'default': [],
-            'dir': [
-                '',
-                ' Volume in drive C is Windows',
-                '',
-                ' Directory of C:\\Users\\dev\\source\\workspace',
-                '',
-                '2026/04/17  10:00    <DIR>          .',
-                '2026/04/17  10:00    <DIR>          ..',
-                '2026/04/15  09:30    <DIR>          api-server',
-                '2026/04/10  14:20    <DIR>          ShopService',
-                '2026/04/03  08:15    <DIR>          TerminalHub',
-                '               0 File(s)              0 bytes',
-                '               5 Dir(s)  234,567,890 bytes free',
-                '',
-                'C:\\Users\\dev\\source\\workspace>',
-            ],
-        },
     },
 };
 
