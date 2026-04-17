@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TerminalHub - マルチセッションターミナル</title>
+    <meta name="description" content="複数のターミナルセッションを一画面で管理。Claude Code / Gemini CLI / Codex CLI 対応のWebベースターミナル。" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" rel="stylesheet" />
+    <link href="css/landing.css" rel="stylesheet" />
+</head>
+<body>
+    <!-- Hero Section -->
+    <header class="hero-section">
+        <div class="container">
+            <div class="hero-content text-center">
+                <img src="assets/icon-round.png" alt="TerminalHub" class="hero-icon" />
+                <h1 class="hero-title">Terminal<span class="text-accent">Hub</span></h1>
+                <p class="hero-subtitle">複数のターミナルセッションを、ひとつの画面で。</p>
+                <p class="hero-description">
+                    Claude Code / Gemini CLI / Codex CLI / 通常ターミナルをタブで管理。<br>
+                    セッションの保存・復元、並列作業、処理通知まで。
+                </p>
+                <div class="hero-actions">
+                    <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg">
+                        <i class="bi bi-download"></i> ダウンロード
+                    </a>
+                    <a href="https://github.com/zio3/TerminalHub" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-github"></i> GitHub
+                    </a>
+                    <a href="https://discord.gg/juCcFNXJg7" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-discord"></i> Discord
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Interactive Demo Section -->
+    <section class="demo-section">
+        <div class="container">
+            <h2 class="section-title text-center">触って試せるデモ</h2>
+            <p class="section-description text-center text-muted">
+                実際の操作感を体験できます。セッションを切り替えたり、コマンドを入力してみてください。
+            </p>
+            <div class="demo-window">
+                <div class="demo-titlebar">
+                    <div class="demo-titlebar-left">
+                        <img src="assets/icon-small.png" alt="" style="width: 18px; height: 18px; border-radius: 3px;" />
+                        <span class="demo-titlebar-text">TerminalHub</span>
+                    </div>
+                    <div class="demo-titlebar-buttons">
+                        <span class="win-btn"><i class="bi bi-dash-lg"></i></span>
+                        <span class="win-btn"><i class="bi bi-square"></i></span>
+                        <span class="win-btn win-btn-close"><i class="bi bi-x-lg"></i></span>
+                    </div>
+                </div>
+                <div class="demo-body">
+                    <!-- Left: Session List -->
+                    <div class="demo-sidebar" id="demoSidebar">
+                        <div class="demo-sidebar-header">
+                            <button class="btn btn-accent btn-sm w-100" id="newSessionBtn">
+                                <i class="bi bi-plus-lg"></i> 新しいセッション
+                            </button>
+                        </div>
+                        <div class="demo-session-list" id="sessionList">
+                            <!-- Sessions will be populated by JS -->
+                        </div>
+                        <div class="demo-sidebar-footer">
+                            <button class="btn btn-outline-secondary btn-sm w-100" id="settingsBtn">
+                                <i class="bi bi-gear"></i> 設定
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Splitter -->
+                    <div class="demo-splitter-v"></div>
+
+                    <!-- Right: Main Area -->
+                    <div class="demo-main">
+                        <!-- Terminal Area -->
+                        <div class="demo-terminal-area" id="terminalArea">
+                            <div id="demoTerminal"></div>
+                        </div>
+
+                        <!-- Horizontal Splitter -->
+                        <div class="demo-splitter-h"></div>
+
+                        <!-- Bottom Panel -->
+                        <div class="demo-bottom-panel">
+                            <ul class="nav nav-tabs demo-panel-tabs" id="bottomTabs">
+                                <li class="nav-item">
+                                    <button class="nav-link active" data-tab="textinput">
+                                        <i class="bi bi-chat-left-text"></i> テキスト入力
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link" data-tab="memo">
+                                        <i class="bi bi-journal-text"></i> メモ
+                                    </button>
+                                </li>
+                            </ul>
+                            <div class="demo-panel-content">
+                                <div class="demo-tab-pane active" id="tab-textinput">
+                                    <div class="demo-input-area">
+                                        <textarea id="demoInput"
+                                                  class="form-control"
+                                                  placeholder="ここにプロンプトを入力... (Enter で送信)"
+                                                  rows="2"></textarea>
+                                        <button class="btn btn-accent btn-sm" id="sendBtn">
+                                            <i class="bi bi-send"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="demo-tab-pane" id="tab-memo">
+                                    <textarea class="form-control demo-memo"
+                                              placeholder="メモ... (Enter で改行、自動保存)"
+                                              id="demoMemo"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Demo Dialog Overlay (inside demo-window for correct positioning) -->
+                <div class="demo-dialog-overlay" id="demoDialogOverlay" style="display: none;">
+                    <div class="demo-dialog">
+                        <div class="demo-dialog-header">
+                            <h5 id="dialogTitle">新しいセッション</h5>
+                            <button class="btn-close btn-close-white" id="dialogClose"></button>
+                        </div>
+                        <div class="demo-dialog-body" id="dialogBody">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="demo-hint text-center text-muted mt-3">
+                <i class="bi bi-info-circle"></i>
+                デモ用のモック環境です。実際の CLI は動作しません。UIも実物とは異なります。
+            </p>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section">
+        <div class="container">
+            <h2 class="section-title text-center">主な機能</h2>
+            <p class="section-description text-center text-muted">クリックするとスクリーンショットを表示します</p>
+            <div class="row g-4 mt-3 justify-content-center">
+                <div class="col-md-4">
+                    <div class="feature-card" data-screenshot="assets/multi-session.png">
+                        <div class="feature-icon"><i class="bi bi-window-stack"></i></div>
+                        <h3>マルチセッション管理</h3>
+                        <p>複数のターミナルをタブで切り替え。AI CLI と通常ターミナルを自由に組み合わせて並列作業できます。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card" data-screenshot="assets/session-restore.png">
+                        <div class="feature-icon"><i class="bi bi-arrow-repeat"></i></div>
+                        <h3>セッション保存・復元</h3>
+                        <p>セッション構成をDBに永続化。アプリを再起動しても、前回の作業状態をそのまま復元できます。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card" data-screenshot="assets/ai-cli-setup.png">
+                        <div class="feature-icon"><i class="bi bi-rocket-takeoff"></i></div>
+                        <h3>AI CLI かんたん起動</h3>
+                        <p>Claude Code / Gemini CLI / Codex CLI を設定画面から主要な引数を指定するだけ。すぐに使い始められます。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Community Section -->
+    <section class="community-section text-center">
+        <div class="container">
+            <h2 class="section-title">コミュニティ</h2>
+            <p class="text-muted mb-4">
+                使い方の質問、機能リクエスト、フィードバックなど、<br>
+                Discord サーバーでお気軽にどうぞ。
+            </p>
+            <a href="https://discord.gg/juCcFNXJg7" class="btn btn-discord btn-lg">
+                <i class="bi bi-discord"></i> Discord に参加する
+            </a>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section text-center">
+        <div class="container">
+            <h2>TerminalHub を始めよう</h2>
+            <p class="text-muted mb-4">Windows 対応 / 無料 / オープンソース</p>
+            <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg">
+                <i class="bi bi-download"></i> 最新版をダウンロード
+            </a>
+        </div>
+    </section>
+
+    <footer class="site-footer text-center">
+        <div class="container">
+            <p class="text-muted mb-0">
+                <a href="https://github.com/zio3/TerminalHub" class="text-muted me-3">
+                    <i class="bi bi-github"></i> GitHub
+                </a>
+                <a href="https://discord.gg/juCcFNXJg7" class="text-muted">
+                    <i class="bi bi-discord"></i> Discord
+                </a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Screenshot Modal -->
+    <div class="screenshot-modal" id="screenshotModal" style="display: none;">
+        <div class="screenshot-modal-backdrop"></div>
+        <div class="screenshot-modal-content">
+            <button class="screenshot-modal-close"><i class="bi bi-x-lg"></i></button>
+            <h4 class="screenshot-modal-title" id="screenshotTitle"></h4>
+            <div class="screenshot-modal-image" id="screenshotImage">
+                <!-- Image or NoImage placeholder -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+    <script src="js/demo.js"></script>
+</body>
+</html>

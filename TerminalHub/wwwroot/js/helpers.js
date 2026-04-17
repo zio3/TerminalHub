@@ -395,6 +395,6 @@ window.terminalHubHelpers = {
 
     // 現在のテーマ取得
     getTheme: function() {
-        return document.documentElement.getAttribute('data-bs-theme') || 'light';
+        return document.documentElement.getAttribute('data-bs-theme') || 'dark';
     }
 };
