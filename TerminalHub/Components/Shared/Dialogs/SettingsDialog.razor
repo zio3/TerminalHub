@@ -778,6 +778,24 @@
                                 <hr />
 
                                 <div class="mb-4">
+                                    <h6 class="mb-2">テキスト事前整形</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="textRefineEnabled" id="textRefineSwitch">
+                                        <label class="form-check-label" for="textRefineSwitch">
+                                            事前整形ボタンを有効にする（実験的）
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        有効にすると、テキスト入力パネルに「<i class="bi bi-stars"></i> 事前整形」ボタンが表示されます。
+                                        押すと Claude Code CLI（Haiku モデル）で誤字脱字や表現の揺れを修正します。<br/>
+                                        整形指示は <code>%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md</code> を編集してカスタマイズ可能。
+                                    </p>
+                                </div>
+
+                                <hr />
+
+                                <div class="mb-4">
                                     <h6 class="mb-2">開発ツール</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
@@ -990,6 +1008,7 @@
     private bool remoteLaunchPasswordCleared = false;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
+    private bool textRefineEnabled = false;
     private string sessionSortMode = "lastAccessed";
     private bool showTerminalType = false;
     private bool showGitInfo = false;
@@ -1030,6 +1049,7 @@
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
     [Parameter] public EventCallback<int> OnSidebarWidthPercentChanged { get; set; }
     [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnTextRefineEnabledChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
@@ -1076,6 +1096,7 @@
             // 特殊設定
             claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
             voiceInputEnabled = settings.Special.VoiceInputEnabled;
+            textRefineEnabled = settings.Special.TextRefineEnabled;
 
             // セッション表示設定
             sessionSortMode = settings.Sessions.SortMode;
@@ -1292,7 +1313,8 @@
                 Special = new SpecialSettings
                 {
                     ClaudeModeSwitchKey = claudeModeSwitchKey,
-                    VoiceInputEnabled = voiceInputEnabled
+                    VoiceInputEnabled = voiceInputEnabled,
+                    TextRefineEnabled = textRefineEnabled
                 },
                 Sessions = new SessionDisplaySettings
                 {
@@ -1356,6 +1378,7 @@
 
             // 音声入力設定の変更を通知
             await OnVoiceInputEnabledChanged.InvokeAsync(voiceInputEnabled);
+            await OnTextRefineEnabledChanged.InvokeAsync(textRefineEnabled);
 
             // テーマの変更を通知
             await OnThemeChanged.InvokeAsync(theme);

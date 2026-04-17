@@ -82,6 +82,7 @@
                             TerminalType="@TerminalType"
                             ClaudeModeSwitchKey="@ClaudeModeSwitchKey"
                             VoiceInputEnabled="@VoiceInputEnabled"
+                            TextRefineEnabled="@TextRefineEnabled"
                             PlaceholderText="@PlaceholderText"
                             Text="@GetTextInputPanelText(tab.Id)"
                             TextChanged="@(text => SetTextInputPanelText(tab.Id, text))"
@@ -114,6 +115,7 @@
     [Parameter] public TerminalType TerminalType { get; set; }
     [Parameter] public string ClaudeModeSwitchKey { get; set; } = "";
     [Parameter] public bool VoiceInputEnabled { get; set; }
+    [Parameter] public bool TextRefineEnabled { get; set; }
     [Parameter] public string PlaceholderText { get; set; } = "";
     [Parameter] public string WorkingDirectory { get; set; } = "";
     [Parameter] public object? DotNetRef { get; set; }

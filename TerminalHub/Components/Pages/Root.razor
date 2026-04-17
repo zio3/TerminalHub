@@ -46,6 +46,7 @@
                 OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged"
                 OnSidebarWidthPercentChanged="HandleSidebarWidthPercentChanged"
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
+                OnTextRefineEnabledChanged="HandleTextRefineEnabledChanged"
                 OnThemeChanged="HandleThemeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog" 
                          ParentSessionName="@subSessionParentSessionName"
@@ -145,6 +146,7 @@
                                  CurrentSessionId="@bottomPanelSession.SessionId"
                                  ClaudeModeSwitchKey="@claudeModeSwitchKey"
                                  VoiceInputEnabled="@voiceInputEnabled"
+                                 TextRefineEnabled="@textRefineEnabled"
                                  PlaceholderText="@GetPlaceholderText(bottomPanelSession.TerminalType)"
                                  WorkingDirectory="@bottomPanelSession.FolderPath"
                                  DotNetRef="@dotNetRef"
@@ -379,6 +381,7 @@
                 var appSettings = AppSettingsService.GetSettings();
                 claudeModeSwitchKey = appSettings.Special.ClaudeModeSwitchKey;
                 voiceInputEnabled = appSettings.Special.VoiceInputEnabled;
+                textRefineEnabled = appSettings.Special.TextRefineEnabled;
                 sessionSortMode = appSettings.Sessions.SortMode;
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
@@ -607,6 +610,12 @@
     private void HandleVoiceInputEnabledChanged(bool enabled)
     {
         voiceInputEnabled = enabled;
+        StateHasChanged();
+    }
+
+    private void HandleTextRefineEnabledChanged(bool enabled)
+    {
+        textRefineEnabled = enabled;
         StateHasChanged();
     }
 
@@ -1645,6 +1654,7 @@
 
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
+    private bool textRefineEnabled = false;
 
     private async Task SendCustomKey(string keyName)
     {
