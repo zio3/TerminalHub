@@ -591,7 +591,8 @@
                                         </div>
                                         @if (editingCommands.ContainsKey(type) && editingCommands[type].Any())
                                         {
-                                            <ul class="list-group list-group-sm">
+                                            var canReorder = editingCommands[type].Count > 1;
+                                            <ul class="list-group list-group-sm custom-command-list">
                                                 @for (var i = 0; i < editingCommands[type].Count; i++)
                                                 {
                                                     var idx = i;
@@ -600,8 +601,20 @@
                                                     var bodyText = isKey
                                                         ? (KeySequencePresets.GetDisplayName(cmd.KeyName) ?? cmd.KeyName ?? "?")
                                                         : cmd.CommandText;
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
-                                                        <small>
+                                                    var isDragOver = _dragOverType == type && _dragOverIndex == idx;
+                                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2 @(isDragOver ? "drag-over" : "")"
+                                                        draggable="@(canReorder ? "true" : "false")"
+                                                        @ondragstart="@(() => OnCommandDragStart(type, idx))"
+                                                        @ondragend="OnCommandDragEnd"
+                                                        @ondragover:preventDefault="true"
+                                                        @ondragover="@(() => OnCommandDragOver(type, idx))"
+                                                        @ondrop:preventDefault="true"
+                                                        @ondrop="@(() => OnCommandDrop(type, idx))">
+                                                        <small class="d-flex align-items-center" style="min-width: 0; flex: 1;">
+                                                            @if (canReorder)
+                                                            {
+                                                                <i class="bi bi-grip-vertical me-2 text-muted drag-handle" title="ドラッグで並び替え"></i>
+                                                            }
                                                             @if (isKey)
                                                             {
                                                                 <i class="bi bi-keyboard me-1 text-muted"></i>
@@ -609,11 +622,11 @@
                                                             @if (!string.IsNullOrEmpty(cmd.Title))
                                                             {
                                                                 <strong>@cmd.Title</strong>
-                                                                <span class="text-muted ms-2">@bodyText</span>
+                                                                <span class="text-muted ms-2 text-truncate">@bodyText</span>
                                                             }
                                                             else
                                                             {
-                                                                <span>@bodyText</span>
+                                                                <span class="text-truncate">@bodyText</span>
                                                             }
                                                         </small>
                                                         <button class="btn btn-outline-danger btn-sm border-0" type="button"
@@ -1449,6 +1462,68 @@
         {
             editingCommands[terminalType].RemoveAt(index);
         }
+    }
+
+    // ===== カスタムコマンドの並び替え (ドラッグ&ドロップ) =====
+    // 同じ terminalType 内でのみ並び替えを許可する（別種別への移動は不可）。
+    private string? _dragSourceType;
+    private int _dragSourceIndex = -1;
+    private string? _dragOverType;
+    private int _dragOverIndex = -1;
+
+    private void OnCommandDragStart(string terminalType, int index)
+    {
+        _dragSourceType = terminalType;
+        _dragSourceIndex = index;
+    }
+
+    private void OnCommandDragOver(string terminalType, int index)
+    {
+        // 別種別のリストに入った場合はハイライトしない（ドロップ不可）
+        if (_dragSourceType != terminalType)
+        {
+            _dragOverType = null;
+            _dragOverIndex = -1;
+            return;
+        }
+        _dragOverType = terminalType;
+        _dragOverIndex = index;
+    }
+
+    private void OnCommandDrop(string terminalType, int targetIndex)
+    {
+        try
+        {
+            if (_dragSourceType != terminalType || _dragSourceIndex < 0) return;
+            if (!editingCommands.TryGetValue(terminalType, out var list)) return;
+            if (_dragSourceIndex >= list.Count || targetIndex >= list.Count) return;
+            if (_dragSourceIndex == targetIndex) return;
+
+            var item = list[_dragSourceIndex];
+            list.RemoveAt(_dragSourceIndex);
+            // RemoveAt 後のインデックス調整: ソースが前方にあった場合、ターゲットが1つ手前にずれる
+            var insertAt = _dragSourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+            if (insertAt < 0) insertAt = 0;
+            if (insertAt > list.Count) insertAt = list.Count;
+            list.Insert(insertAt, item);
+        }
+        finally
+        {
+            ResetDragState();
+        }
+    }
+
+    private void OnCommandDragEnd()
+    {
+        ResetDragState();
+    }
+
+    private void ResetDragState()
+    {
+        _dragSourceType = null;
+        _dragSourceIndex = -1;
+        _dragOverType = null;
+        _dragOverIndex = -1;
     }
 
     private void OnRemoteLaunchPasswordInput(ChangeEventArgs e)
