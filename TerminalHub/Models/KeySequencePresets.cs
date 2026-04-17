@@ -32,6 +32,7 @@ namespace TerminalHub.Models
             new KeyValuePair<string, Preset>("Home",       new("Home",          "\x1b[H")),
             new KeyValuePair<string, Preset>("End",        new("End",           "\x1b[F")),
             new KeyValuePair<string, Preset>("AltM",       new("Alt+M",         "\x1Bm")),
+            new KeyValuePair<string, Preset>("AltT",       new("Alt+T",         "\x1Bt")),
         };
 
         // O(1) ルックアップ用の内部辞書 (All から自動生成されるので順序依存しない)
