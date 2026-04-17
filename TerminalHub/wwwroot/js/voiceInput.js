@@ -137,5 +137,191 @@ window.voiceInputManager = {
             this.recognition = null;
         }
         this.dotNetRef = null;
+    },
+
+    // ===== 中ボタン Push-to-Talk =====
+    // テキストエリア上でマウスの中ボタンを押している間だけ録音を行う。
+    // ブラウザの中ボタンオートスクロールを抑制するため preventDefault する。
+    // textareaId → bind 情報のマップ。コンポーネント破棄時に unbind で解除する。
+    _middleBindings: new Map(),
+
+    bindMiddlePushToTalk(textAreaId, dotNetRef) {
+        const el = document.getElementById(textAreaId);
+        if (!el) return false;
+
+        // 既存バインドがあれば一度外す（再初期化時の重複登録防止）
+        this.unbindMiddlePushToTalk(textAreaId);
+
+        let holding = false;
+
+        const onMouseDown = (e) => {
+            if (e.button !== 1) return; // middle button only
+            e.preventDefault();
+            if (holding) return;
+            holding = true;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStart'); } catch {}
+            }
+        };
+
+        const onMouseUp = (e) => {
+            if (e.button !== 1) return;
+            if (!holding) return;
+            holding = false;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStop'); } catch {}
+            }
+        };
+
+        // 中ボタン押下中にテキストエリア外に出ても、確実に録音を止めるため document 側でも拾う
+        const onDocumentMouseUp = (e) => {
+            if (e.button !== 1) return;
+            if (!holding) return;
+            holding = false;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStop'); } catch {}
+            }
+        };
+
+        // 中ボタン押下でブラウザが auxclick / scroll を出すのを抑える
+        const onAuxClick = (e) => {
+            if (e.button === 1) e.preventDefault();
+        };
+
+        el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('mouseup', onMouseUp);
+        el.addEventListener('auxclick', onAuxClick);
+        document.addEventListener('mouseup', onDocumentMouseUp);
+
+        this._middleBindings.set(textAreaId, {
+            el, onMouseDown, onMouseUp, onAuxClick, onDocumentMouseUp
+        });
+        return true;
+    },
+
+    unbindMiddlePushToTalk(textAreaId) {
+        const b = this._middleBindings.get(textAreaId);
+        if (!b) return;
+        try {
+            b.el.removeEventListener('mousedown', b.onMouseDown);
+            b.el.removeEventListener('mouseup', b.onMouseUp);
+            b.el.removeEventListener('auxclick', b.onAuxClick);
+            document.removeEventListener('mouseup', b.onDocumentMouseUp);
+        } catch {}
+        this._middleBindings.delete(textAreaId);
+    },
+
+    // ===== スペース長押し Push-to-Talk =====
+    // スペース押下を 300ms 遅らせ、閾値を超えたら録音開始、手前で離したら通常のスペース入力。
+    _spaceBindings: new Map(),
+    _spaceHoldThresholdMs: 300,
+
+    bindSpaceHoldPushToTalk(textAreaId, dotNetRef) {
+        const el = document.getElementById(textAreaId);
+        if (!el) return false;
+
+        this.unbindSpaceHoldPushToTalk(textAreaId);
+
+        let tracking = false;        // keydown 受信後、release/threshold 待ち
+        let isLongPress = false;     // 閾値到達済み（録音中）
+        let holdTimer = null;
+
+        const insertSpaceAtCursor = () => {
+            // textarea.value + execCommand は古いが、Blazor のバインディング
+            // 更新と cursor 位置維持のため、setRangeText を使う
+            try {
+                const start = el.selectionStart ?? el.value.length;
+                const end = el.selectionEnd ?? el.value.length;
+                el.setRangeText(' ', start, end, 'end');
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch {
+                // 失敗時は素直に追加
+                el.value = el.value + ' ';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        };
+
+        const onKeyDown = (e) => {
+            // IME 変換中は IME に委ねる（日本語変換候補の確定などを壊さない）
+            // - e.isComposing: 標準プロパティ
+            // - keyCode === 229: 古い挙動の保険（IME中は 229 になるブラウザあり）
+            if (e.isComposing || e.keyCode === 229) return;
+
+            // スペース以外 / 修飾キー併用は対象外
+            if (e.key !== ' ') return;
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+
+            // 既に長押し録音中 → repeat を抑制するだけ
+            if (isLongPress) {
+                e.preventDefault();
+                return;
+            }
+
+            // repeat は初回追跡開始以外では無視（タイマーは1本のみ）
+            if (e.repeat) {
+                e.preventDefault();
+                return;
+            }
+
+            // 初回押下: 通常のスペース挿入を抑制して閾値タイマーを開始
+            e.preventDefault();
+            tracking = true;
+            if (holdTimer) clearTimeout(holdTimer);
+            holdTimer = setTimeout(() => {
+                if (!tracking) return;
+                isLongPress = true;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
+                }
+            }, this._spaceHoldThresholdMs);
+        };
+
+        const onKeyUp = (e) => {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key !== ' ') return;
+            if (!tracking && !isLongPress) return;
+
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            tracking = false;
+
+            if (isLongPress) {
+                isLongPress = false;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
+                }
+            } else {
+                // 閾値未満で離された → 通常のスペース入力を挿入
+                insertSpaceAtCursor();
+            }
+        };
+
+        // フォーカスを外したときに追跡中なら安全に停止
+        const onBlur = () => {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            const wasLongPress = isLongPress;
+            tracking = false;
+            isLongPress = false;
+            if (wasLongPress && dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
+            }
+        };
+
+        el.addEventListener('keydown', onKeyDown);
+        el.addEventListener('keyup', onKeyUp);
+        el.addEventListener('blur', onBlur);
+
+        this._spaceBindings.set(textAreaId, { el, onKeyDown, onKeyUp, onBlur });
+        return true;
+    },
+
+    unbindSpaceHoldPushToTalk(textAreaId) {
+        const b = this._spaceBindings.get(textAreaId);
+        if (!b) return;
+        try {
+            b.el.removeEventListener('keydown', b.onKeyDown);
+            b.el.removeEventListener('keyup', b.onKeyUp);
+            b.el.removeEventListener('blur', b.onBlur);
+        } catch {}
+        this._spaceBindings.delete(textAreaId);
     }
 };
