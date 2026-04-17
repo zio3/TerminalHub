@@ -51,7 +51,8 @@ builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
 // SQLiteセッションストレージを登録
 var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-var dbPath = Path.Combine(appDataPath, "TerminalHub", "sessions.db");
+var dbFileName = builder.Configuration.GetValue<string>("Database:FileName") ?? "sessions.db";
+var dbPath = Path.Combine(appDataPath, "TerminalHub", dbFileName);
 builder.Services.AddSingleton<SessionDbContext>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();

@@ -37,6 +37,11 @@ namespace TerminalHub.Services
             await MigrateSchemaAsync();
         }
 
+        // CreateInitialSchemaAsync の CREATE TABLE 定義が最新バージョンの構造を
+        // 含んでいるため、新規DBでは個別ALTERマイグレーションをスキップして
+        // 直接このバージョンにジャンプする。
+        private const int LatestSchemaVersion = 4;
+
         /// <summary>
         /// スキーママイグレーションを実行
         /// </summary>
@@ -45,12 +50,15 @@ namespace TerminalHub.Services
             var currentVersion = await GetSchemaVersionAsync();
             _logger.LogInformation("現在のスキーマバージョン: {Version}", currentVersion);
 
-            if (currentVersion < 1)
+            if (currentVersion == 0)
             {
-                // v1: 初期スキーマ作成
+                // 新規DB: 最新スキーマを一括作成して個別マイグレーションをスキップ
                 await CreateInitialSchemaAsync();
-                await SetSchemaVersionAsync(1);
-                _logger.LogInformation("スキーマ v1 を作成");
+                await CreateInputHistoryTableAsync();
+                await CreateSessionMemosTableAsync();
+                await SetSchemaVersionAsync(LatestSchemaVersion);
+                _logger.LogInformation("新規DBを最新スキーマ v{Version} で作成", LatestSchemaVersion);
+                return;
             }
 
             if (currentVersion < 2)
