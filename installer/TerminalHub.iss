@@ -69,10 +69,88 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; 
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\TerminalHub.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; インストール後に起動するオプション
-Filename: "{app}\TerminalHub.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; Finish ページでの起動は [Code] 内のラジオボタン選択に応じて CurStepChanged(ssDone) で実行する。
+; [Run] の postinstall を使うと標準のチェックボックスUIが出てしまうため、ここには登録しない。
 
 [Code]
+var
+  LaunchLabel: TNewStaticText;
+  LaunchModeNormal: TNewRadioButton;
+  LaunchModeApp: TNewRadioButton;
+  LaunchModeNone: TNewRadioButton;
+
+// Finish ページにラジオボタンを動的に追加する
+procedure CurPageChanged(CurPageID: Integer);
+var
+  BaseLeft, ControlWidth, CurrentTop: Integer;
+begin
+  if CurPageID = wpFinished then
+  begin
+    // 二重生成防止（戻る→進むした場合）
+    if LaunchLabel <> nil then Exit;
+
+    BaseLeft := WizardForm.RunList.Left;
+    ControlWidth := WizardForm.FinishedPage.ClientWidth - BaseLeft;
+    CurrentTop := WizardForm.RunList.Top;
+
+    LaunchLabel := TNewStaticText.Create(WizardForm);
+    LaunchLabel.Parent := WizardForm.FinishedPage;
+    LaunchLabel.Left := BaseLeft;
+    LaunchLabel.Top := CurrentTop;
+    LaunchLabel.Width := ControlWidth;
+    LaunchLabel.Caption := '起動モード:';
+    CurrentTop := CurrentTop + LaunchLabel.Height + ScaleY(6);
+
+    LaunchModeApp := TNewRadioButton.Create(WizardForm);
+    LaunchModeApp.Parent := WizardForm.FinishedPage;
+    LaunchModeApp.Left := BaseLeft + ScaleX(8);
+    LaunchModeApp.Top := CurrentTop;
+    LaunchModeApp.Width := ControlWidth - ScaleX(8);
+    LaunchModeApp.Caption := 'アプリモード（Chrome アプリウィンドウで起動）';
+    LaunchModeApp.Checked := True;
+    CurrentTop := CurrentTop + LaunchModeApp.Height + ScaleY(4);
+
+    LaunchModeNormal := TNewRadioButton.Create(WizardForm);
+    LaunchModeNormal.Parent := WizardForm.FinishedPage;
+    LaunchModeNormal.Left := LaunchModeApp.Left;
+    LaunchModeNormal.Top := CurrentTop;
+    LaunchModeNormal.Width := LaunchModeApp.Width;
+    LaunchModeNormal.Caption := '通常モード（デフォルトブラウザで起動）';
+    CurrentTop := CurrentTop + LaunchModeNormal.Height + ScaleY(4);
+
+    LaunchModeNone := TNewRadioButton.Create(WizardForm);
+    LaunchModeNone.Parent := WizardForm.FinishedPage;
+    LaunchModeNone.Left := LaunchModeApp.Left;
+    LaunchModeNone.Top := CurrentTop;
+    LaunchModeNone.Width := LaunchModeApp.Width;
+    LaunchModeNone.Caption := '起動しない';
+  end;
+end;
+
+// インストール完了時、選択したモードで起動する
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssDone then
+  begin
+    // ラジオボタン未生成（サイレントインストール等）の場合はスキップ
+    if LaunchModeApp = nil then Exit;
+
+    if LaunchModeApp.Checked then
+    begin
+      Exec(ExpandConstant('{app}\TerminalHub-App.bat'), '', ExpandConstant('{app}'),
+           SW_SHOWNORMAL, ewNoWait, ResultCode);
+    end
+    else if LaunchModeNormal.Checked then
+    begin
+      Exec(ExpandConstant('{app}\TerminalHub.bat'), '', ExpandConstant('{app}'),
+           SW_SHOWNORMAL, ewNoWait, ResultCode);
+    end;
+    // LaunchModeNone: 起動しない（何もしない）
+  end;
+end;
+
 // アンインストール時にプロセスが実行中かチェック
 function InitializeUninstall(): Boolean;
 var

@@ -1,5 +1,13 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+﻿@inject TerminalHub.Services.IAppSettingsService AppSettingsService
+@{
+    // テーマをサーバーレンダー時点で決定して <html data-bs-theme> に埋め込む。
+    // JS interop 経由で後から当てると、初期レンダリング時に一瞬ライトテーマが
+    // 見えてしまう（フラッシュ）問題を防ぐため。
+    var initialTheme = AppSettingsService.GetSettings().General.Theme;
+    if (string.IsNullOrWhiteSpace(initialTheme)) initialTheme = "dark";
+}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="@initialTheme">
 
 <head>
     <meta charset="utf-8" />
