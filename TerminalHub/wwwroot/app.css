@@ -675,3 +675,19 @@ h1:focus {
         padding: 0.375rem !important;
     }
 }
+
+/* ===== Custom Command List (Drag & Drop) ===== */
+.custom-command-list .list-group-item[draggable="true"] {
+    cursor: grab;
+}
+.custom-command-list .list-group-item[draggable="true"]:active {
+    cursor: grabbing;
+}
+.custom-command-list .drag-handle {
+    cursor: grab;
+    font-size: 0.85rem;
+}
+.custom-command-list .list-group-item.drag-over {
+    border-top: 2px solid var(--th-accent);
+    background-color: rgba(127, 127, 127, 0.08);
+}
