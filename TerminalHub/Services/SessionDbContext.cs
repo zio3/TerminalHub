@@ -12,6 +12,9 @@ namespace TerminalHub.Services
         private readonly ILogger<SessionDbContext> _logger;
         private const int CurrentSchemaVersion = 4;
 
+        private readonly SemaphoreSlim _initLock = new(1, 1);
+        private bool _initialized = false;
+
         public SessionDbContext(string dbPath, ILogger<SessionDbContext> logger)
         {
             _connectionString = $"Data Source={dbPath}";
@@ -21,26 +24,120 @@ namespace TerminalHub.Services
         public string ConnectionString => _connectionString;
 
         /// <summary>
-        /// データベースを初期化し、必要に応じてスキーマをマイグレーション
+        /// データベースを初期化し、必要に応じてスキーマをマイグレーション。
+        /// 並行呼び出し安全で、最初の呼び出しのみ実マイグレーションを実行する。
         /// </summary>
         public async Task InitializeAsync()
         {
-            // データベースファイルのディレクトリを作成
-            var dbPath = _connectionString.Replace("Data Source=", "");
-            var dbDir = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrEmpty(dbDir) && !Directory.Exists(dbDir))
-            {
-                Directory.CreateDirectory(dbDir);
-                _logger.LogInformation("データベースディレクトリを作成: {Path}", dbDir);
-            }
+            // ロック前の fast-path（既に初期化済みなら即リターン）
+            if (_initialized) return;
 
-            await MigrateSchemaAsync();
+            await _initLock.WaitAsync();
+            try
+            {
+                // double-checked locking
+                if (_initialized) return;
+
+                var dbPath = _connectionString.Replace("Data Source=", "");
+                var dbExists = File.Exists(dbPath);
+                var dbSize = dbExists ? new FileInfo(dbPath).Length : 0;
+                _logger.LogInformation("[DB][診断] DB初期化開始: Path={Path} / Exists={Exists} / Size={Size} bytes",
+                    dbPath, dbExists, dbSize);
+
+                var dbDir = Path.GetDirectoryName(dbPath);
+                if (!string.IsNullOrEmpty(dbDir) && !Directory.Exists(dbDir))
+                {
+                    Directory.CreateDirectory(dbDir);
+                    _logger.LogInformation("[DB][診断] データベースディレクトリを作成: {Path}", dbDir);
+                }
+
+                await MigrateSchemaAsync();
+                await DumpSchemaDiagnosticsAsync();
+
+                _initialized = true;
+            }
+            finally
+            {
+                _initLock.Release();
+            }
         }
 
-        // CreateInitialSchemaAsync の CREATE TABLE 定義が最新バージョンの構造を
-        // 含んでいるため、新規DBでは個別ALTERマイグレーションをスキップして
-        // 直接このバージョンにジャンプする。
-        private const int LatestSchemaVersion = 4;
+        /// <summary>
+        /// マイグレーション後のスキーマ状態を診断ログに出力する
+        /// </summary>
+        private async Task DumpSchemaDiagnosticsAsync()
+        {
+            try
+            {
+                await using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+
+                // 全テーブル一覧
+                var tables = new List<string>();
+                await using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        tables.Add(reader.GetString(0));
+                    }
+                }
+                _logger.LogInformation("[DB][診断] テーブル一覧: [{Tables}]", string.Join(", ", tables));
+
+                // Sessions テーブルのカラム
+                if (tables.Contains("Sessions"))
+                {
+                    var columns = new List<string>();
+                    await using var cmd = connection.CreateCommand();
+                    cmd.CommandText = "PRAGMA table_info(Sessions)";
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        columns.Add(reader.GetString(1)); // name column
+                    }
+                    _logger.LogInformation("[DB][診断] Sessions カラム: [{Columns}]", string.Join(", ", columns));
+                }
+
+                // SchemaVersion レコード
+                if (tables.Contains("SchemaVersion"))
+                {
+                    var versions = new List<long>();
+                    await using var cmd = connection.CreateCommand();
+                    cmd.CommandText = "SELECT Version FROM SchemaVersion ORDER BY Version";
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        versions.Add(reader.GetInt64(0));
+                    }
+                    _logger.LogInformation("[DB][診断] 適用済みスキーマバージョン: [{Versions}]",
+                        string.Join(", ", versions));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[DB][診断] スキーマ診断中にエラー");
+            }
+        }
+
+        // ============================================================
+        // スキーママイグレーションのルール（必読）
+        // ============================================================
+        // 1. CreateV1SchemaAsync は v1 リリース時点のスキーマの凍結版。
+        //    絶対に編集しない。新しい列・テーブルは ALTER/CREATE の
+        //    マイグレーションブロックとしてのみ追加する。
+        //
+        // 2. 新規DBでも既存DBでも、同じマイグレーションを 0 → 最新まで
+        //    順次適用する。分岐させない（"新規DB shortcut" は作らない）。
+        //    → 初期スキーマとマイグレーションの乖離による duplicate
+        //      column 等のバグを構造的に防ぐため。
+        //
+        // 3. 新しいマイグレーションを追加する際は：
+        //    a. 下の `if (currentVersion < N)` ブロックを追加
+        //    b. テーブル追加なら専用のプライベートメソッドを作る
+        //       （CreateInputHistoryTableAsync のパターン）
+        //    c. カラム追加なら ALTER TABLE をその場で書く
+        // ============================================================
 
         /// <summary>
         /// スキーママイグレーションを実行
@@ -48,45 +145,48 @@ namespace TerminalHub.Services
         private async Task MigrateSchemaAsync()
         {
             var currentVersion = await GetSchemaVersionAsync();
-            _logger.LogInformation("現在のスキーマバージョン: {Version}", currentVersion);
+            _logger.LogInformation("[DB][マイグレーション] 開始: 現在のスキーマバージョン = {Version}", currentVersion);
 
-            if (currentVersion == 0)
+            if (currentVersion < 1)
             {
-                // 新規DB: 最新スキーマを一括作成して個別マイグレーションをスキップ
-                await CreateInitialSchemaAsync();
-                await CreateInputHistoryTableAsync();
-                await CreateSessionMemosTableAsync();
-                await SetSchemaVersionAsync(LatestSchemaVersion);
-                _logger.LogInformation("新規DBを最新スキーマ v{Version} で作成", LatestSchemaVersion);
-                return;
+                // v1: 初期スキーマ作成
+                _logger.LogInformation("[DB][マイグレーション] v1 適用開始: CreateV1SchemaAsync");
+                await CreateV1SchemaAsync();
+                await SetSchemaVersionAsync(1);
+                _logger.LogInformation("[DB][マイグレーション] v1 適用完了");
             }
 
             if (currentVersion < 2)
             {
                 // v2: 入力履歴テーブルを追加
+                _logger.LogInformation("[DB][マイグレーション] v2 適用開始: 入力履歴テーブル追加");
                 await CreateInputHistoryTableAsync();
                 await SetSchemaVersionAsync(2);
-                _logger.LogInformation("スキーマ v2 を作成（入力履歴テーブル追加）");
+                _logger.LogInformation("[DB][マイグレーション] v2 適用完了");
             }
 
             if (currentVersion < 3)
             {
                 // v3: ピン留め・優先度カラムを追加
+                _logger.LogInformation("[DB][マイグレーション] v3 適用開始: IsPinned, PinPriority カラム追加");
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN IsPinned INTEGER DEFAULT 0");
                 await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN PinPriority INTEGER");
                 await SetSchemaVersionAsync(3);
-                _logger.LogInformation("スキーマ v3 を作成（IsPinned, PinPriority カラム追加）");
+                _logger.LogInformation("[DB][マイグレーション] v3 適用完了");
             }
 
             if (currentVersion < 4)
             {
                 // v4: セッション紐づきメモテーブルを追加
+                _logger.LogInformation("[DB][マイグレーション] v4 適用開始: SessionMemos テーブル追加");
                 await CreateSessionMemosTableAsync();
                 await SetSchemaVersionAsync(4);
-                _logger.LogInformation("スキーマ v4 を作成（SessionMemos テーブル追加）");
+                _logger.LogInformation("[DB][マイグレーション] v4 適用完了");
             }
+
+            _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
         private async Task<int> GetSchemaVersionAsync()
@@ -128,7 +228,17 @@ namespace TerminalHub.Services
                 ("@appliedAt", DateTime.UtcNow.ToString("o")));
         }
 
-        private async Task CreateInitialSchemaAsync()
+        /// <summary>
+        /// v1 リリース時点のスキーマを作成する（凍結版）。
+        /// </summary>
+        /// <remarks>
+        /// ⚠️ このメソッドは絶対に編集しないこと。
+        /// 新しい列・テーブルは必ず MigrateSchemaAsync の
+        /// `if (currentVersion &lt; N)` ブロックとして追加する。
+        /// このメソッドを編集すると、既存DBと新規DBで
+        /// スキーマ状態が乖離し、duplicate column 等のバグが発生する。
+        /// </remarks>
+        private async Task CreateV1SchemaAsync()
         {
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
@@ -154,8 +264,6 @@ namespace TerminalHub.Services
                     IsArchived INTEGER DEFAULT 0,
                     ArchivedAt TEXT,
                     ParentSessionId TEXT,
-                    IsPinned INTEGER DEFAULT 0,
-                    PinPriority INTEGER,
                     FOREIGN KEY(ParentSessionId) REFERENCES Sessions(SessionId)
                 );
 

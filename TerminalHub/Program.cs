@@ -53,6 +53,8 @@ builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 var dbFileName = builder.Configuration.GetValue<string>("Database:FileName") ?? "sessions.db";
 var dbPath = Path.Combine(appDataPath, "TerminalHub", dbFileName);
+builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
+Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FileName={dbFileName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();
