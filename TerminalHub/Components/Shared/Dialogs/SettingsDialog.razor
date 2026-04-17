@@ -608,6 +608,7 @@
                                                         @ondragend="OnCommandDragEnd"
                                                         @ondragover:preventDefault="true"
                                                         @ondragover="@(() => OnCommandDragOver(type, idx))"
+                                                        @ondragleave="@(() => OnCommandDragLeave(type, idx))"
                                                         @ondrop:preventDefault="true"
                                                         @ondrop="@(() => OnCommandDrop(type, idx))">
                                                         <small class="d-flex align-items-center" style="min-width: 0; flex: 1;">
@@ -1488,6 +1489,18 @@
         }
         _dragOverType = terminalType;
         _dragOverIndex = index;
+    }
+
+    private void OnCommandDragLeave(string terminalType, int index)
+    {
+        // 自身の上から離脱した場合のみハイライト解除。
+        // 別アイテムへの遷移直後は dragenter → 旧要素 dragleave の順に発火するため、
+        // _dragOverIndex が別 index に既に更新されている可能性を考慮して自分の時だけクリア。
+        if (_dragOverType == terminalType && _dragOverIndex == index)
+        {
+            _dragOverType = null;
+            _dragOverIndex = -1;
+        }
     }
 
     private void OnCommandDrop(string terminalType, int targetIndex)
