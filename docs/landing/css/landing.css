@@ -548,6 +548,52 @@ body {
     border-radius: 4px;
 }
 
+/* ===== Screenshots ===== */
+.screenshots-section {
+    padding: 4rem 0;
+}
+.screenshots-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 2rem;
+}
+.screenshot-item {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s;
+}
+.screenshot-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+.screenshot-item img {
+    width: 100%;
+    display: block;
+}
+.screenshot-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 200px;
+    background: var(--bg-sidebar);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+.screenshot-placeholder i {
+    font-size: 2rem;
+    opacity: 0.3;
+}
+@media (max-width: 480px) {
+    .screenshots-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ===== Community ===== */
 .community-section {
     padding: 4rem 0;

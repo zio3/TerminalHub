@@ -437,10 +437,11 @@ function initScreenshotModal() {
     const closeBtn = modal.querySelector('.screenshot-modal-close');
     const backdrop = modal.querySelector('.screenshot-modal-backdrop');
 
-    document.querySelectorAll('.feature-card[data-screenshot]').forEach(card => {
+    document.querySelectorAll('[data-screenshot]').forEach(card => {
         card.addEventListener('click', () => {
             const src = card.dataset.screenshot;
-            const name = card.querySelector('h3').textContent;
+            const nameEl = card.querySelector('h3') || card.querySelector('span');
+            const name = nameEl ? nameEl.textContent : '';
             title.textContent = name;
 
             // 画像の存在チェック
