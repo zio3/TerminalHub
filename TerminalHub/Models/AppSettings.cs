@@ -52,6 +52,12 @@ public class SpecialSettings
 {
     public string ClaudeModeSwitchKey { get; set; } = "none";
     public bool VoiceInputEnabled { get; set; } = false;
+    /// <summary>
+    /// テキスト事前整形（実験的）を有効にするかどうか。
+    /// 有効時、テキスト入力パネルに「事前整形」ボタンが表示され、Claude Code CLI の
+    /// -p モードで入力テキストを整形してから置換する。
+    /// </summary>
+    public bool TextRefineEnabled { get; set; } = false;
 }
 
 /// <summary>
