@@ -33,6 +33,13 @@
         </button>
     </div>
 
+    @if (!Sessions.Any())
+    {
+        <div class="alert alert-info py-2 px-3 mb-2 small">
+            <i class="bi bi-arrow-up"></i> 上のボタンからセッションを作成してください
+        </div>
+    }
+
     <div class="mb-2">
         <div class="input-group input-group-sm">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -176,13 +183,6 @@
             }
         }
     </div>
-
-    @if (!Sessions.Any())
-    {
-        <div class="alert alert-info mt-3">
-            <i class="bi bi-info-circle"></i> ボタンをクリックしてセッションを作成してください
-        </div>
-    }
 
     <!-- 設定ボタンとショートカット説明を最下部に固定 -->
     <div class="mt-auto border-top sidebar-footer">

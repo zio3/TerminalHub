@@ -50,7 +50,7 @@ public class ClaudeHookSettings
 /// </summary>
 public class SpecialSettings
 {
-    public string ClaudeModeSwitchKey { get; set; } = "altM";
+    public string ClaudeModeSwitchKey { get; set; } = "none";
     public bool VoiceInputEnabled { get; set; } = false;
 }
 
@@ -59,7 +59,7 @@ public class SpecialSettings
 /// </summary>
 public class SessionDisplaySettings
 {
-    public string SortMode { get; set; } = "createdAt";
+    public string SortMode { get; set; } = "lastAccessed";
     public bool ShowTerminalType { get; set; }
     public bool ShowGitInfo { get; set; }
     public bool HideInputPanel { get; set; }
@@ -84,7 +84,7 @@ public class GeneralSettings
     public int TerminalFontSize { get; set; } = 14;
     public int TerminalHeightPercent { get; set; } = 70;
     public int SidebarWidthPercent { get; set; } = 25;
-    public string Theme { get; set; } = "light";
+    public string Theme { get; set; } = "dark";
 }
 
 /// <summary>

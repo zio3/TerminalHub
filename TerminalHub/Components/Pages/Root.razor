@@ -1698,17 +1698,11 @@
                 // Shift+Tab のエスケープシーケンス (CSI Z)
                 await activeSession.WriteAsync("\x1b[Z");
                 break;
-            case "plan":
-                // /plan コマンドを送信して改行
-                await activeSession.WriteAsync("/plan");
-                await Task.Delay(100); // 100ms待機
-                await activeSession.WriteAsync("\r");
-                break;
             case "altM":
-            default:
                 // Alt+M を送信（\x1B はESC、m はM）
                 await activeSession.WriteAsync("\x1Bm");
                 break;
+            // "none" 等の未対応値では何もしない
         }
     }
 

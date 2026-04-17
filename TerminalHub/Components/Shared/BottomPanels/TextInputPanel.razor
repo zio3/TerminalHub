@@ -24,19 +24,7 @@
                 </div>
             </div>
             <div class="btn-group">
-                <button class="btn btn-secondary @(isCtrlCPressed ? "active" : "")"
-                        @onclick="OnCtrlCClick"
-                        title="強制中断 (Ctrl+C)"
-                        style="@(isCtrlCPressed ? "transform: scale(0.95);" : "")">
-                    <i class="bi bi-x-octagon d-none d-md-inline"></i> Ctrl+C
-                </button>
-                <button class="btn btn-secondary @(isEscapePressed ? "active" : "")"
-                        @onclick="OnEscapeClick"
-                        title="中断 (Esc)"
-                        style="@(isEscapePressed ? "transform: scale(0.95);" : "")">
-                    <i class="bi bi-stop-circle d-none d-md-inline"></i> Esc
-                </button>
-                @if (TerminalType == TerminalType.ClaudeCode)
+                @if (TerminalType == TerminalType.ClaudeCode && ClaudeModeSwitchKey != "none")
                 {
                     <button class="btn btn-secondary @(isModeSwitchPressed ? "active" : "")"
                             @onclick="OnModeSwitchClick"
@@ -267,7 +255,6 @@
         return ClaudeModeSwitchKey switch
         {
             "shiftTab" => "Shift+Tab",
-            "plan" => "/plan",
             _ => "Alt+M"
         };
     }
@@ -277,7 +264,6 @@
         return ClaudeModeSwitchKey switch
         {
             "shiftTab" => "モード切替 (Shift+Tab)",
-            "plan" => "Planモードに入る (/plan)",
             _ => "モード切替 (Alt+M)"
         };
     }
