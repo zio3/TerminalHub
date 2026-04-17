@@ -137,5 +137,268 @@ window.voiceInputManager = {
             this.recognition = null;
         }
         this.dotNetRef = null;
+    },
+
+    // ===== 中ボタン Push-to-Talk =====
+    // テキストエリア上でマウスの中ボタンを押している間だけ録音を行う。
+    // ブラウザの中ボタンオートスクロールを抑制するため preventDefault する。
+    // textareaId → bind 情報のマップ。コンポーネント破棄時に unbind で解除する。
+    _middleBindings: new Map(),
+
+    bindMiddlePushToTalk(textAreaId, dotNetRef) {
+        const el = document.getElementById(textAreaId);
+        if (!el) return false;
+
+        // 既存バインドがあれば一度外す（再初期化時の重複登録防止）
+        this.unbindMiddlePushToTalk(textAreaId);
+
+        let holding = false;
+
+        const onMouseDown = (e) => {
+            if (e.button !== 1) return; // middle button only
+            e.preventDefault();
+            if (holding) return;
+            holding = true;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStart'); } catch {}
+            }
+        };
+
+        const onMouseUp = (e) => {
+            if (e.button !== 1) return;
+            if (!holding) return;
+            holding = false;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStop'); } catch {}
+            }
+        };
+
+        // 中ボタン押下中にテキストエリア外に出ても、確実に録音を止めるため document 側でも拾う
+        const onDocumentMouseUp = (e) => {
+            if (e.button !== 1) return;
+            if (!holding) return;
+            holding = false;
+            if (dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnMiddleMouseVoiceStop'); } catch {}
+            }
+        };
+
+        // 中ボタン押下でブラウザが auxclick / scroll を出すのを抑える
+        const onAuxClick = (e) => {
+            if (e.button === 1) e.preventDefault();
+        };
+
+        el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('mouseup', onMouseUp);
+        el.addEventListener('auxclick', onAuxClick);
+        document.addEventListener('mouseup', onDocumentMouseUp);
+
+        this._middleBindings.set(textAreaId, {
+            el, onMouseDown, onMouseUp, onAuxClick, onDocumentMouseUp
+        });
+        return true;
+    },
+
+    unbindMiddlePushToTalk(textAreaId) {
+        const b = this._middleBindings.get(textAreaId);
+        if (!b) return;
+        try {
+            b.el.removeEventListener('mousedown', b.onMouseDown);
+            b.el.removeEventListener('mouseup', b.onMouseUp);
+            b.el.removeEventListener('auxclick', b.onAuxClick);
+            document.removeEventListener('mouseup', b.onDocumentMouseUp);
+        } catch {}
+        this._middleBindings.delete(textAreaId);
+    },
+
+    // ===== スペース長押し Push-to-Talk =====
+    // スペース押下を 300ms 遅らせ、閾値を超えたら録音開始、手前で離したら通常のスペース入力。
+    _spaceBindings: new Map(),
+    _spaceHoldThresholdMs: 300,
+
+    bindSpaceHoldPushToTalk(textAreaId, dotNetRef) {
+        const el = document.getElementById(textAreaId);
+        if (!el) return false;
+
+        this.unbindSpaceHoldPushToTalk(textAreaId);
+
+        let tracking = false;        // keydown 受信後、release/threshold 待ち
+        let isLongPress = false;     // 閾値到達済み（録音中）
+        let holdTimer = null;
+        let imeActive = false;       // IME 変換中フラグ（compositionstart/end で追跡）
+        let lastCompositionEndAt = 0; // IME 確定直後の grace period 用
+        let pressKind = null;        // 'space' | 'ctrlSpace' — 追跡中の押下種別
+
+        const insertSpaceAtCursor = () => {
+            // textarea.value + execCommand は古いが、Blazor のバインディング
+            // 更新と cursor 位置維持のため、setRangeText を使う
+            try {
+                const start = el.selectionStart ?? el.value.length;
+                const end = el.selectionEnd ?? el.value.length;
+                el.setRangeText(' ', start, end, 'end');
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch {
+                // 失敗時は素直に追加
+                el.value = el.value + ' ';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        };
+
+        const thresholdMs = this._spaceHoldThresholdMs;
+
+        const beginTracking = (kind) => {
+            if (isLongPress) return;
+            if (tracking) return; // repeat / 連続 keydown は既に追跡中
+            tracking = true;
+            pressKind = kind;
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+
+            // Ctrl+Space は曖昧性がない（"スペース入力" との競合がない）ので
+            // 閾値待ちなしで即座に録音開始する。
+            if (kind === 'ctrlSpace') {
+                isLongPress = true;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
+                }
+                return;
+            }
+
+            // プレーンスペースは閾値タイマーで短押しと区別する
+            holdTimer = setTimeout(() => {
+                if (!tracking) return;
+                isLongPress = true;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStart'); } catch {}
+                }
+            }, thresholdMs);
+        };
+
+        const onKeyDown = (e) => {
+            // --- Ctrl+Space: IME スキップなしで常に PTT 対象 ---
+            // 物理的な Space キーを code で判定（IME中は key="Process" になるため key では拾えない）
+            const isSpaceLike = (e.code === 'Space' || e.keyCode === 32);
+            const isCtrlSpace = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && isSpaceLike;
+
+            if (isCtrlSpace) {
+                // IME チェックをバイパスして即座に intercept
+                e.preventDefault();
+                e.stopPropagation();
+                beginTracking('ctrlSpace');
+                return;
+            }
+
+            // --- プレーンなスペース: 従来通り IME スキップあり ---
+            // IME 変換中は IME に委ねる（日本語変換候補の確定などを壊さない）
+            if (imeActive) return;
+            if (e.isComposing) return;
+            if (e.keyCode === 229) return;
+            if (Date.now() - lastCompositionEndAt < 50) return;
+
+            // スペース以外 / 修飾キー併用は対象外
+            if (e.key !== ' ') return;
+            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+
+            // スペース関連の既定動作は一律抑止する（first press / repeat / long press すべて）。
+            // 短押しで離された場合のみ keyup で手動挿入する方針。
+            // stopPropagation も併用して Blazor 側の @onkeydown によるバブリング処理を避ける。
+            e.preventDefault();
+            e.stopPropagation();
+
+            beginTracking('space');
+        };
+
+        const onKeyUp = (e) => {
+            // 物理的な Space キーで離されたら stop する。修飾キーの有無は問わない
+            // （Ctrl+Space 押下後、Ctrl→Space の順に離すケースにも対応）
+            const isSpaceLike = (e.code === 'Space' || e.keyCode === 32 || e.key === ' ');
+            if (!isSpaceLike) return;
+
+            // IME 処理中の keyup は無視（229 / isComposing）。
+            // ただし Ctrl+Space 追跡中（pressKind='ctrlSpace'）は IME スキップを適用しない。
+            if (pressKind !== 'ctrlSpace') {
+                if (imeActive || e.isComposing || e.keyCode === 229) return;
+            }
+
+            if (!tracking && !isLongPress) return;
+
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            const wasKind = pressKind;
+            tracking = false;
+            pressKind = null;
+
+            if (isLongPress) {
+                isLongPress = false;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
+                }
+            } else {
+                // 閾値未満で離された
+                // - プレーンスペース: 通常のスペース入力として挿入する
+                // - Ctrl+Space: 何もしない（ユーザーの意図的短押しはキャンセル扱い）
+                if (wasKind === 'space') {
+                    insertSpaceAtCursor();
+                }
+            }
+        };
+
+        // フォーカスを外したときに追跡中なら安全に停止
+        const onBlur = () => {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            const wasLongPress = isLongPress;
+            tracking = false;
+            isLongPress = false;
+            pressKind = null;
+            if (wasLongPress && dotNetRef) {
+                try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
+            }
+        };
+
+        // IME 変換開始: 以降 keydown 介入を停止する
+        const onCompositionStart = () => {
+            imeActive = true;
+            // Ctrl+Space による録音中は IME にガードを効かせない（ユーザーが明示的に
+            // 録音ショートカットを押しているため、IME 発火は無視して継続）。
+            if (pressKind === 'ctrlSpace') return;
+            // 通常のスペース追跡中だったら安全に解除
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            tracking = false;
+            pressKind = null;
+            if (isLongPress) {
+                isLongPress = false;
+                if (dotNetRef) {
+                    try { dotNetRef.invokeMethodAsync('OnSpaceHoldVoiceStop'); } catch {}
+                }
+            }
+        };
+        const onCompositionEnd = () => {
+            imeActive = false;
+            lastCompositionEndAt = Date.now();
+        };
+
+        // capture=true でバブリング前に受け取り、Blazor の @onkeydown より先に
+        // preventDefault / stopPropagation できるようにする。
+        el.addEventListener('keydown', onKeyDown, true);
+        el.addEventListener('keyup', onKeyUp, true);
+        el.addEventListener('blur', onBlur);
+        el.addEventListener('compositionstart', onCompositionStart);
+        el.addEventListener('compositionend', onCompositionEnd);
+
+        this._spaceBindings.set(textAreaId, {
+            el, onKeyDown, onKeyUp, onBlur, onCompositionStart, onCompositionEnd
+        });
+        return true;
+    },
+
+    unbindSpaceHoldPushToTalk(textAreaId) {
+        const b = this._spaceBindings.get(textAreaId);
+        if (!b) return;
+        try {
+            b.el.removeEventListener('keydown', b.onKeyDown, true);
+            b.el.removeEventListener('keyup', b.onKeyUp, true);
+            b.el.removeEventListener('blur', b.onBlur);
+            b.el.removeEventListener('compositionstart', b.onCompositionStart);
+            b.el.removeEventListener('compositionend', b.onCompositionEnd);
+        } catch {}
+        this._spaceBindings.delete(textAreaId);
     }
 };

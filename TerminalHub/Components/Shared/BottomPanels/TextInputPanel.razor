@@ -265,6 +265,20 @@
         if (firstRender && VoiceInputEnabled)
         {
             await InitVoiceInput();
+            // 中ボタン Push-to-Talk バインド
+            try
+            {
+                await JS.InvokeVoidAsync("voiceInputManager.bindMiddlePushToTalk",
+                    $"inputText-{PanelId}", dotNetRef);
+            }
+            catch { }
+            // スペース長押し Push-to-Talk バインド
+            try
+            {
+                await JS.InvokeVoidAsync("voiceInputManager.bindSpaceHoldPushToTalk",
+                    $"inputText-{PanelId}", dotNetRef);
+            }
+            catch { }
         }
     }
 
@@ -326,10 +340,61 @@
         StateHasChanged();
     }
 
+    /// <summary>
+    /// テキストエリア上で中マウスボタンが押されたとき、JS から呼ばれる。
+    /// 録音ボタン押下と同じ挙動を行う（Push-to-Talk）。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnMiddleMouseVoiceStart()
+    {
+        await OnVoiceStart();
+        StateHasChanged(); // isVoiceRecording 変化を UI に反映
+    }
+
+    /// <summary>
+    /// テキストエリア上で中マウスボタンが離されたとき、JS から呼ばれる。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnMiddleMouseVoiceStop()
+    {
+        await OnVoiceStop();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// テキストエリア上でスペースキーの長押しが閾値を超えたとき、JS から呼ばれる。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnSpaceHoldVoiceStart()
+    {
+        await OnVoiceStart();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// スペースキー長押しから離されたとき、JS から呼ばれる。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnSpaceHoldVoiceStop()
+    {
+        await OnVoiceStop();
+        StateHasChanged();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (voiceInitialized)
         {
+            try
+            {
+                await JS.InvokeVoidAsync("voiceInputManager.unbindMiddlePushToTalk", $"inputText-{PanelId}");
+            }
+            catch { }
+            try
+            {
+                await JS.InvokeVoidAsync("voiceInputManager.unbindSpaceHoldPushToTalk", $"inputText-{PanelId}");
+            }
+            catch { }
             try
             {
                 await JS.InvokeVoidAsync("voiceInputManager.dispose");
