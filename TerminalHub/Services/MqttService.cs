@@ -88,9 +88,10 @@ public class MqttService : IHostedService, IDisposable
         var mqttUsername = _configuration.GetValue<string>("Mqtt:Username");
         var mqttPassword = _configuration.GetValue<string>("Mqtt:Password");
 
+        var clientId = $"terminalhub-{topicGuid[..8]}";
         var optionsBuilder = new MqttClientOptionsBuilder()
             .WithTcpServer(mqttHost, mqttPort)
-            .WithClientId($"terminalhub-{topicGuid[..8]}")
+            .WithClientId(clientId)
             .WithCleanSession(true);
 
         if (!string.IsNullOrEmpty(mqttUsername))
@@ -103,18 +104,35 @@ public class MqttService : IHostedService, IDisposable
         _mqttClient.ApplicationMessageReceivedAsync += OnMessageReceivedAsync;
         _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
 
+        _logger.LogInformation("[MQTT] 接続試行: {Host}:{Port}, ClientId={ClientId}, HasCredentials={HasCredentials}",
+            mqttHost, mqttPort, clientId, !string.IsNullOrEmpty(mqttUsername));
+
         try
         {
-            await _mqttClient.ConnectAsync(options, cancellationToken);
-            _logger.LogInformation("[MQTT] ブローカーに接続: {Host}:{Port}", mqttHost, mqttPort);
+            var connectResult = await _mqttClient.ConnectAsync(options, cancellationToken);
+            _logger.LogInformation(
+                "[MQTT] ConnectAsync戻り: ResultCode={ResultCode}, ReasonString={ReasonString}, AssignedClientId={AssignedClientId}, IsSessionPresent={IsSessionPresent}, IsConnected={IsConnected}",
+                connectResult?.ResultCode, connectResult?.ReasonString, connectResult?.AssignedClientIdentifier, connectResult?.IsSessionPresent, _mqttClient.IsConnected);
+
+            if (!_mqttClient.IsConnected)
+            {
+                _logger.LogError("[MQTT] Connect直後にIsConnected=false。ClientId重複で別クライアントに蹴られた可能性が高い (ClientId={ClientId})", clientId);
+                return;
+            }
 
             var requestTopic = $"{MqttConstants.TopicPrefix}/{topicGuid}/request";
-            await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce, cancellationToken);
-            _logger.LogInformation("[MQTT] トピック購読完了");
+            var subResult = await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce, cancellationToken);
+            foreach (var item in subResult.Items)
+            {
+                _logger.LogInformation("[MQTT] SUBACK: Topic={Topic}, ResultCode={ResultCode}",
+                    item.TopicFilter.Topic, item.ResultCode);
+            }
+            _logger.LogInformation("[MQTT] トピック購読完了: {Topic}", requestTopic);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[MQTT] 接続失敗");
+            _logger.LogError(ex, "[MQTT] 接続失敗 (Host={Host}:{Port}, ClientId={ClientId}, IsConnected={IsConnected})",
+                mqttHost, mqttPort, clientId, _mqttClient?.IsConnected);
         }
     }
 
@@ -141,6 +159,11 @@ public class MqttService : IHostedService, IDisposable
 
     private async Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs e)
     {
+        _logger.LogWarning(
+            "[MQTT] 切断検知: Reason={Reason}, ReasonString={ReasonString}, ClientWasConnected={ClientWasConnected}, Intentional={Intentional}, ConnectResultCode={ConnectResultCode}, Exception={ExceptionType}/{ExceptionMessage}",
+            e.Reason, e.ReasonString, e.ClientWasConnected, _intentionalDisconnect,
+            e.ConnectResult?.ResultCode, e.Exception?.GetType().Name, e.Exception?.Message);
+
         if (!e.ClientWasConnected || _intentionalDisconnect) return;
 
         _sessionKey = null;
@@ -179,15 +202,25 @@ public class MqttService : IHostedService, IDisposable
 
             try
             {
-                await _mqttClient!.ConnectAsync(options);
+                var connectResult = await _mqttClient!.ConnectAsync(options);
+                _logger.LogInformation(
+                    "[MQTT] リトライConnectAsync戻り: ResultCode={ResultCode}, ReasonString={ReasonString}, IsConnected={IsConnected}",
+                    connectResult?.ResultCode, connectResult?.ReasonString, _mqttClient.IsConnected);
+
+                if (!_mqttClient.IsConnected)
+                {
+                    _logger.LogWarning("[MQTT] リトライ Connect直後に IsConnected=false ({Attempt}/{Max})", i + 1, delays.Length);
+                    continue;
+                }
+
                 await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce);
                 _logger.LogInformation("[MQTT] 再接続成功 (リトライ {Attempt}回目)", i + 1);
                 return;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("[MQTT] リトライ失敗 ({Attempt}/{Max}): {Message}",
-                    i + 1, delays.Length, ex.Message);
+                _logger.LogWarning(ex, "[MQTT] リトライ失敗 ({Attempt}/{Max}): {ExceptionType}/{Message}",
+                    i + 1, delays.Length, ex.GetType().Name, ex.Message);
             }
         }
 
