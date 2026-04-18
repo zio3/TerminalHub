@@ -12,6 +12,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IVersionCheckService VersionCheckService
 @inject MqttService MqttService
+@implements IDisposable
 
 @if (IsVisible)
 {
@@ -661,6 +662,54 @@
 
                                 @if (remoteLaunchEnabled)
                                 {
+                                    <div class="mb-3 border rounded p-2 bg-body-tertiary">
+                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <div class="d-flex align-items-center flex-wrap gap-2">
+                                                @if (MqttService.IsBrokerConnected)
+                                                {
+                                                    <span class="badge bg-success">
+                                                        <i class="bi bi-check-circle me-1"></i>接続中
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        <i class="bi bi-x-circle me-1"></i>未接続
+                                                    </span>
+                                                }
+                                                @if (MqttService.LastConnectResult is not null)
+                                                {
+                                                    <small class="text-muted">
+                                                        ResultCode: @MqttService.LastConnectResult.ResultCode
+                                                        @if (MqttService.LastConnectAttemptAt.HasValue)
+                                                        {
+                                                            <span> (@MqttService.LastConnectAttemptAt.Value.ToLocalTime().ToString("HH:mm:ss"))</span>
+                                                        }
+                                                    </small>
+                                                }
+                                            </div>
+                                            <button class="btn btn-outline-primary btn-sm" type="button"
+                                                    @onclick="RunDiagPing"
+                                                    disabled="@(!MqttService.IsBrokerConnected || isDiagPingRunning)">
+                                                @if (isDiagPingRunning)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-broadcast me-1"></i>
+                                                }
+                                                疎通確認
+                                            </button>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(diagPingMessage))
+                                        {
+                                            <div class="small mt-1 @(diagPingSuccess ? "text-success" : "text-danger")">
+                                                @diagPingMessage
+                                            </div>
+                                        }
+                                    </div>
+
                                     @if (!string.IsNullOrEmpty(remoteLaunchTopicGuid))
                                     {
                                         <div class="mb-3">
@@ -1006,6 +1055,11 @@
     private string remoteLaunchTopicGuid = "";
     private string remoteLaunchPassword = "";
     private bool remoteLaunchPasswordCleared = false;
+
+    // リモート起動: 疎通確認用
+    private bool isDiagPingRunning = false;
+    private bool diagPingSuccess = false;
+    private string? diagPingMessage = null;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
     private bool textRefineEnabled = false;
@@ -1058,6 +1112,46 @@
     // エクスポート/インポート用
     private int importSessionCount = 0;
     private List<SessionInfo>? importSessions = null;
+
+    protected override void OnInitialized()
+    {
+        MqttService.StateChanged += OnMqttStateChanged;
+    }
+
+    public void Dispose()
+    {
+        MqttService.StateChanged -= OnMqttStateChanged;
+    }
+
+    private void OnMqttStateChanged()
+    {
+        // MqttService のコールバックは任意のスレッドから発火する可能性があるため InvokeAsync で UI スレッドに乗せる
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RunDiagPing()
+    {
+        if (isDiagPingRunning) return;
+        isDiagPingRunning = true;
+        diagPingMessage = null;
+        try
+        {
+            var result = await MqttService.DiagPingAsync(TimeSpan.FromSeconds(3));
+            diagPingSuccess = result.Success;
+            diagPingMessage = result.Success
+                ? $"OK (往復 {result.RoundTrip?.TotalMilliseconds:F0} ms)"
+                : $"NG: {result.FailureReason}";
+        }
+        catch (Exception ex)
+        {
+            diagPingSuccess = false;
+            diagPingMessage = $"NG: {ex.Message}";
+        }
+        finally
+        {
+            isDiagPingRunning = false;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
