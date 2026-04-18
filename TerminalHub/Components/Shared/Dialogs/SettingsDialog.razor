@@ -687,6 +687,10 @@
                                                         }
                                                     </small>
                                                 }
+                                                else if (!MqttService.IsBrokerConnected)
+                                                {
+                                                    <small class="text-muted">接続試行中…</small>
+                                                }
                                             </div>
                                             <button class="btn btn-outline-primary btn-sm" type="button"
                                                     @onclick="RunDiagPing"
