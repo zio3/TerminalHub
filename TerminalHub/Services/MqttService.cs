@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -34,6 +35,26 @@ public class MqttService : IHostedService, IDisposable
 
     /// <summary>現在購読中のトピックGUID</summary>
     public string? CurrentTopicGuid => _currentTopicGuid;
+
+    /// <summary>ブローカーに接続中か (UI 表示用)</summary>
+    public bool IsBrokerConnected => _mqttClient?.IsConnected ?? false;
+
+    /// <summary>最後の ConnectAsync 戻り値 (UI で ResultCode 表示に使用)</summary>
+    public MQTTnet.MqttClientConnectResult? LastConnectResult { get; private set; }
+
+    /// <summary>最後に接続を試みた時刻</summary>
+    public DateTime? LastConnectAttemptAt { get; private set; }
+
+    /// <summary>接続状態が変化したとき UI に再描画を促すためのイベント</summary>
+    public event Action? StateChanged;
+
+    /// <summary>疎通確認で使う action 値 (既存の ping/nonce と衝突しないアンダースコア prefix)</summary>
+    private const string DiagPingAction = "_diag_ping";
+
+    /// <summary>進行中の疎通確認 TCS (相関IDでマッチ)</summary>
+    private readonly object _diagPingLock = new();
+    private TaskCompletionSource<bool>? _diagPingTcs;
+    private string? _diagPingCorrelationId;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -107,9 +128,12 @@ public class MqttService : IHostedService, IDisposable
         _logger.LogInformation("[MQTT] 接続試行: {Host}:{Port}, ClientId={ClientId}, HasCredentials={HasCredentials}",
             mqttHost, mqttPort, clientId, !string.IsNullOrEmpty(mqttUsername));
 
+        LastConnectAttemptAt = DateTime.UtcNow;
+
         try
         {
             var connectResult = await _mqttClient.ConnectAsync(options, cancellationToken);
+            LastConnectResult = connectResult;
             _logger.LogInformation(
                 "[MQTT] ConnectAsync戻り: ResultCode={ResultCode}, ReasonString={ReasonString}, AssignedClientId={AssignedClientId}, IsSessionPresent={IsSessionPresent}, IsConnected={IsConnected}",
                 connectResult?.ResultCode, connectResult?.ReasonString, connectResult?.AssignedClientIdentifier, connectResult?.IsSessionPresent, _mqttClient.IsConnected);
@@ -119,6 +143,7 @@ public class MqttService : IHostedService, IDisposable
                 _logger.LogError(
                     "[MQTT] Connect直後にIsConnected=false。ResultCode={ResultCode} を確認 (NotAuthorized=認証失敗、ClientId重複で蹴られた場合は NormalDisconnection 等) (ClientId={ClientId})",
                     connectResult?.ResultCode, clientId);
+                StateChanged?.Invoke();
                 return;
             }
 
@@ -130,11 +155,13 @@ public class MqttService : IHostedService, IDisposable
                     item.TopicFilter.Topic, item.ResultCode);
             }
             _logger.LogInformation("[MQTT] トピック購読完了: {Topic}", requestTopic);
+            StateChanged?.Invoke();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[MQTT] 接続失敗 (Host={Host}:{Port}, ClientId={ClientId}, IsConnected={IsConnected})",
                 mqttHost, mqttPort, clientId, _mqttClient?.IsConnected);
+            StateChanged?.Invoke();
         }
     }
 
@@ -157,6 +184,8 @@ public class MqttService : IHostedService, IDisposable
         }
         _mqttClient?.Dispose();
         _mqttClient = null;
+        LastConnectResult = null;
+        StateChanged?.Invoke();
     }
 
     private async Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs e)
@@ -165,6 +194,8 @@ public class MqttService : IHostedService, IDisposable
             "[MQTT] 切断検知: Reason={Reason}, ReasonString={ReasonString}, ClientWasConnected={ClientWasConnected}, Intentional={Intentional}, ConnectResultCode={ConnectResultCode}, Exception={ExceptionType}/{ExceptionMessage}",
             e.Reason, e.ReasonString, e.ClientWasConnected, _intentionalDisconnect,
             e.ConnectResult?.ResultCode, e.Exception?.GetType().Name, e.Exception?.Message);
+
+        StateChanged?.Invoke();
 
         if (!e.ClientWasConnected || _intentionalDisconnect) return;
 
@@ -204,7 +235,9 @@ public class MqttService : IHostedService, IDisposable
 
             try
             {
+                LastConnectAttemptAt = DateTime.UtcNow;
                 var connectResult = await _mqttClient!.ConnectAsync(options);
+                LastConnectResult = connectResult;
                 _logger.LogInformation(
                     "[MQTT] リトライConnectAsync戻り: ResultCode={ResultCode}, ReasonString={ReasonString}, IsConnected={IsConnected}",
                     connectResult?.ResultCode, connectResult?.ReasonString, _mqttClient.IsConnected);
@@ -212,11 +245,13 @@ public class MqttService : IHostedService, IDisposable
                 if (!_mqttClient.IsConnected)
                 {
                     _logger.LogWarning("[MQTT] リトライ Connect直後に IsConnected=false ({Attempt}/{Max})", i + 1, delays.Length);
+                    StateChanged?.Invoke();
                     continue;
                 }
 
                 await _mqttClient.SubscribeAsync(requestTopic, MqttQualityOfServiceLevel.AtLeastOnce);
                 _logger.LogInformation("[MQTT] 再接続成功 (リトライ {Attempt}回目)", i + 1);
+                StateChanged?.Invoke();
                 return;
             }
             catch (Exception ex)
@@ -238,6 +273,13 @@ public class MqttService : IHostedService, IDisposable
 
             var envelope = JsonSerializer.Deserialize<MqttEnvelope>(payload, JsonOptions);
             if (envelope == null) return;
+
+            // 疎通確認用の自己ループバックメッセージ (通常処理やレスポンス送信を行わない)
+            if (string.Equals(envelope.Action, DiagPingAction, StringComparison.Ordinal))
+            {
+                TryCompleteDiagPing(envelope.RequestId);
+                return;
+            }
 
             // 平文メッセージ（ping / nonce）
             if (!string.IsNullOrEmpty(envelope.Action))
@@ -654,6 +696,91 @@ public class MqttService : IHostedService, IDisposable
 
     #endregion
 
+    #region 疎通確認
+
+    /// <summary>
+    /// 疎通確認: 自分の request トピックに publish → 自分の subscription で受信確認。
+    /// 既存の接続を維持したまま、broker を介した publish/subscribe の往復を測定する。
+    /// </summary>
+    public async Task<DiagPingResult> DiagPingAsync(TimeSpan timeout, CancellationToken ct = default)
+    {
+        if (_mqttClient?.IsConnected != true || string.IsNullOrEmpty(_currentTopicGuid))
+        {
+            return new DiagPingResult(false, null, "未接続");
+        }
+
+        TaskCompletionSource<bool> tcs;
+        string correlationId = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
+
+        lock (_diagPingLock)
+        {
+            if (_diagPingTcs is { Task.IsCompleted: false })
+            {
+                return new DiagPingResult(false, null, "別の疎通確認が進行中");
+            }
+            tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _diagPingTcs = tcs;
+            _diagPingCorrelationId = correlationId;
+        }
+
+        var requestTopic = $"{MqttConstants.TopicPrefix}/{_currentTopicGuid}/request";
+        var payload = JsonSerializer.Serialize(new { action = DiagPingAction, requestId = correlationId }, JsonOptions);
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(requestTopic)
+            .WithPayload(payload)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+            .Build();
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await _mqttClient.PublishAsync(message, ct);
+        }
+        catch (Exception ex)
+        {
+            ClearDiagPing();
+            return new DiagPingResult(false, null, $"publish失敗: {ex.Message}");
+        }
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout);
+            await tcs.Task.WaitAsync(cts.Token);
+            stopwatch.Stop();
+            return new DiagPingResult(true, stopwatch.Elapsed, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return new DiagPingResult(false, null, $"タイムアウト ({timeout.TotalSeconds:F0}秒)");
+        }
+        finally
+        {
+            ClearDiagPing();
+        }
+    }
+
+    private void TryCompleteDiagPing(string? correlationId)
+    {
+        lock (_diagPingLock)
+        {
+            if (_diagPingTcs is null || _diagPingCorrelationId is null) return;
+            if (!string.Equals(_diagPingCorrelationId, correlationId, StringComparison.Ordinal)) return;
+            _diagPingTcs.TrySetResult(true);
+        }
+    }
+
+    private void ClearDiagPing()
+    {
+        lock (_diagPingLock)
+        {
+            _diagPingTcs = null;
+            _diagPingCorrelationId = null;
+        }
+    }
+
+    #endregion
+
     public void Dispose()
     {
         _mqttClient?.Dispose();
@@ -701,3 +828,11 @@ public class MqttRequest
     /// <summary>パスワードハッシュ（パスワード設定時のみ）</summary>
     public string? PasswordHash { get; set; }
 }
+
+/// <summary>
+/// 疎通確認 (DiagPingAsync) の結果
+/// </summary>
+/// <param name="Success">publish/subscribe の往復に成功したか</param>
+/// <param name="RoundTrip">成功時の往復時間</param>
+/// <param name="FailureReason">失敗時の理由</param>
+public record DiagPingResult(bool Success, TimeSpan? RoundTrip, string? FailureReason);
