@@ -116,7 +116,9 @@ public class MqttService : IHostedService, IDisposable
 
             if (!_mqttClient.IsConnected)
             {
-                _logger.LogError("[MQTT] Connect直後にIsConnected=false。ClientId重複で別クライアントに蹴られた可能性が高い (ClientId={ClientId})", clientId);
+                _logger.LogError(
+                    "[MQTT] Connect直後にIsConnected=false。ResultCode={ResultCode} を確認 (NotAuthorized=認証失敗、ClientId重複で蹴られた場合は NormalDisconnection 等) (ClientId={ClientId})",
+                    connectResult?.ResultCode, clientId);
                 return;
             }
 
