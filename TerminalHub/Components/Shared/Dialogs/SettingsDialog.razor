@@ -1094,12 +1094,23 @@
             claudeHookEnabled = settings.ClaudeHook.Enabled;
 
             // 特殊設定
-            claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey;
+            // ClaudeModeSwitchKey は過去バージョンで "plan" 等の廃止された値が
+            // 保存されている可能性があるため、現在の UI が扱える値にフォールバックする。
+            claudeModeSwitchKey = settings.Special.ClaudeModeSwitchKey switch
+            {
+                "altM" or "shiftTab" or "none" => settings.Special.ClaudeModeSwitchKey,
+                _ => "none"
+            };
             voiceInputEnabled = settings.Special.VoiceInputEnabled;
             textRefineEnabled = settings.Special.TextRefineEnabled;
 
             // セッション表示設定
-            sessionSortMode = settings.Sessions.SortMode;
+            // 未知の SortMode 値は lastAccessed にフォールバック（UI ラジオの未選択状態を防ぐ）
+            sessionSortMode = settings.Sessions.SortMode switch
+            {
+                "createdAt" or "lastAccessed" or "name" => settings.Sessions.SortMode,
+                _ => "lastAccessed"
+            };
             showTerminalType = settings.Sessions.ShowTerminalType;
             showGitInfo = settings.Sessions.ShowGitInfo;
             hideInputPanel = settings.Sessions.HideInputPanel;

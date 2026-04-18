@@ -379,7 +379,15 @@
             try
             {
                 var appSettings = AppSettingsService.GetSettings();
-                claudeModeSwitchKey = appSettings.Special.ClaudeModeSwitchKey;
+                // 過去バージョンで "plan" 等の廃止値が保存されている可能性があるため、
+                // 現在の UI とランタイムが扱える値に正規化する。
+                // 不明値をそのままにしておくと TextInputPanel が Alt+M ラベルの
+                // ボタンを表示するが実際は押しても何も起きない、という UI 不整合が発生する。
+                claudeModeSwitchKey = appSettings.Special.ClaudeModeSwitchKey switch
+                {
+                    "altM" or "shiftTab" or "none" => appSettings.Special.ClaudeModeSwitchKey,
+                    _ => "none"
+                };
                 voiceInputEnabled = appSettings.Special.VoiceInputEnabled;
                 textRefineEnabled = appSettings.Special.TextRefineEnabled;
                 sessionSortMode = appSettings.Sessions.SortMode;
