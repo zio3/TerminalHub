@@ -704,7 +704,11 @@
                                         </div>
                                         @if (!string.IsNullOrEmpty(diagPingMessage))
                                         {
-                                            <div class="small mt-1 @(diagPingSuccess ? "text-success" : "text-danger")">
+                                            <div class="small mt-1 @(isDiagPingRunning ? "text-muted" : diagPingSuccess ? "text-success" : "text-danger")">
+                                                @if (diagPingExecutedAt.HasValue)
+                                                {
+                                                    <span class="me-1">[@diagPingExecutedAt.Value.ToString("HH:mm:ss")]</span>
+                                                }
                                                 @diagPingMessage
                                             </div>
                                         }
@@ -1060,6 +1064,7 @@
     private bool isDiagPingRunning = false;
     private bool diagPingSuccess = false;
     private string? diagPingMessage = null;
+    private DateTime? diagPingExecutedAt = null;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
     private bool textRefineEnabled = false;
@@ -1133,7 +1138,9 @@
     {
         if (isDiagPingRunning) return;
         isDiagPingRunning = true;
-        diagPingMessage = null;
+        diagPingExecutedAt = DateTime.Now;
+        diagPingMessage = "確認中...";
+        diagPingSuccess = false;
         try
         {
             var result = await MqttService.DiagPingAsync(TimeSpan.FromSeconds(3));
