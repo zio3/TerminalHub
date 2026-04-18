@@ -261,9 +261,9 @@
             }
 
             <div class="form-check mt-3">
-                <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumePicker" id="@($"codexResumePicker{UniqueId}")">
-                <label class="form-check-label" for="@($"codexResumePicker{UniqueId}")">
-                    再開するセッションを選択 (resume)
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumeLast" id="@($"codexResumeLast{UniqueId}")">
+                <label class="form-check-label" for="@($"codexResumeLast{UniqueId}")">
+                    最新セッションを再開 (resume --last)
                 </label>
             </div>
 
@@ -556,9 +556,9 @@
 
             case TerminalType.CodexCLI:
                 options["mode"] = CodexOptions.Mode;
-                if (CodexOptions.ResumePicker)
+                if (CodexOptions.ResumeLast)
                 {
-                    options["resume-picker"] = "true";
+                    options["resume-last"] = "true";
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.SandboxMode))
                 {
@@ -619,7 +619,7 @@
     public class CodexOptionsData
     {
         public string Mode { get; set; } = "auto"; // auto, standard, yolo
-        public bool ResumePicker { get; set; } = false;
+        public bool ResumeLast { get; set; } = false;
         public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
         public string NetworkAccess { get; set; } = "";
