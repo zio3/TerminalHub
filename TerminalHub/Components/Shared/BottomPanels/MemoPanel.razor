@@ -19,13 +19,16 @@
     // デバウンス間隔 (ms)。短すぎると毎入力で I/O が走る、長すぎるとアプリ終了時の消失リスクが増える。
     private const int DebounceMs = 1000;
 
+    // 編集中は _pendingBody を優先的に返す。親のステータス更新等で
+    // 再描画が連鎖したときに親の古い Body が textarea に書き戻されて
+    // 入力が消える/荒ぶる現象を防ぐための「local-wins」戦略。
     private string bodyText
     {
-        get => Body;
+        get => _pendingBody ?? Body;
         set
         {
-            if (Body == value) return;
-            Body = value;
+            var current = _pendingBody ?? Body;
+            if (current == value) return;
             ScheduleFlush(value);
         }
     }
@@ -43,6 +46,12 @@
         }
         _lastMemoId = MemoId;
     }
+
+    // 編集中 (debounce 保留あり) は親の再描画に追従しない。
+    // SetParametersAsync は呼ばれるが DOM を書き換えない → textarea の入力値が維持される。
+    // MemoId 切替時は OnParametersSet で _pendingBody がフラッシュ/クリアされるので、
+    // 本メソッドは次回の再描画で true を返し、新しい Body が正しく表示される。
+    protected override bool ShouldRender() => _pendingBody == null;
 
     private void ScheduleFlush(string value)
     {
