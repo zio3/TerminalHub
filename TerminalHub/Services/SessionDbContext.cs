@@ -200,6 +200,15 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v6 適用完了");
             }
 
+            if (currentVersion < 7)
+            {
+                // v7: メモ編集履歴 (スナップショット) テーブルを追加
+                _logger.LogInformation("[DB][マイグレーション] v7 適用開始: SessionMemoSnapshots テーブル追加");
+                await CreateSessionMemoSnapshotsTableAsync();
+                await SetSchemaVersionAsync(7);
+                _logger.LogInformation("[DB][マイグレーション] v7 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -370,6 +379,31 @@ namespace TerminalHub.Services
                 "ALTER TABLE SessionMemos ADD COLUMN DeletedAt TEXT");
             await connection.ExecuteNonQueryAsync(
                 "CREATE INDEX IF NOT EXISTS idx_session_memos_deleted ON SessionMemos(SessionId, IsDeleted, DeletedAt)");
+        }
+
+        private async Task CreateSessionMemoSnapshotsTableAsync()
+        {
+            // v7 マイグレーション: メモの編集履歴 (スナップショット) テーブルを追加。
+            // 10 分毎の自動スナップショット (Trigger="auto") と、論理削除直前の
+            // 保険スナップショット (Trigger="pre-delete") を保存する。
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var sql = @"
+                CREATE TABLE IF NOT EXISTS SessionMemoSnapshots (
+                    SnapshotId TEXT PRIMARY KEY,
+                    MemoId TEXT NOT NULL,
+                    Title TEXT NOT NULL DEFAULT '',
+                    Body TEXT NOT NULL DEFAULT '',
+                    SavedAt TEXT NOT NULL,
+                    Trigger TEXT NOT NULL,
+                    FOREIGN KEY(MemoId) REFERENCES SessionMemos(MemoId) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_memo_snapshots_memo ON SessionMemoSnapshots(MemoId, SavedAt DESC);
+            ";
+
+            await connection.ExecuteNonQueryAsync(sql);
         }
 
         /// <summary>

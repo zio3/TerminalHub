@@ -8,11 +8,16 @@ namespace TerminalHub.Services
     {
         private readonly SessionDbContext _dbContext;
         private readonly ILogger<SessionMemoRepository> _logger;
+        private readonly ISessionMemoSnapshotRepository _snapshotRepository;
 
-        public SessionMemoRepository(SessionDbContext dbContext, ILogger<SessionMemoRepository> logger)
+        public SessionMemoRepository(
+            SessionDbContext dbContext,
+            ILogger<SessionMemoRepository> logger,
+            ISessionMemoSnapshotRepository snapshotRepository)
         {
             _dbContext = dbContext;
             _logger = logger;
+            _snapshotRepository = snapshotRepository;
         }
 
         public async Task<List<SessionMemo>> GetBySessionAsync(Guid sessionId)
@@ -151,6 +156,10 @@ namespace TerminalHub.Services
         {
             // うっかり × ボタンで消されても後から復元できるよう、論理削除に移行。
             // シグネチャは変えていないので、既存呼び出し側 (BottomPanel.RemoveTab 等) は無変更で動く。
+            // さらに、論理削除の直前に pre-delete スナップショットを 1 件作成しておき、
+            // 復元時に直前状態を確実に戻せるようにする (Phase 2)。
+            await SavePreDeleteSnapshotAsync(memoId);
+
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
@@ -160,6 +169,42 @@ namespace TerminalHub.Services
                 WHERE MemoId = @memoId",
                 ("@memoId", memoId.ToString()),
                 ("@deletedAt", DateTime.Now.ToString("o")));
+        }
+
+        private async Task SavePreDeleteSnapshotAsync(Guid memoId)
+        {
+            try
+            {
+                await using var connection = _dbContext.CreateConnection();
+                await connection.OpenAsync();
+
+                await using var reader = await connection.ExecuteReaderAsync(
+                    "SELECT Title, Body FROM SessionMemos WHERE MemoId = @memoId AND IsDeleted = 0",
+                    ("@memoId", memoId.ToString()));
+
+                if (!await reader.ReadAsync())
+                {
+                    // 既に削除済み or 存在しない → 何もしない
+                    return;
+                }
+                var title = reader.GetString(0);
+                var body = reader.GetString(1);
+                await reader.CloseAsync();
+
+                await _snapshotRepository.InsertAsync(new SessionMemoSnapshot
+                {
+                    MemoId = memoId,
+                    Title = title,
+                    Body = body,
+                    SavedAt = DateTime.Now,
+                    Trigger = SessionMemoSnapshot.TriggerPreDelete
+                });
+            }
+            catch (Exception ex)
+            {
+                // スナップショット失敗で論理削除そのものを止めたくないので、ログだけ残して続行
+                _logger.LogError(ex, "[Memo] pre-delete snapshot 失敗: MemoId={MemoId}", memoId);
+            }
         }
 
         public async Task RestoreAsync(Guid memoId)

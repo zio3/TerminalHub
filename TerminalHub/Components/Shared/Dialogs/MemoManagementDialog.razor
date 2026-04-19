@@ -1,6 +1,7 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @inject ISessionMemoRepository MemoRepository
+@inject ISessionMemoSnapshotRepository SnapshotRepository
 @inject ILogger<MemoManagementDialog> Logger
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
@@ -22,12 +23,36 @@
                 }
                 else
                 {
-                    <!-- 削除済みメモ -->
-                    <div class="mb-4">
-                        <h6 class="text-muted">
-                            <i class="bi bi-trash me-1"></i>削除済みメモ
-                            <span class="badge bg-secondary ms-2">@deletedMemos.Count</span>
-                        </h6>
+                    <!-- タブナビゲーション -->
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button type="button"
+                                    class="nav-link @(activeTab == "current" ? "active" : "")"
+                                    @onclick='() => activeTab = "current"'>
+                                <i class="bi bi-journal-text me-1"></i>現在のメモ
+                                <span class="badge bg-secondary ms-1">@activeMemos.Count</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button type="button"
+                                    class="nav-link @(activeTab == "deleted" ? "active" : "")"
+                                    @onclick='() => activeTab = "deleted"'>
+                                <i class="bi bi-trash me-1"></i>削除済みメモ
+                                @if (deletedMemos.Count > 0)
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">@deletedMemos.Count</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary ms-1">0</span>
+                                }
+                            </button>
+                        </li>
+                    </ul>
+
+                    @if (activeTab == "deleted")
+                    {
+                        <!-- 削除済みメモタブ -->
                         @if (deletedMemos.Count == 0)
                         {
                             <p class="text-muted small mb-0">削除済みのメモはありません。</p>
@@ -65,14 +90,10 @@
                                 }
                             </div>
                         }
-                    </div>
-
-                    <!-- アクティブなメモ (参考情報) -->
-                    <div>
-                        <h6 class="text-muted">
-                            <i class="bi bi-journal-text me-1"></i>現在のメモ
-                            <span class="badge bg-secondary ms-2">@activeMemos.Count</span>
-                        </h6>
+                    }
+                    else
+                    {
+                        <!-- 現在のメモタブ (履歴つき) -->
                         @if (activeMemos.Count == 0)
                         {
                             <p class="text-muted small mb-0">現在、有効なメモはありません。</p>
@@ -82,19 +103,81 @@
                             <div class="list-group">
                                 @foreach (var memo in activeMemos)
                                 {
+                                    var isExpanded = expandedMemoIds.Contains(memo.MemoId);
+                                    var snapshots = snapshotCache.TryGetValue(memo.MemoId, out var list) ? list : null;
+                                    // 展開前は事前ロードした snapshotCounts を、展開後はより確実な snapshots.Count を表示
+                                    var countLabel = snapshots is not null
+                                        ? $" ({snapshots.Count})"
+                                        : (snapshotCounts.TryGetValue(memo.MemoId, out var cnt) && cnt > 0 ? $" ({cnt})" : "");
                                     <div class="list-group-item">
-                                        <div class="fw-bold text-truncate">@(string.IsNullOrWhiteSpace(memo.Title) ? "(無題)" : memo.Title)</div>
-                                        <small class="text-muted">
-                                            更新日時: @memo.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
-                                        </small>
-                                        <div class="small text-muted mt-1" style="white-space: pre-wrap; word-break: break-all; max-height: 4.5em; overflow: hidden;">
-                                            @(GetPreview(memo.Body))
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <div class="flex-grow-1 min-width-0">
+                                                <div class="fw-bold text-truncate">@(string.IsNullOrWhiteSpace(memo.Title) ? "(無題)" : memo.Title)</div>
+                                                <small class="text-muted">
+                                                    更新日時: @memo.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                                                </small>
+                                                <div class="small text-muted mt-1" style="white-space: pre-wrap; word-break: break-all; max-height: 4.5em; overflow: hidden;">
+                                                    @(GetPreview(memo.Body))
+                                                </div>
+                                            </div>
+                                            <div class="flex-shrink-0">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                        @onclick="() => ToggleHistoryAsync(memo.MemoId)"
+                                                        disabled="@isBusy">
+                                                    <i class="bi @(isExpanded ? "bi-chevron-up" : "bi-clock-history") me-1"></i>
+                                                    履歴@(countLabel)
+                                                </button>
+                                            </div>
                                         </div>
+
+                                        @if (isExpanded)
+                                        {
+                                            <div class="mt-2 ps-3 border-start">
+                                                @if (snapshots is null)
+                                                {
+                                                    <div class="small text-muted py-2">
+                                                        <span class="spinner-border spinner-border-sm me-1"></span>読み込み中...
+                                                    </div>
+                                                }
+                                                else if (snapshots.Count == 0)
+                                                {
+                                                    <div class="small text-muted py-2">履歴はまだありません。自動スナップショットは 10 分毎に取得されます。</div>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var snap in snapshots)
+                                                    {
+                                                        <div class="py-2 border-bottom">
+                                                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                                                <div class="flex-grow-1 min-width-0">
+                                                                    <div class="small">
+                                                                        <span class="text-muted">@snap.SavedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                                                                        <span class="badge @(snap.Trigger == SessionMemoSnapshot.TriggerPreDelete ? "bg-warning text-dark" : "bg-secondary") ms-2">
+                                                                            @(snap.Trigger == SessionMemoSnapshot.TriggerPreDelete ? "削除直前" : "自動")
+                                                                        </span>
+                                                                    </div>
+                                                                    <div class="small text-muted mt-1" style="white-space: pre-wrap; word-break: break-all; max-height: 3.5em; overflow: hidden;">
+                                                                        @(GetPreview(snap.Body))
+                                                                    </div>
+                                                                </div>
+                                                                <div class="flex-shrink-0">
+                                                                    <button type="button" class="btn btn-outline-success btn-sm"
+                                                                            @onclick="() => RequestRestoreVersion(memo, snap)"
+                                                                            disabled="@isBusy">
+                                                                        <i class="bi bi-arrow-counterclockwise me-1"></i>このバージョンに戻す
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        }
                                     </div>
                                 }
                             </div>
                         }
-                    </div>
+                    }
 
                     @if (!string.IsNullOrEmpty(statusMessage))
                     {
@@ -138,6 +221,37 @@
     </div>
 }
 
+@if (restoreVersionTarget.HasValue)
+{
+    var (targetMemo, targetSnap) = restoreVersionTarget.Value;
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: var(--th-surface-overlay); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>過去バージョンに戻す</h5>
+                    <button type="button" class="btn-close" @onclick="() => restoreVersionTarget = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        メモ「<strong>@(string.IsNullOrWhiteSpace(targetMemo.Title) ? "(無題)" : targetMemo.Title)</strong>」の本文を
+                        <strong>@targetSnap.SavedAt.ToString("yyyy-MM-dd HH:mm:ss")</strong> 時点のバージョンに戻します。
+                    </p>
+                    <p class="small text-muted mb-2">現在の本文は新しい「直前」スナップショット (自動) として残り、いつでも戻せます。</p>
+                    <div class="border rounded p-2 small bg-body-tertiary" style="white-space: pre-wrap; word-break: break-all; max-height: 10em; overflow: auto;">
+                        @(GetPreview(targetSnap.Body, 400))
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => restoreVersionTarget = null">キャンセル</button>
+                    <button type="button" class="btn btn-success" @onclick="ConfirmRestoreVersion" disabled="@isBusy">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>このバージョンに戻す
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public Guid? SessionId { get; set; }
@@ -151,6 +265,18 @@
     private string statusMessage = "";
     private bool statusIsError = false;
     private SessionMemo? hardDeleteConfirmTarget;
+
+    // ダイアログ内のタブ: "current" (現在のメモ+履歴) | "deleted" (削除済み)
+    private string activeTab = "current";
+
+    // アクティブメモの履歴展開状態とキャッシュ
+    private HashSet<Guid> expandedMemoIds = new();
+    private Dictionary<Guid, List<SessionMemoSnapshot>> snapshotCache = new();
+    // メモごとの履歴件数 (展開前に (N) を表示するため、ダイアログ表示時に一括取得)
+    private Dictionary<Guid, int> snapshotCounts = new();
+
+    // 履歴復元の確認対象 (メモ本体 + 戻すスナップショット)
+    private (SessionMemo Memo, SessionMemoSnapshot Snapshot)? restoreVersionTarget;
 
     private Guid? _loadedSessionId;
 
@@ -173,11 +299,25 @@
 
         isLoading = true;
         statusMessage = "";
+        // 再読み込み時は履歴キャッシュ/展開状態もクリア (別セッション切替や確実な最新化のため)
+        expandedMemoIds.Clear();
+        snapshotCache.Clear();
+        snapshotCounts.Clear();
         StateHasChanged();
         try
         {
             deletedMemos = await MemoRepository.GetDeletedBySessionAsync(SessionId.Value);
             activeMemos = await MemoRepository.GetBySessionAsync(SessionId.Value);
+            // 履歴件数はメモを開かずとも表示したいので先読み (1 クエリ GROUP BY)
+            try
+            {
+                snapshotCounts = await SnapshotRepository.GetCountsBySessionAsync(SessionId.Value);
+            }
+            catch (Exception exCounts)
+            {
+                Logger.LogWarning(exCounts, "[MemoManagementDialog] 履歴件数取得失敗 (続行): SessionId={SessionId}", SessionId);
+                snapshotCounts = new Dictionary<Guid, int>();
+            }
         }
         catch (Exception ex)
         {
@@ -188,6 +328,100 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task ToggleHistoryAsync(Guid memoId)
+    {
+        if (expandedMemoIds.Contains(memoId))
+        {
+            expandedMemoIds.Remove(memoId);
+            return;
+        }
+        expandedMemoIds.Add(memoId);
+        StateHasChanged();
+
+        if (!snapshotCache.ContainsKey(memoId))
+        {
+            try
+            {
+                var snapshots = await SnapshotRepository.GetByMemoAsync(memoId);
+                snapshotCache[memoId] = snapshots;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "[MemoManagementDialog] 履歴読み込み失敗: MemoId={MemoId}", memoId);
+                snapshotCache[memoId] = new List<SessionMemoSnapshot>();
+                statusMessage = $"履歴の読み込みに失敗しました: {ex.Message}";
+                statusIsError = true;
+            }
+        }
+    }
+
+    private void RequestRestoreVersion(SessionMemo memo, SessionMemoSnapshot snap)
+    {
+        restoreVersionTarget = (memo, snap);
+    }
+
+    private async Task ConfirmRestoreVersion()
+    {
+        if (restoreVersionTarget is null || isBusy) return;
+        var (memo, snap) = restoreVersionTarget.Value;
+        restoreVersionTarget = null;
+        isBusy = true;
+        statusMessage = "";
+        try
+        {
+            // 先に現在の本文を snapshot に残してから UpdateBodyAsync で巻き戻す。
+            // これで「復元をやり直したい」時も現在の本文が履歴から拾えるように保全される。
+            if (!string.Equals(memo.Body, snap.Body, StringComparison.Ordinal))
+            {
+                try
+                {
+                    await SnapshotRepository.InsertAsync(new SessionMemoSnapshot
+                    {
+                        MemoId = memo.MemoId,
+                        Title = memo.Title,
+                        Body = memo.Body,
+                        SavedAt = DateTime.Now,
+                        Trigger = SessionMemoSnapshot.TriggerAuto
+                    });
+                    // 保全 snapshot を挿入した分だけ件数が伸びるので、ここで上限超過を整理する。
+                    // (MemoSnapshotService の Tick を待たずに復元操作で閉じる)
+                    await SnapshotRepository.TrimAutoSnapshotsAsync(memo.MemoId, SessionMemoSnapshot.MaxAutoKeep);
+                }
+                catch (Exception exInner)
+                {
+                    // 保全 snapshot が取れなくても復元自体は続行 (ログだけ残す)
+                    Logger.LogWarning(exInner, "[MemoManagementDialog] 復元前 snapshot 保存失敗 (続行): MemoId={MemoId}", memo.MemoId);
+                }
+            }
+
+            // UpdateBodyAsync で現在の本文を上書き。
+            await MemoRepository.UpdateBodyAsync(memo.MemoId, snap.Body);
+
+            // ReloadAsync が snapshotCache/expandedMemoIds を全クリアするので、
+            // 戻したメモだけ再展開+最新キャッシュを入れ直しておく (ユーザーが直前に見ていたビューを維持)。
+            await ReloadAsync();
+            expandedMemoIds.Add(memo.MemoId);
+            var refreshed = await SnapshotRepository.GetByMemoAsync(memo.MemoId);
+            snapshotCache[memo.MemoId] = refreshed;
+
+            statusMessage = $"メモを {snap.SavedAt:yyyy-MM-dd HH:mm:ss} 時点のバージョンに戻しました。";
+            statusIsError = false;
+
+            // BottomPanel に通知して textarea 側も差し替える
+            await OnMemoRestored.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[MemoManagementDialog] バージョン復元失敗: MemoId={MemoId}, SnapshotId={SnapshotId}", memo.MemoId, snap.SnapshotId);
+            statusMessage = $"復元に失敗しました: {ex.Message}";
+            statusIsError = true;
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 
@@ -252,10 +486,9 @@
         await OnClose.InvokeAsync();
     }
 
-    private static string GetPreview(string body)
+    private static string GetPreview(string body, int maxLen = 200)
     {
         if (string.IsNullOrEmpty(body)) return "(空)";
-        const int maxLen = 200;
         return body.Length <= maxLen ? body : body.Substring(0, maxLen) + "…";
     }
 }
