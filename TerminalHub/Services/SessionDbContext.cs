@@ -186,13 +186,18 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v4 適用完了");
             }
 
-            if (currentVersion < 5)
+            // v5 は廃止された「ファイル参照」機能 (SessionFiles テーブル) で一度消費された番号。
+            // 開発環境の DB には SchemaVersion=5 と空のままの SessionFiles テーブルが残っている
+            // ケースがあるため、メモの論理削除は v6 として新設する。新規 DB でも害はない
+            // (単に v5 が no-op で通過するだけ)。
+
+            if (currentVersion < 6)
             {
-                // v5: SessionMemos に論理削除カラム (IsDeleted, DeletedAt) を追加
-                _logger.LogInformation("[DB][マイグレーション] v5 適用開始: SessionMemos に論理削除カラムを追加");
+                // v6: SessionMemos に論理削除カラム (IsDeleted, DeletedAt) を追加
+                _logger.LogInformation("[DB][マイグレーション] v6 適用開始: SessionMemos に論理削除カラムを追加");
                 await AddMemoSoftDeleteColumnsAsync();
-                await SetSchemaVersionAsync(5);
-                _logger.LogInformation("[DB][マイグレーション] v5 適用完了");
+                await SetSchemaVersionAsync(6);
+                _logger.LogInformation("[DB][マイグレーション] v6 適用完了");
             }
 
             _logger.LogInformation("[DB][マイグレーション] 完了");
