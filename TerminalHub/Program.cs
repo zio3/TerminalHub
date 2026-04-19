@@ -61,8 +61,13 @@ builder.Services.AddSingleton<SessionDbContext>(sp =>
     return new SessionDbContext(dbPath, logger);
 });
 builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
+builder.Services.AddSingleton<ISessionMemoSnapshotRepository, SessionMemoSnapshotRepository>();
 builder.Services.AddSingleton<ISessionMemoRepository, SessionMemoRepository>();
 builder.Services.AddScoped<IStorageServiceFactory, StorageServiceFactory>();
+
+// メモ編集履歴の自動スナップショットサービス (10分毎)
+builder.Services.AddSingleton<MemoSnapshotService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MemoSnapshotService>());
 
 // NotificationServiceを登録
 builder.Services.AddScoped<INotificationService, NotificationService>();
