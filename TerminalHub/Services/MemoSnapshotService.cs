@@ -16,11 +16,12 @@ namespace TerminalHub.Services
         // WinForms の Timer と衝突するので System.Threading.Timer を明示
         private System.Threading.Timer? _timer;
 
-        /// <summary>スナップショット取得間隔</summary>
+        /// <summary>
+        /// スナップショット取得間隔。
+        /// 初回 Tick も同じ遅延を使う (= 起動から 10 分は snapshot を作らない)。
+        /// これは設計上の意図で、「10 分間維持されていないテキストは保護対象外」と割り切っている。
+        /// </summary>
         private static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
-
-        /// <summary>メモ 1 件あたりの auto スナップショット保持上限 (超過分は古い順に削除)</summary>
-        private const int MaxAutoKeep = 50;
 
         public MemoSnapshotService(IServiceScopeFactory scopeFactory, ILogger<MemoSnapshotService> logger)
         {
@@ -90,7 +91,7 @@ namespace TerminalHub.Services
                                     SavedAt = DateTime.Now,
                                     Trigger = SessionMemoSnapshot.TriggerAuto
                                 });
-                                await snapshotRepo.TrimAutoSnapshotsAsync(memo.MemoId, MaxAutoKeep);
+                                await snapshotRepo.TrimAutoSnapshotsAsync(memo.MemoId, SessionMemoSnapshot.MaxAutoKeep);
                                 inserted++;
                             }
                         }

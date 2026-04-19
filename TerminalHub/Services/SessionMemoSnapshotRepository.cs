@@ -45,11 +45,12 @@ namespace TerminalHub.Services
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
+            // SavedAt 同時刻のタイ時に順序がぶれないよう SnapshotId を第 2 キーに使う
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SnapshotId, MemoId, Title, Body, SavedAt, Trigger
                 FROM SessionMemoSnapshots
                 WHERE MemoId = @memoId
-                ORDER BY SavedAt DESC
+                ORDER BY SavedAt DESC, SnapshotId DESC
                 LIMIT 1",
                 ("@memoId", memoId.ToString()));
 
@@ -70,7 +71,7 @@ namespace TerminalHub.Services
                 SELECT SnapshotId, MemoId, Title, Body, SavedAt, Trigger
                 FROM SessionMemoSnapshots
                 WHERE MemoId = @memoId
-                ORDER BY SavedAt DESC",
+                ORDER BY SavedAt DESC, SnapshotId DESC",
                 ("@memoId", memoId.ToString()));
 
             while (await reader.ReadAsync())
@@ -113,12 +114,13 @@ namespace TerminalHub.Services
 
             // auto トリガーだけを対象に、古い順に超過分を削除する。
             // pre-delete スナップショットは対象外 (復元の最終防衛線として保護)。
+            // SavedAt 同時刻のタイ時に tie-breaker が無いと削除対象が非決定的になるので SnapshotId を第 2 キーに。
             await connection.ExecuteNonQueryAsync(@"
                 DELETE FROM SessionMemoSnapshots
                 WHERE SnapshotId IN (
                     SELECT SnapshotId FROM SessionMemoSnapshots
                     WHERE MemoId = @memoId AND Trigger = @trigger
-                    ORDER BY SavedAt DESC
+                    ORDER BY SavedAt DESC, SnapshotId DESC
                     LIMIT -1 OFFSET @keep
                 )",
                 ("@memoId", memoId.ToString()),

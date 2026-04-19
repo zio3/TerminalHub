@@ -17,5 +17,11 @@ namespace TerminalHub.Models
 
         public const string TriggerAuto = "auto";
         public const string TriggerPreDelete = "pre-delete";
+
+        /// <summary>
+        /// メモ 1 件あたりの auto スナップショット保持上限。超過分は古い順に物理削除される。
+        /// pre-delete は対象外 (復元の最終防衛線として保護)。
+        /// </summary>
+        public const int MaxAutoKeep = 50;
     }
 }

@@ -386,6 +386,9 @@
                         SavedAt = DateTime.Now,
                         Trigger = SessionMemoSnapshot.TriggerAuto
                     });
+                    // 保全 snapshot を挿入した分だけ件数が伸びるので、ここで上限超過を整理する。
+                    // (MemoSnapshotService の Tick を待たずに復元操作で閉じる)
+                    await SnapshotRepository.TrimAutoSnapshotsAsync(memo.MemoId, SessionMemoSnapshot.MaxAutoKeep);
                 }
                 catch (Exception exInner)
                 {
@@ -397,11 +400,9 @@
             // UpdateBodyAsync で現在の本文を上書き。
             await MemoRepository.UpdateBodyAsync(memo.MemoId, snap.Body);
 
-            // 履歴キャッシュをこのメモだけクリア (再展開で最新状態を取得)
-            snapshotCache.Remove(memo.MemoId);
-
+            // ReloadAsync が snapshotCache/expandedMemoIds を全クリアするので、
+            // 戻したメモだけ再展開+最新キャッシュを入れ直しておく (ユーザーが直前に見ていたビューを維持)。
             await ReloadAsync();
-            // 展開状態は ReloadAsync でクリアされるので、戻したメモは再度展開しておくと親切
             expandedMemoIds.Add(memo.MemoId);
             var refreshed = await SnapshotRepository.GetByMemoAsync(memo.MemoId);
             snapshotCache[memo.MemoId] = refreshed;
