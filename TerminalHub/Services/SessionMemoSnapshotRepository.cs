@@ -80,6 +80,30 @@ namespace TerminalHub.Services
             return result;
         }
 
+        public async Task<Dictionary<Guid, int>> GetCountsBySessionAsync(Guid sessionId)
+        {
+            var result = new Dictionary<Guid, int>();
+            await using var connection = _dbContext.CreateConnection();
+            await connection.OpenAsync();
+
+            // セッション配下のメモ (論理削除済みも含む) に紐づく snapshot 件数を一括取得。
+            // アクティブメモだけでなく削除済みも対象にしておくことで、将来「削除済みメモの履歴」
+            // UI を足すときにも再利用できる。履歴 0 件のメモは結果に含まれない。
+            await using var reader = await connection.ExecuteReaderAsync(@"
+                SELECT sn.MemoId, COUNT(*) AS Cnt
+                FROM SessionMemoSnapshots sn
+                INNER JOIN SessionMemos m ON m.MemoId = sn.MemoId
+                WHERE m.SessionId = @sessionId
+                GROUP BY sn.MemoId",
+                ("@sessionId", sessionId.ToString()));
+
+            while (await reader.ReadAsync())
+            {
+                result[Guid.Parse(reader.GetString(0))] = reader.GetInt32(1);
+            }
+            return result;
+        }
+
         public async Task TrimAutoSnapshotsAsync(Guid memoId, int maxAutoKeep)
         {
             if (maxAutoKeep <= 0) return;

@@ -17,6 +17,13 @@ namespace TerminalHub.Services
         Task<List<SessionMemoSnapshot>> GetByMemoAsync(Guid memoId);
 
         /// <summary>
+        /// 指定セッションに紐づくメモごとの snapshot 件数を一括取得する
+        /// (メモ管理ダイアログで履歴件数を展開前に表示するため)。
+        /// 履歴 0 件のメモは Dictionary に含まれない。
+        /// </summary>
+        Task<Dictionary<Guid, int>> GetCountsBySessionAsync(Guid sessionId);
+
+        /// <summary>
         /// Trigger="auto" のスナップショットが <paramref name="maxAutoKeep"/> 件を超えたら
         /// 古い順に物理削除する。pre-delete は削除対象外 (復元の最終防衛線を保護)。
         /// </summary>
