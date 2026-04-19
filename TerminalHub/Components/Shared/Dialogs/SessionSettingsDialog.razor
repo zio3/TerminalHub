@@ -6,6 +6,7 @@
 @inject ISessionManager SessionManager
 @inject IJSRuntime JSRuntime
 @inject ILogger<SessionSettingsDialog> Logger
+@inject ISessionMemoRepository MemoRepository
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -58,12 +59,21 @@
                         </div>
                     </div>
 
-                    @if (!sessionInfo.ParentSessionId.HasValue)
+                    @if (!sessionInfo.ParentSessionId.HasValue || anyMemoExists)
                     {
-                        <div class="mt-3">
-                            <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
-                                <i class="bi bi-plus-circle me-1"></i>サブセッションを作成
-                            </button>
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            @if (!sessionInfo.ParentSessionId.HasValue)
+                            {
+                                <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
+                                    <i class="bi bi-plus-circle me-1"></i>サブセッションを作成
+                                </button>
+                            }
+                            @if (anyMemoExists)
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenMemoManagement">
+                                    <i class="bi bi-journal-text me-1"></i>メモ管理
+                                </button>
+                            }
                         </div>
                     }
 
@@ -146,12 +156,21 @@
     </div>
 </div>
 
+<MemoManagementDialog IsVisible="showMemoManagement"
+                      SessionId="SessionId"
+                      OnClose="CloseMemoManagement"
+                      OnMemoRestored="HandleMemoRestored" />
+
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public Guid? SessionId { get; set; }
     [Parameter] public EventCallback OnSettingsSaved { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public EventCallback<Guid> OnCreateSubSession { get; set; }
+    [Parameter] public EventCallback OnMemoRestored { get; set; }
+
+    private bool showMemoManagement = false;
+    private bool anyMemoExists = false;
 
     private SessionOptionsSelector? optionsSelector;
     private SessionInfo? sessionInfo;
@@ -167,12 +186,50 @@
     private string errorMessage = "";
     private bool restartSession = true;
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         if (IsVisible && SessionId.HasValue)
         {
             LoadSessionInfo();
+            await RefreshMemoExistsAsync();
         }
+    }
+
+    private async Task RefreshMemoExistsAsync()
+    {
+        if (!SessionId.HasValue)
+        {
+            anyMemoExists = false;
+            return;
+        }
+        try
+        {
+            anyMemoExists = await MemoRepository.AnyExistsAsync(SessionId.Value);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[SessionSettingsDialog] メモ存在確認失敗: SessionId={SessionId}", SessionId);
+            anyMemoExists = false;
+        }
+    }
+
+    private void OpenMemoManagement()
+    {
+        showMemoManagement = true;
+    }
+
+    private async Task CloseMemoManagement()
+    {
+        showMemoManagement = false;
+        // 完全削除や復元でメモの存在状況が変わった可能性があるのでボタン表示を更新
+        await RefreshMemoExistsAsync();
+    }
+
+    private async Task HandleMemoRestored()
+    {
+        // 復元は呼び出し元 (Root 等) にも伝播させて BottomPanel のメモタブを再読み込みさせる
+        await OnMemoRestored.InvokeAsync();
+        await RefreshMemoExistsAsync();
     }
 
     private void LoadSessionInfo()

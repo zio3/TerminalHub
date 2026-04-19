@@ -186,6 +186,20 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v4 適用完了");
             }
 
+            // v5 は廃止された「ファイル参照」機能 (SessionFiles テーブル) で一度消費された番号。
+            // 開発環境の DB には SchemaVersion=5 と空のままの SessionFiles テーブルが残っている
+            // ケースがあるため、メモの論理削除は v6 として新設する。新規 DB でも害はない
+            // (単に v5 が no-op で通過するだけ)。
+
+            if (currentVersion < 6)
+            {
+                // v6: SessionMemos に論理削除カラム (IsDeleted, DeletedAt) を追加
+                _logger.LogInformation("[DB][マイグレーション] v6 適用開始: SessionMemos に論理削除カラムを追加");
+                await AddMemoSoftDeleteColumnsAsync();
+                await SetSchemaVersionAsync(6);
+                _logger.LogInformation("[DB][マイグレーション] v6 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -340,6 +354,22 @@ namespace TerminalHub.Services
             ";
 
             await connection.ExecuteNonQueryAsync(sql);
+        }
+
+        private async Task AddMemoSoftDeleteColumnsAsync()
+        {
+            // v5 マイグレーション: メモのうっかり消失対策で論理削除に移行するため、
+            // IsDeleted (フラグ) と DeletedAt (論理削除日時) を追加する。
+            // 既存レコードは IsDeleted=0 で何も変わらない。
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await connection.ExecuteNonQueryAsync(
+                "ALTER TABLE SessionMemos ADD COLUMN IsDeleted INTEGER NOT NULL DEFAULT 0");
+            await connection.ExecuteNonQueryAsync(
+                "ALTER TABLE SessionMemos ADD COLUMN DeletedAt TEXT");
+            await connection.ExecuteNonQueryAsync(
+                "CREATE INDEX IF NOT EXISTS idx_session_memos_deleted ON SessionMemos(SessionId, IsDeleted, DeletedAt)");
         }
 
         /// <summary>

@@ -220,6 +220,18 @@
         }
     }
 
+    /// <summary>
+    /// メモ管理ダイアログ側で復元操作が行われた場合など、外部から明示的にメモ一覧を
+    /// 再読み込みしたいときに呼ぶ。対象セッションのロード済みフラグを落としてから
+    /// 読み直すので、復元されたメモが新しいタブとして現れる。
+    /// </summary>
+    public async Task ReloadMemosForCurrentSessionAsync()
+    {
+        if (!CurrentSessionId.HasValue) return;
+        loadedMemoSessions.Remove(CurrentSessionId.Value);
+        await LoadMemoTabsForSessionAsync(CurrentSessionId.Value);
+    }
+
     private void AddTab(BottomPanelTabType type)
     {
         var count = Tabs.Count(t => t.Type == type);
