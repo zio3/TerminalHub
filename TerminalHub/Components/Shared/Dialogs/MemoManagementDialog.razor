@@ -1,0 +1,261 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@inject ISessionMemoRepository MemoRepository
+@inject ILogger<MemoManagementDialog> Logger
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-journal-text me-2"></i>メモ管理
+                </h5>
+                <button type="button" class="btn-close" @onclick="HandleClose"></button>
+            </div>
+            <div class="modal-body">
+                @if (isLoading)
+                {
+                    <div class="text-center py-4">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        読み込み中...
+                    </div>
+                }
+                else
+                {
+                    <!-- 削除済みメモ -->
+                    <div class="mb-4">
+                        <h6 class="text-muted">
+                            <i class="bi bi-trash me-1"></i>削除済みメモ
+                            <span class="badge bg-secondary ms-2">@deletedMemos.Count</span>
+                        </h6>
+                        @if (deletedMemos.Count == 0)
+                        {
+                            <p class="text-muted small mb-0">削除済みのメモはありません。</p>
+                        }
+                        else
+                        {
+                            <div class="list-group">
+                                @foreach (var memo in deletedMemos)
+                                {
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <div class="flex-grow-1 min-width-0">
+                                                <div class="fw-bold text-truncate">@(string.IsNullOrWhiteSpace(memo.Title) ? "(無題)" : memo.Title)</div>
+                                                <small class="text-muted">
+                                                    削除日時: @(memo.DeletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")
+                                                </small>
+                                                <div class="small text-muted mt-1" style="white-space: pre-wrap; word-break: break-all; max-height: 4.5em; overflow: hidden;">
+                                                    @(GetPreview(memo.Body))
+                                                </div>
+                                            </div>
+                                            <div class="d-flex flex-column gap-1 flex-shrink-0">
+                                                <button type="button" class="btn btn-outline-success btn-sm"
+                                                        @onclick="() => HandleRestore(memo.MemoId)"
+                                                        disabled="@isBusy">
+                                                    <i class="bi bi-arrow-counterclockwise me-1"></i>復元
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                                        @onclick="() => HandleHardDelete(memo)"
+                                                        disabled="@isBusy">
+                                                    <i class="bi bi-x-lg me-1"></i>完全削除
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <!-- アクティブなメモ (参考情報) -->
+                    <div>
+                        <h6 class="text-muted">
+                            <i class="bi bi-journal-text me-1"></i>現在のメモ
+                            <span class="badge bg-secondary ms-2">@activeMemos.Count</span>
+                        </h6>
+                        @if (activeMemos.Count == 0)
+                        {
+                            <p class="text-muted small mb-0">現在、有効なメモはありません。</p>
+                        }
+                        else
+                        {
+                            <div class="list-group">
+                                @foreach (var memo in activeMemos)
+                                {
+                                    <div class="list-group-item">
+                                        <div class="fw-bold text-truncate">@(string.IsNullOrWhiteSpace(memo.Title) ? "(無題)" : memo.Title)</div>
+                                        <small class="text-muted">
+                                            更新日時: @memo.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                                        </small>
+                                        <div class="small text-muted mt-1" style="white-space: pre-wrap; word-break: break-all; max-height: 4.5em; overflow: hidden;">
+                                            @(GetPreview(memo.Body))
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(statusMessage))
+                    {
+                        <div class="alert @(statusIsError ? "alert-danger" : "alert-success") mt-3 mb-0 py-2">
+                            @statusMessage
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HandleClose">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (hardDeleteConfirmTarget != null)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: var(--th-surface-overlay); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-warning me-2"></i>完全削除の確認</h5>
+                    <button type="button" class="btn-close" @onclick="() => hardDeleteConfirmTarget = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">以下のメモを <strong>完全に削除</strong> します。この操作は取り消せません。</p>
+                    <div class="border rounded p-2 small bg-body-tertiary">
+                        <div class="fw-bold">@(string.IsNullOrWhiteSpace(hardDeleteConfirmTarget.Title) ? "(無題)" : hardDeleteConfirmTarget.Title)</div>
+                        <div class="text-muted">削除日時: @(hardDeleteConfirmTarget.DeletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => hardDeleteConfirmTarget = null">キャンセル</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmHardDelete" disabled="@isBusy">
+                        <i class="bi bi-x-lg me-1"></i>完全に削除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public Guid? SessionId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnMemoRestored { get; set; }
+
+    private List<SessionMemo> deletedMemos = new();
+    private List<SessionMemo> activeMemos = new();
+    private bool isLoading = false;
+    private bool isBusy = false;
+    private string statusMessage = "";
+    private bool statusIsError = false;
+    private SessionMemo? hardDeleteConfirmTarget;
+
+    private Guid? _loadedSessionId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && SessionId.HasValue && _loadedSessionId != SessionId)
+        {
+            await ReloadAsync();
+            _loadedSessionId = SessionId;
+        }
+        else if (!IsVisible)
+        {
+            _loadedSessionId = null;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (!SessionId.HasValue) return;
+
+        isLoading = true;
+        statusMessage = "";
+        StateHasChanged();
+        try
+        {
+            deletedMemos = await MemoRepository.GetDeletedBySessionAsync(SessionId.Value);
+            activeMemos = await MemoRepository.GetBySessionAsync(SessionId.Value);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[MemoManagementDialog] メモ一覧読み込み失敗: SessionId={SessionId}", SessionId);
+            statusMessage = $"読み込みに失敗しました: {ex.Message}";
+            statusIsError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleRestore(Guid memoId)
+    {
+        if (isBusy) return;
+        isBusy = true;
+        statusMessage = "";
+        try
+        {
+            await MemoRepository.RestoreAsync(memoId);
+            await ReloadAsync();
+            statusMessage = "メモを復元しました。";
+            statusIsError = false;
+            await OnMemoRestored.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[MemoManagementDialog] メモ復元失敗: MemoId={MemoId}", memoId);
+            statusMessage = $"復元に失敗しました: {ex.Message}";
+            statusIsError = true;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void HandleHardDelete(SessionMemo memo)
+    {
+        hardDeleteConfirmTarget = memo;
+    }
+
+    private async Task ConfirmHardDelete()
+    {
+        if (hardDeleteConfirmTarget is null || isBusy) return;
+        var target = hardDeleteConfirmTarget;
+        hardDeleteConfirmTarget = null;
+        isBusy = true;
+        statusMessage = "";
+        try
+        {
+            await MemoRepository.HardDeleteAsync(target.MemoId);
+            await ReloadAsync();
+            statusMessage = "メモを完全に削除しました。";
+            statusIsError = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[MemoManagementDialog] メモ完全削除失敗: MemoId={MemoId}", target.MemoId);
+            statusMessage = $"完全削除に失敗しました: {ex.Message}";
+            statusIsError = true;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task HandleClose()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private static string GetPreview(string body)
+    {
+        if (string.IsNullOrEmpty(body)) return "(空)";
+        const int maxLen = 200;
+        return body.Length <= maxLen ? body : body.Substring(0, maxLen) + "…";
+    }
+}

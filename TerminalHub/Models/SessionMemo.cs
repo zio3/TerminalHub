@@ -13,5 +13,11 @@ namespace TerminalHub.Models
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
         public int SortOrder { get; set; } = 0;
+
+        /// <summary>論理削除フラグ (v5)</summary>
+        public bool IsDeleted { get; set; }
+
+        /// <summary>論理削除日時 (v5, IsDeleted=false のときは null)</summary>
+        public DateTime? DeletedAt { get; set; }
     }
 }

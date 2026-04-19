@@ -59,7 +59,8 @@
                        SessionId="@settingsSessionId"
                        OnSettingsSaved="OnSessionSettingsSaved"
                        OnCancel="() => showSessionSettingsDialog = false"
-                       OnCreateSubSession="HandleCreateSubSessionFromSettings" />
+                       OnCreateSubSession="HandleCreateSubSessionFromSettings"
+                       OnMemoRestored="HandleMemoRestoredFromSettings" />
 <ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
                         ArchivedSessions="@GetArchivedSessions()"
                         OnRestoreSession="RestoreArchivedSession"
@@ -2096,6 +2097,16 @@
         showSessionSettingsDialog = false;
         // サブセッションダイアログを表示
         ShowWorktreeDialog(sessionId);
+    }
+
+    private async Task HandleMemoRestoredFromSettings()
+    {
+        // メモ管理ダイアログで論理削除済みメモが復元されたときに BottomPanel を再読み込みさせる。
+        // これで復元メモが新タブとして現れる。
+        if (bottomPanel != null)
+        {
+            await bottomPanel.ReloadMemosForCurrentSessionAsync();
+        }
     }
 
     private async Task OnSessionSettingsSaved()
