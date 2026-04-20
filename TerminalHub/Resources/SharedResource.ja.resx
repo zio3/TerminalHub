@@ -518,4 +518,32 @@
   <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell({0})</value></data>
   <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>タブ({0})</value></data>
   <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>メモ({0})</value></data>
+
+  <!-- Root page -->
+  <data name="Root.NoSessionSelected" xml:space="preserve"><value>左側からセッションを選択してください</value></data>
+  <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Claude Code へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Gemini CLI へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>コマンドを入力…</value></data>
+  <data name="Root.SessionType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
+  <data name="Root.SessionType.Fallback" xml:space="preserve"><value>セッション</value></data>
+
+  <!-- Root: Toast messages -->
+  <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>セッション作成エラー: {0}</value></data>
+  <data name="Root.Toast.DirectoryNotFoundFormat" xml:space="preserve"><value>ディレクトリが見つかりません: {0}</value></data>
+  <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>セッション初期化エラー: {0}</value></data>
+  <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>ターミナルを破棄しました</value></data>
+  <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>ターミナル破棄エラー: {0}</value></data>
+  <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>ターミナルを再作成しました</value></data>
+  <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>このセッションを選択してからターミナルを再作成してください</value></data>
+  <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>ターミナル再作成エラー: {0}</value></data>
+  <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' を作成しました</value></data>
+  <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>既存の Worktree '{0}' を追加しました</value></data>
+  <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>新しい {0} セッションを作成しました</value></data>
+  <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>新しいフォルダ '{0}' でセッションを作成しました</value></data>
+  <data name="Root.Toast.SessionCreated" xml:space="preserve"><value>セッションを作成しました</value></data>
+  <data name="Root.Toast.SessionCreateFailed" xml:space="preserve"><value>セッション作成に失敗しました</value></data>
+  <data name="Root.Toast.SessionSettingsSaved" xml:space="preserve"><value>セッション設定を保存しました</value></data>
+  <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>--continue オプションなしでセッションを再作成しました</value></data>
+  <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>セッション再作成に失敗しました</value></data>
+  <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>セッション再作成エラー: {0}</value></data>
 </root>

@@ -10,7 +10,9 @@
 @using Microsoft.JSInterop
 @using Microsoft.Extensions.Configuration
 @using Microsoft.Extensions.Logging
+@using Microsoft.Extensions.Localization
 @inject ISessionManager SessionManager
+@inject IStringLocalizer<SharedResource> L
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject IConfiguration Configuration
@@ -167,7 +169,7 @@
                  style="display: @(hasActiveSession ? "none" : "flex");">
                 <div class="text-center text-muted">
                     <i class="bi bi-terminal" style="font-size: 4rem;"></i>
-                    <p class="mt-3">左側からセッションを選択してください</p>
+                    <p class="mt-3">@L["Root.NoSessionSelected"]</p>
                 </div>
             </div>
         </div>
@@ -776,7 +778,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Session creation failed");
-            toast?.ShowError($"セッション作成エラー: {ex.Message}");
+            toast?.ShowError(string.Format(L["Root.Toast.SessionCreateErrorFormat"], ex.Message));
         }
         finally
         {
@@ -831,7 +833,7 @@
         if (sessionInfo != null && !string.IsNullOrEmpty(sessionInfo.FolderPath) && !Directory.Exists(sessionInfo.FolderPath))
         {
             Logger.LogWarning("セッション {SessionId} のディレクトリが存在しません: {FolderPath}", sessionId, sessionInfo.FolderPath);
-            toast?.ShowError($"ディレクトリが見つかりません: {sessionInfo.FolderPath}");
+            toast?.ShowError(string.Format(L["Root.Toast.DirectoryNotFoundFormat"], sessionInfo.FolderPath));
             activeSessionId = null;
             return;
         }
@@ -844,7 +846,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "セッション {SessionId} の初期化に失敗", sessionId);
-            toast?.ShowError($"セッション初期化エラー: {ex.Message}");
+            toast?.ShowError(string.Format(L["Root.Toast.SessionInitErrorFormat"], ex.Message));
             activeSession = null;
         }
 
@@ -1496,14 +1498,14 @@
 
             if (showAlert)
             {
-                toast?.ShowSuccess("ターミナルを破棄しました");
+                toast?.ShowSuccess(L["Root.Toast.TerminalDisposed"]);
             }
         }
         catch (Exception ex)
         {
             if (showAlert)
             {
-                toast?.ShowError($"ターミナル破棄エラー: {ex.Message}");
+                toast?.ShowError(string.Format(L["Root.Toast.TerminalDisposeErrorFormat"], ex.Message));
             }
         }
     }
@@ -1532,16 +1534,16 @@
                     ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
-                toast?.ShowSuccess("ターミナルを再作成しました");
+                toast?.ShowSuccess(L["Root.Toast.TerminalRecreated"]);
             }
             else
             {
-                toast?.ShowWarning("このセッションを選択してからターミナルを再作成してください");
+                toast?.ShowWarning(L["Root.Toast.SelectSessionFirst"]);
             }
         }
         catch (Exception ex)
         {
-            toast?.ShowError($"ターミナル再作成エラー: {ex.Message}");
+            toast?.ShowError(string.Format(L["Root.Toast.TerminalRecreateErrorFormat"], ex.Message));
         }
     }
 
@@ -1642,9 +1644,9 @@
     {
         return terminalType switch
         {
-            TerminalType.ClaudeCode => "Claude Codeへのメッセージを入力...",
-            TerminalType.GeminiCLI => "Gemini CLIへのメッセージを入力...",
-            _ => "コマンドを入力..."
+            TerminalType.ClaudeCode => L["Root.Placeholder.ClaudeCode"],
+            TerminalType.GeminiCLI => L["Root.Placeholder.GeminiCLI"],
+            _ => L["Root.Placeholder.Terminal"]
         };
     }
 
@@ -1797,28 +1799,28 @@
 
                 string successMessage = result.OperationType switch
                 {
-                    SubSessionDialog.SubSessionType.CreateNew => 
-                        $"Worktree '{result.BranchName}' を作成しました",
-                    SubSessionDialog.SubSessionType.AddExisting => 
-                        $"既存のWorktree '{result.BranchName}' を追加しました",
-                    SubSessionDialog.SubSessionType.SamePath => 
-                        $"新しい{GetSessionTypeName(result.TerminalType)}セッションを作成しました",
-                    SubSessionDialog.SubSessionType.NewFolder => 
-                        $"新しいフォルダ '{result.WorktreePath}' でセッションを作成しました",
-                    _ => "セッションを作成しました"
+                    SubSessionDialog.SubSessionType.CreateNew =>
+                        string.Format(L["Root.Toast.WorktreeCreatedFormat"], result.BranchName),
+                    SubSessionDialog.SubSessionType.AddExisting =>
+                        string.Format(L["Root.Toast.WorktreeAddedFormat"], result.BranchName),
+                    SubSessionDialog.SubSessionType.SamePath =>
+                        string.Format(L["Root.Toast.SamePathSessionCreatedFormat"], GetSessionTypeName(result.TerminalType)),
+                    SubSessionDialog.SubSessionType.NewFolder =>
+                        string.Format(L["Root.Toast.NewFolderSessionCreatedFormat"], result.WorktreePath),
+                    _ => L["Root.Toast.SessionCreated"]
                 };
 
                 toast?.ShowSuccess(successMessage);
             }
             else
             {
-                toast?.ShowError("セッション作成に失敗しました");
+                toast?.ShowError(L["Root.Toast.SessionCreateFailed"]);
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Sub-session creation failed");
-            toast?.ShowError($"セッション作成エラー: {ex.Message}");
+            toast?.ShowError(string.Format(L["Root.Toast.SessionCreateErrorFormat"], ex.Message));
         }
         finally
         {
@@ -1834,10 +1836,10 @@
     {
         return terminalType switch
         {
-            TerminalType.Terminal => "ターミナル",
+            TerminalType.Terminal => L["Root.SessionType.Terminal"],
             TerminalType.ClaudeCode => "Claude Code",
             TerminalType.GeminiCLI => "Gemini CLI",
-            _ => "セッション"
+            _ => L["Root.SessionType.Fallback"]
         };
     }
 
@@ -2141,7 +2143,7 @@
             StateHasChanged();
         }
 
-        toast?.ShowSuccess("セッション設定を保存しました");
+        toast?.ShowSuccess(L["Root.Toast.SessionSettingsSaved"]);
     }
 
     private async Task RefreshGitStatus(Guid sessionId)
@@ -2202,19 +2204,19 @@
                 // forceReinit で強制再初期化（activeSessionId を null にしないので BottomPanel は保持される）
                 await SelectSession(sessionId, forceReinit: true);
                 
-                toast?.ShowInfo("--continueオプションなしでセッションを再作成しました");
+                toast?.ShowInfo(L["Root.Toast.SessionRecreatedWithoutContinue"]);
             }
             else
             {
                 // Session recreation failed
-                toast?.ShowError("セッション再作成に失敗しました");
+                toast?.ShowError(L["Root.Toast.SessionRecreateFailed"]);
             }
         }
         catch (Exception ex)
         {
             // RecreateSessionWithoutContinue error
             Logger.LogError(ex, "Session recreation failed: SessionId={SessionId}", sessionId);
-            toast?.ShowError($"セッション再作成エラー: {ex.Message}");
+            toast?.ShowError(string.Format(L["Root.Toast.SessionRecreateErrorFormat"], ex.Message));
         }
     }
     

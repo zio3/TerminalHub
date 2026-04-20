@@ -518,4 +518,32 @@
   <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell ({0})</value></data>
   <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>Tab ({0})</value></data>
   <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>Memo ({0})</value></data>
+
+  <!-- Root page -->
+  <data name="Root.NoSessionSelected" xml:space="preserve"><value>Select a session from the left sidebar</value></data>
+  <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Type a message for Claude Code...</value></data>
+  <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Type a message for Gemini CLI...</value></data>
+  <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>Enter a command...</value></data>
+  <data name="Root.SessionType.Terminal" xml:space="preserve"><value>Terminal</value></data>
+  <data name="Root.SessionType.Fallback" xml:space="preserve"><value>Session</value></data>
+
+  <!-- Root: Toast messages -->
+  <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>Session creation error: {0}</value></data>
+  <data name="Root.Toast.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
+  <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>Session initialization error: {0}</value></data>
+  <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
+  <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
+  <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>
+  <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>Please select this session first, then recreate the terminal</value></data>
+  <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>Terminal recreate error: {0}</value></data>
+  <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' created</value></data>
+  <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>Existing worktree '{0}' added</value></data>
+  <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>New {0} session created</value></data>
+  <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>New session created in folder '{0}'</value></data>
+  <data name="Root.Toast.SessionCreated" xml:space="preserve"><value>Session created</value></data>
+  <data name="Root.Toast.SessionCreateFailed" xml:space="preserve"><value>Failed to create session</value></data>
+  <data name="Root.Toast.SessionSettingsSaved" xml:space="preserve"><value>Session settings saved</value></data>
+  <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>Session recreated without --continue option</value></data>
+  <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>Failed to recreate session</value></data>
+  <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>Session recreate error: {0}</value></data>
 </root>
