@@ -506,4 +506,16 @@
 
   <!-- BottomPanels: MemoPanel -->
   <data name="MemoPanel.Placeholder" xml:space="preserve"><value>メモ… (Enter で改行、自動保存)</value></data>
+
+  <!-- BottomPanel (タブホスト) -->
+  <data name="BottomPanel.CloseTab" xml:space="preserve"><value>タブを閉じる</value></data>
+  <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>コマンドプロンプトを追加</value></data>
+  <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>PowerShell を追加</value></data>
+  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>メモを追加</value></data>
+  <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>テキスト入力</value></data>
+  <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>テキスト入力({0})</value></data>
+  <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>コマンドプロンプト({0})</value></data>
+  <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell({0})</value></data>
+  <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>タブ({0})</value></data>
+  <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>メモ({0})</value></data>
 </root>
