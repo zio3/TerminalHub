@@ -39,6 +39,27 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// ローカライゼーション設定
+// - リソース配置: TerminalHub/Resources/SharedResource.{en,ja}.resx
+// - 言語判定: Cookie (.AspNetCore.Culture) → Accept-Language → デフォルト "en"
+// - 対応外言語は "en" にフォールバック (英語を canonical として統一)
+//
+// 注意: ResourcesPath は敢えて指定しない。
+// .NET SDK のビルドが resx を埋め込む際、観測された実名は
+//   TerminalHub.SharedResource.{culture}.resources
+// となっていて "Resources." フォルダ prefix が付与されていない。
+// ResourcesPath を指定すると localizer は "TerminalHub.Resources.SharedResource..." を
+// 探しに行って見つけられずキー文字列がそのまま返ってしまう。
+// 空のまま = typeInfo.FullName (TerminalHub.SharedResource) をそのまま prefix として使うので一致する。
+builder.Services.AddLocalization();
+builder.Services.Configure<Microsoft.AspNetCore.Builder.RequestLocalizationOptions>(options =>
+{
+    var supported = new[] { "en", "ja" };
+    options.SetDefaultCulture("en");
+    options.AddSupportedCultures(supported);
+    options.AddSupportedUICultures(supported);
+});
+
 // SignalRのメッセージサイズ制限を増加（デフォルト32KBでは不足）
 builder.Services.AddSignalR(options =>
 {
@@ -137,6 +158,44 @@ if (!app.Environment.IsDevelopment())
 // app.UseHttpsRedirection();
 
 app.UseAntiforgery();
+
+// リクエストローカライゼーション
+// Program.cs 先頭で登録した RequestLocalizationOptions を適用する。
+// Cookie (.AspNetCore.Culture) → Accept-Language の順で culture を判定、対応外は "en" へフォールバック。
+app.UseRequestLocalization();
+
+// Cookie スライディング更新: culture cookie の有効期限を毎リクエスト 1 年先へ延長する。
+// これでユーザーが最後にアクセスしてから 1 年放置しない限り言語選択は永続化される。
+//
+// 実装注意: await next() の後に Response.Cookies.Append を呼ぶと、静的ファイル配信や
+// SignalR ストリーミング応答では既にヘッダーが送信済みで "Headers are read-only" 例外になる。
+// OnStarting コールバックはヘッダー送信「直前」に一度だけ呼ばれるのでここで cookie を追記する。
+app.Use((context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        // 実リクエストで解決された culture を IRequestCultureFeature から取得する。
+        // CurrentUICulture は AsyncLocal で OnStarting 発火時に壊れているケースがあるので、
+        // より信頼できる Feature 経由で取り直す。
+        var feature = context.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>();
+        var culture = feature?.RequestCulture ??
+                      new Microsoft.AspNetCore.Localization.RequestCulture(System.Globalization.CultureInfo.CurrentUICulture);
+        var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(culture);
+        context.Response.Cookies.Append(
+            Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
+            cookieValue,
+            new Microsoft.AspNetCore.Http.CookieOptions
+            {
+                Expires = DateTimeOffset.UtcNow.AddYears(1),
+                IsEssential = true,
+                SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+                HttpOnly = false, // 言語切替のため JS からも読み書き可能にする
+                Path = "/"
+            });
+        return Task.CompletedTask;
+    });
+    return next();
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    i18n 共有リソース (日本語)
+    キーは "エリア.要素" の階層ドット記法で書き、英語版 (SharedResource.en.resx) と同じキーを維持する。
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Common -->
+  <data name="Common.Close" xml:space="preserve"><value>閉じる</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>追加</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>キャンセル</value></data>
+  <data name="Common.Create" xml:space="preserve"><value>作成</value></data>
+  <data name="Common.Unspecified" xml:space="preserve"><value>未指定</value></data>
+  <data name="Common.ErrorFormat" xml:space="preserve"><value>エラー: {0}</value></data>
+  <data name="Common.DirectoryNotFoundFormat" xml:space="preserve"><value>ディレクトリが見つかりません: {0}</value></data>
+
+  <!-- Settings Dialog -->
+  <data name="Settings.Title" xml:space="preserve"><value>設定</value></data>
+
+  <!-- Settings Tabs -->
+  <data name="Settings.Tab.General" xml:space="preserve"><value>一般</value></data>
+  <data name="Settings.Tab.Display" xml:space="preserve"><value>表示</value></data>
+  <data name="Settings.Tab.Notifications" xml:space="preserve"><value>通知</value></data>
+  <data name="Settings.Tab.Sessions" xml:space="preserve"><value>セッション</value></data>
+  <data name="Settings.Tab.ExportImport" xml:space="preserve"><value>エクスポート/インポート</value></data>
+  <data name="Settings.Tab.Commands" xml:space="preserve"><value>コマンド</value></data>
+  <data name="Settings.Tab.RemoteLaunch" xml:space="preserve"><value>リモート起動</value></data>
+  <data name="Settings.Tab.Special" xml:space="preserve"><value>特殊</value></data>
+  <data name="Settings.Tab.DevDiagnose" xml:space="preserve"><value>診断</value></data>
+  <data name="Settings.Tab.DevBuffer" xml:space="preserve"><value>バッファ</value></data>
+  <data name="Settings.Tab.DevNotify" xml:space="preserve"><value>通知テスト</value></data>
+
+  <!-- Settings: General Tab -->
+  <data name="Settings.General.Header" xml:space="preserve"><value>一般設定</value></data>
+  <data name="Settings.General.Language.Label" xml:space="preserve"><value>言語</value></data>
+  <data name="Settings.General.Language.Help" xml:space="preserve"><value>UI の表示言語を切り替えます。選択すると再読み込みされます。</value></data>
+  <data name="Settings.General.DefaultFolder.Label" xml:space="preserve"><value>デフォルトフォルダパス</value></data>
+  <data name="Settings.General.DefaultFolder.PickTitle" xml:space="preserve"><value>フォルダを選択</value></data>
+  <data name="Settings.General.DefaultFolder.Help" xml:space="preserve"><value>新規セッション作成時のデフォルトパスを設定します。空欄の場合はユーザーフォルダが使用されます。</value></data>
+  <data name="Settings.General.FavoriteFolders.Label" xml:space="preserve"><value>お気に入りフォルダ</value></data>
+  <data name="Settings.General.FavoriteFolders.Placeholder" xml:space="preserve"><value>フォルダパスを入力</value></data>
+  <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>セッション作成時にフォルダ選択の候補として表示されます。</value></data>
+  <data name="Settings.General.Version.Header" xml:space="preserve"><value>バージョン情報</value></data>
+  <data name="Settings.General.Version.Current" xml:space="preserve"><value>現在のバージョン:</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中…</value></data>
+  <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>新しいバージョン &lt;strong&gt;v{0}&lt;/strong&gt; があります</value></data>
+  <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>GitHubで確認</value></data>
+  <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>最新バージョンです</value></data>
+  <data name="Settings.General.Community.Header" xml:space="preserve"><value>コミュニティ</value></data>
+  <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Discord サーバーに参加</value></data>
+  <data name="Settings.General.Community.Help" xml:space="preserve"><value>バグ報告、機能リクエスト、質問などはこちらで受け付けています。</value></data>
+
+  <!-- Settings: Display Tab -->
+  <data name="Settings.Display.Header" xml:space="preserve"><value>表示設定</value></data>
+  <data name="Settings.Display.Theme.Label" xml:space="preserve"><value>テーマ</value></data>
+  <data name="Settings.Display.Theme.Light" xml:space="preserve"><value>ライト</value></data>
+  <data name="Settings.Display.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="Settings.Display.SessionListScale.Label" xml:space="preserve"><value>セッションリスト表示倍率</value></data>
+  <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>セッションリストの表示倍率を調整します（50%〜150%）。</value></data>
+  <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>ターミナルフォントサイズ</value></data>
+  <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>ターミナルのフォントサイズを調整します（8px〜28px）。</value></data>
+  <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>サイドバー幅</value></data>
+  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>セッションリストの幅を調整します（15%〜40%）。境界線のドラッグでも変更できます。</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>ターミナル / 入力パネル比率</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。境界線のドラッグでも変更できます。</value></data>
+
+  <!-- Settings: Notifications Tab -->
+  <data name="Settings.Notifications.Header" xml:space="preserve"><value>通知設定</value></data>
+  <data name="Settings.Notifications.Browser.Label" xml:space="preserve"><value>ブラウザ通知</value></data>
+  <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>許可済み</value></data>
+  <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>拒否</value></data>
+  <data name="Settings.Notifications.Status.NotRequested" xml:space="preserve"><value>未許可</value></data>
+  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>確認中…</value></data>
+  <data name="Settings.Notifications.Status.CheckError" xml:space="preserve"><value>確認エラー</value></data>
+  <data name="Settings.Notifications.Status.Unknown" xml:space="preserve"><value>不明</value></data>
+  <data name="Settings.Notifications.Browser.Enable" xml:space="preserve"><value>ブラウザ通知を有効にする</value></data>
+  <data name="Settings.Notifications.Browser.Revoke" xml:space="preserve"><value>通知許可を解除</value></data>
+  <data name="Settings.Notifications.Browser.RevokeHelp" xml:space="preserve"><value>ブラウザの設定画面で通知許可を解除できます。</value></data>
+  <data name="Settings.Notifications.Browser.Request" xml:space="preserve"><value>通知を許可する</value></data>
+  <data name="Settings.Notifications.Browser.RequestHelp" xml:space="preserve"><value>処理完了時にデスクトップ通知を受け取るには、ブラウザの通知を許可してください。</value></data>
+  <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>通知を送信する処理時間（秒）</value></data>
+  <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>0に設定すると、すべての処理完了時に通知します</value></data>
+  <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook 設定</value></data>
+  <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Webhook 通知を有効にする</value></data>
+  <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook 設定</value></data>
+  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。セッション作成時に自動的に &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に設定が追加されます。</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Claude Code Hook を有効にする</value></data>
+  <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>この設定は各セッションが次に起動／再起動されたタイミングで &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に反映されます。既に起動中のセッションや、TerminalHub 管理外のワークスペースには即時適用されません。</value></data>
+
+  <!-- Settings: Sessions Tab -->
+  <data name="Settings.Sessions.Header" xml:space="preserve"><value>セッション設定</value></data>
+  <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>セッション一覧の並び順</value></data>
+  <data name="Settings.Sessions.SortOrder.ByCreatedAt" xml:space="preserve"><value>作成日時順</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>最終利用日時順</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>最近使用したセッションが上に表示</value></data>
+  <data name="Settings.Sessions.SortOrder.ByName" xml:space="preserve"><value>名前順</value></data>
+  <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>「最終利用日時順」では、子セッション（Worktree）の利用も親セッションの順序に反映されます。</value></data>
+  <data name="Settings.Sessions.Display.Label" xml:space="preserve"><value>セッション一覧の表示設定</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalType" xml:space="preserve"><value>ターミナル種別を表示</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalTypeSub" xml:space="preserve"><value>Claude/Gemini/Codexバッジ</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfo" xml:space="preserve"><value>Git情報を表示</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>ブランチ名バッジ</value></data>
+  <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>セッション一覧に表示する追加情報を選択できます。</value></data>
+  <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>入力パネル設定</value></data>
+  <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>入力パネルを非表示</value></data>
+  <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>ターミナルのみ表示</value></data>
+  <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>下部の入力パネルを非表示にして、ターミナル領域を広く使えます。</value></data>
+
+  <!-- Settings: Export/Import Tab -->
+  <data name="Settings.Export.Header" xml:space="preserve"><value>データのエクスポート/インポート</value></data>
+  <data name="Settings.Export.Export.Header" xml:space="preserve"><value>エクスポート</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>現在のストレージ（{0}）からセッション情報をJSONファイルとしてダウンロードします。</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>エクスポート対象: セッション情報（{0} 件）</value></data>
+  <data name="Settings.Export.Export.Button" xml:space="preserve"><value>エクスポート</value></data>
+  <data name="Settings.Export.Import.Header" xml:space="preserve"><value>インポート</value></data>
+  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>JSONファイルを選択してセッション情報をインポートします。現在のストレージ（{0}）に追加されます。</value></data>
+  <data name="Settings.Export.Import.PreviewHeader" xml:space="preserve"><value>インポートプレビュー</value></data>
+  <data name="Settings.Export.Import.PreviewSessions" xml:space="preserve"><value>セッション情報: {0} 件</value></data>
+  <data name="Settings.Export.Import.RunButton" xml:space="preserve"><value>インポート実行</value></data>
+
+  <!-- Settings: Commands Tab -->
+  <data name="Settings.Commands.Header" xml:space="preserve"><value>カスタムコマンド</value></data>
+  <data name="Settings.Commands.Help" xml:space="preserve"><value>ターミナル種別ごとにボタンバーに表示するコマンドを登録できます。</value></data>
+  <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>テキスト</value></data>
+  <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>キー</value></data>
+  <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>タイトル（省略可）</value></data>
+  <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>コマンド（例: /plan）</value></data>
+  <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>ドラッグで並び替え</value></data>
+
+  <!-- Settings: Remote Launch Tab -->
+  <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>リモート起動</value></data>
+  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>外出先のスマートフォンから Claude Code セッションを起動し、Remote Control URL を取得できます。</value></data>
+  <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>リモート起動を有効にする</value></data>
+  <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>接続中</value></data>
+  <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>未接続</value></data>
+  <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>接続試行中…</value></data>
+  <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>疎通確認</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>確認中…</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (往復 {0} ms)</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>NG: {0}</value></data>
+  <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>アクセスURL</value></data>
+  <data name="Settings.RemoteLaunch.CopyUrlTitle" xml:space="preserve"><value>URLをコピー</value></data>
+  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>このURLは他人に公開しないでください。URLを知っている人がセッションを起動できます。</value></data>
+  <data name="Settings.RemoteLaunch.PasswordLabel" xml:space="preserve"><value>パスワード（任意）</value></data>
+  <data name="Settings.RemoteLaunch.PasswordPlaceholder" xml:space="preserve"><value>設定するとアクセス時にパスワードが必要になります</value></data>
+  <data name="Settings.RemoteLaunch.PasswordHelp" xml:space="preserve"><value>空欄の場合はURLのみでアクセスできます。</value></data>
+  <data name="Settings.RemoteLaunch.TopicGuid" xml:space="preserve"><value>トピックGUID</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidTitle" xml:space="preserve"><value>GUIDを再発行（既存のアクセスURLが無効になります）</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>再発行すると既存のアクセスURLが無効になります。</value></data>
+
+  <!-- Settings: Special Tab -->
+  <data name="Settings.Special.Header" xml:space="preserve"><value>特殊設定</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Header" xml:space="preserve"><value>Claude Code モード切替キー</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Help" xml:space="preserve"><value>Claude Code でモード切替に使用するキーボードショートカットを選択します。</value></data>
+  <data name="Settings.Special.ClaudeModeKey.None" xml:space="preserve"><value>無し</value></data>
+  <data name="Settings.Special.ClaudeModeKey.DefaultNote" xml:space="preserve"><value>（デフォルト）</value></data>
+  <data name="Settings.Special.ClaudeModeKey.ConflictNote" xml:space="preserve"><value>環境によっては Alt+M が他の機能と競合する場合があります。その場合は Shift+Tab をお試しください。</value></data>
+  <data name="Settings.Special.VoiceInput.Header" xml:space="preserve"><value>音声入力</value></data>
+  <data name="Settings.Special.VoiceInput.Enable" xml:space="preserve"><value>音声入力を有効にする（実験的）</value></data>
+  <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>有効にすると、テキスト入力パネルにマイクボタンが表示されます。ボタンを押している間だけ音声認識が動作します（Chrome 推奨）。</value></data>
+  <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>テキスト事前整形</value></data>
+  <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>事前整形ボタンを有効にする（実験的）</value></data>
+  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>有効にすると、テキスト入力パネルに「&lt;i class="bi bi-stars"&gt;&lt;/i&gt; 事前整形」ボタンが表示されます。押すと Claude Code CLI（Haiku モデル）で誤字脱字や表現の揺れを修正します。&lt;br/&gt;整形指示は &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt; を編集してカスタマイズ可能。</value></data>
+  <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>開発ツール</value></data>
+  <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>開発ツールを有効にする</value></data>
+  <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>有効にすると、診断・バッファ・通知テストのタブが表示されます。</value></data>
+  <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>ログファイル</value></data>
+  <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>ログフォルダを開く</value></data>
+  <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>アプリケーションのログファイルが保存されているフォルダを開きます。</value></data>
+
+  <!-- Settings: Dev Diagnose Tab -->
+  <data name="Settings.DevDiagnose.Header" xml:space="preserve"><value>診断情報</value></data>
+  <data name="Settings.DevDiagnose.Refresh" xml:space="preserve"><value>診断情報を更新</value></data>
+  <data name="Settings.DevDiagnose.RunJs" xml:space="preserve"><value>JS 診断実行</value></data>
+  <data name="Settings.DevDiagnose.SessionList" xml:space="preserve"><value>セッション一覧</value></data>
+  <data name="Settings.DevDiagnose.ColName" xml:space="preserve"><value>名前</value></data>
+  <data name="Settings.DevDiagnose.ColStatus" xml:space="preserve"><value>状態</value></data>
+  <data name="Settings.DevDiagnose.ConPtyPresent" xml:space="preserve"><value>有</value></data>
+  <data name="Settings.DevDiagnose.ConPtyAbsent" xml:space="preserve"><value>無</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.Header" xml:space="preserve"><value>ターミナル情報</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.JsTerminalCount" xml:space="preserve"><value>JavaScript 側ターミナル数:</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.Header" xml:space="preserve"><value>ターミナル制御テスト</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollBottom" xml:space="preserve"><value>最下部へ</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollTop" xml:space="preserve"><value>最上部へ</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.GetPosition" xml:space="preserve"><value>位置取得</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.Initial" xml:space="preserve"><value>スクロール位置情報が表示されます</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.BottomFormat" xml:space="preserve"><value>最下部にスクロールしました - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.TopFormat" xml:space="preserve"><value>最上部にスクロールしました - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.PositionFormat" xml:space="preserve"><value>スクロール位置: {0} - {1}</value></data>
+
+  <!-- Settings: Dev Buffer Tab -->
+  <data name="Settings.DevBuffer.Header" xml:space="preserve"><value>バッファダンプ</value></data>
+  <data name="Settings.DevBuffer.Help" xml:space="preserve"><value>セッションの出力バッファ（最大2MB）をファイルにダウンロードします。</value></data>
+  <data name="Settings.DevBuffer.SelectLabel" xml:space="preserve"><value>セッション選択</value></data>
+  <data name="Settings.DevBuffer.SelectPlaceholder" xml:space="preserve"><value>-- セッションを選択 --</value></data>
+  <data name="Settings.DevBuffer.Empty" xml:space="preserve"><value>(空)</value></data>
+  <data name="Settings.DevBuffer.BufferFormat" xml:space="preserve"><value>バッファ: {0}</value></data>
+  <data name="Settings.DevBuffer.StatusHistoryFormat" xml:space="preserve"><value>ステータス履歴: {0} 件</value></data>
+  <data name="Settings.DevBuffer.DownloadBuffer" xml:space="preserve"><value>バッファ</value></data>
+  <data name="Settings.DevBuffer.DownloadBufferClean" xml:space="preserve"><value>バッファ (ANSI 除去)</value></data>
+  <data name="Settings.DevBuffer.DownloadStatusHistory" xml:space="preserve"><value>ステータス履歴 JSON</value></data>
+  <data name="Settings.DevBuffer.Result.SelectSession" xml:space="preserve"><value>セッションを選択してください</value></data>
+  <data name="Settings.DevBuffer.Result.BufferEmpty" xml:space="preserve"><value>バッファが空です</value></data>
+  <data name="Settings.DevBuffer.Result.DownloadedFormat" xml:space="preserve"><value>ダウンロード完了: {0} ({1})</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferInfo" xml:space="preserve"><value>バッファ情報</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferContent" xml:space="preserve"><value>バッファ内容</value></data>
+
+  <!-- Settings: Dev Notify Tab -->
+  <data name="Settings.DevNotify.Header" xml:space="preserve"><value>通知テスト</value></data>
+  <data name="Settings.DevNotify.TestElapsedLabel" xml:space="preserve"><value>テスト用経過時間（秒）</value></data>
+  <data name="Settings.DevNotify.TestBrowser" xml:space="preserve"><value>ブラウザ通知テスト</value></data>
+  <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>Webhook 通知テスト</value></data>
+  <data name="Settings.DevNotify.Result.Initial" xml:space="preserve"><value>テスト結果がここに表示されます</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSendingFormat" xml:space="preserve"><value>ブラウザ通知を送信中… ({0} 秒の処理として)</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSentFormat" xml:space="preserve"><value>ブラウザ通知を送信しました - {0}</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSendingFormat" xml:space="preserve"><value>Webhook 通知を送信中… ({0} 秒の処理として)</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSentFormat" xml:space="preserve"><value>Webhook 通知を送信しました - {0}</value></data>
+  <data name="Settings.DevNotify.SessionName.Browser" xml:space="preserve"><value>通知テストセッション</value></data>
+  <data name="Settings.DevNotify.SessionName.Webhook" xml:space="preserve"><value>Webhook テストセッション</value></data>
+
+  <!-- Settings: Cross-tab messages (saveMessage / validation / version / export / import) -->
+  <data name="Settings.Message.PermissionGranted" xml:space="preserve"><value>通知が許可されました</value></data>
+  <data name="Settings.Message.PermissionDenied" xml:space="preserve"><value>通知が拒否されました</value></data>
+  <data name="Settings.Message.OpenFolderErrorFormat" xml:space="preserve"><value>フォルダを開けませんでした: {0}</value></data>
+  <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>通知時間は 0 以上にしてください</value></data>
+  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Webhook URL を入力してください</value></data>
+  <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>指定されたパスが存在しません</value></data>
+  <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>指定されたフォルダが存在しません。</value></data>
+  <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>このフォルダは既に追加されています</value></data>
+  <data name="Settings.Message.SaveSuccess" xml:space="preserve"><value>設定を保存しました</value></data>
+  <data name="Settings.Message.SaveErrorFormat" xml:space="preserve"><value>保存エラー: {0}</value></data>
+  <data name="Settings.Message.VersionFetchFailed" xml:space="preserve"><value>バージョン情報を取得できませんでした</value></data>
+  <data name="Settings.Message.VersionCheckErrorFormat" xml:space="preserve"><value>チェックに失敗しました: {0}</value></data>
+  <data name="Settings.Message.ExportSuccessFormat" xml:space="preserve"><value>セッション情報（{0} 件）をエクスポートしました</value></data>
+  <data name="Settings.Message.ExportErrorFormat" xml:space="preserve"><value>エクスポートエラー: {0}</value></data>
+  <data name="Settings.Message.JsonFileRequired" xml:space="preserve"><value>JSON ファイルを選択してください</value></data>
+  <data name="Settings.Message.SessionsNotFound" xml:space="preserve"><value>セッション情報が見つかりませんでした</value></data>
+  <data name="Settings.Message.FileReadErrorFormat" xml:space="preserve"><value>ファイル読み込みエラー: {0}</value></data>
+  <data name="Settings.Message.ImportResultFormat" xml:space="preserve"><value>インポートが完了しました（{0} 件追加、{1} 件は重複のためスキップ）。ページを再読み込みしてください。</value></data>
+  <data name="Settings.Message.ImportErrorFormat" xml:space="preserve"><value>インポートエラー: {0}</value></data>
+
+  <!-- SessionCreate Dialog -->
+  <data name="SessionCreate.Title" xml:space="preserve"><value>新しいセッションを作成</value></data>
+  <data name="SessionCreate.FolderLabel" xml:space="preserve"><value>フォルダを選択</value></data>
+  <data name="SessionCreate.FolderPlaceholder" xml:space="preserve"><value>フォルダパスを入力または選択</value></data>
+  <data name="SessionCreate.BrowseButton" xml:space="preserve"><value>参照</value></data>
+  <data name="SessionCreate.FavoriteFolders" xml:space="preserve"><value>お気に入りフォルダ</value></data>
+  <data name="SessionCreate.DefaultFolder" xml:space="preserve"><value>デフォルトフォルダ</value></data>
+  <data name="SessionCreate.UserHome" xml:space="preserve"><value>ユーザーホーム</value></data>
+  <data name="SessionCreate.PickFolder" xml:space="preserve"><value>フォルダを選択...</value></data>
+  <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>フォルダの作成</value></data>
+  <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>このフォルダを作成しますか？</value></data>
+  <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>作成する</value></data>
+
+  <!-- SessionOptionsSelector: common -->
+  <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>ターミナルタイプ</value></data>
+  <data name="SessionOptions.TerminalType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
+  <data name="SessionOptions.ExtraArgs.Label" xml:space="preserve"><value>追加引数</value></data>
+
+  <!-- SessionOptionsSelector: Terminal (default startup command) -->
+  <data name="SessionOptions.Terminal.StartupCommand.Label" xml:space="preserve"><value>起動コマンド（任意）</value></data>
+  <data name="SessionOptions.Terminal.StartupCommand.Placeholder" xml:space="preserve"><value>例: cmd.exe, powershell.exe</value></data>
+
+  <!-- SessionOptionsSelector: Claude Code -->
+  <data name="SessionOptions.Claude.Header" xml:space="preserve"><value>Claude Code オプション</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.Label" xml:space="preserve"><value>権限モード</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassLabel" xml:space="preserve"><value>バイパス</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>全操作を無条件で自動承認します（危険）</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>オートモード</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>デフォルト</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>全ての操作で都度確認を求めます</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>全操作を無条件で自動承認します（--dangerously-skip-permissions）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>全ての操作で都度確認を求めます。</value></data>
+  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>コンティニュー (--continue)</value></data>
+  <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>ブラウザ連携 (--chrome)</value></data>
+  <data name="SessionOptions.Claude.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model claude-sonnet-4-20250514 --verbose</value></data>
+  <data name="SessionOptions.Claude.PassToCli" xml:space="preserve"><value>そのまま Claude Code に渡します</value></data>
+
+  <!-- SessionOptionsSelector: Gemini CLI -->
+  <data name="SessionOptions.Gemini.Header" xml:space="preserve"><value>Gemini CLI オプション</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.Label" xml:space="preserve"><value>承認モード</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.DefaultTitle" xml:space="preserve"><value>ツール使用時に都度確認を求めます（デフォルト）</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.AutoEditTitle" xml:space="preserve"><value>ファイル編集など、安全な操作を自動で承認します</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.YoloTitle" xml:space="preserve"><value>全ての操作を警告なしで自動的に承認します（危険）</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpDefault" xml:space="preserve"><value>ツール使用時に都度確認を求めます（デフォルト）。</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpAutoEdit" xml:space="preserve"><value>ファイル編集など、安全な操作を自動で承認します。</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpYolo" xml:space="preserve"><value>全ての操作を警告なしで自動的に承認します（危険）。</value></data>
+  <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>サンドボックスモード (-s)</value></data>
+  <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>この機能を使用するには、Docker Desktop がインストールされている必要があります。</value></data>
+  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>コンティニュー (--resume latest)</value></data>
+  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>モデルをカスタマイズ</value></data>
+  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>使用するモデル</value></data>
+  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>モデルリスト管理</value></data>
+  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>モデル名を追加...</value></data>
+  <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --debug --allowed-tools shell,file</value></data>
+  <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>そのまま Gemini CLI に渡します</value></data>
+
+  <!-- SessionOptionsSelector: Codex CLI -->
+  <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
+  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>実行モード</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (推奨)</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>編集＋ビルド/テスト等を基本自動化</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (危険)</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--full-auto` を付けて自動実行寄りに進めます。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨です。</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>最新セッションを再開 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyLabel" xml:space="preserve"><value>読み取り専用</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyTitle" xml:space="preserve"><value>読み取り専用。書き込みはブロック。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceLabel" xml:space="preserve"><value>ワークスペース (推奨)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceTitle" xml:space="preserve"><value>ワークスペース内のみ書き込み可能。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessLabel" xml:space="preserve"><value>フルアクセス</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessTitle" xml:space="preserve"><value>フルアクセス（危険）。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>外部通信やファイルアクセス範囲を制限</value></data>
+  <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Codex CLI の既定値に任せます。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>承認ポリシー</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>操作の承認レベル（--ask-for-approval）</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>ネットワークアクセス</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>workspace-write 時の通信許可（-c sandbox_workspace_write.network_access）。デフォルトは enabled。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>ネットワークアクセスを許可します。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>ネットワークアクセスを制限します。</value></data>
+  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>プロファイル</value></data>
+  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>例: trusted</value></data>
+  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Codex CLI の `--profile` を指定します</value></data>
+  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>モデル</value></data>
+  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>例: gpt-5-codex</value></data>
+  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Codex CLI の `--model` を指定します</value></data>
+  <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
+
+  <!-- SessionSettings Dialog -->
+  <data name="SessionSettings.Title" xml:space="preserve"><value>セッション設定</value></data>
+  <data name="SessionSettings.Info.Header" xml:space="preserve"><value>セッション情報</value></data>
+  <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>セッション名:</value></data>
+  <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>フォルダ:</value></data>
+  <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>フォルダパスをコピー</value></data>
+  <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>フォルダを開く</value></data>
+  <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>セッションID:</value></data>
+  <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>セッションIDをコピー</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>サブセッションを作成</value></data>
+  <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>メモ管理</value></data>
+  <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>表示名</value></data>
+  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>セッションの表示名</value></data>
+  <data name="SessionSettings.DisplayName.Help" xml:space="preserve"><value>空白の場合はフォルダ名が使用されます</value></data>
+  <data name="SessionSettings.Pin.Label" xml:space="preserve"><value>セッションをピン留め</value></data>
+  <data name="SessionSettings.Pin.PriorityLabel" xml:space="preserve"><value>優先度:</value></data>
+  <data name="SessionSettings.Memo.Label" xml:space="preserve"><value>メモ</value></data>
+  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>セッションに関するメモ</value></data>
+  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>このセッションに関する任意のメモを記入できます</value></data>
+  <data name="SessionSettings.Loading" xml:space="preserve"><value>セッション情報を読み込み中…</value></data>
+  <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>変更を即座に適用（セッションを再起動）</value></data>
+  <data name="SessionSettings.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="SessionSettings.SaveErrorFormat" xml:space="preserve"><value>設定の保存に失敗しました: {0}</value></data>
+  <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>設定は保存されましたが、セッションの再起動に失敗しました。</value></data>
+
+  <!-- SubSession Dialog -->
+  <data name="SubSession.Title" xml:space="preserve"><value>サブセッション作成</value></data>
+  <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>親セッション: {0}</value></data>
+  <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>Worktree 新規作成</value></data>
+  <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>既存 Worktree 追加</value></data>
+  <data name="SubSession.Tab.SamePath" xml:space="preserve"><value>同じフォルダで開く</value></data>
+  <data name="SubSession.Tab.NewFolder" xml:space="preserve"><value>新しいフォルダで開く</value></data>
+  <data name="SubSession.GitRequired.Title" xml:space="preserve"><value>Git 管理が必要です</value></data>
+  <data name="SubSession.GitRequired.CreateWorktree" xml:space="preserve"><value>Worktree の作成には Git リポジトリが必要です。</value></data>
+  <data name="SubSession.GitRequired.ExistingWorktree" xml:space="preserve"><value>既存の Worktree を追加するには Git リポジトリが必要です。</value></data>
+  <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>ブランチ選択方法</value></data>
+  <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>新規ブランチ</value></data>
+  <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>既存ブランチ</value></data>
+  <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>新しいブランチ名</value></data>
+  <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>このブランチ名で新しい Worktree が作成されます</value></data>
+  <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>既存のブランチを選択</value></data>
+  <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>ブランチ一覧を読み込み中…</value></data>
+  <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>利用可能なブランチがありません</value></data>
+  <data name="SubSession.ExistingBranch.Placeholder" xml:space="preserve"><value>ブランチを選択してください</value></data>
+  <data name="SubSession.BranchExistingWorktree.Title" xml:space="preserve"><value>このブランチには既に Worktree が存在します</value></data>
+  <data name="SubSession.BranchExistingWorktree.PathFormat" xml:space="preserve"><value>パス: {0}</value></data>
+  <data name="SubSession.BranchExistingWorktree.Help" xml:space="preserve"><value>「既存 Worktree 追加」タブから追加してください</value></data>
+  <data name="SubSession.ExistingWorktree.Label" xml:space="preserve"><value>既存の Worktree を選択</value></data>
+  <data name="SubSession.ExistingWorktree.Loading" xml:space="preserve"><value>Worktree 一覧を読み込み中…</value></data>
+  <data name="SubSession.ExistingWorktree.Empty" xml:space="preserve"><value>利用可能な Worktree がありません</value></data>
+  <data name="SubSession.ExistingWorktree.Placeholder" xml:space="preserve"><value>Worktree を選択してください</value></data>
+  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>- メイン</value></data>
+  <data name="SubSession.SamePath.InfoFormat" xml:space="preserve"><value>親セッション "{0}" と同じフォルダで開きます</value></data>
+  <data name="SubSession.NewFolder.Label" xml:space="preserve"><value>新しいフォルダのパス</value></data>
+  <data name="SubSession.NewFolder.Placeholder" xml:space="preserve"><value>C:\path\to\new\folder または相対パス</value></data>
+  <data name="SubSession.NewFolder.Help" xml:space="preserve"><value>フォルダが存在しない場合は自動的に作成されます</value></data>
+  <data name="SubSession.NewFolder.InfoFormat" xml:space="preserve"><value>新しいフォルダ "{0}" でセッションを開始します</value></data>
+  <data name="SubSession.Button.Create" xml:space="preserve"><value>Worktree 作成</value></data>
+  <data name="SubSession.Button.Existing" xml:space="preserve"><value>Worktree 追加</value></data>
+  <data name="SubSession.Button.SamePath" xml:space="preserve"><value>セッション作成</value></data>
+  <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>フォルダ作成</value></data>
+  <data name="SubSession.ErrorFormat" xml:space="preserve"><value>操作中にエラーが発生しました: {0}</value></data>
+
+  <!-- SessionList (left sidebar) -->
+  <data name="SessionList.CreateSession" xml:space="preserve"><value>新しいセッションを作成</value></data>
+  <data name="SessionList.EmptyHint" xml:space="preserve"><value>上のボタンからセッションを作成してください</value></data>
+  <data name="SessionList.SearchPlaceholder" xml:space="preserve"><value>セッションを検索…</value></data>
+  <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>アーカイブ済みセッション</value></data>
+  <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>ピン留め</value></data>
+  <data name="SessionList.Badge.Notification" xml:space="preserve"><value>処理が完了しました</value></data>
+  <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git ブランチ</value></data>
+  <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>未コミットの変更があります</value></data>
+  <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>リモートコントロール接続中</value></data>
+  <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} 件</value></data>
+  <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>セッション設定</value></data>
+  <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>セッション削除</value></data>
+
+  <!-- ArchivedSessions Dialog -->
+  <data name="ArchivedSessions.Title" xml:space="preserve"><value>アーカイブ済みセッション</value></data>
+  <data name="ArchivedSessions.SearchPlaceholder" xml:space="preserve"><value>アーカイブを検索…</value></data>
+  <data name="ArchivedSessions.SelectAll" xml:space="preserve"><value>全選択</value></data>
+  <data name="ArchivedSessions.SelectedCountFormat" xml:space="preserve"><value>{0} 件選択中</value></data>
+  <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>選択を削除</value></data>
+  <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>ディレクトリが見つかりません</value></data>
+  <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>アーカイブ日時: {0}</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>不明</value></data>
+  <data name="ArchivedSessions.Restore" xml:space="preserve"><value>復帰</value></data>
+  <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>完全に削除</value></data>
+  <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>検索結果がありません</value></data>
+  <data name="ArchivedSessions.Empty" xml:space="preserve"><value>アーカイブ済みのセッションはありません</value></data>
+  <data name="ArchivedSessions.DeleteAll" xml:space="preserve"><value>すべて削除</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Title" xml:space="preserve"><value>削除の確認</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.AllFormat" xml:space="preserve"><value>すべてのアーカイブ済みセッション（{0} 件）を完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SelectedFormat" xml:space="preserve"><value>選択した {0} 件のアーカイブ済みセッションを完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>「{0}」を完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>この操作は取り消せません。</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>削除する</value></data>
+
+  <!-- BottomPanels: TextInputPanel -->
+  <data name="TextInput.KeyHints.Send" xml:space="preserve"><value>送信</value></data>
+  <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>改行</value></data>
+  <data name="TextInput.KeyHints.History" xml:space="preserve"><value>履歴</value></data>
+  <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
+  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Claude Code で誤字脱字・表現を整える</value></data>
+  <data name="TextInput.Refine.Label" xml:space="preserve"><value>事前整形</value></data>
+  <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
+  <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
+
+  <!-- BottomPanels: MemoPanel -->
+  <data name="MemoPanel.Placeholder" xml:space="preserve"><value>メモ… (Enter で改行、自動保存)</value></data>
+
+  <!-- BottomPanel (タブホスト) -->
+  <data name="BottomPanel.CloseTab" xml:space="preserve"><value>タブを閉じる</value></data>
+  <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>コマンドプロンプトを追加</value></data>
+  <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>PowerShell を追加</value></data>
+  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>メモを追加</value></data>
+  <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>テキスト入力</value></data>
+  <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>テキスト入力({0})</value></data>
+  <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>コマンドプロンプト({0})</value></data>
+  <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell({0})</value></data>
+  <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>タブ({0})</value></data>
+  <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>メモ({0})</value></data>
+
+  <!-- Root page -->
+  <data name="Root.NoSessionSelected" xml:space="preserve"><value>左側からセッションを選択してください</value></data>
+  <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Claude Code へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Gemini CLI へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>コマンドを入力…</value></data>
+  <data name="Root.SessionType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
+  <data name="Root.SessionType.Fallback" xml:space="preserve"><value>セッション</value></data>
+
+  <!-- Root: Toast messages -->
+  <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>セッション作成エラー: {0}</value></data>
+  <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>セッション初期化エラー: {0}</value></data>
+  <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>ターミナルを破棄しました</value></data>
+  <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>ターミナル破棄エラー: {0}</value></data>
+  <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>ターミナルを再作成しました</value></data>
+  <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>このセッションを選択してからターミナルを再作成してください</value></data>
+  <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>ターミナル再作成エラー: {0}</value></data>
+  <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' を作成しました</value></data>
+  <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>既存の Worktree '{0}' を追加しました</value></data>
+  <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>新しい{0}セッションを作成しました</value></data>
+  <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>新しいフォルダ '{0}' でセッションを作成しました</value></data>
+  <data name="Root.Toast.SessionCreated" xml:space="preserve"><value>セッションを作成しました</value></data>
+  <data name="Root.Toast.SessionCreateFailed" xml:space="preserve"><value>セッション作成に失敗しました</value></data>
+  <data name="Root.Toast.SessionSettingsSaved" xml:space="preserve"><value>セッション設定を保存しました</value></data>
+  <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>--continue オプションなしでセッションを再作成しました</value></data>
+  <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>セッション再作成に失敗しました</value></data>
+  <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>セッション再作成エラー: {0}</value></data>
+  <data name="Root.Confirm.DeleteSessionFormat" xml:space="preserve"><value>セッション「{0}」を削除しますか？</value></data>
+  <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>セッション「{0}」をアーカイブしますか？</value></data>
+</root>

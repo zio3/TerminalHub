@@ -1,5 +1,6 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
+@using Microsoft.Extensions.Localization
 @using Microsoft.JSInterop
 @using System.Diagnostics
 @using System.IO
@@ -7,13 +8,14 @@
 @inject IJSRuntime JSRuntime
 @inject ILogger<SessionSettingsDialog> Logger
 @inject ISessionMemoRepository MemoRepository
+@inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="bi bi-gear me-2"></i>セッション設定
+                    <i class="bi bi-gear me-2"></i>@L["SessionSettings.Title"]
                 </h5>
                 <button type="button" class="btn-close" @onclick="OnCancel"></button>
             </div>
@@ -21,24 +23,24 @@
                 @if (sessionInfo != null)
                 {
                     <div class="mb-3">
-                        <h6 class="text-muted">セッション情報</h6>
+                        <h6 class="text-muted">@L["SessionSettings.Info.Header"]</h6>
                         <div class="row">
                             <div class="col-md-6">
-                                <small class="text-muted">セッション名:</small><br/>
+                                <small class="text-muted">@L["SessionSettings.Info.SessionName"]</small><br/>
                                 <strong>@sessionInfo.GetDisplayName()</strong>
                             </div>
                             <div class="col-md-6">
-                                <small class="text-muted">フォルダ:</small><br/>
+                                <small class="text-muted">@L["SessionSettings.Info.Folder"]</small><br/>
                                 <div class="d-flex align-items-start">
                                     <code class="flex-grow-1 me-2 text-break" style="word-wrap: break-word; overflow-wrap: break-word;">@sessionInfo.FolderPath</code>
                                     <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
                                             @onclick="() => CopyToClipboard(sessionInfo.FolderPath)"
-                                            title="フォルダパスをコピー">
+                                            title="@L["SessionSettings.Info.CopyFolderPath"]">
                                         <i class="bi bi-clipboard"></i>
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0 ms-1"
                                             @onclick="() => OpenFolder(sessionInfo.FolderPath)"
-                                            title="フォルダを開く">
+                                            title="@L["SessionSettings.Info.OpenFolder"]">
                                         <i class="bi bi-folder2-open"></i>
                                     </button>
                                 </div>
@@ -46,12 +48,12 @@
                         </div>
                         <div class="row mt-2">
                             <div class="col-12">
-                                <small class="text-muted">セッションID:</small>
+                                <small class="text-muted">@L["SessionSettings.Info.SessionId"]</small>
                                 <div class="d-flex align-items-center">
                                     <code class="text-muted small">@sessionInfo.SessionId</code>
-                                    <button type="button" class="btn btn-link btn-sm text-muted ms-2" 
-                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString())" 
-                                            title="セッションIDをコピー">
+                                    <button type="button" class="btn btn-link btn-sm text-muted ms-2"
+                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString())"
+                                            title="@L["SessionSettings.Info.CopySessionId"]">
                                         <i class="bi bi-clipboard small"></i>
                                     </button>
                                 </div>
@@ -65,13 +67,13 @@
                             @if (!sessionInfo.ParentSessionId.HasValue)
                             {
                                 <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
-                                    <i class="bi bi-plus-circle me-1"></i>サブセッションを作成
+                                    <i class="bi bi-plus-circle me-1"></i>@L["SessionSettings.CreateSubSession"]
                                 </button>
                             }
                             @if (anyMemoExists)
                             {
                                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenMemoManagement">
-                                    <i class="bi bi-journal-text me-1"></i>メモ管理
+                                    <i class="bi bi-journal-text me-1"></i>@L["SessionSettings.OpenMemoManagement"]
                                 </button>
                             }
                         </div>
@@ -81,10 +83,10 @@
 
                     <!-- セッション名の変更 -->
                     <div class="mb-3">
-                        <label class="form-label">表示名</label>
-                        <input type="text" class="form-control" @bind="displayName" placeholder="セッションの表示名" />
+                        <label class="form-label">@L["SessionSettings.DisplayName.Label"]</label>
+                        <input type="text" class="form-control" @bind="displayName" placeholder="@L["SessionSettings.DisplayName.Placeholder"]" />
                         <small class="form-text text-muted">
-                            空白の場合はフォルダ名が使用されます
+                            @L["SessionSettings.DisplayName.Help"]
                         </small>
                     </div>
 
@@ -95,13 +97,13 @@
                             <div class="form-check d-inline-block">
                                 <input class="form-check-input" type="checkbox" @bind="isPinned" id="isPinnedCheck">
                                 <label class="form-check-label" for="isPinnedCheck">
-                                    <i class="bi bi-pin-fill me-1"></i>セッションをピン留め
+                                    <i class="bi bi-pin-fill me-1"></i>@L["SessionSettings.Pin.Label"]
                                 </label>
                             </div>
                             @if (isPinned)
                             {
                                 <div class="d-inline-block ms-3">
-                                    <label class="form-label mb-0 me-1 small">優先度:</label>
+                                    <label class="form-label mb-0 me-1 small">@L["SessionSettings.Pin.PriorityLabel"]</label>
                                     <input type="number" class="form-control form-control-sm d-inline-block" style="width: 80px;"
                                            @bind="pinPriority" placeholder="--" />
                                 </div>
@@ -111,10 +113,10 @@
 
                     <!-- メモ -->
                     <div class="mb-3">
-                        <label class="form-label">メモ</label>
-                        <textarea class="form-control" @bind="memo" placeholder="セッションに関するメモ" rows="3"></textarea>
+                        <label class="form-label">@L["SessionSettings.Memo.Label"]</label>
+                        <textarea class="form-control" @bind="memo" placeholder="@L["SessionSettings.Memo.Placeholder"]" rows="3"></textarea>
                         <small class="form-text text-muted">
-                            このセッションに関する任意のメモを記入できます
+                            @L["SessionSettings.Memo.Help"]
                         </small>
                     </div>
 
@@ -134,7 +136,7 @@
                 {
                     <div class="text-center">
                         <span class="spinner-border spinner-border-sm" role="status"></span>
-                        セッション情報を読み込み中...
+                        @L["SessionSettings.Loading"]
                     </div>
                 }
             </div>
@@ -142,14 +144,14 @@
                 <div class="form-check me-auto">
                     <input class="form-check-input" type="checkbox" @bind="restartSession" id="restartSessionCheck">
                     <label class="form-check-label" for="restartSessionCheck">
-                        変更を即座に適用（セッションを再起動）
+                        @L["SessionSettings.RestartOnSave"]
                     </label>
                 </div>
                 <button type="button" class="btn btn-secondary" @onclick="OnCancel">
-                    キャンセル
+                    @L["Common.Cancel"]
                 </button>
                 <button type="button" class="btn btn-primary" @onclick="SaveSettings" disabled="@(sessionInfo == null)">
-                    <i class="bi bi-check-circle me-2"></i>保存
+                    <i class="bi bi-check-circle me-2"></i>@L["SessionSettings.Save"]
                 </button>
             </div>
         </div>
@@ -332,7 +334,7 @@
                 var success = await SessionManager.RestartSessionAsync(SessionId.Value);
                 if (!success)
                 {
-                    errorMessage = "設定は保存されましたが、セッションの再起動に失敗しました。";
+                    errorMessage = L["SessionSettings.RestartFailed"];
                 }
             }
 
@@ -344,7 +346,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"設定の保存に失敗しました: {ex.Message}";
+            errorMessage = string.Format(L["SessionSettings.SaveErrorFormat"], ex.Message);
         }
     }
 

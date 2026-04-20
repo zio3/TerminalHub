@@ -1,11 +1,13 @@
 @using System.IO
 @using TerminalHub.Models
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-archive me-2"></i>アーカイブ済みセッション</h5>
+                <h5 class="modal-title"><i class="bi bi-archive me-2"></i>@L["ArchivedSessions.Title"]</h5>
                 <button type="button" class="btn-close" @onclick="Close"></button>
             </div>
             <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
@@ -14,7 +16,7 @@
                     <div class="mb-3">
                         <div class="input-group input-group-sm">
                             <span class="input-group-text"><i class="bi bi-search"></i></span>
-                            <input type="text" class="form-control" placeholder="アーカイブを検索..."
+                            <input type="text" class="form-control" placeholder="@L["ArchivedSessions.SearchPlaceholder"]"
                                    value="@searchText" @oninput="OnSearchTextChanged" />
                             @if (!string.IsNullOrEmpty(searchText))
                             {
@@ -30,13 +32,13 @@
                             <input type="checkbox" class="form-check-input" id="selectAllArchived"
                                    checked="@IsAllSelected"
                                    @onchange="ToggleSelectAll" />
-                            <label class="form-check-label small" for="selectAllArchived">全選択</label>
+                            <label class="form-check-label small" for="selectAllArchived">@L["ArchivedSessions.SelectAll"]</label>
                         </div>
                         @if (selectedSessionIds.Count > 0)
                         {
-                            <span class="small text-muted me-2">@selectedSessionIds.Count 件選択中</span>
+                            <span class="small text-muted me-2">@string.Format(L["ArchivedSessions.SelectedCountFormat"], selectedSessionIds.Count)</span>
                             <button class="btn btn-outline-danger btn-sm" @onclick="ConfirmDeleteSelected">
-                                <i class="bi bi-trash me-1"></i>選択を削除
+                                <i class="bi bi-trash me-1"></i>@L["ArchivedSessions.DeleteSelected"]
                             </button>
                         }
                     </div>
@@ -56,7 +58,7 @@
                                             @session.GetDisplayName()
                                             @if (!string.IsNullOrEmpty(session.FolderPath) && !Directory.Exists(session.FolderPath))
                                             {
-                                                <span class="text-warning ms-1" title="ディレクトリが見つかりません">
+                                                <span class="text-warning ms-1" title="@L["ArchivedSessions.DirectoryNotFound"]">
                                                     <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem;"></i>
                                                 </span>
                                             }
@@ -71,14 +73,14 @@
                                             </div>
                                         }
                                         <div class="small text-muted mt-1">
-                                            <i class="bi bi-clock me-1"></i>アーカイブ日時: @(session.ArchivedAt?.ToString("yyyy/MM/dd HH:mm") ?? "不明")
+                                            <i class="bi bi-clock me-1"></i>@string.Format(L["ArchivedSessions.ArchivedAtFormat"], session.ArchivedAt?.ToString("yyyy/MM/dd HH:mm") ?? L["ArchivedSessions.DateUnknown"].Value)
                                         </div>
                                     </div>
                                     <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-success" @onclick="() => RestoreSession(session.SessionId)" title="復帰">
+                                        <button class="btn btn-outline-success" @onclick="() => RestoreSession(session.SessionId)" title="@L["ArchivedSessions.Restore"]">
                                             <i class="bi bi-arrow-counterclockwise"></i>
                                         </button>
-                                        <button class="btn btn-outline-danger" @onclick="() => ConfirmDelete(session)" title="完全に削除">
+                                        <button class="btn btn-outline-danger" @onclick="() => ConfirmDelete(session)" title="@L["ArchivedSessions.DeletePermanently"]">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -90,7 +92,7 @@
                     @if (!_cachedFilteredSessions.Any())
                     {
                         <div class="text-center text-muted py-3">
-                            <i class="bi bi-search"></i> 検索結果がありません
+                            <i class="bi bi-search"></i> @L["ArchivedSessions.NoResults"]
                         </div>
                     }
                 }
@@ -98,7 +100,7 @@
                 {
                     <div class="text-center text-muted py-5">
                         <i class="bi bi-archive" style="font-size: 3rem;"></i>
-                        <p class="mt-3">アーカイブ済みのセッションはありません</p>
+                        <p class="mt-3">@L["ArchivedSessions.Empty"]</p>
                     </div>
                 }
             </div>
@@ -106,10 +108,10 @@
                 @if (ArchivedSessions.Any())
                 {
                     <button type="button" class="btn btn-outline-danger" @onclick="ConfirmDeleteAll">
-                        <i class="bi bi-trash me-1"></i>すべて削除
+                        <i class="bi bi-trash me-1"></i>@L["ArchivedSessions.DeleteAll"]
                     </button>
                 }
-                <button type="button" class="btn btn-secondary" @onclick="Close">閉じる</button>
+                <button type="button" class="btn btn-secondary" @onclick="Close">@L["Common.Close"]</button>
             </div>
         </div>
     </div>
@@ -127,26 +129,26 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">削除の確認</h5>
+                    <h5 class="modal-title">@L["ArchivedSessions.DeleteConfirm.Title"]</h5>
                 </div>
                 <div class="modal-body">
                     @if (deleteAllMode)
                     {
-                        <p>すべてのアーカイブ済みセッション（@ArchivedSessions.Count 件）を完全に削除しますか？</p>
+                        <p>@string.Format(L["ArchivedSessions.DeleteConfirm.AllFormat"], ArchivedSessions.Count)</p>
                     }
                     else if (deleteSelectedMode)
                     {
-                        <p>選択した @selectedSessionIds.Count 件のアーカイブ済みセッションを完全に削除しますか？</p>
+                        <p>@string.Format(L["ArchivedSessions.DeleteConfirm.SelectedFormat"], selectedSessionIds.Count)</p>
                     }
                     else
                     {
-                        <p>「@sessionToDelete?.GetDisplayName()」を完全に削除しますか？</p>
+                        <p>@string.Format(L["ArchivedSessions.DeleteConfirm.SingleFormat"], sessionToDelete?.GetDisplayName())</p>
                     }
-                    <p class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>この操作は取り消せません。</p>
+                    <p class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>@L["ArchivedSessions.DeleteConfirm.Irreversible"]</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">キャンセル</button>
-                    <button type="button" class="btn btn-danger" @onclick="ExecuteDelete">削除する</button>
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">@L["Common.Cancel"]</button>
+                    <button type="button" class="btn btn-danger" @onclick="ExecuteDelete">@L["ArchivedSessions.DeleteConfirm.Execute"]</button>
                 </div>
             </div>
         </div>

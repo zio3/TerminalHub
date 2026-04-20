@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    i18n shared resources (English - canonical)
+    Keys use dotted "Area.Element" hierarchy. Must match SharedResource.ja.resx.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Common -->
+  <data name="Common.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common.Create" xml:space="preserve"><value>Create</value></data>
+  <data name="Common.Unspecified" xml:space="preserve"><value>Unspecified</value></data>
+  <data name="Common.ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
+  <data name="Common.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
+
+  <!-- Settings Dialog -->
+  <data name="Settings.Title" xml:space="preserve"><value>Settings</value></data>
+
+  <!-- Settings Tabs -->
+  <data name="Settings.Tab.General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.Tab.Display" xml:space="preserve"><value>Display</value></data>
+  <data name="Settings.Tab.Notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Settings.Tab.Sessions" xml:space="preserve"><value>Sessions</value></data>
+  <data name="Settings.Tab.ExportImport" xml:space="preserve"><value>Export / Import</value></data>
+  <data name="Settings.Tab.Commands" xml:space="preserve"><value>Commands</value></data>
+  <data name="Settings.Tab.RemoteLaunch" xml:space="preserve"><value>Remote Launch</value></data>
+  <data name="Settings.Tab.Special" xml:space="preserve"><value>Special</value></data>
+  <data name="Settings.Tab.DevDiagnose" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Settings.Tab.DevBuffer" xml:space="preserve"><value>Buffer</value></data>
+  <data name="Settings.Tab.DevNotify" xml:space="preserve"><value>Notification Test</value></data>
+
+  <!-- Settings: General Tab -->
+  <data name="Settings.General.Header" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.General.Language.Label" xml:space="preserve"><value>Language</value></data>
+  <data name="Settings.General.Language.Help" xml:space="preserve"><value>Switch the UI language. Selecting a value reloads the page.</value></data>
+  <data name="Settings.General.DefaultFolder.Label" xml:space="preserve"><value>Default folder path</value></data>
+  <data name="Settings.General.DefaultFolder.PickTitle" xml:space="preserve"><value>Choose a folder</value></data>
+  <data name="Settings.General.DefaultFolder.Help" xml:space="preserve"><value>Sets the default path for new sessions. When empty, the user home folder is used.</value></data>
+  <data name="Settings.General.FavoriteFolders.Label" xml:space="preserve"><value>Favorite folders</value></data>
+  <data name="Settings.General.FavoriteFolders.Placeholder" xml:space="preserve"><value>Enter a folder path</value></data>
+  <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>Shown as suggestions when creating a new session.</value></data>
+  <data name="Settings.General.Version.Header" xml:space="preserve"><value>Version</value></data>
+  <data name="Settings.General.Version.Current" xml:space="preserve"><value>Current version:</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>Checking for updates...</value></data>
+  <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>A new version &lt;strong&gt;v{0}&lt;/strong&gt; is available</value></data>
+  <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>Check on GitHub</value></data>
+  <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>You're on the latest version</value></data>
+  <data name="Settings.General.Community.Header" xml:space="preserve"><value>Community</value></data>
+  <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Join the Discord server</value></data>
+  <data name="Settings.General.Community.Help" xml:space="preserve"><value>Bug reports, feature requests, and questions are welcome there.</value></data>
+
+  <!-- Settings: Display Tab -->
+  <data name="Settings.Display.Header" xml:space="preserve"><value>Display</value></data>
+  <data name="Settings.Display.Theme.Label" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings.Display.Theme.Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Settings.Display.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Settings.Display.SessionListScale.Label" xml:space="preserve"><value>Session list scale</value></data>
+  <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>Adjust the session list display scale (50%–150%).</value></data>
+  <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>Terminal font size</value></data>
+  <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Adjust the terminal font size (8px–28px).</value></data>
+  <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
+  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Adjust the session list width (15%–40%). You can also drag the border.</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Adjust the height ratio between the terminal and input panel (50:50–90:10). You can also drag the border.</value></data>
+
+  <!-- Settings: Notifications Tab -->
+  <data name="Settings.Notifications.Header" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Settings.Notifications.Browser.Label" xml:space="preserve"><value>Browser notifications</value></data>
+  <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>Allowed</value></data>
+  <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>Denied</value></data>
+  <data name="Settings.Notifications.Status.NotRequested" xml:space="preserve"><value>Not requested</value></data>
+  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>Checking...</value></data>
+  <data name="Settings.Notifications.Status.CheckError" xml:space="preserve"><value>Check failed</value></data>
+  <data name="Settings.Notifications.Status.Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Settings.Notifications.Browser.Enable" xml:space="preserve"><value>Enable browser notifications</value></data>
+  <data name="Settings.Notifications.Browser.Revoke" xml:space="preserve"><value>Revoke notification permission</value></data>
+  <data name="Settings.Notifications.Browser.RevokeHelp" xml:space="preserve"><value>You can revoke the notification permission from your browser's settings.</value></data>
+  <data name="Settings.Notifications.Browser.Request" xml:space="preserve"><value>Allow notifications</value></data>
+  <data name="Settings.Notifications.Browser.RequestHelp" xml:space="preserve"><value>To receive desktop notifications when processing completes, please allow browser notifications.</value></data>
+  <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>Notify after processing time (seconds)</value></data>
+  <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>Set to 0 to notify on every completion</value></data>
+  <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
+  <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
+  <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook</value></data>
+  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use Claude Code's hook feature to receive notifications more reliably. Settings are automatically added to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; when a session is created.</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Enable Claude Code Hook</value></data>
+  <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>This setting is applied to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; the next time each session is started/restarted. It is not applied immediately to running sessions or workspaces outside TerminalHub's management.</value></data>
+
+  <!-- Settings: Sessions Tab -->
+  <data name="Settings.Sessions.Header" xml:space="preserve"><value>Sessions</value></data>
+  <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
+  <data name="Settings.Sessions.SortOrder.ByCreatedAt" xml:space="preserve"><value>By creation date</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last used</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>Most recently used sessions appear at the top</value></data>
+  <data name="Settings.Sessions.SortOrder.ByName" xml:space="preserve"><value>By name</value></data>
+  <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>In "By last accessed" order, usage of child (worktree) sessions is reflected in the parent's position.</value></data>
+  <data name="Settings.Sessions.Display.Label" xml:space="preserve"><value>Session list display settings</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalType" xml:space="preserve"><value>Show terminal type</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalTypeSub" xml:space="preserve"><value>Claude / Gemini / Codex badges</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfo" xml:space="preserve"><value>Show Git info</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>Branch name badge</value></data>
+  <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>Choose which additional info to display in the session list.</value></data>
+  <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>Input panel settings</value></data>
+  <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
+  <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Terminal only</value></data>
+  <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
+
+  <!-- Settings: Export/Import Tab -->
+  <data name="Settings.Export.Header" xml:space="preserve"><value>Export / Import Data</value></data>
+  <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: {0} sessions</value></data>
+  <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
+  <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>
+  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. It will be added to the current storage ({0}).</value></data>
+  <data name="Settings.Export.Import.PreviewHeader" xml:space="preserve"><value>Import preview</value></data>
+  <data name="Settings.Export.Import.PreviewSessions" xml:space="preserve"><value>Sessions: {0}</value></data>
+  <data name="Settings.Export.Import.RunButton" xml:space="preserve"><value>Run import</value></data>
+
+  <!-- Settings: Commands Tab -->
+  <data name="Settings.Commands.Header" xml:space="preserve"><value>Custom Commands</value></data>
+  <data name="Settings.Commands.Help" xml:space="preserve"><value>Register commands shown in the button bar for each terminal type.</value></data>
+  <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>Text</value></data>
+  <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>Key</value></data>
+  <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>Title (optional)</value></data>
+  <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>Command (e.g., /plan)</value></data>
+  <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>Drag to reorder</value></data>
+
+  <!-- Settings: Remote Launch Tab -->
+  <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>Remote Launch</value></data>
+  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Launch Claude Code sessions from your phone while away and obtain a Remote Control URL.</value></data>
+  <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>Enable remote launch</value></data>
+  <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>Disconnected</value></data>
+  <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>Connecting...</value></data>
+  <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>Test connection</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>Checking...</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (round-trip {0} ms)</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>Failed: {0}</value></data>
+  <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>Access URL</value></data>
+  <data name="Settings.RemoteLaunch.CopyUrlTitle" xml:space="preserve"><value>Copy URL</value></data>
+  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>Do not share this URL. Anyone who knows it can launch sessions.</value></data>
+  <data name="Settings.RemoteLaunch.PasswordLabel" xml:space="preserve"><value>Password (optional)</value></data>
+  <data name="Settings.RemoteLaunch.PasswordPlaceholder" xml:space="preserve"><value>When set, a password will be required at access time</value></data>
+  <data name="Settings.RemoteLaunch.PasswordHelp" xml:space="preserve"><value>If empty, the URL alone grants access.</value></data>
+  <data name="Settings.RemoteLaunch.TopicGuid" xml:space="preserve"><value>Topic GUID</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidTitle" xml:space="preserve"><value>Regenerate GUID (existing access URL will be invalidated)</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>Regenerating invalidates the existing access URL.</value></data>
+
+  <!-- Settings: Special Tab -->
+  <data name="Settings.Special.Header" xml:space="preserve"><value>Special Settings</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Header" xml:space="preserve"><value>Claude Code mode switch key</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Help" xml:space="preserve"><value>Select the keyboard shortcut used for mode switching in Claude Code.</value></data>
+  <data name="Settings.Special.ClaudeModeKey.None" xml:space="preserve"><value>None</value></data>
+  <data name="Settings.Special.ClaudeModeKey.DefaultNote" xml:space="preserve"><value>(default)</value></data>
+  <data name="Settings.Special.ClaudeModeKey.ConflictNote" xml:space="preserve"><value>Alt+M can conflict with other functions in some environments. If that happens, try Shift+Tab instead.</value></data>
+  <data name="Settings.Special.VoiceInput.Header" xml:space="preserve"><value>Voice input</value></data>
+  <data name="Settings.Special.VoiceInput.Enable" xml:space="preserve"><value>Enable voice input (experimental)</value></data>
+  <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>When enabled, a microphone button appears in the text input panel. Speech recognition only runs while the button is held down (Chrome recommended).</value></data>
+  <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>Text pre-refinement</value></data>
+  <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>Enable pre-refinement button (experimental)</value></data>
+  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>When enabled, a &lt;i class="bi bi-stars"&gt;&lt;/i&gt; Refine button appears in the text input panel. Pressing it uses Claude Code CLI (Haiku model) to fix typos and inconsistencies.&lt;br/&gt;The refinement instructions can be customized by editing &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt;.</value></data>
+  <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>Developer tools</value></data>
+  <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>Enable developer tools</value></data>
+  <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs are shown.</value></data>
+  <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>Log files</value></data>
+  <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>Open log folder</value></data>
+  <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>
+
+  <!-- Settings: Dev Diagnose Tab -->
+  <data name="Settings.DevDiagnose.Header" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Settings.DevDiagnose.Refresh" xml:space="preserve"><value>Refresh diagnostics</value></data>
+  <data name="Settings.DevDiagnose.RunJs" xml:space="preserve"><value>Run JS diagnostics</value></data>
+  <data name="Settings.DevDiagnose.SessionList" xml:space="preserve"><value>Session list</value></data>
+  <data name="Settings.DevDiagnose.ColName" xml:space="preserve"><value>Name</value></data>
+  <data name="Settings.DevDiagnose.ColStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="Settings.DevDiagnose.ConPtyPresent" xml:space="preserve"><value>Yes</value></data>
+  <data name="Settings.DevDiagnose.ConPtyAbsent" xml:space="preserve"><value>No</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.Header" xml:space="preserve"><value>Terminal info</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.JsTerminalCount" xml:space="preserve"><value>JavaScript terminal count:</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.Header" xml:space="preserve"><value>Terminal control test</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollBottom" xml:space="preserve"><value>Scroll to bottom</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollTop" xml:space="preserve"><value>Scroll to top</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.GetPosition" xml:space="preserve"><value>Get position</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.Initial" xml:space="preserve"><value>Scroll position info will appear here</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.BottomFormat" xml:space="preserve"><value>Scrolled to bottom - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.TopFormat" xml:space="preserve"><value>Scrolled to top - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.PositionFormat" xml:space="preserve"><value>Scroll position: {0} - {1}</value></data>
+
+  <!-- Settings: Dev Buffer Tab -->
+  <data name="Settings.DevBuffer.Header" xml:space="preserve"><value>Buffer Dump</value></data>
+  <data name="Settings.DevBuffer.Help" xml:space="preserve"><value>Downloads the session's output buffer (up to 2MB) as a file.</value></data>
+  <data name="Settings.DevBuffer.SelectLabel" xml:space="preserve"><value>Select session</value></data>
+  <data name="Settings.DevBuffer.SelectPlaceholder" xml:space="preserve"><value>-- Select a session --</value></data>
+  <data name="Settings.DevBuffer.Empty" xml:space="preserve"><value>(empty)</value></data>
+  <data name="Settings.DevBuffer.BufferFormat" xml:space="preserve"><value>Buffer: {0}</value></data>
+  <data name="Settings.DevBuffer.StatusHistoryFormat" xml:space="preserve"><value>Status history: {0}</value></data>
+  <data name="Settings.DevBuffer.DownloadBuffer" xml:space="preserve"><value>Buffer</value></data>
+  <data name="Settings.DevBuffer.DownloadBufferClean" xml:space="preserve"><value>Buffer (ANSI stripped)</value></data>
+  <data name="Settings.DevBuffer.DownloadStatusHistory" xml:space="preserve"><value>Status history JSON</value></data>
+  <data name="Settings.DevBuffer.Result.SelectSession" xml:space="preserve"><value>Please select a session</value></data>
+  <data name="Settings.DevBuffer.Result.BufferEmpty" xml:space="preserve"><value>Buffer is empty</value></data>
+  <data name="Settings.DevBuffer.Result.DownloadedFormat" xml:space="preserve"><value>Download complete: {0} ({1})</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferInfo" xml:space="preserve"><value>Buffer Info</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferContent" xml:space="preserve"><value>Buffer Content</value></data>
+
+  <!-- Settings: Dev Notify Tab -->
+  <data name="Settings.DevNotify.Header" xml:space="preserve"><value>Notification Test</value></data>
+  <data name="Settings.DevNotify.TestElapsedLabel" xml:space="preserve"><value>Test elapsed time (seconds)</value></data>
+  <data name="Settings.DevNotify.TestBrowser" xml:space="preserve"><value>Test browser notification</value></data>
+  <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>Test webhook notification</value></data>
+  <data name="Settings.DevNotify.Result.Initial" xml:space="preserve"><value>Test results will appear here</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSendingFormat" xml:space="preserve"><value>Sending browser notification... (as {0}s process)</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSentFormat" xml:space="preserve"><value>Browser notification sent - {0}</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSendingFormat" xml:space="preserve"><value>Sending webhook notification... (as {0}s process)</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSentFormat" xml:space="preserve"><value>Webhook notification sent - {0}</value></data>
+  <data name="Settings.DevNotify.SessionName.Browser" xml:space="preserve"><value>Browser notification test</value></data>
+  <data name="Settings.DevNotify.SessionName.Webhook" xml:space="preserve"><value>Webhook notification test</value></data>
+
+  <!-- Settings: Cross-tab messages (saveMessage / validation / version / export / import) -->
+  <data name="Settings.Message.PermissionGranted" xml:space="preserve"><value>Notifications allowed</value></data>
+  <data name="Settings.Message.PermissionDenied" xml:space="preserve"><value>Notifications denied</value></data>
+  <data name="Settings.Message.OpenFolderErrorFormat" xml:space="preserve"><value>Could not open folder: {0}</value></data>
+  <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>Notification threshold must be 0 or greater</value></data>
+  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Please enter a Webhook URL</value></data>
+  <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>The specified path does not exist</value></data>
+  <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>The specified folder does not exist.</value></data>
+  <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>This folder has already been added</value></data>
+  <data name="Settings.Message.SaveSuccess" xml:space="preserve"><value>Settings saved</value></data>
+  <data name="Settings.Message.SaveErrorFormat" xml:space="preserve"><value>Save error: {0}</value></data>
+  <data name="Settings.Message.VersionFetchFailed" xml:space="preserve"><value>Could not retrieve version information</value></data>
+  <data name="Settings.Message.VersionCheckErrorFormat" xml:space="preserve"><value>Check failed: {0}</value></data>
+  <data name="Settings.Message.ExportSuccessFormat" xml:space="preserve"><value>Exported {0} sessions</value></data>
+  <data name="Settings.Message.ExportErrorFormat" xml:space="preserve"><value>Export error: {0}</value></data>
+  <data name="Settings.Message.JsonFileRequired" xml:space="preserve"><value>Please select a JSON file</value></data>
+  <data name="Settings.Message.SessionsNotFound" xml:space="preserve"><value>No sessions found</value></data>
+  <data name="Settings.Message.FileReadErrorFormat" xml:space="preserve"><value>File read error: {0}</value></data>
+  <data name="Settings.Message.ImportResultFormat" xml:space="preserve"><value>Import complete ({0} added, {1} skipped as duplicates). Please reload the page.</value></data>
+  <data name="Settings.Message.ImportErrorFormat" xml:space="preserve"><value>Import error: {0}</value></data>
+
+  <!-- SessionCreate Dialog -->
+  <data name="SessionCreate.Title" xml:space="preserve"><value>New Session</value></data>
+  <data name="SessionCreate.FolderLabel" xml:space="preserve"><value>Select folder</value></data>
+  <data name="SessionCreate.FolderPlaceholder" xml:space="preserve"><value>Enter or select a folder path</value></data>
+  <data name="SessionCreate.BrowseButton" xml:space="preserve"><value>Browse</value></data>
+  <data name="SessionCreate.FavoriteFolders" xml:space="preserve"><value>Favorite folders</value></data>
+  <data name="SessionCreate.DefaultFolder" xml:space="preserve"><value>Default folder</value></data>
+  <data name="SessionCreate.UserHome" xml:space="preserve"><value>User home</value></data>
+  <data name="SessionCreate.PickFolder" xml:space="preserve"><value>Pick folder...</value></data>
+  <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>Create Folder</value></data>
+  <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>Create this folder?</value></data>
+  <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>Create</value></data>
+
+  <!-- SessionOptionsSelector: common -->
+  <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>Terminal type</value></data>
+  <data name="SessionOptions.TerminalType.Terminal" xml:space="preserve"><value>Terminal</value></data>
+  <data name="SessionOptions.ExtraArgs.Label" xml:space="preserve"><value>Additional arguments</value></data>
+
+  <!-- SessionOptionsSelector: Terminal (default startup command) -->
+  <data name="SessionOptions.Terminal.StartupCommand.Label" xml:space="preserve"><value>Startup command (optional)</value></data>
+  <data name="SessionOptions.Terminal.StartupCommand.Placeholder" xml:space="preserve"><value>e.g., cmd.exe, powershell.exe</value></data>
+
+  <!-- SessionOptionsSelector: Claude Code -->
+  <data name="SessionOptions.Claude.Header" xml:space="preserve"><value>Claude Code Options</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.Label" xml:space="preserve"><value>Permission mode</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassLabel" xml:space="preserve"><value>Bypass</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>Auto-approves all operations unconditionally (dangerous)</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>Auto mode</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>Default</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every operation</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>Auto-approves all operations unconditionally (--dangerously-skip-permissions).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones (--enable-auto-mode).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every operation.</value></data>
+  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>Continue (--continue)</value></data>
+  <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>Browser integration (--chrome)</value></data>
+  <data name="SessionOptions.Claude.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --model claude-sonnet-4-20250514 --verbose</value></data>
+  <data name="SessionOptions.Claude.PassToCli" xml:space="preserve"><value>Passed as-is to Claude Code</value></data>
+
+  <!-- SessionOptionsSelector: Gemini CLI -->
+  <data name="SessionOptions.Gemini.Header" xml:space="preserve"><value>Gemini CLI Options</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.Label" xml:space="preserve"><value>Approval mode</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every tool use (default)</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.AutoEditTitle" xml:space="preserve"><value>Auto-approves safe operations like file edits</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.YoloTitle" xml:space="preserve"><value>Auto-approves all operations without warning (dangerous)</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every tool use (default).</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpAutoEdit" xml:space="preserve"><value>Auto-approves safe operations like file edits.</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpYolo" xml:space="preserve"><value>Auto-approves all operations without warning (dangerous).</value></data>
+  <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>Sandbox mode (-s)</value></data>
+  <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>Docker Desktop must be installed to use this feature.</value></data>
+  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>Continue (--resume latest)</value></data>
+  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>Customize model</value></data>
+  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>Model to use</value></data>
+  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>Model list management</value></data>
+  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>Add a model name...</value></data>
+  <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --debug --allowed-tools shell,file</value></data>
+  <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>Passed as-is to Gemini CLI</value></data>
+
+  <!-- SessionOptionsSelector: Codex CLI -->
+  <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
+  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>Execution mode</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (recommended)</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>Mostly automates edits, builds, and tests</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Adds `--full-auto` for mostly automatic execution.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume last session (resume --last)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>Sandbox mode</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI default</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>Do not add --sandbox; use the Codex CLI default.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyLabel" xml:space="preserve"><value>Read-only</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyTitle" xml:space="preserve"><value>Read-only. Writes are blocked.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceLabel" xml:space="preserve"><value>Workspace (recommended)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceTitle" xml:space="preserve"><value>Writable only within the workspace.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessLabel" xml:space="preserve"><value>Full access</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessTitle" xml:space="preserve"><value>Full access (dangerous).</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>Limits external communication and file access.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Uses the Codex CLI default.</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>Approval policy</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>Operation approval level (--ask-for-approval)</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>Network access</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>Network permission for workspace-write (-c sandbox_workspace_write.network_access). Default is enabled.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>Allows network access.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>Restricts network access.</value></data>
+  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>Profile</value></data>
+  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>e.g., trusted</value></data>
+  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Specifies --profile for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>Model</value></data>
+  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>e.g., gpt-5-codex</value></data>
+  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Specifies --model for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
+
+  <!-- SessionSettings Dialog -->
+  <data name="SessionSettings.Title" xml:space="preserve"><value>Session Settings</value></data>
+  <data name="SessionSettings.Info.Header" xml:space="preserve"><value>Session info</value></data>
+  <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>Session name:</value></data>
+  <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>Folder:</value></data>
+  <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>Copy folder path</value></data>
+  <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>Session ID:</value></data>
+  <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>Copy session ID</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>Create sub-session</value></data>
+  <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>Manage memos</value></data>
+  <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>Display name</value></data>
+  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>Session display name</value></data>
+  <data name="SessionSettings.DisplayName.Help" xml:space="preserve"><value>If blank, the folder name will be used</value></data>
+  <data name="SessionSettings.Pin.Label" xml:space="preserve"><value>Pin this session</value></data>
+  <data name="SessionSettings.Pin.PriorityLabel" xml:space="preserve"><value>Priority:</value></data>
+  <data name="SessionSettings.Memo.Label" xml:space="preserve"><value>Memo</value></data>
+  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>Memo for this session</value></data>
+  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>Write any notes about this session here</value></data>
+  <data name="SessionSettings.Loading" xml:space="preserve"><value>Loading session info...</value></data>
+  <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>Apply changes immediately (restart session)</value></data>
+  <data name="SessionSettings.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="SessionSettings.SaveErrorFormat" xml:space="preserve"><value>Failed to save settings: {0}</value></data>
+  <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>Settings were saved, but session restart failed.</value></data>
+
+  <!-- SubSession Dialog -->
+  <data name="SubSession.Title" xml:space="preserve"><value>Create Sub-session</value></data>
+  <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>Parent session: {0}</value></data>
+  <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>New worktree</value></data>
+  <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>Existing worktree</value></data>
+  <data name="SubSession.Tab.SamePath" xml:space="preserve"><value>Same folder</value></data>
+  <data name="SubSession.Tab.NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="SubSession.GitRequired.Title" xml:space="preserve"><value>Git repository required</value></data>
+  <data name="SubSession.GitRequired.CreateWorktree" xml:space="preserve"><value>A Git repository is required to create a worktree.</value></data>
+  <data name="SubSession.GitRequired.ExistingWorktree" xml:space="preserve"><value>A Git repository is required to add an existing worktree.</value></data>
+  <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>Branch selection</value></data>
+  <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>New branch</value></data>
+  <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>Existing branch</value></data>
+  <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
+  <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
+  <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>
+  <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>Loading branch list...</value></data>
+  <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>No branches available</value></data>
+  <data name="SubSession.ExistingBranch.Placeholder" xml:space="preserve"><value>Please select a branch</value></data>
+  <data name="SubSession.BranchExistingWorktree.Title" xml:space="preserve"><value>A worktree already exists for this branch</value></data>
+  <data name="SubSession.BranchExistingWorktree.PathFormat" xml:space="preserve"><value>Path: {0}</value></data>
+  <data name="SubSession.BranchExistingWorktree.Help" xml:space="preserve"><value>Please use the "Existing worktree" tab to add it</value></data>
+  <data name="SubSession.ExistingWorktree.Label" xml:space="preserve"><value>Select an existing worktree</value></data>
+  <data name="SubSession.ExistingWorktree.Loading" xml:space="preserve"><value>Loading worktree list...</value></data>
+  <data name="SubSession.ExistingWorktree.Empty" xml:space="preserve"><value>No worktrees available</value></data>
+  <data name="SubSession.ExistingWorktree.Placeholder" xml:space="preserve"><value>Please select a worktree</value></data>
+  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>- main</value></data>
+  <data name="SubSession.SamePath.InfoFormat" xml:space="preserve"><value>Opens in the same folder as parent session "{0}"</value></data>
+  <data name="SubSession.NewFolder.Label" xml:space="preserve"><value>New folder path</value></data>
+  <data name="SubSession.NewFolder.Placeholder" xml:space="preserve"><value>C:\path\to\new\folder or relative path</value></data>
+  <data name="SubSession.NewFolder.Help" xml:space="preserve"><value>The folder will be created automatically if it doesn't exist</value></data>
+  <data name="SubSession.NewFolder.InfoFormat" xml:space="preserve"><value>Starts a session in the new folder "{0}"</value></data>
+  <data name="SubSession.Button.Create" xml:space="preserve"><value>Create worktree</value></data>
+  <data name="SubSession.Button.Existing" xml:space="preserve"><value>Add worktree</value></data>
+  <data name="SubSession.Button.SamePath" xml:space="preserve"><value>Create session</value></data>
+  <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>Create folder</value></data>
+  <data name="SubSession.ErrorFormat" xml:space="preserve"><value>An error occurred during the operation: {0}</value></data>
+
+  <!-- SessionList (left sidebar) -->
+  <data name="SessionList.CreateSession" xml:space="preserve"><value>New Session</value></data>
+  <data name="SessionList.EmptyHint" xml:space="preserve"><value>Use the button above to create a session</value></data>
+  <data name="SessionList.SearchPlaceholder" xml:space="preserve"><value>Search sessions...</value></data>
+  <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>Archived sessions</value></data>
+  <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>Pinned</value></data>
+  <data name="SessionList.Badge.Notification" xml:space="preserve"><value>Processing completed</value></data>
+  <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git branch</value></data>
+  <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>Uncommitted changes</value></data>
+  <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>
+  <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} children</value></data>
+  <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>Session settings</value></data>
+  <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>Delete session</value></data>
+
+  <!-- ArchivedSessions Dialog -->
+  <data name="ArchivedSessions.Title" xml:space="preserve"><value>Archived Sessions</value></data>
+  <data name="ArchivedSessions.SearchPlaceholder" xml:space="preserve"><value>Search archives...</value></data>
+  <data name="ArchivedSessions.SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="ArchivedSessions.SelectedCountFormat" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>Delete selected</value></data>
+  <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>Directory not found</value></data>
+  <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>Archived at: {0}</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="ArchivedSessions.Restore" xml:space="preserve"><value>Restore</value></data>
+  <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>Delete permanently</value></data>
+  <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>No search results</value></data>
+  <data name="ArchivedSessions.Empty" xml:space="preserve"><value>No archived sessions</value></data>
+  <data name="ArchivedSessions.DeleteAll" xml:space="preserve"><value>Delete all</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Title" xml:space="preserve"><value>Confirm deletion</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.AllFormat" xml:space="preserve"><value>Permanently delete all {0} archived sessions?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SelectedFormat" xml:space="preserve"><value>Permanently delete {0} selected archived sessions?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>Permanently delete "{0}"?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>This action cannot be undone.</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>Delete</value></data>
+
+  <!-- BottomPanels: TextInputPanel -->
+  <data name="TextInput.KeyHints.Send" xml:space="preserve"><value>Send</value></data>
+  <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>Newline</value></data>
+  <data name="TextInput.KeyHints.History" xml:space="preserve"><value>History</value></data>
+  <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>Voice input (hold to record)</value></data>
+  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Clean up typos and phrasing with Claude Code</value></data>
+  <data name="TextInput.Refine.Label" xml:space="preserve"><value>Refine</value></data>
+  <data name="TextInput.Send" xml:space="preserve"><value>Send</value></data>
+  <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>Mode switch ({0})</value></data>
+
+  <!-- BottomPanels: MemoPanel -->
+  <data name="MemoPanel.Placeholder" xml:space="preserve"><value>Memo... (Enter for newline, auto-saved)</value></data>
+
+  <!-- BottomPanel (tab host) -->
+  <data name="BottomPanel.CloseTab" xml:space="preserve"><value>Close tab</value></data>
+  <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>Add Command Prompt</value></data>
+  <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>Add PowerShell</value></data>
+  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>Add memo</value></data>
+  <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>Text input</value></data>
+  <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>Text input ({0})</value></data>
+  <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>Command Prompt ({0})</value></data>
+  <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell ({0})</value></data>
+  <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>Tab ({0})</value></data>
+  <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>Memo ({0})</value></data>
+
+  <!-- Root page -->
+  <data name="Root.NoSessionSelected" xml:space="preserve"><value>Select a session from the left sidebar</value></data>
+  <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Type a message for Claude Code...</value></data>
+  <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Type a message for Gemini CLI...</value></data>
+  <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>Enter a command...</value></data>
+  <data name="Root.SessionType.Terminal" xml:space="preserve"><value>Terminal</value></data>
+  <data name="Root.SessionType.Fallback" xml:space="preserve"><value>Session</value></data>
+
+  <!-- Root: Toast messages -->
+  <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>Session creation error: {0}</value></data>
+  <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>Session initialization error: {0}</value></data>
+  <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
+  <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
+  <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>
+  <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>Please select this session first, then recreate the terminal</value></data>
+  <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>Terminal recreate error: {0}</value></data>
+  <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' created</value></data>
+  <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>Existing worktree '{0}' added</value></data>
+  <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>New {0} session created</value></data>
+  <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>New session created in folder '{0}'</value></data>
+  <data name="Root.Toast.SessionCreated" xml:space="preserve"><value>Session created</value></data>
+  <data name="Root.Toast.SessionCreateFailed" xml:space="preserve"><value>Failed to create session</value></data>
+  <data name="Root.Toast.SessionSettingsSaved" xml:space="preserve"><value>Session settings saved</value></data>
+  <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>Session recreated without --continue option</value></data>
+  <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>Failed to recreate session</value></data>
+  <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>Session recreate error: {0}</value></data>
+  <data name="Root.Confirm.DeleteSessionFormat" xml:space="preserve"><value>Delete session "{0}"?</value></data>
+  <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>Archive session "{0}"?</value></data>
+</root>
