@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    i18n 共有リソース (日本語)
+    キーは "エリア.要素" の階層ドット記法で書き、英語版 (SharedResource.en.resx) と同じキーを維持する。
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Common -->
+  <data name="Common.Close" xml:space="preserve"><value>閉じる</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>追加</value></data>
+
+  <!-- Settings Dialog -->
+  <data name="Settings.Title" xml:space="preserve"><value>設定</value></data>
+
+  <!-- Settings Tabs -->
+  <data name="Settings.Tab.General" xml:space="preserve"><value>一般</value></data>
+  <data name="Settings.Tab.Display" xml:space="preserve"><value>表示</value></data>
+  <data name="Settings.Tab.Notifications" xml:space="preserve"><value>通知</value></data>
+  <data name="Settings.Tab.Sessions" xml:space="preserve"><value>セッション</value></data>
+  <data name="Settings.Tab.ExportImport" xml:space="preserve"><value>エクスポート/インポート</value></data>
+  <data name="Settings.Tab.Commands" xml:space="preserve"><value>コマンド</value></data>
+  <data name="Settings.Tab.RemoteLaunch" xml:space="preserve"><value>リモート起動</value></data>
+  <data name="Settings.Tab.Special" xml:space="preserve"><value>特殊</value></data>
+  <data name="Settings.Tab.DevDiagnose" xml:space="preserve"><value>診断</value></data>
+  <data name="Settings.Tab.DevBuffer" xml:space="preserve"><value>バッファ</value></data>
+  <data name="Settings.Tab.DevNotify" xml:space="preserve"><value>通知テスト</value></data>
+
+  <!-- Settings: General Tab -->
+  <data name="Settings.General.Header" xml:space="preserve"><value>一般設定</value></data>
+  <data name="Settings.General.Language.Label" xml:space="preserve"><value>言語</value></data>
+  <data name="Settings.General.Language.Help" xml:space="preserve"><value>UI の表示言語を切り替えます。選択すると再読み込みされます。</value></data>
+  <data name="Settings.General.DefaultFolder.Label" xml:space="preserve"><value>デフォルトフォルダパス</value></data>
+  <data name="Settings.General.DefaultFolder.PickTitle" xml:space="preserve"><value>フォルダを選択</value></data>
+  <data name="Settings.General.DefaultFolder.Help" xml:space="preserve"><value>新規セッション作成時のデフォルトパスを設定します。空欄の場合はユーザーフォルダが使用されます。</value></data>
+  <data name="Settings.General.FavoriteFolders.Label" xml:space="preserve"><value>お気に入りフォルダ</value></data>
+  <data name="Settings.General.FavoriteFolders.Placeholder" xml:space="preserve"><value>フォルダパスを入力</value></data>
+  <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>セッション作成時にフォルダ選択の候補として表示されます。</value></data>
+  <data name="Settings.General.Version.Header" xml:space="preserve"><value>バージョン情報</value></data>
+  <data name="Settings.General.Version.Current" xml:space="preserve"><value>現在のバージョン:</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中...</value></data>
+  <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>新しいバージョン &lt;strong&gt;v{0}&lt;/strong&gt; があります</value></data>
+  <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>GitHubで確認</value></data>
+  <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>最新バージョンです</value></data>
+  <data name="Settings.General.Community.Header" xml:space="preserve"><value>コミュニティ</value></data>
+  <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Discord サーバーに参加</value></data>
+  <data name="Settings.General.Community.Help" xml:space="preserve"><value>バグ報告、機能リクエスト、質問などはこちらで受け付けています。</value></data>
+</root>

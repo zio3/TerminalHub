@@ -396,5 +396,21 @@ window.terminalHubHelpers = {
     // 現在のテーマ取得
     getTheme: function() {
         return document.documentElement.getAttribute('data-bs-theme') || 'dark';
+    },
+
+    // UI 言語の切替。.AspNetCore.Culture cookie を書き込んでページを reload。
+    // ASP.NET Core 標準の CookieRequestCultureProvider が読む形式 (c=xx|uic=xx)。
+    setUiCulture: function(culture) {
+        try {
+            var value = encodeURIComponent('c=' + culture + '|uic=' + culture);
+            var oneYear = 60 * 60 * 24 * 365;
+            document.cookie = '.AspNetCore.Culture=' + value +
+                '; path=/; max-age=' + oneYear + '; samesite=lax';
+        } catch (e) {
+            // Cookie ブロック環境では書き込みが失敗する。reload 自体は走らせるが、
+            // デバッグ時に原因を追えるよう console に警告を残す。
+            console.warn('[TerminalHub i18n] setUiCulture: cookie write failed', e);
+        }
+        window.location.reload();
     }
 };
