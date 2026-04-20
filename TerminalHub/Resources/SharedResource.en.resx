@@ -58,6 +58,8 @@
   <!-- Common -->
   <data name="Common.Close" xml:space="preserve"><value>Close</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common.Create" xml:space="preserve"><value>Create</value></data>
   <data name="Common.ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
 
   <!-- Settings Dialog -->
@@ -285,4 +287,18 @@
   <data name="Settings.Message.FileReadErrorFormat" xml:space="preserve"><value>File read error: {0}</value></data>
   <data name="Settings.Message.ImportResultFormat" xml:space="preserve"><value>Import complete ({0} added, {1} skipped as duplicates). Please reload the page.</value></data>
   <data name="Settings.Message.ImportErrorFormat" xml:space="preserve"><value>Import error: {0}</value></data>
+
+  <!-- SessionCreate Dialog -->
+  <data name="SessionCreate.Title" xml:space="preserve"><value>New Session</value></data>
+  <data name="SessionCreate.FolderLabel" xml:space="preserve"><value>Select folder</value></data>
+  <data name="SessionCreate.FolderPlaceholder" xml:space="preserve"><value>Enter or select a folder path</value></data>
+  <data name="SessionCreate.BrowseButton" xml:space="preserve"><value>Browse</value></data>
+  <data name="SessionCreate.FavoriteFolders" xml:space="preserve"><value>Favorite folders</value></data>
+  <data name="SessionCreate.DefaultFolder" xml:space="preserve"><value>Default folder</value></data>
+  <data name="SessionCreate.UserHome" xml:space="preserve"><value>User home</value></data>
+  <data name="SessionCreate.PickFolder" xml:space="preserve"><value>Pick folder...</value></data>
+  <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>Create Folder</value></data>
+  <data name="SessionCreate.CreateFolder.NotExists" xml:space="preserve"><value>The specified folder does not exist.</value></data>
+  <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>Create this folder?</value></data>
+  <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>Create</value></data>
 </root>

@@ -1,5 +1,6 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
+@using Microsoft.Extensions.Localization
 @using Microsoft.JSInterop
 @using System.IO
 @inject IJSRuntime JSRuntime
@@ -7,27 +8,28 @@
 @inject ILogger<SessionCreateDialog> Logger
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
+@inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible && !showCreateFolderDialog ? "show" : "")" tabindex="-1" style="@(IsVisible && !showCreateFolderDialog ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
     <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">新しいセッションを作成</h5>
+                <h5 class="modal-title">@L["SessionCreate.Title"]</h5>
                 <button type="button" class="btn-close" @onclick="Cancel"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label">フォルダを選択</label>
+                    <label class="form-label">@L["SessionCreate.FolderLabel"]</label>
                     <div class="input-group">
-                        <input type="text" class="form-control" @bind="folderPath" placeholder="フォルダパスを入力または選択" />
+                        <input type="text" class="form-control" @bind="folderPath" placeholder="@L["SessionCreate.FolderPlaceholder"]" />
                         <div class="dropdown">
                             <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-folder-open"></i> 参照
+                                <i class="bi bi-folder-open"></i> @L["SessionCreate.BrowseButton"]
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end" style="max-height: 300px; overflow-y: auto;">
                                 @if (favoriteFolders.Any())
                                 {
-                                    <li><h6 class="dropdown-header">お気に入りフォルダ</h6></li>
+                                    <li><h6 class="dropdown-header">@L["SessionCreate.FavoriteFolders"]</h6></li>
                                     @foreach (var folder in favoriteFolders)
                                     {
                                         <li>
@@ -51,19 +53,19 @@
                                 {
                                     <li>
                                         <button class="dropdown-item" type="button" @onclick="() => SelectFolder(_cachedDefaultFolderPath)">
-                                            <i class="bi bi-folder-fill text-success me-2"></i>デフォルトフォルダ
+                                            <i class="bi bi-folder-fill text-success me-2"></i>@L["SessionCreate.DefaultFolder"]
                                         </button>
                                     </li>
                                 }
                                 <li>
                                     <button class="dropdown-item" type="button" @onclick="SelectUserHome">
-                                        <i class="bi bi-house-fill text-primary me-2"></i>ユーザーホーム
+                                        <i class="bi bi-house-fill text-primary me-2"></i>@L["SessionCreate.UserHome"]
                                     </button>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <button class="dropdown-item" type="button" @onclick="OpenNativeFolderPicker">
-                                        <i class="bi bi-folder-symlink text-secondary me-2"></i>フォルダを選択...
+                                        <i class="bi bi-folder-symlink text-secondary me-2"></i>@L["SessionCreate.PickFolder"]
                                     </button>
                                 </li>
                             </ul>
@@ -82,9 +84,9 @@
                                       CodexOptions="codexOptions" />
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="Cancel">キャンセル</button>
+                <button type="button" class="btn btn-secondary" @onclick="Cancel">@L["Common.Cancel"]</button>
                 <button type="button" class="btn btn-primary" @onclick="CreateSession" disabled="@string.IsNullOrWhiteSpace(folderPath)">
-                    作成
+                    @L["Common.Create"]
                 </button>
             </div>
         </div>
@@ -103,16 +105,16 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">フォルダの作成</h5>
+                    <h5 class="modal-title">@L["SessionCreate.CreateFolder.Title"]</h5>
                 </div>
                 <div class="modal-body">
-                    <p>指定されたフォルダが存在しません。</p>
+                    <p>@L["SessionCreate.CreateFolder.NotExists"]</p>
                     <p class="mb-2"><strong>@folderPath</strong></p>
-                    <p>このフォルダを作成しますか？</p>
+                    <p>@L["SessionCreate.CreateFolder.Question"]</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelFolderCreation">キャンセル</button>
-                    <button type="button" class="btn btn-primary" @onclick="ConfirmFolderCreation">作成する</button>
+                    <button type="button" class="btn btn-secondary" @onclick="CancelFolderCreation">@L["Common.Cancel"]</button>
+                    <button type="button" class="btn btn-primary" @onclick="ConfirmFolderCreation">@L["SessionCreate.CreateFolder.Confirm"]</button>
                 </div>
             </div>
         </div>
