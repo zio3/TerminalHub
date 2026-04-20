@@ -1,9 +1,11 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using TerminalHub.Components.Shared.BottomPanels
+@using Microsoft.Extensions.Localization
 @inject ISessionMemoRepository MemoRepository
 @inject IJSRuntime JSRuntime
 @inject ILogger<BottomPanel> Logger
+@inject IStringLocalizer<SharedResource> L
 @implements IAsyncDisposable
 
 <!-- タブヘッダー -->
@@ -37,7 +39,7 @@
                     <button type="button" class="btn-close ms-1" style="font-size: 0.6rem; opacity: 0.7;"
                             @onclick:stopPropagation="true"
                             @onclick="async () => await RemoveTab(tab.Id)"
-                            title="タブを閉じる">
+                            title="@L["BottomPanel.CloseTab"]">
                     </button>
                 }
             </button>
@@ -52,19 +54,19 @@
             <li>
                 <button class="dropdown-item" type="button"
                    @onclick="() => AddTab(BottomPanelTabType.CommandPrompt)">
-                    <i class="bi bi-terminal me-2"></i>コマンドプロンプトを追加
+                    <i class="bi bi-terminal me-2"></i>@L["BottomPanel.AddCommandPrompt"]
                 </button>
             </li>
             <li>
                 <button class="dropdown-item" type="button"
                    @onclick="() => AddTab(BottomPanelTabType.PowerShell)">
-                    <i class="bi bi-terminal-fill me-2"></i>PowerShellを追加
+                    <i class="bi bi-terminal-fill me-2"></i>@L["BottomPanel.AddPowerShell"]
                 </button>
             </li>
             <li>
                 <button class="dropdown-item" type="button"
                    @onclick="AddMemoTab">
-                    <i class="bi bi-journal-text me-2"></i>メモを追加
+                    <i class="bi bi-journal-text me-2"></i>@L["BottomPanel.AddMemo"]
                 </button>
             </li>
         </ul>
@@ -151,7 +153,7 @@
     {
         Tabs = new List<BottomPanelTabInfo>
         {
-            new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = "テキスト入力", IsDefault = true }
+            new() { Id = "default-text", Type = BottomPanelTabType.TextInput, DisplayName = L["BottomPanel.Tab.TextInputDefault"], IsDefault = true }
         };
         ActiveTabId = "default-text";
     }
@@ -237,10 +239,10 @@
         var count = Tabs.Count(t => t.Type == type);
         var displayName = type switch
         {
-            BottomPanelTabType.TextInput => $"テキスト入力({count + 1})",
-            BottomPanelTabType.CommandPrompt => $"コマンドプロンプト({count + 1})",
-            BottomPanelTabType.PowerShell => $"PowerShell({count + 1})",
-            _ => $"タブ({count + 1})"
+            BottomPanelTabType.TextInput => string.Format(L["BottomPanel.Tab.TextInputFormat"], count + 1),
+            BottomPanelTabType.CommandPrompt => string.Format(L["BottomPanel.Tab.CommandPromptFormat"], count + 1),
+            BottomPanelTabType.PowerShell => string.Format(L["BottomPanel.Tab.PowerShellFormat"], count + 1),
+            _ => string.Format(L["BottomPanel.Tab.GenericFormat"], count + 1)
         };
 
         var newTab = new BottomPanelTabInfo
@@ -266,7 +268,7 @@
         {
             MemoId = Guid.NewGuid(),
             SessionId = sessionId,
-            Title = $"メモ({visibleMemoCount + 1})",
+            Title = string.Format(L["BottomPanel.Tab.MemoFormat"], visibleMemoCount + 1),
             Body = "",
             CreatedAt = DateTime.Now,
             UpdatedAt = DateTime.Now,

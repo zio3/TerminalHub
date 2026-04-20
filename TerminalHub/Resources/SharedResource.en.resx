@@ -493,4 +493,29 @@
   <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>Permanently delete "{0}"?</value></data>
   <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>This action cannot be undone.</value></data>
   <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>Delete</value></data>
+
+  <!-- BottomPanels: TextInputPanel -->
+  <data name="TextInput.KeyHints.Send" xml:space="preserve"><value>Send</value></data>
+  <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>Newline</value></data>
+  <data name="TextInput.KeyHints.History" xml:space="preserve"><value>History</value></data>
+  <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>Voice input (hold to record)</value></data>
+  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Clean up typos and phrasing with Claude Code</value></data>
+  <data name="TextInput.Refine.Label" xml:space="preserve"><value>Refine</value></data>
+  <data name="TextInput.Send" xml:space="preserve"><value>Send</value></data>
+  <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>Mode switch ({0})</value></data>
+
+  <!-- BottomPanels: MemoPanel -->
+  <data name="MemoPanel.Placeholder" xml:space="preserve"><value>Memo... (Enter for newline, auto-saved)</value></data>
+
+  <!-- BottomPanel (tab host) -->
+  <data name="BottomPanel.CloseTab" xml:space="preserve"><value>Close tab</value></data>
+  <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>Add Command Prompt</value></data>
+  <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>Add PowerShell</value></data>
+  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>Add memo</value></data>
+  <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>Text input</value></data>
+  <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>Text input ({0})</value></data>
+  <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>Command Prompt ({0})</value></data>
+  <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell ({0})</value></data>
+  <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>Tab ({0})</value></data>
+  <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>Memo ({0})</value></data>
 </root>
