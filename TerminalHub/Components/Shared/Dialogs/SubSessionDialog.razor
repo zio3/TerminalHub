@@ -1,13 +1,15 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
+@using Microsoft.Extensions.Localization
 @inject IGitService GitService
+@inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="bi bi-diagram-3 me-2"></i>サブセッション作成
+                    <i class="bi bi-diagram-3 me-2"></i>@L["SubSession.Title"]
                 </h5>
                 <button type="button" class="btn-close" @onclick="OnCancel"></button>
             </div>
@@ -15,37 +17,37 @@
                 @if (!string.IsNullOrEmpty(ParentSessionName))
                 {
                     <div class="mb-3">
-                        <small class="text-muted">親セッション: @ParentSessionName</small>
+                        <small class="text-muted">@string.Format(L["SubSession.ParentSessionFormat"], ParentSessionName)</small>
                     </div>
                 }
-                
+
                 <!-- タブナビゲーション -->
                 <ul class="nav nav-tabs mb-3">
                     @if (IsGitRepository)
                     {
                         <li class="nav-item">
-                            <button class="nav-link @(activeTab == TabType.Create ? "active" : "")" 
+                            <button class="nav-link @(activeTab == TabType.Create ? "active" : "")"
                                     @onclick="@(() => activeTab = TabType.Create)">
-                                <i class="bi bi-plus-circle me-1"></i>Worktree新規作成
+                                <i class="bi bi-plus-circle me-1"></i>@L["SubSession.Tab.CreateWorktree"]
                             </button>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link @(activeTab == TabType.Existing ? "active" : "")" 
+                            <button class="nav-link @(activeTab == TabType.Existing ? "active" : "")"
                                     @onclick="@(() => activeTab = TabType.Existing)">
-                                <i class="bi bi-folder-plus me-1"></i>既存Worktree追加
+                                <i class="bi bi-folder-plus me-1"></i>@L["SubSession.Tab.ExistingWorktree"]
                             </button>
                         </li>
                     }
                     <li class="nav-item">
-                        <button class="nav-link @(activeTab == TabType.SamePath ? "active" : "")" 
+                        <button class="nav-link @(activeTab == TabType.SamePath ? "active" : "")"
                                 @onclick="@(() => activeTab = TabType.SamePath)">
-                            <i class="bi bi-folder me-1"></i>同じフォルダで開く
+                            <i class="bi bi-folder me-1"></i>@L["SubSession.Tab.SamePath"]
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link @(activeTab == TabType.NewFolder ? "active" : "")" 
+                        <button class="nav-link @(activeTab == TabType.NewFolder ? "active" : "")"
                                 @onclick="@(() => activeTab = TabType.NewFolder)">
-                            <i class="bi bi-folder-plus me-1"></i>新しいフォルダで開く
+                            <i class="bi bi-folder-plus me-1"></i>@L["SubSession.Tab.NewFolder"]
                         </button>
                     </li>
                 </ul>
@@ -60,64 +62,64 @@
                             {
                                 <div class="alert alert-warning">
                                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                    <strong>Git管理が必要です</strong><br/>
-                                    Worktreeの作成にはGitリポジトリが必要です。
+                                    <strong>@L["SubSession.GitRequired.Title"]</strong><br/>
+                                    @L["SubSession.GitRequired.CreateWorktree"]
                                 </div>
                             }
                             else
                             {
                             <div class="mb-3">
-                                <label class="form-label">ブランチ選択方法</label>
+                                <label class="form-label">@L["SubSession.BranchSelection.Label"]</label>
                                 <div class="btn-group d-flex mb-2" role="group">
-                                    <input type="radio" class="btn-check" name="branchOption" id="newBranch" 
+                                    <input type="radio" class="btn-check" name="branchOption" id="newBranch"
                                            checked="@(branchSelectionMode == BranchSelectionMode.NewBranch)"
                                            @onclick="@(() => branchSelectionMode = BranchSelectionMode.NewBranch)">
-                                    <label class="btn btn-outline-secondary" for="newBranch">新規ブランチ</label>
-                                    
-                                    <input type="radio" class="btn-check" name="branchOption" id="existingBranch" 
+                                    <label class="btn btn-outline-secondary" for="newBranch">@L["SubSession.BranchSelection.New"]</label>
+
+                                    <input type="radio" class="btn-check" name="branchOption" id="existingBranch"
                                            checked="@(branchSelectionMode == BranchSelectionMode.ExistingBranch)"
                                            @onclick="@(() => branchSelectionMode = BranchSelectionMode.ExistingBranch)">
-                                    <label class="btn btn-outline-secondary" for="existingBranch">既存ブランチ</label>
+                                    <label class="btn btn-outline-secondary" for="existingBranch">@L["SubSession.BranchSelection.Existing"]</label>
                                 </div>
                             </div>
-                            
+
                             @if (branchSelectionMode == BranchSelectionMode.NewBranch)
                             {
                                 <div class="mb-3">
-                                    <label for="branchName" class="form-label">新しいブランチ名</label>
-                                    <input type="text" class="form-control" id="branchName" 
-                                           @bind="branchName" 
+                                    <label for="branchName" class="form-label">@L["SubSession.NewBranch.Label"]</label>
+                                    <input type="text" class="form-control" id="branchName"
+                                           @bind="branchName"
                                            @bind:event="oninput"
                                            @onkeydown="OnKeyDown"
-                                           placeholder="feature/new-feature" 
+                                           placeholder="feature/new-feature"
                                            autofocus>
                                     <small class="form-text text-muted">
-                                        このブランチ名で新しいWorktreeが作成されます
+                                        @L["SubSession.NewBranch.Help"]
                                     </small>
                                 </div>
                             }
                             else
                             {
                                 <div class="mb-3">
-                                    <label for="existingBranchSelect" class="form-label">既存のブランチを選択</label>
+                                    <label for="existingBranchSelect" class="form-label">@L["SubSession.ExistingBranch.Label"]</label>
                                     @if (availableBranches == null)
                                     {
                                         <div class="text-center">
                                             <span class="spinner-border spinner-border-sm" role="status"></span>
-                                            ブランチ一覧を読み込み中...
+                                            @L["SubSession.ExistingBranch.Loading"]
                                         </div>
                                     }
                                     else if (availableBranches.Count == 0)
                                     {
                                         <div class="alert alert-warning">
-                                            利用可能なブランチがありません
+                                            @L["SubSession.ExistingBranch.Empty"]
                                         </div>
                                     }
                                     else
                                     {
-                                        <select class="form-select" id="existingBranchSelect" 
+                                        <select class="form-select" id="existingBranchSelect"
                                                 @onchange="OnExistingBranchSelected">
-                                            <option value="">ブランチを選択してください</option>
+                                            <option value="">@L["SubSession.ExistingBranch.Placeholder"]</option>
                                             @foreach (var branch in availableBranches)
                                             {
                                                 <option value="@branch">@branch</option>
@@ -125,14 +127,14 @@
                                         </select>
                                     }
                                 </div>
-                                
+
                                 @if (!string.IsNullOrEmpty(selectedExistingBranch) && branchWorktreeInfo != null)
                                 {
                                     <div class="alert alert-warning">
                                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                        <strong>このブランチには既にWorktreeが存在します</strong><br/>
-                                        <span>パス: @branchWorktreeInfo.Path</span><br/>
-                                        <small>「既存Worktree追加」タブから追加してください</small>
+                                        <strong>@L["SubSession.BranchExistingWorktree.Title"]</strong><br/>
+                                        <span>@string.Format(L["SubSession.BranchExistingWorktree.PathFormat"], branchWorktreeInfo.Path)</span><br/>
+                                        <small>@L["SubSession.BranchExistingWorktree.Help"]</small>
                                     </div>
                                 }
                             }
@@ -157,41 +159,41 @@
                             {
                                 <div class="alert alert-warning">
                                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                    <strong>Git管理が必要です</strong><br/>
-                                    既存のWorktreeを追加するにはGitリポジトリが必要です。
+                                    <strong>@L["SubSession.GitRequired.Title"]</strong><br/>
+                                    @L["SubSession.GitRequired.ExistingWorktree"]
                                 </div>
                             }
                             else
                             {
                             <div class="mb-3">
-                                <label for="worktreePath" class="form-label">既存のWorktreeを選択</label>
+                                <label for="worktreePath" class="form-label">@L["SubSession.ExistingWorktree.Label"]</label>
                                 @if (availableWorktrees == null)
                                 {
                                     <div class="text-center">
                                         <span class="spinner-border spinner-border-sm" role="status"></span>
-                                        Worktree一覧を読み込み中...
+                                        @L["SubSession.ExistingWorktree.Loading"]
                                     </div>
                                 }
                                 else if (availableWorktrees.Count == 0)
                                 {
                                     <div class="alert alert-warning">
                                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                        利用可能なWorktreeがありません
+                                        @L["SubSession.ExistingWorktree.Empty"]
                                     </div>
                                 }
                                 else
                                 {
-                                    <select class="form-select" id="worktreeSelect" 
+                                    <select class="form-select" id="worktreeSelect"
                                             value="@selectedWorktreePath"
                                             @onchange="OnWorktreeSelected">
-                                        <option value="">Worktreeを選択してください</option>
+                                        <option value="">@L["SubSession.ExistingWorktree.Placeholder"]</option>
                                         @foreach (var worktree in availableWorktrees)
                                         {
                                             <option value="@worktree.Path">
                                                 (@worktree.BranchName)
                                                 @if (worktree.IsMain)
                                                 {
-                                                    <text> - メイン</text>
+                                                    <text> @L["SubSession.WorktreeMainSuffix"]</text>
                                                 }
                                             </option>
                                         }
@@ -232,7 +234,7 @@
                             {
                                 <div class="alert alert-info">
                                     <i class="bi bi-info-circle me-2"></i>
-                                    親セッション "@ParentSessionName" と同じフォルダで開きます
+                                    @string.Format(L["SubSession.SamePath.InfoFormat"], ParentSessionName)
                                 </div>
                             }
                         </div>
@@ -242,20 +244,20 @@
                         <!-- 新しいフォルダで開く -->
                         <div class="tab-pane active">
                             <div class="mb-3">
-                                <label for="newFolderPath" class="form-label">新しいフォルダのパス</label>
+                                <label for="newFolderPath" class="form-label">@L["SubSession.NewFolder.Label"]</label>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" id="newFolderPath" 
-                                           @bind="newFolderPath" 
+                                    <input type="text" class="form-control" id="newFolderPath"
+                                           @bind="newFolderPath"
                                            @bind:event="oninput"
                                            @onkeydown="OnKeyDown"
-                                           placeholder="C:\path\to\new\folder または相対パス" 
+                                           placeholder="@L["SubSession.NewFolder.Placeholder"]"
                                            autofocus>
                                     <button class="btn btn-outline-secondary" type="button" @onclick="SelectFolderDialog">
                                         <i class="bi bi-folder2-open"></i>
                                     </button>
                                 </div>
                                 <small class="form-text text-muted">
-                                    フォルダが存在しない場合は自動的に作成されます
+                                    @L["SubSession.NewFolder.Help"]
                                 </small>
                             </div>
                             
@@ -274,7 +276,7 @@
                                 
                                 <div class="alert alert-info mt-3">
                                     <i class="bi bi-info-circle me-2"></i>
-                                    新しいフォルダ "@newFolderPath" でセッションを開始します
+                                    @string.Format(L["SubSession.NewFolder.InfoFormat"], newFolderPath)
                                 </div>
                             }
                         </div>
@@ -285,7 +287,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@isProcessing">
-                    キャンセル
+                    @L["Common.Cancel"]
                 </button>
                 <button type="button" class="btn btn-success" @onclick="ProcessOperation" 
                         disabled="@(!CanProcess || isProcessing)">
@@ -437,7 +439,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"操作中にエラーが発生しました: {ex.Message}";
+            errorMessage = string.Format(L["SubSession.ErrorFormat"], ex.Message);
             isProcessing = false;
         }
     }
@@ -566,11 +568,11 @@
     {
         return activeTab switch
         {
-            TabType.Create => "Worktree作成",
-            TabType.Existing => "Worktree追加",
-            TabType.SamePath => "セッション作成",
-            TabType.NewFolder => "フォルダ作成",
-            _ => "作成"
+            TabType.Create => L["SubSession.Button.Create"],
+            TabType.Existing => L["SubSession.Button.Existing"],
+            TabType.SamePath => L["SubSession.Button.SamePath"],
+            TabType.NewFolder => L["SubSession.Button.NewFolder"],
+            _ => L["Common.Create"]
         };
     }
     

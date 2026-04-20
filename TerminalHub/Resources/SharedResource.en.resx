@@ -394,4 +394,67 @@
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
   <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --reasoning-effort high</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
+
+  <!-- SessionSettings Dialog -->
+  <data name="SessionSettings.Title" xml:space="preserve"><value>Session Settings</value></data>
+  <data name="SessionSettings.Info.Header" xml:space="preserve"><value>Session info</value></data>
+  <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>Session name:</value></data>
+  <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>Folder:</value></data>
+  <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>Copy folder path</value></data>
+  <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>Session ID:</value></data>
+  <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>Copy session ID</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>Create sub-session</value></data>
+  <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>Manage memos</value></data>
+  <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>Display name</value></data>
+  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>Session display name</value></data>
+  <data name="SessionSettings.DisplayName.Help" xml:space="preserve"><value>If blank, the folder name will be used</value></data>
+  <data name="SessionSettings.Pin.Label" xml:space="preserve"><value>Pin this session</value></data>
+  <data name="SessionSettings.Pin.PriorityLabel" xml:space="preserve"><value>Priority:</value></data>
+  <data name="SessionSettings.Memo.Label" xml:space="preserve"><value>Memo</value></data>
+  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>Memo for this session</value></data>
+  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>Write any notes about this session here</value></data>
+  <data name="SessionSettings.Loading" xml:space="preserve"><value>Loading session info...</value></data>
+  <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>Apply changes immediately (restart session)</value></data>
+  <data name="SessionSettings.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="SessionSettings.SaveErrorFormat" xml:space="preserve"><value>Failed to save settings: {0}</value></data>
+  <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>Settings were saved, but session restart failed.</value></data>
+
+  <!-- SubSession Dialog -->
+  <data name="SubSession.Title" xml:space="preserve"><value>Create Sub-session</value></data>
+  <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>Parent session: {0}</value></data>
+  <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>New worktree</value></data>
+  <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>Existing worktree</value></data>
+  <data name="SubSession.Tab.SamePath" xml:space="preserve"><value>Same folder</value></data>
+  <data name="SubSession.Tab.NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="SubSession.GitRequired.Title" xml:space="preserve"><value>Git repository required</value></data>
+  <data name="SubSession.GitRequired.CreateWorktree" xml:space="preserve"><value>A Git repository is required to create a worktree.</value></data>
+  <data name="SubSession.GitRequired.ExistingWorktree" xml:space="preserve"><value>A Git repository is required to add an existing worktree.</value></data>
+  <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>Branch selection</value></data>
+  <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>New branch</value></data>
+  <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>Existing branch</value></data>
+  <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
+  <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
+  <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>
+  <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>Loading branch list...</value></data>
+  <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>No branches available</value></data>
+  <data name="SubSession.ExistingBranch.Placeholder" xml:space="preserve"><value>Please select a branch</value></data>
+  <data name="SubSession.BranchExistingWorktree.Title" xml:space="preserve"><value>A worktree already exists for this branch</value></data>
+  <data name="SubSession.BranchExistingWorktree.PathFormat" xml:space="preserve"><value>Path: {0}</value></data>
+  <data name="SubSession.BranchExistingWorktree.Help" xml:space="preserve"><value>Please use the "Existing worktree" tab to add it</value></data>
+  <data name="SubSession.ExistingWorktree.Label" xml:space="preserve"><value>Select an existing worktree</value></data>
+  <data name="SubSession.ExistingWorktree.Loading" xml:space="preserve"><value>Loading worktree list...</value></data>
+  <data name="SubSession.ExistingWorktree.Empty" xml:space="preserve"><value>No worktrees available</value></data>
+  <data name="SubSession.ExistingWorktree.Placeholder" xml:space="preserve"><value>Please select a worktree</value></data>
+  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>- main</value></data>
+  <data name="SubSession.SamePath.InfoFormat" xml:space="preserve"><value>Opens in the same folder as parent session "{0}"</value></data>
+  <data name="SubSession.NewFolder.Label" xml:space="preserve"><value>New folder path</value></data>
+  <data name="SubSession.NewFolder.Placeholder" xml:space="preserve"><value>C:\path\to\new\folder or relative path</value></data>
+  <data name="SubSession.NewFolder.Help" xml:space="preserve"><value>The folder will be created automatically if it doesn't exist</value></data>
+  <data name="SubSession.NewFolder.InfoFormat" xml:space="preserve"><value>Starts a session in the new folder "{0}"</value></data>
+  <data name="SubSession.Button.Create" xml:space="preserve"><value>Create worktree</value></data>
+  <data name="SubSession.Button.Existing" xml:space="preserve"><value>Add worktree</value></data>
+  <data name="SubSession.Button.SamePath" xml:space="preserve"><value>Create session</value></data>
+  <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>Create folder</value></data>
+  <data name="SubSession.ErrorFormat" xml:space="preserve"><value>An error occurred during the operation: {0}</value></data>
 </root>
