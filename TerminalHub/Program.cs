@@ -158,23 +158,31 @@ app.UseRequestLocalization();
 
 // Cookie スライディング更新: culture cookie の有効期限を毎リクエスト 1 年先へ延長する。
 // これでユーザーが最後にアクセスしてから 1 年放置しない限り言語選択は永続化される。
-app.Use(async (context, next) =>
+//
+// 実装注意: await next() の後に Response.Cookies.Append を呼ぶと、静的ファイル配信や
+// SignalR ストリーミング応答では既にヘッダーが送信済みで "Headers are read-only" 例外になる。
+// OnStarting コールバックはヘッダー送信「直前」に一度だけ呼ばれるのでここで cookie を追記する。
+app.Use((context, next) =>
 {
-    await next();
-    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
-    var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(
-        new Microsoft.AspNetCore.Localization.RequestCulture(culture));
-    context.Response.Cookies.Append(
-        Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
-        cookieValue,
-        new Microsoft.AspNetCore.Http.CookieOptions
-        {
-            Expires = DateTimeOffset.UtcNow.AddYears(1),
-            IsEssential = true,
-            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            HttpOnly = false, // 言語切替のため JS からも読み書き可能にする
-            Path = "/"
-        });
+    context.Response.OnStarting(() =>
+    {
+        var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+        var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(
+            new Microsoft.AspNetCore.Localization.RequestCulture(culture));
+        context.Response.Cookies.Append(
+            Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
+            cookieValue,
+            new Microsoft.AspNetCore.Http.CookieOptions
+            {
+                Expires = DateTimeOffset.UtcNow.AddYears(1),
+                IsEssential = true,
+                SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+                HttpOnly = false, // 言語切替のため JS からも読み書き可能にする
+                Path = "/"
+            });
+        return Task.CompletedTask;
+    });
+    return next();
 });
 
 app.MapStaticAssets();
