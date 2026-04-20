@@ -13,8 +13,21 @@ if (args.Contains("--notify"))
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ユーザーデータ保存先: %LOCALAPPDATA%\TerminalHub\
+// 全ユーザー向けインストール (C:\Program Files 配下) でも書き込み権限の問題が起きないよう、
+// ログ / 設定 / DB すべてユーザーの LocalApplicationData 配下に寄せる。
+var userDataRoot = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "TerminalHub");
+Directory.CreateDirectory(userDataRoot);
+
 // Serilog 設定
-var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "terminalhub-.log");
+// フォルダ名は Development 環境だけ "logs-dev" に切り替えて dev/prod のログを分離する。
+// appsettings.Development.json は gitignore 対象なので、環境変数ベースの既定を採用し、
+// 設定上書き (Logging:FolderName) も引き続き受け付ける。
+var defaultLogsFolderName = builder.Environment.IsDevelopment() ? "logs-dev" : "logs";
+var logsFolderName = builder.Configuration.GetValue<string>("Logging:FolderName") ?? defaultLogsFolderName;
+var logPath = Path.Combine(userDataRoot, logsFolderName, "terminalhub-.log");
 builder.Host.UseSerilog((context, configuration) =>
 {
     configuration
@@ -50,9 +63,8 @@ builder.Services.AddSingleton<ISessionManager, SessionManager>();
 builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
 // SQLiteセッションストレージを登録
-var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 var dbFileName = builder.Configuration.GetValue<string>("Database:FileName") ?? "sessions.db";
-var dbPath = Path.Combine(appDataPath, "TerminalHub", dbFileName);
+var dbPath = Path.Combine(userDataRoot, dbFileName);
 builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
 Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FileName={dbFileName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
