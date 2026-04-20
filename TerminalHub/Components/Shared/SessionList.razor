@@ -1,6 +1,8 @@
 @using System.IO
 @using TerminalHub.Models
 @using TerminalHub.Constants
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
 
 <style>
     @@keyframes bell-ring {
@@ -29,21 +31,21 @@
 
     <div class="mb-2">
         <button class="btn btn-primary w-100" @onclick="() => OnAddSession.InvokeAsync()" disabled="@IsAddingSession">
-            <i class="bi bi-plus-circle"></i> 新しいセッションを作成
+            <i class="bi bi-plus-circle"></i> @L["SessionList.CreateSession"]
         </button>
     </div>
 
     @if (!Sessions.Any())
     {
         <div class="alert alert-info py-2 px-3 mb-2 small">
-            <i class="bi bi-arrow-up"></i> 上のボタンからセッションを作成してください
+            <i class="bi bi-arrow-up"></i> @L["SessionList.EmptyHint"]
         </div>
     }
 
     <div class="mb-2">
         <div class="input-group input-group-sm">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" placeholder="セッションを検索..."
+            <input type="text" class="form-control" placeholder="@L["SessionList.SearchPlaceholder"]"
                    @bind="filterText" @bind:event="oninput" />
             @if (!string.IsNullOrEmpty(filterText))
             {
@@ -52,7 +54,7 @@
                 </button>
             }
             <button class="btn btn-outline-secondary" type="button" @onclick="() => OnShowArchivedSessions.InvokeAsync()"
-                    title="アーカイブ済みセッション">
+                    title="@L["SessionList.ArchivedTooltip"]">
                 <i class="bi bi-archive"></i>
                 @{
                     var archivedCount = Sessions.Count(s => s.IsArchived);
@@ -90,20 +92,20 @@
                                 }
                             @if (session.IsPinned)
                             {
-                                <span class="text-muted me-1" title="ピン留め">
+                                <span class="text-muted me-1" title="@L["SessionList.Badge.Pinned"]">
                                     <i class="bi bi-pin-fill"></i>
                                 </span>
                             }
                             @if (NotificationPendingSessions.Contains(session.SessionId))
                             {
-                                <span class="text-danger me-1" title="処理が完了しました">
+                                <span class="text-danger me-1" title="@L["SessionList.Badge.Notification"]">
                                     <i class="bi bi-bell-fill"></i>
                                 </span>
                             }
                             <span class="@GetConnectionOpacityClass(session)">@session.GetDisplayName()</span>
                             @if (!string.IsNullOrEmpty(session.FolderPath) && !Directory.Exists(session.FolderPath))
                             {
-                                <span class="text-warning ms-1" title="ディレクトリが見つかりません: @session.FolderPath">
+                                <span class="text-warning ms-1" title="@string.Format(L["SessionList.Badge.DirectoryNotFoundFormat"], session.FolderPath)">
                                     <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem;"></i>
                                 </span>
                             }
@@ -113,24 +115,24 @@
                             }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
-                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" title="@(session.IsWorktree ? "Worktree" : "Git ブランチ")">
+                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" title="@(session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value)">
                                     <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
                                     @if (session.HasUncommittedChanges)
                                     {
-                                        <i class="bi bi-circle-fill text-danger git-status-indicator" title="未コミットの変更があります"></i>
+                                        <i class="bi bi-circle-fill text-danger git-status-indicator" title="@L["SessionList.Badge.UncommittedChanges"]"></i>
                                     }
                                 </span>
                             }
                             @if (!string.IsNullOrEmpty(session.RemoteControlUrl))
                             {
-                                <span class="badge bg-info ms-1" title="リモートコントロール接続中">
+                                <span class="badge bg-info ms-1" title="@L["SessionList.Badge.RemoteControl"]">
                                     <i class="bi bi-phone-fill"></i>
                                 </span>
                             }
                             @if (!session.ParentSessionId.HasValue && HasChildren(session) && !session.IsExpanded)
                             {
                                 <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">
-                                    @GetChildrenCount(session) 件
+                                    @string.Format(L["SessionList.Badge.ChildrenCountFormat"], GetChildrenCount(session))
                                 </span>
                             }
                         </h6>
@@ -155,15 +157,15 @@
                         }
                     </div>
                     <div class="d-flex align-items-center">
-                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
+                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true"
                                 @onclick="() => OnSessionSettings.InvokeAsync(session.SessionId)"
-                                title="セッション設定"
+                                title="@L["SessionList.Tooltip.Settings"]"
                                 style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
                             <i class="bi bi-gear"></i>
                         </button>
-                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true" 
+                        <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true"
                                 @onclick="() => OnSessionRemove.InvokeAsync(session.SessionId)"
-                                title="セッション削除"
+                                title="@L["SessionList.Tooltip.Delete"]"
                                 style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
                             <i class="bi bi-x-lg"></i>
                         </button>
@@ -188,7 +190,7 @@
     <div class="mt-auto border-top sidebar-footer">
         <div class="p-2">
             <button class="btn btn-outline-secondary btn-sm w-100" @onclick="OnSettingsClick">
-                <i class="bi bi-gear me-1"></i>設定
+                <i class="bi bi-gear me-1"></i>@L["Settings.Title"]
             </button>
         </div>
     </div>

@@ -457,4 +457,40 @@
   <data name="SubSession.Button.SamePath" xml:space="preserve"><value>Create session</value></data>
   <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>Create folder</value></data>
   <data name="SubSession.ErrorFormat" xml:space="preserve"><value>An error occurred during the operation: {0}</value></data>
+
+  <!-- SessionList (left sidebar) -->
+  <data name="SessionList.CreateSession" xml:space="preserve"><value>New Session</value></data>
+  <data name="SessionList.EmptyHint" xml:space="preserve"><value>Use the button above to create a session</value></data>
+  <data name="SessionList.SearchPlaceholder" xml:space="preserve"><value>Search sessions...</value></data>
+  <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>Archived sessions</value></data>
+  <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>Pinned</value></data>
+  <data name="SessionList.Badge.Notification" xml:space="preserve"><value>Processing completed</value></data>
+  <data name="SessionList.Badge.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
+  <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git branch</value></data>
+  <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>Uncommitted changes</value></data>
+  <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>
+  <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} children</value></data>
+  <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>Session settings</value></data>
+  <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>Delete session</value></data>
+
+  <!-- ArchivedSessions Dialog -->
+  <data name="ArchivedSessions.Title" xml:space="preserve"><value>Archived Sessions</value></data>
+  <data name="ArchivedSessions.SearchPlaceholder" xml:space="preserve"><value>Search archives...</value></data>
+  <data name="ArchivedSessions.SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="ArchivedSessions.SelectedCountFormat" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>Delete selected</value></data>
+  <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>Directory not found</value></data>
+  <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>Archived at: {0}</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="ArchivedSessions.Restore" xml:space="preserve"><value>Restore</value></data>
+  <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>Delete permanently</value></data>
+  <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>No search results</value></data>
+  <data name="ArchivedSessions.Empty" xml:space="preserve"><value>No archived sessions</value></data>
+  <data name="ArchivedSessions.DeleteAll" xml:space="preserve"><value>Delete all</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Title" xml:space="preserve"><value>Confirm deletion</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.AllFormat" xml:space="preserve"><value>Permanently delete all {0} archived sessions?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SelectedFormat" xml:space="preserve"><value>Permanently delete {0} selected archived sessions?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>Permanently delete "{0}"?</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>This action cannot be undone.</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>Delete</value></data>
 </root>

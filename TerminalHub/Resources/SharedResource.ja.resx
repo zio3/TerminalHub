@@ -457,4 +457,40 @@
   <data name="SubSession.Button.SamePath" xml:space="preserve"><value>セッション作成</value></data>
   <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>フォルダ作成</value></data>
   <data name="SubSession.ErrorFormat" xml:space="preserve"><value>操作中にエラーが発生しました: {0}</value></data>
+
+  <!-- SessionList (left sidebar) -->
+  <data name="SessionList.CreateSession" xml:space="preserve"><value>新しいセッションを作成</value></data>
+  <data name="SessionList.EmptyHint" xml:space="preserve"><value>上のボタンからセッションを作成してください</value></data>
+  <data name="SessionList.SearchPlaceholder" xml:space="preserve"><value>セッションを検索…</value></data>
+  <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>アーカイブ済みセッション</value></data>
+  <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>ピン留め</value></data>
+  <data name="SessionList.Badge.Notification" xml:space="preserve"><value>処理が完了しました</value></data>
+  <data name="SessionList.Badge.DirectoryNotFoundFormat" xml:space="preserve"><value>ディレクトリが見つかりません: {0}</value></data>
+  <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git ブランチ</value></data>
+  <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>未コミットの変更があります</value></data>
+  <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>リモートコントロール接続中</value></data>
+  <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} 件</value></data>
+  <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>セッション設定</value></data>
+  <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>セッション削除</value></data>
+
+  <!-- ArchivedSessions Dialog -->
+  <data name="ArchivedSessions.Title" xml:space="preserve"><value>アーカイブ済みセッション</value></data>
+  <data name="ArchivedSessions.SearchPlaceholder" xml:space="preserve"><value>アーカイブを検索…</value></data>
+  <data name="ArchivedSessions.SelectAll" xml:space="preserve"><value>全選択</value></data>
+  <data name="ArchivedSessions.SelectedCountFormat" xml:space="preserve"><value>{0} 件選択中</value></data>
+  <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>選択を削除</value></data>
+  <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>ディレクトリが見つかりません</value></data>
+  <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>アーカイブ日時: {0}</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>不明</value></data>
+  <data name="ArchivedSessions.Restore" xml:space="preserve"><value>復帰</value></data>
+  <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>完全に削除</value></data>
+  <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>検索結果がありません</value></data>
+  <data name="ArchivedSessions.Empty" xml:space="preserve"><value>アーカイブ済みのセッションはありません</value></data>
+  <data name="ArchivedSessions.DeleteAll" xml:space="preserve"><value>すべて削除</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Title" xml:space="preserve"><value>削除の確認</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.AllFormat" xml:space="preserve"><value>すべてのアーカイブ済みセッション（{0} 件）を完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SelectedFormat" xml:space="preserve"><value>選択した {0} 件のアーカイブ済みセッションを完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>「{0}」を完全に削除しますか？</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>この操作は取り消せません。</value></data>
+  <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>削除する</value></data>
 </root>
