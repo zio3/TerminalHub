@@ -788,11 +788,11 @@
                         else if (activeTab == "special")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">特殊設定</h6>
+                                <h6 class="mb-3">@L["Settings.Special.Header"]</h6>
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">Claude Code モード切替キー</h6>
-                                    <p class="text-muted small">Claude Codeでモード切替に使用するキーボードショートカットを選択します。</p>
+                                    <h6 class="mb-2">@L["Settings.Special.ClaudeModeKey.Header"]</h6>
+                                    <p class="text-muted small">@L["Settings.Special.ClaudeModeKey.Help"]</p>
 
                                     <div class="mb-3">
                                         <div class="form-check">
@@ -800,7 +800,7 @@
                                                    id="keyNone" value="none" checked="@(claudeModeSwitchKey == "none")"
                                                    @onchange="@(() => claudeModeSwitchKey = "none")">
                                             <label class="form-check-label" for="keyNone">
-                                                無し <span class="text-muted">（デフォルト）</span>
+                                                @L["Settings.Special.ClaudeModeKey.None"] <span class="text-muted">@L["Settings.Special.ClaudeModeKey.DefaultNote"]</span>
                                             </label>
                                         </div>
                                         <div class="form-check">
@@ -822,70 +822,68 @@
                                     </div>
                                     <p class="text-muted small mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        環境によってはAlt+Mが他の機能と競合する場合があります。その場合はShift+Tabをお試しください。
+                                        @L["Settings.Special.ClaudeModeKey.ConflictNote"]
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">音声入力</h6>
+                                    <h6 class="mb-2">@L["Settings.Special.VoiceInput.Header"]</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="voiceInputEnabled" id="voiceInputSwitch">
                                         <label class="form-check-label" for="voiceInputSwitch">
-                                            音声入力を有効にする（実験的）
+                                            @L["Settings.Special.VoiceInput.Enable"]
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        有効にすると、テキスト入力パネルにマイクボタンが表示されます。ボタンを押している間だけ音声認識が動作します（Chrome推奨）。
+                                        @L["Settings.Special.VoiceInput.Help"]
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">テキスト事前整形</h6>
+                                    <h6 class="mb-2">@L["Settings.Special.TextRefine.Header"]</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="textRefineEnabled" id="textRefineSwitch">
                                         <label class="form-check-label" for="textRefineSwitch">
-                                            事前整形ボタンを有効にする（実験的）
+                                            @L["Settings.Special.TextRefine.Enable"]
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        有効にすると、テキスト入力パネルに「<i class="bi bi-stars"></i> 事前整形」ボタンが表示されます。
-                                        押すと Claude Code CLI（Haiku モデル）で誤字脱字や表現の揺れを修正します。<br/>
-                                        整形指示は <code>%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md</code> を編集してカスタマイズ可能。
+                                        @((MarkupString)L["Settings.Special.TextRefine.HelpHtml"].Value)
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">開発ツール</h6>
+                                    <h6 class="mb-2">@L["Settings.Special.DevTools.Header"]</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
                                         <label class="form-check-label" for="devToolsSwitch">
-                                            開発ツールを有効にする
+                                            @L["Settings.Special.DevTools.Enable"]
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        有効にすると、診断・バッファ・通知テストのタブが表示されます。
+                                        @L["Settings.Special.DevTools.Help"]
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">ログファイル</h6>
+                                    <h6 class="mb-2">@L["Settings.Special.Logs.Header"]</h6>
                                     <button class="btn btn-outline-secondary btn-sm" @onclick="OpenLogFolder">
-                                        <i class="bi bi-folder2-open me-1"></i>ログフォルダを開く
+                                        <i class="bi bi-folder2-open me-1"></i>@L["Settings.Special.Logs.OpenFolder"]
                                     </button>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        アプリケーションのログファイルが保存されているフォルダを開きます。
+                                        @L["Settings.Special.Logs.Help"]
                                     </p>
                                 </div>
                             </div>
@@ -893,25 +891,25 @@
                         else if (activeTab == "devDiagnose")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">診断情報</h6>
+                                <h6 class="mb-3">@L["Settings.DevDiagnose.Header"]</h6>
 
                                 <div class="mb-3">
                                     <button class="btn btn-info btn-sm me-2" @onclick="RefreshDiagnostics">
-                                        <i class="bi bi-arrow-clockwise me-1"></i>診断情報を更新
+                                        <i class="bi bi-arrow-clockwise me-1"></i>@L["Settings.DevDiagnose.Refresh"]
                                     </button>
                                     <button class="btn btn-warning btn-sm" @onclick="RunJSDiagnostics">
-                                        <i class="bi bi-bug me-1"></i>JS診断実行
+                                        <i class="bi bi-bug me-1"></i>@L["Settings.DevDiagnose.RunJs"]
                                     </button>
                                 </div>
 
                                 <div class="mb-3">
-                                    <h6>セッション一覧</h6>
+                                    <h6>@L["Settings.DevDiagnose.SessionList"]</h6>
                                     <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
                                         <table class="table table-sm table-striped">
                                             <thead>
                                                 <tr>
-                                                    <th>名前</th>
-                                                    <th>状態</th>
+                                                    <th>@L["Settings.DevDiagnose.ColName"]</th>
+                                                    <th>@L["Settings.DevDiagnose.ColStatus"]</th>
                                                     <th>ConPTY</th>
                                                 </tr>
                                             </thead>
@@ -927,7 +925,7 @@
                                                         </td>
                                                         <td>
                                                             <span class="badge @(session.ConPtySession != null ? "bg-primary" : "bg-warning")">
-                                                                @(session.ConPtySession != null ? "有" : "無")
+                                                                @(session.ConPtySession != null ? L["Settings.DevDiagnose.ConPtyPresent"] : L["Settings.DevDiagnose.ConPtyAbsent"])
                                                             </span>
                                                         </td>
                                                     </tr>
@@ -938,22 +936,22 @@
                                 </div>
 
                                 <div class="mb-3">
-                                    <h6>ターミナル情報</h6>
-                                    <p class="mb-1">JavaScript側ターミナル数: <span class="badge bg-info">@jsTerminalCount</span></p>
+                                    <h6>@L["Settings.DevDiagnose.TerminalInfo.Header"]</h6>
+                                    <p class="mb-1">@L["Settings.DevDiagnose.TerminalInfo.JsTerminalCount"] <span class="badge bg-info">@jsTerminalCount</span></p>
                                 </div>
 
                                 <hr />
 
-                                <h6 class="mb-3">ターミナル制御テスト</h6>
+                                <h6 class="mb-3">@L["Settings.DevDiagnose.TerminalTest.Header"]</h6>
                                 <div class="mb-3">
                                     <button class="btn btn-primary btn-sm me-2" @onclick="ScrollToBottom">
-                                        <i class="bi bi-arrow-down me-1"></i>最下部へ
+                                        <i class="bi bi-arrow-down me-1"></i>@L["Settings.DevDiagnose.TerminalTest.ScrollBottom"]
                                     </button>
                                     <button class="btn btn-secondary btn-sm me-2" @onclick="ScrollToTop">
-                                        <i class="bi bi-arrow-up me-1"></i>最上部へ
+                                        <i class="bi bi-arrow-up me-1"></i>@L["Settings.DevDiagnose.TerminalTest.ScrollTop"]
                                     </button>
                                     <button class="btn btn-info btn-sm" @onclick="GetScrollPosition">
-                                        <i class="bi bi-info-circle me-1"></i>位置取得
+                                        <i class="bi bi-info-circle me-1"></i>@L["Settings.DevDiagnose.TerminalTest.GetPosition"]
                                     </button>
                                 </div>
                                 <div class="mb-3">
@@ -964,16 +962,16 @@
                         else if (activeTab == "devBuffer")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">バッファダンプ</h6>
-                                <p class="text-muted small mb-3">セッションの出力バッファ（最大2MB）をファイルにダウンロードします。</p>
+                                <h6 class="mb-3">@L["Settings.DevBuffer.Header"]</h6>
+                                <p class="text-muted small mb-3">@L["Settings.DevBuffer.Help"]</p>
 
                                 <div class="mb-3">
-                                    <label class="form-label">セッション選択</label>
+                                    <label class="form-label">@L["Settings.DevBuffer.SelectLabel"]</label>
                                     <select class="form-select" @bind="selectedSessionForBuffer">
-                                        <option value="">-- セッションを選択 --</option>
+                                        <option value="">@L["Settings.DevBuffer.SelectPlaceholder"]</option>
                                         @foreach (var session in GetAvailableSessions())
                                         {
-                                            var bufferSize = session.TerminalBufferSize > 0 ? $" ({FormatBytes(session.TerminalBufferSize)})" : " (空)";
+                                            var bufferSize = session.TerminalBufferSize > 0 ? $" ({FormatBytes(session.TerminalBufferSize)})" : $" {L["Settings.DevBuffer.Empty"]}";
                                             <option value="@session.SessionId">@session.GetDisplayName()@bufferSize</option>
                                         }
                                     </select>
@@ -982,23 +980,23 @@
                                 @if (GetSelectedBufferSession() is SessionInfo selectedSession)
                                 {
                                     <div class="mb-3">
-                                        <span class="badge bg-info me-2">バッファ: @FormatBytes(selectedSession.TerminalBufferSize)</span>
-                                        <span class="badge bg-secondary">ステータス履歴: @selectedSession.StatusChangeHistoryCount 件</span>
+                                        <span class="badge bg-info me-2">@string.Format(L["Settings.DevBuffer.BufferFormat"], FormatBytes(selectedSession.TerminalBufferSize))</span>
+                                        <span class="badge bg-secondary">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount)</span>
                                     </div>
                                 }
 
                                 <div class="mb-3">
                                     <button class="btn btn-primary btn-sm me-2" @onclick="DownloadBuffer"
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
-                                        <i class="bi bi-download me-1"></i>バッファ
+                                        <i class="bi bi-download me-1"></i>@L["Settings.DevBuffer.DownloadBuffer"]
                                     </button>
                                     <button class="btn btn-outline-primary btn-sm me-2" @onclick="DownloadBufferClean"
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
-                                        <i class="bi bi-file-text me-1"></i>バッファ (ANSI除去)
+                                        <i class="bi bi-file-text me-1"></i>@L["Settings.DevBuffer.DownloadBufferClean"]
                                     </button>
                                     <button class="btn btn-outline-info btn-sm" @onclick="DownloadStatusHistory"
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.StatusChangeHistoryCount == 0)">
-                                        <i class="bi bi-clock-history me-1"></i>ステータス履歴 JSON
+                                        <i class="bi bi-clock-history me-1"></i>@L["Settings.DevBuffer.DownloadStatusHistory"]
                                     </button>
                                 </div>
 
@@ -1010,19 +1008,19 @@
                         else if (activeTab == "devNotify")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">通知テスト</h6>
+                                <h6 class="mb-3">@L["Settings.DevNotify.Header"]</h6>
 
                                 <div class="mb-3">
-                                    <label class="form-label">テスト用経過時間（秒）</label>
+                                    <label class="form-label">@L["Settings.DevNotify.TestElapsedLabel"]</label>
                                     <input type="number" class="form-control" @bind="testElapsedSeconds" min="1" max="300" style="max-width: 150px;" />
                                 </div>
 
                                 <div class="mb-3">
                                     <button class="btn btn-warning btn-sm me-2" @onclick="TestBrowserNotification">
-                                        <i class="bi bi-bell me-1"></i>ブラウザ通知テスト
+                                        <i class="bi bi-bell me-1"></i>@L["Settings.DevNotify.TestBrowser"]
                                     </button>
                                     <button class="btn btn-success btn-sm" @onclick="TestWebHookNotification">
-                                        <i class="bi bi-send me-1"></i>WebHook通知テスト
+                                        <i class="bi bi-send me-1"></i>@L["Settings.DevNotify.TestWebhook"]
                                     </button>
                                 </div>
 
@@ -1121,11 +1119,13 @@
     private bool devToolsEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
-    private string scrollInfo = "スクロール位置情報が表示されます";
+    // localize 済みの初期メッセージは OnInitialized で設定する (この時点では L インジェクト未完了のため)
+    private string scrollInfo = "";
     private string selectedSessionForBuffer = "";
     private string bufferResult = "";
     private int testElapsedSeconds = 10;
-    private string notificationTestResult = "テスト結果がここに表示されます";
+    // localize 済みの初期メッセージは OnInitialized で設定する (この時点では L インジェクト未完了のため)
+    private string notificationTestResult = "";
 
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "lastAccessed";
@@ -1152,6 +1152,9 @@
         // Blazor Server の初期レンダー時には UseRequestLocalization middleware が
         // 既に CultureInfo.CurrentUICulture を差し替え済みなので、ここで確定値を拾う。
         currentCulture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        // localize 済みの初期値を設定 (field initializer では IStringLocalizer L がまだ inject されていない)
+        scrollInfo = L["Settings.DevDiagnose.ScrollInfo.Initial"];
+        notificationTestResult = L["Settings.DevNotify.Result.Initial"];
     }
 
     public void Dispose()
@@ -1305,12 +1308,12 @@
             versionCheckResult = await VersionCheckService.CheckForUpdatesAsync();
             if (versionCheckResult == null)
             {
-                versionCheckError = "バージョン情報を取得できませんでした";
+                versionCheckError = L["Settings.Message.VersionFetchFailed"];
             }
         }
         catch (Exception ex)
         {
-            versionCheckError = $"チェックに失敗しました: {ex.Message}";
+            versionCheckError = string.Format(L["Settings.Message.VersionCheckErrorFormat"], ex.Message);
         }
         finally
         {
@@ -1347,18 +1350,18 @@
 
             if (granted)
             {
-                saveMessage = "通知が許可されました";
+                saveMessage = L["Settings.Message.PermissionGranted"];
                 saveSuccess = true;
             }
             else
             {
-                saveMessage = "通知が拒否されました";
+                saveMessage = L["Settings.Message.PermissionDenied"];
                 saveSuccess = false;
             }
         }
         catch (Exception ex)
         {
-            saveMessage = $"エラー: {ex.Message}";
+            saveMessage = string.Format(L["Common.ErrorFormat"], ex.Message);
             saveSuccess = false;
         }
     }
@@ -1371,7 +1374,7 @@
         }
         catch (Exception ex)
         {
-            saveMessage = $"エラー: {ex.Message}";
+            saveMessage = string.Format(L["Common.ErrorFormat"], ex.Message);
             saveSuccess = false;
         }
     }
@@ -1396,7 +1399,7 @@
         }
         catch (Exception ex)
         {
-            saveMessage = $"フォルダを開けませんでした: {ex.Message}";
+            saveMessage = string.Format(L["Settings.Message.OpenFolderErrorFormat"], ex.Message);
             saveSuccess = false;
             StateHasChanged();
         }
@@ -1409,14 +1412,14 @@
             // 設定値の検証
             if (thresholdSeconds < 0)
             {
-                saveMessage = "通知時間は0以上にしてください";
+                saveMessage = L["Settings.Message.ThresholdNegative"];
                 saveSuccess = false;
                 return;
             }
 
             if (webHookEnabled && string.IsNullOrWhiteSpace(webHookUrl))
             {
-                saveMessage = "WebHook URLを入力してください";
+                saveMessage = L["Settings.Message.WebhookUrlRequired"];
                 saveSuccess = false;
                 return;
             }
@@ -1435,7 +1438,7 @@
                 // パスの存在チェック
                 if (!Directory.Exists(defaultFolderPath))
                 {
-                    defaultFolderPathWarning = "指定されたパスが存在しません";
+                    defaultFolderPathWarning = L["Settings.Message.PathNotExists"];
                 }
             }
 
@@ -1536,7 +1539,7 @@
                 await MqttService.ConnectAsync(remoteLaunchTopicGuid);
             }
 
-            saveMessage = "設定を保存しました";
+            saveMessage = L["Settings.Message.SaveSuccess"];
             saveSuccess = true;
 
             // 3秒後にメッセージを消す
@@ -1552,11 +1555,11 @@
         }
         catch (Exception ex)
         {
-            saveMessage = $"保存エラー: {ex.Message}";
+            saveMessage = string.Format(L["Settings.Message.SaveErrorFormat"], ex.Message);
             saveSuccess = false;
         }
     }
-    
+
     private void AddFavoriteFolder()
     {
         if (string.IsNullOrWhiteSpace(newFavoriteFolder)) return;
@@ -1568,13 +1571,13 @@
 
         if (!Directory.Exists(folder))
         {
-            favoriteFolderError = "指定されたフォルダが存在しません";
+            favoriteFolderError = L["Settings.Message.FolderNotExists"];
             return;
         }
 
         if (favoriteFolders.Contains(folder))
         {
-            favoriteFolderError = "このフォルダは既に追加されています";
+            favoriteFolderError = L["Settings.Message.FolderDuplicate"];
             return;
         }
 
@@ -1927,16 +1930,16 @@
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadJson",
                 json, $"terminalhub_sessions_{DateTime.Now:yyyyMMdd_HHmmss}.json");
 
-            saveMessage = $"セッション情報（{sessions.Count}件）をエクスポートしました";
+            saveMessage = string.Format(L["Settings.Message.ExportSuccessFormat"], sessions.Count);
             saveSuccess = true;
         }
         catch (Exception ex)
         {
-            saveMessage = $"エクスポートエラー: {ex.Message}";
+            saveMessage = string.Format(L["Settings.Message.ExportErrorFormat"], ex.Message);
             saveSuccess = false;
         }
     }
-    
+
     private async Task LoadImportFile(InputFileChangeEventArgs e)
     {
         try
@@ -1944,7 +1947,7 @@
             var file = e.File;
             if (file.ContentType != "application/json")
             {
-                saveMessage = "JSONファイルを選択してください";
+                saveMessage = L["Settings.Message.JsonFileRequired"];
                 saveSuccess = false;
                 return;
             }
@@ -1967,7 +1970,7 @@
             }
             else
             {
-                saveMessage = "セッション情報が見つかりませんでした";
+                saveMessage = L["Settings.Message.SessionsNotFound"];
                 saveSuccess = false;
                 importSessions = null;
                 importSessionCount = 0;
@@ -1975,7 +1978,7 @@
         }
         catch (Exception ex)
         {
-            saveMessage = $"ファイル読み込みエラー: {ex.Message}";
+            saveMessage = string.Format(L["Settings.Message.FileReadErrorFormat"], ex.Message);
             saveSuccess = false;
             importSessions = null;
             importSessionCount = 0;
@@ -2006,7 +2009,7 @@
                 }
             }
 
-            saveMessage = $"インポートが完了しました（{addedCount}件追加、{importSessions.Count - addedCount}件は重複のためスキップ）。ページを再読み込みしてください。";
+            saveMessage = string.Format(L["Settings.Message.ImportResultFormat"], addedCount, importSessions.Count - addedCount);
             saveSuccess = true;
             importSessions = null;
             importSessionCount = 0;
@@ -2014,7 +2017,7 @@
         }
         catch (Exception ex)
         {
-            saveMessage = $"インポートエラー: {ex.Message}";
+            saveMessage = string.Format(L["Settings.Message.ImportErrorFormat"], ex.Message);
             saveSuccess = false;
         }
     }
@@ -2051,11 +2054,11 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.scrollAllTerminalsToBottom");
-            scrollInfo = $"最下部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+            scrollInfo = string.Format(L["Settings.DevDiagnose.ScrollInfo.BottomFormat"], DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (Exception ex)
         {
-            scrollInfo = $"エラー: {ex.Message}";
+            scrollInfo = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
@@ -2064,11 +2067,11 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.scrollAllTerminalsToTop");
-            scrollInfo = $"最上部にスクロールしました - {DateTime.Now:HH:mm:ss}";
+            scrollInfo = string.Format(L["Settings.DevDiagnose.ScrollInfo.TopFormat"], DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (Exception ex)
         {
-            scrollInfo = $"エラー: {ex.Message}";
+            scrollInfo = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
@@ -2077,11 +2080,12 @@
         try
         {
             var result = await JSRuntime.InvokeAsync<object>("terminalHubHelpers.getAllTerminalScrollPositions");
-            scrollInfo = $"スクロール位置: {System.Text.Json.JsonSerializer.Serialize(result)} - {DateTime.Now:HH:mm:ss}";
+            scrollInfo = string.Format(L["Settings.DevDiagnose.ScrollInfo.PositionFormat"],
+                System.Text.Json.JsonSerializer.Serialize(result), DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (Exception ex)
         {
-            scrollInfo = $"エラー: {ex.Message}";
+            scrollInfo = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
@@ -2126,7 +2130,9 @@
                 SessionName = sessionInfo.GetDisplayName(),
                 SessionId = sessionInfo.SessionId
             };
-            var header = "--- バッファ情報 ---\n" + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }) + "\n\n--- バッファ内容 ---\n";
+            var header = $"--- {L["Settings.DevBuffer.HeaderBufferInfo"]} ---\n"
+                + System.Text.Json.JsonSerializer.Serialize(bufferInfo, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })
+                + $"\n\n--- {L["Settings.DevBuffer.HeaderBufferContent"]} ---\n";
 
             return Task.FromResult<(string?, string, string)?>(
                 (header + content, $"buffer_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.txt", "text/plain"));
@@ -2191,14 +2197,14 @@
             var sessionInfo = GetSelectedBufferSession();
             if (sessionInfo == null)
             {
-                bufferResult = "セッションを選択してください";
+                bufferResult = L["Settings.DevBuffer.Result.SelectSession"];
                 return;
             }
 
             var result = await contentFactory(sessionInfo);
             if (result == null || result.Value.Content == null)
             {
-                bufferResult = "バッファが空です";
+                bufferResult = L["Settings.DevBuffer.Result.BufferEmpty"];
                 return;
             }
 
@@ -2207,11 +2213,11 @@
             var base64 = Convert.ToBase64String(bytes);
 
             await JSRuntime.InvokeVoidAsync("terminalHubHelpers.downloadBase64File", base64, filename, mimeType);
-            bufferResult = $"ダウンロード完了: {filename} ({FormatBytes(content.Length)})";
+            bufferResult = string.Format(L["Settings.DevBuffer.Result.DownloadedFormat"], filename, FormatBytes(content.Length));
         }
         catch (Exception ex)
         {
-            bufferResult = $"エラー: {ex.Message}";
+            bufferResult = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
@@ -2241,21 +2247,21 @@
             {
                 SessionId = Guid.NewGuid(),
                 FolderPath = "C:\\TestFolder",
-                DisplayName = "通知テストセッション",
+                DisplayName = L["Settings.DevNotify.SessionName.Browser"],
                 TerminalType = TerminalType.ClaudeCode,
                 ProcessingElapsedSeconds = testElapsedSeconds
             };
 
-            notificationTestResult = $"ブラウザ通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            notificationTestResult = string.Format(L["Settings.DevNotify.Result.BrowserSendingFormat"], testElapsedSeconds);
             StateHasChanged();
 
             await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
 
-            notificationTestResult = $"ブラウザ通知を送信しました - {DateTime.Now:HH:mm:ss}";
+            notificationTestResult = string.Format(L["Settings.DevNotify.Result.BrowserSentFormat"], DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (Exception ex)
         {
-            notificationTestResult = $"エラー: {ex.Message}";
+            notificationTestResult = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
@@ -2267,21 +2273,21 @@
             {
                 SessionId = Guid.NewGuid(),
                 FolderPath = "C:\\TestFolder",
-                DisplayName = "WebHookテストセッション",
+                DisplayName = L["Settings.DevNotify.SessionName.Webhook"],
                 TerminalType = TerminalType.GeminiCLI,
                 ProcessingElapsedSeconds = testElapsedSeconds
             };
 
-            notificationTestResult = $"WebHook通知を送信中... ({testElapsedSeconds}秒の処理として)";
+            notificationTestResult = string.Format(L["Settings.DevNotify.Result.WebhookSendingFormat"], testElapsedSeconds);
             StateHasChanged();
 
             await NotificationService.NotifyProcessingCompleteAsync(testSession, testElapsedSeconds);
 
-            notificationTestResult = $"WebHook通知を送信しました - {DateTime.Now:HH:mm:ss}";
+            notificationTestResult = string.Format(L["Settings.DevNotify.Result.WebhookSentFormat"], DateTime.Now.ToString("HH:mm:ss"));
         }
         catch (Exception ex)
         {
-            notificationTestResult = $"エラー: {ex.Message}";
+            notificationTestResult = string.Format(L["Common.ErrorFormat"], ex.Message);
         }
     }
 
