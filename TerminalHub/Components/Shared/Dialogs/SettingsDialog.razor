@@ -1,11 +1,14 @@
 @namespace TerminalHub.Components.Shared.Dialogs
 @using TerminalHub.Services
 @using TerminalHub.Models
+@using TerminalHub.Resources
 @using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.Localization
 @inject INotificationService NotificationService
 @inject IConfiguration Configuration
 @inject IHostEnvironment HostEnvironment
 @inject IJSRuntime JSRuntime
+@inject IStringLocalizer<SharedResource> L
 @inject ILocalStorageService LocalStorageService
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
@@ -22,7 +25,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bi bi-gear-fill me-2"></i>設定
+                        <i class="bi bi-gear-fill me-2"></i>@L["Settings.Title"]
                     </h5>
                     <button type="button" class="btn-close" @onclick="SaveAndClose"></button>
                 </div>
@@ -33,56 +36,56 @@
                             <button class="nav-link @(activeTab == "general" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "general")">
-                                <i class="bi bi-gear me-1"></i>一般
+                                <i class="bi bi-gear me-1"></i>@L["Settings.Tab.General"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "display" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "display")">
-                                <i class="bi bi-palette me-1"></i>表示
+                                <i class="bi bi-palette me-1"></i>@L["Settings.Tab.Display"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "notifications" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "notifications")">
-                                <i class="bi bi-bell me-1"></i>通知
+                                <i class="bi bi-bell me-1"></i>@L["Settings.Tab.Notifications"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "sessions" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "sessions")">
-                                <i class="bi bi-terminal me-1"></i>セッション
+                                <i class="bi bi-terminal me-1"></i>@L["Settings.Tab.Sessions"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "export" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "export")">
-                                <i class="bi bi-download me-1"></i>エクスポート/インポート
+                                <i class="bi bi-download me-1"></i>@L["Settings.Tab.ExportImport"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "commands" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "commands")">
-                                <i class="bi bi-play-btn me-1"></i>コマンド
+                                <i class="bi bi-play-btn me-1"></i>@L["Settings.Tab.Commands"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "remoteLaunch" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "remoteLaunch")">
-                                <i class="bi bi-phone me-1"></i>リモート起動
+                                <i class="bi bi-phone me-1"></i>@L["Settings.Tab.RemoteLaunch"]
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "special" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "special")">
-                                <i class="bi bi-wrench me-1"></i>特殊
+                                <i class="bi bi-wrench me-1"></i>@L["Settings.Tab.Special"]
                             </button>
                         </li>
                         @if (devToolsEnabled)
@@ -91,21 +94,21 @@
                                 <button class="nav-link @(activeTab == "devDiagnose" ? "active" : "")"
                                         type="button"
                                         @onclick="@(() => activeTab = "devDiagnose")">
-                                    <i class="bi bi-bug me-1"></i>診断
+                                    <i class="bi bi-bug me-1"></i>@L["Settings.Tab.DevDiagnose"]
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link @(activeTab == "devBuffer" ? "active" : "")"
                                         type="button"
                                         @onclick="@(() => activeTab = "devBuffer")">
-                                    <i class="bi bi-hdd me-1"></i>バッファ
+                                    <i class="bi bi-hdd me-1"></i>@L["Settings.Tab.DevBuffer"]
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link @(activeTab == "devNotify" ? "active" : "")"
                                         type="button"
                                         @onclick="@(() => activeTab = "devNotify")">
-                                    <i class="bi bi-bell-fill me-1"></i>通知テスト
+                                    <i class="bi bi-bell-fill me-1"></i>@L["Settings.Tab.DevNotify"]
                                 </button>
                             </li>
                         }
@@ -116,16 +119,26 @@
                         @if (activeTab == "general")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">一般設定</h6>
+                                <h6 class="mb-3">@L["Settings.General.Header"]</h6>
+
+                                <!-- UI 言語切替 -->
+                                <div class="mb-4">
+                                    <label class="form-label">@L["Settings.General.Language.Label"]</label>
+                                    <select class="form-select" value="@currentCulture" @onchange="ChangeUiCulture">
+                                        <option value="en">English</option>
+                                        <option value="ja">日本語</option>
+                                    </select>
+                                    <small class="text-muted">@L["Settings.General.Language.Help"]</small>
+                                </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">デフォルトフォルダパス</label>
+                                    <label class="form-label">@L["Settings.General.DefaultFolder.Label"]</label>
                                     <div class="input-group">
                                         <input type="text" class="form-control @(defaultFolderPathWarning != null ? "is-warning" : "")"
                                                @bind="defaultFolderPath"
                                                placeholder="@Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)" />
                                         <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDefaultFolder"
-                                                title="フォルダを選択">
+                                                title="@L["Settings.General.DefaultFolder.PickTitle"]">
                                             <i class="bi bi-folder-symlink"></i>
                                         </button>
                                     </div>
@@ -136,23 +149,23 @@
                                         </div>
                                     }
                                     <small class="text-muted">
-                                        新規セッション作成時のデフォルトパスを設定します。空欄の場合はユーザーフォルダが使用されます。
+                                        @L["Settings.General.DefaultFolder.Help"]
                                     </small>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">お気に入りフォルダ</label>
+                                    <label class="form-label">@L["Settings.General.FavoriteFolders.Label"]</label>
                                     <div class="input-group mb-2">
                                         <input type="text" class="form-control @(favoriteFolderError != null ? "is-invalid" : "")"
                                                @bind="newFavoriteFolder" @bind:event="oninput"
-                                               placeholder="フォルダパスを入力" />
+                                               placeholder="@L["Settings.General.FavoriteFolders.Placeholder"]" />
                                         <button class="btn btn-outline-secondary" type="button" @onclick="BrowseFavoriteFolder"
-                                                title="フォルダを選択">
+                                                title="@L["Settings.General.DefaultFolder.PickTitle"]">
                                             <i class="bi bi-folder-symlink"></i>
                                         </button>
                                         <button class="btn btn-outline-primary" type="button" @onclick="AddFavoriteFolder"
                                                 disabled="@string.IsNullOrWhiteSpace(newFavoriteFolder)">
-                                            <i class="bi bi-plus-lg"></i> 追加
+                                            <i class="bi bi-plus-lg"></i> @L["Common.Add"]
                                         </button>
                                     </div>
                                     @if (favoriteFolderError != null)
@@ -180,14 +193,14 @@
                                         </ul>
                                     }
                                     <small class="text-muted">
-                                        セッション作成時にフォルダ選択の候補として表示されます。
+                                        @L["Settings.General.FavoriteFolders.Help"]
                                     </small>
                                 </div>
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">バージョン情報</h6>
+                                    <h6 class="mb-2">@L["Settings.General.Version.Header"]</h6>
                                     <div class="d-flex align-items-center mb-2">
-                                        <span class="me-2">現在のバージョン:</span>
+                                        <span class="me-2">@L["Settings.General.Version.Current"]</span>
                                         <span class="badge bg-secondary">v@(currentVersion)</span>
                                     </div>
 
@@ -195,23 +208,23 @@
                                     {
                                         <div class="text-muted small">
                                             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                            バージョンを確認中...
+                                            @L["Settings.General.Version.Checking"]
                                         </div>
                                     }
                                     else if (versionCheckResult != null && versionCheckResult.IsNewVersionAvailable)
                                     {
                                         <div class="alert alert-info py-2 mb-0">
                                             <i class="bi bi-info-circle me-1"></i>
-                                            新しいバージョン <strong>v@(versionCheckResult.LatestVersion)</strong> があります
+                                            @((MarkupString)string.Format(L["Settings.General.Version.NewAvailableHtml"], versionCheckResult.LatestVersion))
                                             <a href="@versionCheckResult.ReleaseUrl" target="_blank" class="ms-2">
-                                                <i class="bi bi-box-arrow-up-right me-1"></i>GitHubで確認
+                                                <i class="bi bi-box-arrow-up-right me-1"></i>@L["Settings.General.Version.CheckOnGitHub"]
                                             </a>
                                         </div>
                                     }
                                     else if (versionCheckResult != null && !versionCheckResult.IsNewVersionAvailable)
                                     {
                                         <div class="text-success small">
-                                            <i class="bi bi-check-circle me-1"></i>最新バージョンです
+                                            <i class="bi bi-check-circle me-1"></i>@L["Settings.General.Version.UpToDate"]
                                         </div>
                                     }
                                     else if (versionCheckError != null)
@@ -223,12 +236,12 @@
                                 </div>
 
                                 <div class="mt-4 pt-3 border-top">
-                                    <h6 class="mb-2">コミュニティ</h6>
+                                    <h6 class="mb-2">@L["Settings.General.Community.Header"]</h6>
                                     <a href="https://discord.gg/juCcFNXJg7" target="_blank" class="btn btn-outline-primary btn-sm">
-                                        <i class="bi bi-discord me-1"></i>Discord サーバーに参加
+                                        <i class="bi bi-discord me-1"></i>@L["Settings.General.Community.JoinDiscord"]
                                     </a>
                                     <small class="text-muted d-block mt-1">
-                                        バグ報告、機能リクエスト、質問などはこちらで受け付けています。
+                                        @L["Settings.General.Community.Help"]
                                     </small>
                                 </div>
                             </div>
@@ -1034,7 +1047,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" @onclick="SaveAndClose">
-                        <i class="bi bi-check-circle me-1"></i>閉じる
+                        <i class="bi bi-check-circle me-1"></i>@L["Common.Close"]
                     </button>
                 </div>
             </div>
@@ -1060,6 +1073,9 @@
     private Dictionary<string, CustomCommandType> newCommandTypes = new();
     private Dictionary<string, string> newCommandKeyNames = new();
     private string activeTab = "general";
+
+    // 現在の UI culture (dropdown の選択値)。CultureInfo の two-letter name をそのまま使う (ja / en)。
+    private string currentCulture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     private bool remoteLaunchEnabled = false;
     private string remoteLaunchTopicGuid = "";
     private string remoteLaunchPassword = "";
@@ -1844,6 +1860,15 @@
     {
         await SaveSettings();
         await Close();
+    }
+
+    // UI 言語切替: .AspNetCore.Culture cookie を書き換えてからページを reload する。
+    // JS 側 (helpers.js#setUiCulture) で cookie 書き込み → reload をまとめて行う。
+    private async Task ChangeUiCulture(ChangeEventArgs e)
+    {
+        var next = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(next) || next == currentCulture) return;
+        await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setUiCulture", next);
     }
     
     private async Task ExportSettings()

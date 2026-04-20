@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    i18n shared resources (English - canonical)
+    Keys use dotted "Area.Element" hierarchy. Must match SharedResource.ja.resx.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Common -->
+  <data name="Common.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
+
+  <!-- Settings Dialog -->
+  <data name="Settings.Title" xml:space="preserve"><value>Settings</value></data>
+
+  <!-- Settings Tabs -->
+  <data name="Settings.Tab.General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.Tab.Display" xml:space="preserve"><value>Display</value></data>
+  <data name="Settings.Tab.Notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Settings.Tab.Sessions" xml:space="preserve"><value>Sessions</value></data>
+  <data name="Settings.Tab.ExportImport" xml:space="preserve"><value>Export / Import</value></data>
+  <data name="Settings.Tab.Commands" xml:space="preserve"><value>Commands</value></data>
+  <data name="Settings.Tab.RemoteLaunch" xml:space="preserve"><value>Remote Launch</value></data>
+  <data name="Settings.Tab.Special" xml:space="preserve"><value>Special</value></data>
+  <data name="Settings.Tab.DevDiagnose" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Settings.Tab.DevBuffer" xml:space="preserve"><value>Buffer</value></data>
+  <data name="Settings.Tab.DevNotify" xml:space="preserve"><value>Notification Test</value></data>
+
+  <!-- Settings: General Tab -->
+  <data name="Settings.General.Header" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.General.Language.Label" xml:space="preserve"><value>Language</value></data>
+  <data name="Settings.General.Language.Help" xml:space="preserve"><value>Switch the UI language. Selecting a value reloads the page.</value></data>
+  <data name="Settings.General.DefaultFolder.Label" xml:space="preserve"><value>Default folder path</value></data>
+  <data name="Settings.General.DefaultFolder.PickTitle" xml:space="preserve"><value>Choose a folder</value></data>
+  <data name="Settings.General.DefaultFolder.Help" xml:space="preserve"><value>Sets the default path for new sessions. When empty, the user home folder is used.</value></data>
+  <data name="Settings.General.FavoriteFolders.Label" xml:space="preserve"><value>Favorite folders</value></data>
+  <data name="Settings.General.FavoriteFolders.Placeholder" xml:space="preserve"><value>Enter a folder path</value></data>
+  <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>Shown as suggestions when creating a new session.</value></data>
+  <data name="Settings.General.Version.Header" xml:space="preserve"><value>Version</value></data>
+  <data name="Settings.General.Version.Current" xml:space="preserve"><value>Current version:</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>Checking for updates...</value></data>
+  <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>A new version &lt;strong&gt;v{0}&lt;/strong&gt; is available</value></data>
+  <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>Check on GitHub</value></data>
+  <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>You're on the latest version</value></data>
+  <data name="Settings.General.Community.Header" xml:space="preserve"><value>Community</value></data>
+  <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Join the Discord server</value></data>
+  <data name="Settings.General.Community.Help" xml:space="preserve"><value>Bug reports, feature requests, and questions are welcome there.</value></data>
+</root>

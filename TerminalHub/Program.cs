@@ -39,6 +39,19 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// ローカライゼーション設定
+// - リソース配置: TerminalHub/Resources/SharedResource.{en,ja}.resx
+// - 言語判定: Cookie (.AspNetCore.Culture) → Accept-Language → デフォルト "en"
+// - 対応外言語は "en" にフォールバック (英語を canonical として統一)
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.Configure<Microsoft.AspNetCore.Builder.RequestLocalizationOptions>(options =>
+{
+    var supported = new[] { "en", "ja" };
+    options.SetDefaultCulture("en");
+    options.AddSupportedCultures(supported);
+    options.AddSupportedUICultures(supported);
+});
+
 // SignalRのメッセージサイズ制限を増加（デフォルト32KBでは不足）
 builder.Services.AddSignalR(options =>
 {
@@ -137,6 +150,32 @@ if (!app.Environment.IsDevelopment())
 // app.UseHttpsRedirection();
 
 app.UseAntiforgery();
+
+// リクエストローカライゼーション
+// Program.cs 先頭で登録した RequestLocalizationOptions を適用する。
+// Cookie (.AspNetCore.Culture) → Accept-Language の順で culture を判定、対応外は "en" へフォールバック。
+app.UseRequestLocalization();
+
+// Cookie スライディング更新: culture cookie の有効期限を毎リクエスト 1 年先へ延長する。
+// これでユーザーが最後にアクセスしてから 1 年放置しない限り言語選択は永続化される。
+app.Use(async (context, next) =>
+{
+    await next();
+    var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+    var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(
+        new Microsoft.AspNetCore.Localization.RequestCulture(culture));
+    context.Response.Cookies.Append(
+        Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
+        cookieValue,
+        new Microsoft.AspNetCore.Http.CookieOptions
+        {
+            Expires = DateTimeOffset.UtcNow.AddYears(1),
+            IsEssential = true,
+            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+            HttpOnly = false, // 言語切替のため JS からも読み書き可能にする
+            Path = "/"
+        });
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
