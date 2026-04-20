@@ -394,4 +394,67 @@
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
   <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --reasoning-effort high</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
+
+  <!-- SessionSettings Dialog -->
+  <data name="SessionSettings.Title" xml:space="preserve"><value>セッション設定</value></data>
+  <data name="SessionSettings.Info.Header" xml:space="preserve"><value>セッション情報</value></data>
+  <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>セッション名:</value></data>
+  <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>フォルダ:</value></data>
+  <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>フォルダパスをコピー</value></data>
+  <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>フォルダを開く</value></data>
+  <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>セッションID:</value></data>
+  <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>セッションIDをコピー</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>サブセッションを作成</value></data>
+  <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>メモ管理</value></data>
+  <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>表示名</value></data>
+  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>セッションの表示名</value></data>
+  <data name="SessionSettings.DisplayName.Help" xml:space="preserve"><value>空白の場合はフォルダ名が使用されます</value></data>
+  <data name="SessionSettings.Pin.Label" xml:space="preserve"><value>セッションをピン留め</value></data>
+  <data name="SessionSettings.Pin.PriorityLabel" xml:space="preserve"><value>優先度:</value></data>
+  <data name="SessionSettings.Memo.Label" xml:space="preserve"><value>メモ</value></data>
+  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>セッションに関するメモ</value></data>
+  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>このセッションに関する任意のメモを記入できます</value></data>
+  <data name="SessionSettings.Loading" xml:space="preserve"><value>セッション情報を読み込み中...</value></data>
+  <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>変更を即座に適用（セッションを再起動）</value></data>
+  <data name="SessionSettings.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="SessionSettings.SaveErrorFormat" xml:space="preserve"><value>設定の保存に失敗しました: {0}</value></data>
+  <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>設定は保存されましたが、セッションの再起動に失敗しました。</value></data>
+
+  <!-- SubSession Dialog -->
+  <data name="SubSession.Title" xml:space="preserve"><value>サブセッション作成</value></data>
+  <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>親セッション: {0}</value></data>
+  <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>Worktree 新規作成</value></data>
+  <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>既存 Worktree 追加</value></data>
+  <data name="SubSession.Tab.SamePath" xml:space="preserve"><value>同じフォルダで開く</value></data>
+  <data name="SubSession.Tab.NewFolder" xml:space="preserve"><value>新しいフォルダで開く</value></data>
+  <data name="SubSession.GitRequired.Title" xml:space="preserve"><value>Git 管理が必要です</value></data>
+  <data name="SubSession.GitRequired.CreateWorktree" xml:space="preserve"><value>Worktree の作成には Git リポジトリが必要です。</value></data>
+  <data name="SubSession.GitRequired.ExistingWorktree" xml:space="preserve"><value>既存の Worktree を追加するには Git リポジトリが必要です。</value></data>
+  <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>ブランチ選択方法</value></data>
+  <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>新規ブランチ</value></data>
+  <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>既存ブランチ</value></data>
+  <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>新しいブランチ名</value></data>
+  <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>このブランチ名で新しい Worktree が作成されます</value></data>
+  <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>既存のブランチを選択</value></data>
+  <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>ブランチ一覧を読み込み中...</value></data>
+  <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>利用可能なブランチがありません</value></data>
+  <data name="SubSession.ExistingBranch.Placeholder" xml:space="preserve"><value>ブランチを選択してください</value></data>
+  <data name="SubSession.BranchExistingWorktree.Title" xml:space="preserve"><value>このブランチには既に Worktree が存在します</value></data>
+  <data name="SubSession.BranchExistingWorktree.PathFormat" xml:space="preserve"><value>パス: {0}</value></data>
+  <data name="SubSession.BranchExistingWorktree.Help" xml:space="preserve"><value>「既存 Worktree 追加」タブから追加してください</value></data>
+  <data name="SubSession.ExistingWorktree.Label" xml:space="preserve"><value>既存の Worktree を選択</value></data>
+  <data name="SubSession.ExistingWorktree.Loading" xml:space="preserve"><value>Worktree 一覧を読み込み中...</value></data>
+  <data name="SubSession.ExistingWorktree.Empty" xml:space="preserve"><value>利用可能な Worktree がありません</value></data>
+  <data name="SubSession.ExistingWorktree.Placeholder" xml:space="preserve"><value>Worktree を選択してください</value></data>
+  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>メイン</value></data>
+  <data name="SubSession.SamePath.InfoFormat" xml:space="preserve"><value>親セッション "{0}" と同じフォルダで開きます</value></data>
+  <data name="SubSession.NewFolder.Label" xml:space="preserve"><value>新しいフォルダのパス</value></data>
+  <data name="SubSession.NewFolder.Placeholder" xml:space="preserve"><value>C:\path\to\new\folder または相対パス</value></data>
+  <data name="SubSession.NewFolder.Help" xml:space="preserve"><value>フォルダが存在しない場合は自動的に作成されます</value></data>
+  <data name="SubSession.NewFolder.InfoFormat" xml:space="preserve"><value>新しいフォルダ "{0}" でセッションを開始します</value></data>
+  <data name="SubSession.Button.Create" xml:space="preserve"><value>Worktree 作成</value></data>
+  <data name="SubSession.Button.Existing" xml:space="preserve"><value>Worktree 追加</value></data>
+  <data name="SubSession.Button.SamePath" xml:space="preserve"><value>セッション作成</value></data>
+  <data name="SubSession.Button.NewFolder" xml:space="preserve"><value>フォルダ作成</value></data>
+  <data name="SubSession.ErrorFormat" xml:space="preserve"><value>操作中にエラーが発生しました: {0}</value></data>
 </root>
