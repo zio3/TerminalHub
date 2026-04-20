@@ -256,14 +256,14 @@
   <data name="Settings.DevNotify.Header" xml:space="preserve"><value>通知テスト</value></data>
   <data name="Settings.DevNotify.TestElapsedLabel" xml:space="preserve"><value>テスト用経過時間（秒）</value></data>
   <data name="Settings.DevNotify.TestBrowser" xml:space="preserve"><value>ブラウザ通知テスト</value></data>
-  <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>WebHook 通知テスト</value></data>
+  <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>Webhook 通知テスト</value></data>
   <data name="Settings.DevNotify.Result.Initial" xml:space="preserve"><value>テスト結果がここに表示されます</value></data>
   <data name="Settings.DevNotify.Result.BrowserSendingFormat" xml:space="preserve"><value>ブラウザ通知を送信中… ({0} 秒の処理として)</value></data>
   <data name="Settings.DevNotify.Result.BrowserSentFormat" xml:space="preserve"><value>ブラウザ通知を送信しました - {0}</value></data>
-  <data name="Settings.DevNotify.Result.WebhookSendingFormat" xml:space="preserve"><value>WebHook 通知を送信中… ({0} 秒の処理として)</value></data>
-  <data name="Settings.DevNotify.Result.WebhookSentFormat" xml:space="preserve"><value>WebHook 通知を送信しました - {0}</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSendingFormat" xml:space="preserve"><value>Webhook 通知を送信中… ({0} 秒の処理として)</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSentFormat" xml:space="preserve"><value>Webhook 通知を送信しました - {0}</value></data>
   <data name="Settings.DevNotify.SessionName.Browser" xml:space="preserve"><value>通知テストセッション</value></data>
-  <data name="Settings.DevNotify.SessionName.Webhook" xml:space="preserve"><value>WebHook テストセッション</value></data>
+  <data name="Settings.DevNotify.SessionName.Webhook" xml:space="preserve"><value>Webhook テストセッション</value></data>
 
   <!-- Settings: Cross-tab messages (saveMessage / validation / version / export / import) -->
   <data name="Settings.Message.PermissionGranted" xml:space="preserve"><value>通知が許可されました</value></data>

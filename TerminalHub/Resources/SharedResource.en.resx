@@ -157,7 +157,7 @@
   <data name="Settings.Export.Header" xml:space="preserve"><value>Export / Import Data</value></data>
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
-  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: sessions ({0})</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: {0} sessions</value></data>
   <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>
   <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. It will be added to the current storage ({0}).</value></data>
@@ -278,7 +278,7 @@
   <data name="Settings.Message.SaveErrorFormat" xml:space="preserve"><value>Save error: {0}</value></data>
   <data name="Settings.Message.VersionFetchFailed" xml:space="preserve"><value>Could not retrieve version information</value></data>
   <data name="Settings.Message.VersionCheckErrorFormat" xml:space="preserve"><value>Check failed: {0}</value></data>
-  <data name="Settings.Message.ExportSuccessFormat" xml:space="preserve"><value>Exported sessions ({0})</value></data>
+  <data name="Settings.Message.ExportSuccessFormat" xml:space="preserve"><value>Exported {0} sessions</value></data>
   <data name="Settings.Message.ExportErrorFormat" xml:space="preserve"><value>Export error: {0}</value></data>
   <data name="Settings.Message.JsonFileRequired" xml:space="preserve"><value>Please select a JSON file</value></data>
   <data name="Settings.Message.SessionsNotFound" xml:space="preserve"><value>No sessions found</value></data>
