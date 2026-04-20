@@ -62,6 +62,7 @@
   <data name="Common.Create" xml:space="preserve"><value>Create</value></data>
   <data name="Common.Unspecified" xml:space="preserve"><value>Unspecified</value></data>
   <data name="Common.ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
+  <data name="Common.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
 
   <!-- Settings Dialog -->
   <data name="Settings.Title" xml:space="preserve"><value>Settings</value></data>
@@ -465,7 +466,6 @@
   <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>Archived sessions</value></data>
   <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>Pinned</value></data>
   <data name="SessionList.Badge.Notification" xml:space="preserve"><value>Processing completed</value></data>
-  <data name="SessionList.Badge.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
   <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git branch</value></data>
   <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>Uncommitted changes</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>
@@ -529,7 +529,6 @@
 
   <!-- Root: Toast messages -->
   <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>Session creation error: {0}</value></data>
-  <data name="Root.Toast.DirectoryNotFoundFormat" xml:space="preserve"><value>Directory not found: {0}</value></data>
   <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>Session initialization error: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>

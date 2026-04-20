@@ -833,7 +833,7 @@
         if (sessionInfo != null && !string.IsNullOrEmpty(sessionInfo.FolderPath) && !Directory.Exists(sessionInfo.FolderPath))
         {
             Logger.LogWarning("セッション {SessionId} のディレクトリが存在しません: {FolderPath}", sessionId, sessionInfo.FolderPath);
-            toast?.ShowError(string.Format(L["Root.Toast.DirectoryNotFoundFormat"], sessionInfo.FolderPath));
+            toast?.ShowError(string.Format(L["Common.DirectoryNotFoundFormat"], sessionInfo.FolderPath));
             activeSessionId = null;
             return;
         }
