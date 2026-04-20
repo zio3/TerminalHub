@@ -16,7 +16,7 @@ const sessions = [
         branch: 'main',
         status: null,
         notification: true,
-        memo: 'Adding validation to endpoints',
+        memo: 'エンドポイントのバリデーション追加中',
     },
     {
         id: 'gemini-shop',
@@ -39,7 +39,7 @@ const terminalScenarios = {
             '',
             '\x1b[2mTips: /help for commands, /model to change model\x1b[0m',
             '',
-            '\x1b[1;34m❯\x1b[0m \x1b[37mReading CLAUDE.md...\x1b[0m',
+            '\x1b[1;34m❯\x1b[0m \x1b[37mCLAUDE.md を読み込んでいます...\x1b[0m',
             '',
             '\x1b[33mC:\\Users\\dev\\source\\repos\\TerminalHub\x1b[0m',
             '\x1b[2m(master)\x1b[0m',
@@ -49,12 +49,12 @@ const terminalScenarios = {
         responses: {
             'default': [
                 '',
-                '\x1b[1;35m⏺ \x1b[0m\x1b[1;37mThinking...\x1b[0m',
+                '\x1b[1;35m⏺ \x1b[0m\x1b[1;37m考えています...\x1b[0m',
                 '',
             ],
             'git status': [
                 '',
-                '\x1b[1;35m⏺ \x1b[0mRunning `git status`.',
+                '\x1b[1;35m⏺ \x1b[0m`git status` を実行します。',
                 '',
                 '\x1b[2m  ❯ git status\x1b[0m',
                 '  On branch master',
@@ -62,13 +62,13 @@ const terminalScenarios = {
                 '',
                 '  nothing to commit, working tree clean',
                 '',
-                '\x1b[1;32m✓\x1b[0m Working tree is clean. No uncommitted changes.',
+                '\x1b[1;32m✓\x1b[0m 作業ツリーはクリーンです。未コミットの変更はありません。',
                 '',
                 '\x1b[1;32m>\x1b[0m ',
             ],
-            'build it': [
+            'ビルドして': [
                 '',
-                '\x1b[1;35m⏺ \x1b[0m\x1b[1;37mBuilding the project.\x1b[0m',
+                '\x1b[1;35m⏺ \x1b[0m\x1b[1;37mビルドを実行します。\x1b[0m',
                 '',
                 '\x1b[2m  ❯ dotnet build TerminalHub/TerminalHub.csproj\x1b[0m',
                 '',
@@ -77,11 +77,11 @@ const terminalScenarios = {
                 '    All projects are up-to-date for restore.',
                 '    TerminalHub -> bin\\Debug\\net10.0-windows\\TerminalHub.dll',
                 '',
-                '  \x1b[1;32mBuild succeeded.\x1b[0m',
-                '      0 Warning(s)',
-                '      0 Error(s)',
+                '  \x1b[1;32mビルドに成功しました。\x1b[0m',
+                '      0 個の警告',
+                '      0 エラー',
                 '',
-                '\x1b[1;32m✓\x1b[0m Build succeeded. No errors, no warnings.',
+                '\x1b[1;32m✓\x1b[0m ビルドが成功しました。エラーなし、警告なしです。',
                 '',
                 '\x1b[1;32m>\x1b[0m ',
             ],
@@ -94,26 +94,26 @@ const terminalScenarios = {
             '\x1b[33mC:\\Users\\dev\\source\\repos\\api-server\x1b[0m',
             '\x1b[2m(main)\x1b[0m',
             '',
-            '\x1b[1;32m>\x1b[0m Add validation to POST /api/orders',
+            '\x1b[1;32m>\x1b[0m POST /api/orders のバリデーションを追加して',
             '',
-            '\x1b[1;33m⟡ \x1b[0m\x1b[1;37mChecking the code...\x1b[0m',
+            '\x1b[1;33m⟡ \x1b[0m\x1b[1;37mコードを確認しています...\x1b[0m',
             '',
             '\x1b[2m  Reading: Controllers/OrdersController.cs\x1b[0m',
             '\x1b[2m  Reading: Models/OrderRequest.cs\x1b[0m',
             '',
-            '\x1b[1;33m⟡ \x1b[0mAdding validation attributes to the request body.',
+            '\x1b[1;33m⟡ \x1b[0mリクエストボディのバリデーション属性を追加します。',
             '',
             '\x1b[2m  Editing: Models/OrderRequest.cs\x1b[0m',
             '\x1b[2m  Editing: Controllers/OrdersController.cs\x1b[0m',
             '',
-            '\x1b[1;32m✓\x1b[0m Added validation attributes and ModelState checks.',
+            '\x1b[1;32m✓\x1b[0m バリデーション属性と ModelState チェックを追加しました。',
             '',
             '\x1b[1;32m>\x1b[0m ',
         ],
         responses: {
             'default': [
                 '',
-                '\x1b[1;33m⟡ \x1b[0m\x1b[1;37mProcessing...\x1b[0m',
+                '\x1b[1;33m⟡ \x1b[0m\x1b[1;37m処理中...\x1b[0m',
                 '',
             ],
         },
@@ -125,11 +125,11 @@ const terminalScenarios = {
             '\x1b[33mC:\\Users\\dev\\source\\repos\\ShopService\x1b[0m',
             '\x1b[2m(develop)\x1b[0m',
             '',
-            '\x1b[1;32m>\x1b[0m Improve performance of the inventory management API',
+            '\x1b[1;32m>\x1b[0m 在庫管理APIのパフォーマンスを改善して',
             '',
-            '\x1b[1;34m✦ \x1b[0m\x1b[1;37mAnalyzing...\x1b[0m',
+            '\x1b[1;34m✦ \x1b[0m\x1b[1;37m分析中...\x1b[0m',
             '',
-            '\x1b[1;34m✦ \x1b[0mChecking project structure...',
+            '\x1b[1;34m✦ \x1b[0mプロジェクト構造を確認しています...',
             '',
             '\x1b[2m  Reading: Services/InventoryService.cs\x1b[0m',
             '\x1b[2m  Reading: Repositories/ProductRepository.cs\x1b[0m',
@@ -253,27 +253,27 @@ function renderSessionList() {
 function switchSession(sessionId) {
     if (sessionId === activeSessionId) return;
 
-    // Allow switching even while playback is running (playback is interrupted).
+    // 再生中でも切替を許可（再生は中断される）
     isPlaying = false;
 
     activeSessionId = sessionId;
     renderSessionList();
     updateMemo();
 
-    // Clear the terminal and restore the target session's buffer immediately.
+    // ターミナルをクリアして、対象セッションのバッファを即時復元
     term.clear();
     term.reset();
 
     const buf = sessionBuffers[sessionId];
     if (buf.played) {
-        // Write back saved lines in one pass (no animation).
+        // 保持済みの行を一括で書き戻す（アニメーションなし）
         buf.lines.forEach(line => term.writeln(line));
     } else {
         playScenario(sessionId);
     }
 }
 
-// Wrap terminal writes and record them in the buffer as well.
+// 書き込みをラップして、バッファにも記録する
 function writeToTerminal(line) {
     term.writeln(line);
     sessionBuffers[activeSessionId].lines.push(line);
@@ -288,7 +288,7 @@ async function playScenario(sessionId) {
     sessionBuffers[sessionId].played = true;
 
     for (const line of scenario.initial) {
-        // Abort if the session was switched during playback.
+        // 再生中にセッションが切り替わった場合は中断
         if (activeSessionId !== sessionId) break;
         writeToTerminal(line);
         await sleep(40 + Math.random() * 30);
@@ -381,40 +381,40 @@ function initDialogs() {
     const dialogClose = document.getElementById('dialogClose');
 
     document.getElementById('newSessionBtn').addEventListener('click', () => {
-        dialogTitle.textContent = 'New session';
+        dialogTitle.textContent = '新しいセッション';
         dialogBody.innerHTML = `
-            <label>Session name</label>
+            <label>セッション名</label>
             <input type="text" value="NewProject" disabled />
-            <label>Terminal type</label>
+            <label>ターミナルタイプ</label>
             <select disabled>
                 <option>Claude Code</option>
                 <option>Gemini CLI</option>
                 <option>Codex CLI</option>
-                <option>Plain Terminal</option>
+                <option>通常ターミナル</option>
             </select>
-            <label>Folder path</label>
+            <label>フォルダパス</label>
             <input type="text" value="C:\\Users\\dev\\source\\repos\\" disabled />
             <div class="demo-dialog-note">
-                <i class="bi bi-info-circle"></i> Demo only — controls are disabled
+                <i class="bi bi-info-circle"></i> デモのため操作できません
             </div>
         `;
         overlay.style.display = 'flex';
     });
 
     document.getElementById('settingsBtn').addEventListener('click', () => {
-        dialogTitle.textContent = 'Settings';
+        dialogTitle.textContent = '設定';
         dialogBody.innerHTML = `
-            <label>Theme</label>
+            <label>テーマ</label>
             <select disabled>
-                <option>Dark</option>
-                <option>Light</option>
+                <option>ダーク</option>
+                <option>ライト</option>
             </select>
-            <label>Default folder</label>
+            <label>デフォルトフォルダ</label>
             <input type="text" value="C:\\Users\\dev\\source\\repos" disabled />
-            <label>Webhook notifications</label>
+            <label>Webhook通知</label>
             <input type="text" value="https://hooks.example.com/notify" disabled />
             <div class="demo-dialog-note">
-                <i class="bi bi-info-circle"></i> Demo only — controls are disabled
+                <i class="bi bi-info-circle"></i> デモのため操作できません
             </div>
         `;
         overlay.style.display = 'flex';
@@ -444,7 +444,7 @@ function initScreenshotModal() {
             const name = nameEl ? nameEl.textContent : '';
             title.textContent = name;
 
-            // Check whether the image exists
+            // 画像の存在チェック
             const img = new Image();
             img.onload = () => {
                 imageContainer.innerHTML = `<img src="${src}" alt="${name}" />`;
@@ -455,7 +455,7 @@ function initScreenshotModal() {
                     <div class="screenshot-noimage">
                         <i class="bi bi-image"></i>
                         <span>No Image</span>
-                        <span style="font-size: 0.75rem;">Place the screenshot under assets/</span>
+                        <span style="font-size: 0.75rem;">assets/ にスクリーンショットを配置してください</span>
                     </div>
                 `;
                 modal.style.display = 'flex';

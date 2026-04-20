@@ -1,58 +1,54 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="ja" data-bs-theme="dark">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TerminalHub — Multi-session terminal for AI CLIs on Windows</title>
-    <meta name="description" content="Windows-native hub for Claude Code / Gemini CLI / Codex CLI. Multiple sessions on one screen, with first-class IME support for CJK and other composition-based input." />
-    <link rel="alternate" hreflang="en" href="https://zio3.github.io/TerminalHub/landing/" />
-    <link rel="alternate" hreflang="ja" href="https://zio3.github.io/TerminalHub/landing/ja/" />
-    <link rel="alternate" hreflang="x-default" href="https://zio3.github.io/TerminalHub/landing/" />
+    <title>TerminalHub - マルチセッションターミナル</title>
+    <meta name="description" content="Windows 専用。Claude Code / Gemini CLI / Codex CLI の複数セッションを一画面で管理するターミナルハブ。" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" rel="stylesheet" />
-    <link href="css/landing.css" rel="stylesheet" />
+    <link rel="alternate" hreflang="en" href="https://zio3.github.io/TerminalHub/landing/" />
+    <link rel="alternate" hreflang="ja" href="https://zio3.github.io/TerminalHub/landing/ja/" />
+    <link rel="alternate" hreflang="x-default" href="https://zio3.github.io/TerminalHub/landing/" />
+    <link href="../css/landing.css" rel="stylesheet" />
 </head>
 <body>
     <script>
-        // 初回アクセス時のみ navigator.languages で日本語ブラウザを検出して /ja/ にリダイレクト。
-        // LocalStorage に明示的選択が保存されていればそれを尊重 (リダイレクトループ防止)。
+        // ユーザーが言語を明示的に切り替えた場合のみ LocalStorage を見て該当言語へ飛ばす
+        // (日本語ページ → 英語ページ) 自動リダイレクトはしない。
         (function() {
             try {
                 var pref = localStorage.getItem('th-lang-pref');
-                if (pref === 'ja') { location.replace('ja/'); return; }
-                if (pref === 'en') return;
-                var langs = navigator.languages || [navigator.language || 'en'];
-                var prefersJa = langs.some(function(l) { return /^ja\b/i.test(l); });
-                if (prefersJa) location.replace('ja/');
+                if (pref === 'en') location.replace('../');
             } catch (e) {}
         })();
     </script>
 
     <!-- Language Toggle -->
     <nav class="lang-toggle" aria-label="Language">
-        <strong>English</strong>
+        <a href="../" hreflang="en"
+           onclick="try{localStorage.setItem('th-lang-pref','en')}catch(e){}">English</a>
         <span aria-hidden="true">|</span>
-        <a href="ja/" hreflang="ja" lang="ja"
-           onclick="try{localStorage.setItem('th-lang-pref','ja')}catch(e){}">日本語</a>
+        <strong lang="ja">日本語</strong>
     </nav>
 
     <!-- Hero Section -->
     <header class="hero-section">
         <div class="container">
             <div class="hero-content text-center">
-                <img src="assets/icon-round.png" alt="TerminalHub" class="hero-icon" />
+                <img src="../assets/icon-round.png" alt="TerminalHub" class="hero-icon" />
                 <div class="hero-prompt">~/source/repos $ launch</div>
                 <h1 class="hero-title">Terminal<span class="text-accent">Hub</span></h1>
-                <p class="hero-subtitle">Multiple AI CLI sessions, in a single window. Zero switching cost.</p>
+                <p class="hero-subtitle">複数の AI CLI セッションを、ひとつの画面で。切り替えコスト、ゼロ。</p>
                 <p class="hero-description">
-                    For <code>Claude Code</code> / <code>Gemini CLI</code> / <code>Codex CLI</code>.<br>
-                    Session save / restore, parallel work, completion notifications — and first-class IME input for CJK and other composition-based languages.
+                    <code>Claude Code</code> / <code>Gemini CLI</code> / <code>Codex CLI</code> に対応。<br>
+                    セッションの保存・復元、並列作業、処理通知まで。
                 </p>
                 <div class="hero-actions">
                     <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg btn-bracket">
-                        <i class="bi bi-windows"></i> Download for Windows
+                        <i class="bi bi-windows"></i> Windows 版をダウンロード
                     </a>
                     <a href="https://github.com/zio3/TerminalHub" class="btn btn-outline-light btn-lg btn-bracket">
                         <i class="bi bi-github"></i> GitHub
@@ -65,14 +61,14 @@
     <!-- Interactive Demo Section -->
     <section class="demo-section">
         <div class="container">
-            <h2 class="section-title plain text-center">Interactive Demo</h2>
+            <h2 class="section-title plain text-center">コンセプトデモ</h2>
             <p class="section-description text-center text-muted">
-                Try switching sessions or typing a command.
+                セッションを切り替えたり、コマンドを入力してみてください。
             </p>
             <div class="demo-window">
                 <div class="demo-titlebar">
                     <div class="demo-titlebar-left">
-                        <img src="assets/icon-small.png" alt="" style="width: 18px; height: 18px; border-radius: 3px;" />
+                        <img src="../assets/icon-small.png" alt="" style="width: 18px; height: 18px; border-radius: 3px;" />
                         <span class="demo-titlebar-text">TerminalHub</span>
                         <span class="demo-status-dot" title="connected"></span>
                     </div>
@@ -87,11 +83,11 @@
                     <div class="demo-sidebar" id="demoSidebar">
                         <div class="demo-sidebar-header">
                             <button class="btn btn-accent btn-sm w-100" id="newSessionBtn">
-                                <i class="bi bi-plus-circle"></i> New session
+                                <i class="bi bi-plus-circle"></i> 新しいセッションを作成
                             </button>
                             <div class="demo-search-bar">
                                 <span class="demo-search-icon"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control form-control-sm" placeholder="Search sessions..." disabled />
+                                <input type="text" class="form-control form-control-sm" placeholder="セッションを検索..." disabled />
                                 <button class="demo-archive-btn" type="button" disabled>
                                     <i class="bi bi-archive"></i>
                                 </button>
@@ -102,7 +98,7 @@
                         </div>
                         <div class="demo-sidebar-footer">
                             <button class="btn btn-outline-secondary btn-sm w-100" id="settingsBtn">
-                                <i class="bi bi-gear"></i> Settings
+                                <i class="bi bi-gear"></i> 設定
                             </button>
                         </div>
                     </div>
@@ -125,12 +121,12 @@
                             <ul class="nav nav-tabs demo-panel-tabs" id="bottomTabs">
                                 <li class="nav-item">
                                     <button class="nav-link active" data-tab="textinput">
-                                        <i class="bi bi-chat-left-text"></i> Text input
+                                        <i class="bi bi-chat-left-text"></i> テキスト入力
                                     </button>
                                 </li>
                                 <li class="nav-item">
                                     <button class="nav-link" data-tab="memo">
-                                        <i class="bi bi-journal-text"></i> Memo
+                                        <i class="bi bi-journal-text"></i> メモ
                                     </button>
                                 </li>
                             </ul>
@@ -139,23 +135,23 @@
                                     <div class="demo-input-wrap">
                                         <textarea id="demoInput"
                                                   class="form-control"
-                                                  placeholder="Type a message for Claude Code..."
+                                                  placeholder="Claude Codeへのメッセージを入力..."
                                                   rows="2"></textarea>
                                         <div class="demo-input-footer">
                                             <div class="demo-keyhints">
-                                                <kbd>Enter</kbd> Send <span class="sep">|</span>
-                                                <kbd>Shift+Enter</kbd> Newline <span class="sep">|</span>
-                                                <kbd>Ctrl+↑↓</kbd> History
+                                                <kbd>Enter</kbd> 送信 <span class="sep">|</span>
+                                                <kbd>Shift+Enter</kbd> 改行 <span class="sep">|</span>
+                                                <kbd>Ctrl+↑↓</kbd> 履歴
                                             </div>
                                             <button class="btn btn-accent btn-sm" id="sendBtn">
-                                                <i class="bi bi-send"></i> Send
+                                                <i class="bi bi-send"></i> 送信
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="demo-tab-pane" id="tab-memo">
                                     <textarea class="form-control demo-memo"
-                                              placeholder="Memo... (Enter for newline, auto-saved)"
+                                              placeholder="メモ... (Enter で改行、自動保存)"
                                               id="demoMemo"></textarea>
                                 </div>
                             </div>
@@ -167,7 +163,7 @@
                 <div class="demo-dialog-overlay" id="demoDialogOverlay" style="display: none;">
                     <div class="demo-dialog">
                         <div class="demo-dialog-header">
-                            <h5 id="dialogTitle">New session</h5>
+                            <h5 id="dialogTitle">新しいセッション</h5>
                             <button class="btn-close btn-close-white" id="dialogClose"></button>
                         </div>
                         <div class="demo-dialog-body" id="dialogBody">
@@ -178,7 +174,7 @@
 
             <p class="demo-hint text-center text-muted mt-3">
                 <i class="bi bi-info-circle"></i>
-                This is a mock demo. Actual CLIs don't run here, and the UI differs slightly from the real product.
+                デモ用のモック環境です。実際の CLI は動作しません。UIも実物とは異なります。
             </p>
         </div>
     </section>
@@ -188,31 +184,31 @@
     <!-- Features Section -->
     <section class="features-section">
         <div class="container">
-            <h2 class="section-title text-center">Key Features</h2>
-            <p class="section-description text-center text-muted">Click a card to see a screenshot</p>
+            <h2 class="section-title text-center">主な特徴</h2>
+            <p class="section-description text-center text-muted">クリックするとスクリーンショットを表示します</p>
             <div class="row g-4 mt-3 justify-content-center">
                 <div class="col-md-4">
-                    <div class="feature-card" data-screenshot="assets/multi-session.gif">
+                    <div class="feature-card" data-screenshot="../assets/multi-session.gif">
                         <div class="feature-icon"><i class="bi bi-window-stack"></i></div>
-                        <h3>Multi-session management</h3>
-                        <p>Switch between AI CLI sessions with one click. Parallel work fits in a single window. Session state is saved automatically and restored on restart.</p>
-                        <div class="feature-card-hint"><i class="bi bi-image"></i> Click to see a screenshot</div>
+                        <h3>マルチセッション管理</h3>
+                        <p>複数の AI CLI セッションを簡単に切り替え。並列作業がひとつのウィンドウにまとまります。セッション構成は自動保存され、再起動後もそのまま復元。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="feature-card" data-screenshot="assets/ai-cli-setup.gif">
+                    <div class="feature-card" data-screenshot="../assets/ai-cli-setup.gif">
                         <div class="feature-icon"><i class="bi bi-rocket-takeoff"></i></div>
-                        <h3>Easy AI CLI launch</h3>
-                        <p>Configure key flags for Claude Code / Gemini CLI / Codex CLI right from the settings dialog. Get started in seconds.</p>
-                        <div class="feature-card-hint"><i class="bi bi-image"></i> Click to see a screenshot</div>
+                        <h3>AI CLI かんたん起動</h3>
+                        <p>Claude Code / Gemini CLI / Codex CLI を設定画面から主要な引数を指定するだけ。すぐに使い始められます。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="feature-card" data-screenshot="assets/japanese-input.gif">
+                    <div class="feature-card" data-screenshot="../assets/japanese-input.gif">
                         <div class="feature-icon"><i class="bi bi-translate"></i></div>
-                        <h3>First-class IME input</h3>
-                        <p>Most Windows terminals struggle with composition-based input — characters jump around mid-conversion in CJK, Thai, Vietnamese, and more. TerminalHub's dedicated input panel sends only the finalized text, so IME behaviour stays stable.</p>
-                        <div class="feature-card-hint"><i class="bi bi-image"></i> Click to see a screenshot</div>
+                        <h3>日本語入力のストレスを解消</h3>
+                        <p>ターミナルに直接打つと変換中の文字位置がずれる問題を、専用の入力パネル経由で解決。確定したテキストだけを送信するので、IME の挙動が安定します。</p>
+                        <div class="feature-card-hint"><i class="bi bi-image"></i> クリックで画像を表示</div>
                     </div>
                 </div>
             </div>
@@ -224,19 +220,19 @@
     <!-- Screenshots Section -->
     <section class="screenshots-section">
         <div class="container">
-            <h2 class="section-title text-center">Actual Screens</h2>
+            <h2 class="section-title text-center">実際の画面</h2>
             <div class="screenshots-grid" id="screenshotsGrid">
-                <div class="screenshot-item" data-screenshot="assets/ss-overview.png">
-                    <img src="assets/ss-overview.png" alt="Overview" loading="lazy" />
+                <div class="screenshot-item" data-screenshot="../assets/ss-overview.png">
+                    <img src="../assets/ss-overview.png" alt="全体画面" loading="lazy" />
                     <div class="screenshot-caption">
-                        <span>Overview</span>
+                        <span>全体画面</span>
                         <i class="bi bi-zoom-in"></i>
                     </div>
                 </div>
-                <div class="screenshot-item" data-screenshot="assets/ss-settings.png">
-                    <img src="assets/ss-settings.png" alt="Settings" loading="lazy" />
+                <div class="screenshot-item" data-screenshot="../assets/ss-settings.png">
+                    <img src="../assets/ss-settings.png" alt="設定画面" loading="lazy" />
                     <div class="screenshot-caption">
-                        <span>Settings</span>
+                        <span>設定画面</span>
                         <i class="bi bi-zoom-in"></i>
                     </div>
                 </div>
@@ -249,13 +245,13 @@
     <!-- Community Section -->
     <section class="community-section text-center">
         <div class="container">
-            <h2 class="section-title">Community</h2>
+            <h2 class="section-title">コミュニティ</h2>
             <p class="text-muted mb-4">
-                Questions, feature requests, feedback —<br>
-                drop by our Discord server anytime.
+                使い方の質問、機能リクエスト、フィードバックなど、<br>
+                Discord サーバーでお気軽にどうぞ。
             </p>
             <a href="https://discord.gg/juCcFNXJg7" class="btn btn-discord btn-lg">
-                <i class="bi bi-discord"></i> Join Discord
+                <i class="bi bi-discord"></i> Discord に参加する
             </a>
         </div>
     </section>
@@ -263,10 +259,10 @@
     <!-- CTA Section -->
     <section class="cta-section text-center">
         <div class="container">
-            <h2>Get started with TerminalHub</h2>
-            <p class="text-muted mb-4">Windows only / Free / Open source</p>
+            <h2>TerminalHub を始めよう</h2>
+            <p class="text-muted mb-4">Windows 専用 / 無料 / オープンソース</p>
             <a href="https://github.com/zio3/TerminalHub/releases/latest" class="btn btn-accent btn-lg">
-                <i class="bi bi-windows"></i> Download for Windows
+                <i class="bi bi-windows"></i> Windows 版をダウンロード
             </a>
         </div>
     </section>
@@ -299,6 +295,6 @@ zio3
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
-    <script src="js/demo.js"></script>
+    <script src="../js/demo.ja.js"></script>
 </body>
 </html>

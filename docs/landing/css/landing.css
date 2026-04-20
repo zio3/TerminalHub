@@ -922,3 +922,36 @@ body {
     .demo-sidebar { width: 140px; min-width: 140px; }
     .demo-session-name { font-size: 0.75rem; }
 }
+
+/* ===== Language Toggle ===== */
+.lang-toggle {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 100;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.lang-toggle a,
+.lang-toggle strong {
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    padding: 2px 4px;
+}
+.lang-toggle strong {
+    color: var(--accent);
+    font-weight: 700;
+}
+.lang-toggle a:hover {
+    color: var(--accent);
+}
+.lang-toggle span {
+    color: rgba(255, 255, 255, 0.25);
+    padding: 0 2px;
+}
