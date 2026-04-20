@@ -13,8 +13,9 @@
 # Windows null device file (誤って作成されたファイル)
 nul
 
-# Claude Code local settings
+# Claude Code local settings / ランタイムロックファイル
 .claude/settings.local.json
+.claude/*.lock
 
 # MCP設定（Bot Tokenなど秘密情報を含む）
 .mcp.json
