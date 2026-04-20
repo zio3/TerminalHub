@@ -43,7 +43,15 @@ builder.Services.AddRazorComponents()
 // - リソース配置: TerminalHub/Resources/SharedResource.{en,ja}.resx
 // - 言語判定: Cookie (.AspNetCore.Culture) → Accept-Language → デフォルト "en"
 // - 対応外言語は "en" にフォールバック (英語を canonical として統一)
-builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+//
+// 注意: ResourcesPath は敢えて指定しない。
+// .NET SDK のビルドが resx を埋め込む際、観測された実名は
+//   TerminalHub.SharedResource.{culture}.resources
+// となっていて "Resources." フォルダ prefix が付与されていない。
+// ResourcesPath を指定すると localizer は "TerminalHub.Resources.SharedResource..." を
+// 探しに行って見つけられずキー文字列がそのまま返ってしまう。
+// 空のまま = typeInfo.FullName (TerminalHub.SharedResource) をそのまま prefix として使うので一致する。
+builder.Services.AddLocalization();
 builder.Services.Configure<Microsoft.AspNetCore.Builder.RequestLocalizationOptions>(options =>
 {
     var supported = new[] { "en", "ja" };
