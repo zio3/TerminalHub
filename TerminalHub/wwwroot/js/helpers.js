@@ -406,12 +406,7 @@ window.terminalHubHelpers = {
             var oneYear = 60 * 60 * 24 * 365;
             document.cookie = '.AspNetCore.Culture=' + value +
                 '; path=/; max-age=' + oneYear + '; samesite=lax';
-            // 診断用: 設定後の cookie を確認できるよう console に出す。
-            // DevTools で見れば write が成功しているかを即座に判定可能。
-            console.log('[TerminalHub i18n] cookie set =', document.cookie);
-        } catch (e) {
-            console.error('[TerminalHub i18n] cookie write failed', e);
-        }
+        } catch (e) { /* ignore */ }
         window.location.reload();
     }
 };
