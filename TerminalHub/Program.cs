@@ -14,7 +14,12 @@ if (args.Contains("--notify"))
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog 設定
-var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "terminalhub-.log");
+// ユーザーデータ配下 (%LOCALAPPDATA%\TerminalHub\) にログを置く。Program Files にインストールした
+// 場合の書き込み権限エラーを回避するため。dev/prod は AppDataPaths 側で切り分け。
+var logsFolder = AppDataPaths.GetLogsFolder(
+    builder.Environment.IsDevelopment(),
+    builder.Configuration.GetValue<string>("Logging:FolderName"));
+var logPath = Path.Combine(logsFolder, "terminalhub-.log");
 builder.Host.UseSerilog((context, configuration) =>
 {
     configuration
@@ -50,9 +55,8 @@ builder.Services.AddSingleton<ISessionManager, SessionManager>();
 builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
 // SQLiteセッションストレージを登録
-var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 var dbFileName = builder.Configuration.GetValue<string>("Database:FileName") ?? "sessions.db";
-var dbPath = Path.Combine(appDataPath, "TerminalHub", dbFileName);
+var dbPath = Path.Combine(AppDataPaths.UserDataRoot, dbFileName);
 builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
 Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FileName={dbFileName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
