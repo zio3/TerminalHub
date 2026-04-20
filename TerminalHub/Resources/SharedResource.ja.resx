@@ -60,6 +60,7 @@
   <data name="Common.Add" xml:space="preserve"><value>追加</value></data>
   <data name="Common.Cancel" xml:space="preserve"><value>キャンセル</value></data>
   <data name="Common.Create" xml:space="preserve"><value>作成</value></data>
+  <data name="Common.Unspecified" xml:space="preserve"><value>未指定</value></data>
   <data name="Common.ErrorFormat" xml:space="preserve"><value>エラー: {0}</value></data>
 
   <!-- Settings Dialog -->
@@ -131,7 +132,7 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook 設定</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Webhook 通知を有効にする</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook設定</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook 設定</value></data>
   <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。セッション作成時に自動的に &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に設定が追加されます。</value></data>
   <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Claude Code Hook を有効にする</value></data>
   <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>この設定は各セッションが次に起動／再起動されたタイミングで &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に反映されます。既に起動中のセッションや、TerminalHub 管理外のワークスペースには即時適用されません。</value></data>
@@ -373,7 +374,6 @@
   <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>外部通信やファイルアクセス範囲を制限</value></data>
   <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Codex CLI の既定値に任せます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>承認ポリシー</value></data>
-  <data name="SessionOptions.Codex.ApprovalPolicy.Unspecified" xml:space="preserve"><value>未指定</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>操作の承認レベル（--ask-for-approval）</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>

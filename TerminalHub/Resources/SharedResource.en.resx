@@ -60,6 +60,7 @@
   <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
   <data name="Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Common.Create" xml:space="preserve"><value>Create</value></data>
+  <data name="Common.Unspecified" xml:space="preserve"><value>Unspecified</value></data>
   <data name="Common.ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
 
   <!-- Settings Dialog -->
@@ -373,7 +374,6 @@
   <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>Limits external communication and file access.</value></data>
   <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Uses the Codex CLI default.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>Approval policy</value></data>
-  <data name="SessionOptions.Codex.ApprovalPolicy.Unspecified" xml:space="preserve"><value>Unspecified</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>Operation approval level (--ask-for-approval)</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
