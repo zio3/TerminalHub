@@ -58,6 +58,7 @@
   <!-- Common -->
   <data name="Common.Close" xml:space="preserve"><value>Close</value></data>
   <data name="Common.Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Common.ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
 
   <!-- Settings Dialog -->
   <data name="Settings.Title" xml:space="preserve"><value>Settings</value></data>
@@ -156,7 +157,7 @@
   <data name="Settings.Export.Header" xml:space="preserve"><value>Export / Import Data</value></data>
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
-  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: sessions ({0})</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: {0} sessions</value></data>
   <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>
   <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. It will be added to the current storage ({0}).</value></data>
@@ -193,4 +194,95 @@
   <data name="Settings.RemoteLaunch.TopicGuid" xml:space="preserve"><value>Topic GUID</value></data>
   <data name="Settings.RemoteLaunch.RegenerateGuidTitle" xml:space="preserve"><value>Regenerate GUID (existing access URL will be invalidated)</value></data>
   <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>Regenerating invalidates the existing access URL.</value></data>
+
+  <!-- Settings: Special Tab -->
+  <data name="Settings.Special.Header" xml:space="preserve"><value>Special Settings</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Header" xml:space="preserve"><value>Claude Code mode switch key</value></data>
+  <data name="Settings.Special.ClaudeModeKey.Help" xml:space="preserve"><value>Select the keyboard shortcut used for mode switching in Claude Code.</value></data>
+  <data name="Settings.Special.ClaudeModeKey.None" xml:space="preserve"><value>None</value></data>
+  <data name="Settings.Special.ClaudeModeKey.DefaultNote" xml:space="preserve"><value>(default)</value></data>
+  <data name="Settings.Special.ClaudeModeKey.ConflictNote" xml:space="preserve"><value>Alt+M can conflict with other functions in some environments. If that happens, try Shift+Tab instead.</value></data>
+  <data name="Settings.Special.VoiceInput.Header" xml:space="preserve"><value>Voice input</value></data>
+  <data name="Settings.Special.VoiceInput.Enable" xml:space="preserve"><value>Enable voice input (experimental)</value></data>
+  <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>When enabled, a microphone button appears in the text input panel. Speech recognition only runs while the button is held down (Chrome recommended).</value></data>
+  <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>Text pre-refinement</value></data>
+  <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>Enable pre-refinement button (experimental)</value></data>
+  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>When enabled, a &lt;i class="bi bi-stars"&gt;&lt;/i&gt; Refine button appears in the text input panel. Pressing it uses Claude Code CLI (Haiku model) to fix typos and inconsistencies.&lt;br/&gt;The refinement instructions can be customized by editing &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt;.</value></data>
+  <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>Developer tools</value></data>
+  <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>Enable developer tools</value></data>
+  <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs are shown.</value></data>
+  <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>Log files</value></data>
+  <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>Open log folder</value></data>
+  <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>
+
+  <!-- Settings: Dev Diagnose Tab -->
+  <data name="Settings.DevDiagnose.Header" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Settings.DevDiagnose.Refresh" xml:space="preserve"><value>Refresh diagnostics</value></data>
+  <data name="Settings.DevDiagnose.RunJs" xml:space="preserve"><value>Run JS diagnostics</value></data>
+  <data name="Settings.DevDiagnose.SessionList" xml:space="preserve"><value>Session list</value></data>
+  <data name="Settings.DevDiagnose.ColName" xml:space="preserve"><value>Name</value></data>
+  <data name="Settings.DevDiagnose.ColStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="Settings.DevDiagnose.ConPtyPresent" xml:space="preserve"><value>Yes</value></data>
+  <data name="Settings.DevDiagnose.ConPtyAbsent" xml:space="preserve"><value>No</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.Header" xml:space="preserve"><value>Terminal info</value></data>
+  <data name="Settings.DevDiagnose.TerminalInfo.JsTerminalCount" xml:space="preserve"><value>JavaScript terminal count:</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.Header" xml:space="preserve"><value>Terminal control test</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollBottom" xml:space="preserve"><value>Scroll to bottom</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.ScrollTop" xml:space="preserve"><value>Scroll to top</value></data>
+  <data name="Settings.DevDiagnose.TerminalTest.GetPosition" xml:space="preserve"><value>Get position</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.Initial" xml:space="preserve"><value>Scroll position info will appear here</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.BottomFormat" xml:space="preserve"><value>Scrolled to bottom - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.TopFormat" xml:space="preserve"><value>Scrolled to top - {0}</value></data>
+  <data name="Settings.DevDiagnose.ScrollInfo.PositionFormat" xml:space="preserve"><value>Scroll position: {0} - {1}</value></data>
+
+  <!-- Settings: Dev Buffer Tab -->
+  <data name="Settings.DevBuffer.Header" xml:space="preserve"><value>Buffer Dump</value></data>
+  <data name="Settings.DevBuffer.Help" xml:space="preserve"><value>Downloads the session's output buffer (up to 2MB) as a file.</value></data>
+  <data name="Settings.DevBuffer.SelectLabel" xml:space="preserve"><value>Select session</value></data>
+  <data name="Settings.DevBuffer.SelectPlaceholder" xml:space="preserve"><value>-- Select a session --</value></data>
+  <data name="Settings.DevBuffer.Empty" xml:space="preserve"><value>(empty)</value></data>
+  <data name="Settings.DevBuffer.BufferFormat" xml:space="preserve"><value>Buffer: {0}</value></data>
+  <data name="Settings.DevBuffer.StatusHistoryFormat" xml:space="preserve"><value>Status history: {0}</value></data>
+  <data name="Settings.DevBuffer.DownloadBuffer" xml:space="preserve"><value>Buffer</value></data>
+  <data name="Settings.DevBuffer.DownloadBufferClean" xml:space="preserve"><value>Buffer (ANSI stripped)</value></data>
+  <data name="Settings.DevBuffer.DownloadStatusHistory" xml:space="preserve"><value>Status history JSON</value></data>
+  <data name="Settings.DevBuffer.Result.SelectSession" xml:space="preserve"><value>Please select a session</value></data>
+  <data name="Settings.DevBuffer.Result.BufferEmpty" xml:space="preserve"><value>Buffer is empty</value></data>
+  <data name="Settings.DevBuffer.Result.DownloadedFormat" xml:space="preserve"><value>Download complete: {0} ({1})</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferInfo" xml:space="preserve"><value>Buffer Info</value></data>
+  <data name="Settings.DevBuffer.HeaderBufferContent" xml:space="preserve"><value>Buffer Content</value></data>
+
+  <!-- Settings: Dev Notify Tab -->
+  <data name="Settings.DevNotify.Header" xml:space="preserve"><value>Notification Test</value></data>
+  <data name="Settings.DevNotify.TestElapsedLabel" xml:space="preserve"><value>Test elapsed time (seconds)</value></data>
+  <data name="Settings.DevNotify.TestBrowser" xml:space="preserve"><value>Test browser notification</value></data>
+  <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>Test webhook notification</value></data>
+  <data name="Settings.DevNotify.Result.Initial" xml:space="preserve"><value>Test results will appear here</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSendingFormat" xml:space="preserve"><value>Sending browser notification... (as {0}s process)</value></data>
+  <data name="Settings.DevNotify.Result.BrowserSentFormat" xml:space="preserve"><value>Browser notification sent - {0}</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSendingFormat" xml:space="preserve"><value>Sending webhook notification... (as {0}s process)</value></data>
+  <data name="Settings.DevNotify.Result.WebhookSentFormat" xml:space="preserve"><value>Webhook notification sent - {0}</value></data>
+  <data name="Settings.DevNotify.SessionName.Browser" xml:space="preserve"><value>Browser notification test</value></data>
+  <data name="Settings.DevNotify.SessionName.Webhook" xml:space="preserve"><value>Webhook notification test</value></data>
+
+  <!-- Settings: Cross-tab messages (saveMessage / validation / version / export / import) -->
+  <data name="Settings.Message.PermissionGranted" xml:space="preserve"><value>Notifications allowed</value></data>
+  <data name="Settings.Message.PermissionDenied" xml:space="preserve"><value>Notifications denied</value></data>
+  <data name="Settings.Message.OpenFolderErrorFormat" xml:space="preserve"><value>Could not open folder: {0}</value></data>
+  <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>Notification threshold must be 0 or greater</value></data>
+  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Please enter a Webhook URL</value></data>
+  <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>The specified path does not exist</value></data>
+  <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>The specified folder does not exist</value></data>
+  <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>This folder has already been added</value></data>
+  <data name="Settings.Message.SaveSuccess" xml:space="preserve"><value>Settings saved</value></data>
+  <data name="Settings.Message.SaveErrorFormat" xml:space="preserve"><value>Save error: {0}</value></data>
+  <data name="Settings.Message.VersionFetchFailed" xml:space="preserve"><value>Could not retrieve version information</value></data>
+  <data name="Settings.Message.VersionCheckErrorFormat" xml:space="preserve"><value>Check failed: {0}</value></data>
+  <data name="Settings.Message.ExportSuccessFormat" xml:space="preserve"><value>Exported {0} sessions</value></data>
+  <data name="Settings.Message.ExportErrorFormat" xml:space="preserve"><value>Export error: {0}</value></data>
+  <data name="Settings.Message.JsonFileRequired" xml:space="preserve"><value>Please select a JSON file</value></data>
+  <data name="Settings.Message.SessionsNotFound" xml:space="preserve"><value>No sessions found</value></data>
+  <data name="Settings.Message.FileReadErrorFormat" xml:space="preserve"><value>File read error: {0}</value></data>
+  <data name="Settings.Message.ImportResultFormat" xml:space="preserve"><value>Import complete ({0} added, {1} skipped as duplicates). Please reload the page.</value></data>
+  <data name="Settings.Message.ImportErrorFormat" xml:space="preserve"><value>Import error: {0}</value></data>
 </root>
