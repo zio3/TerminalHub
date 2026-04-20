@@ -106,13 +106,13 @@
   <data name="Settings.Display.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Display.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.Display.SessionListScale.Label" xml:space="preserve"><value>Session list scale</value></data>
-  <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>Adjust the session list display scale (50%–150%).</value></data>
+  <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>Scale of the session list (50%–150%).</value></data>
   <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>Terminal font size</value></data>
-  <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Adjust the terminal font size (8px–28px).</value></data>
+  <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Size of terminal text (8px–28px).</value></data>
   <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
-  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Adjust the session list width (15%–40%). You can also drag the border.</value></data>
+  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Width of the session list (15%–40%). You can also drag the border.</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>
-  <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Adjust the height ratio between the terminal and input panel (50:50–90:10). You can also drag the border.</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Height split between terminal and input panel (50:50–90:10). Drag the border to adjust.</value></data>
 
   <!-- Settings: Notifications Tab -->
   <data name="Settings.Notifications.Header" xml:space="preserve"><value>Notifications</value></data>
@@ -128,8 +128,8 @@
   <data name="Settings.Notifications.Browser.RevokeHelp" xml:space="preserve"><value>You can revoke the notification permission from your browser's settings.</value></data>
   <data name="Settings.Notifications.Browser.Request" xml:space="preserve"><value>Allow notifications</value></data>
   <data name="Settings.Notifications.Browser.RequestHelp" xml:space="preserve"><value>To receive desktop notifications when processing completes, please allow browser notifications.</value></data>
-  <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>Notify after processing time (seconds)</value></data>
-  <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>Set to 0 to notify on every completion</value></data>
+  <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>Minimum task duration for notifications (seconds)</value></data>
+  <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>Set to 0 to notify on every completion.</value></data>
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
@@ -145,7 +145,7 @@
   <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last used</value></data>
   <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>Most recently used sessions appear at the top</value></data>
   <data name="Settings.Sessions.SortOrder.ByName" xml:space="preserve"><value>By name</value></data>
-  <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>In "By last accessed" order, usage of child (worktree) sessions is reflected in the parent's position.</value></data>
+  <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>In "By last used" order, usage of child (worktree) sessions is reflected in the parent's position.</value></data>
   <data name="Settings.Sessions.Display.Label" xml:space="preserve"><value>Session list display settings</value></data>
   <data name="Settings.Sessions.Display.ShowTerminalType" xml:space="preserve"><value>Show terminal type</value></data>
   <data name="Settings.Sessions.Display.ShowTerminalTypeSub" xml:space="preserve"><value>Claude / Gemini / Codex badges</value></data>
@@ -154,7 +154,7 @@
   <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>Choose which additional info to display in the session list.</value></data>
   <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>Input panel settings</value></data>
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
-  <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Terminal only</value></data>
+  <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Show terminal only</value></data>
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
 
   <!-- Settings: Export/Import Tab -->
@@ -180,18 +180,20 @@
 
   <!-- Settings: Remote Launch Tab -->
   <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>Remote Launch</value></data>
-  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Launch Claude Code sessions from your phone while away and obtain a Remote Control URL.</value></data>
+  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Start Claude Code sessions from your phone when you're away from your PC. Use the URL below on your mobile device.</value></data>
   <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>Enable remote launch</value></data>
   <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>Connected</value></data>
   <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>Disconnected</value></data>
   <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>Connecting...</value></data>
+  <data name="Settings.RemoteLaunch.LastTested" xml:space="preserve"><value>Last tested</value></data>
+  <data name="Settings.RemoteLaunch.ResultCodeFormat" xml:space="preserve"><value>ResultCode: {0}</value></data>
   <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>Test connection</value></data>
   <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>Checking...</value></data>
   <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (round-trip {0} ms)</value></data>
   <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>Failed: {0}</value></data>
   <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>Access URL</value></data>
   <data name="Settings.RemoteLaunch.CopyUrlTitle" xml:space="preserve"><value>Copy URL</value></data>
-  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>Do not share this URL. Anyone who knows it can launch sessions.</value></data>
+  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>Keep this URL private. Anyone with this URL can launch sessions on your machine.</value></data>
   <data name="Settings.RemoteLaunch.PasswordLabel" xml:space="preserve"><value>Password (optional)</value></data>
   <data name="Settings.RemoteLaunch.PasswordPlaceholder" xml:space="preserve"><value>When set, a password will be required at access time</value></data>
   <data name="Settings.RemoteLaunch.PasswordHelp" xml:space="preserve"><value>If empty, the URL alone grants access.</value></data>
@@ -211,10 +213,10 @@
   <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>When enabled, a microphone button appears in the text input panel. Speech recognition only runs while the button is held down (Chrome recommended).</value></data>
   <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>Text pre-refinement</value></data>
   <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>Enable pre-refinement button (experimental)</value></data>
-  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>When enabled, a &lt;i class="bi bi-stars"&gt;&lt;/i&gt; Refine button appears in the text input panel. Pressing it uses Claude Code CLI (Haiku model) to fix typos and inconsistencies.&lt;br/&gt;The refinement instructions can be customized by editing &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt;.</value></data>
+  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>When enabled, a &lt;i class="bi bi-stars"&gt;&lt;/i&gt; Refine button appears in the text input panel. Pressing it runs Claude Code CLI (Haiku model) to fix typos and polish phrasing.&lt;br/&gt;The refinement instructions can be customized by editing &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt;.</value></data>
   <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>Developer tools</value></data>
   <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>Enable developer tools</value></data>
-  <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs are shown.</value></data>
+  <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs appear in the input panel.</value></data>
   <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>Log files</value></data>
   <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>Open log folder</value></data>
   <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>
@@ -317,7 +319,7 @@
   <data name="SessionOptions.Claude.PermissionMode.Label" xml:space="preserve"><value>Permission mode</value></data>
   <data name="SessionOptions.Claude.PermissionMode.BypassLabel" xml:space="preserve"><value>Bypass</value></data>
   <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>Auto-approves all operations unconditionally (dangerous)</value></data>
-  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>Auto mode</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>Auto</value></data>
   <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>Default</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every operation</value></data>
@@ -375,7 +377,7 @@
   <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>Limits external communication and file access.</value></data>
   <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Uses the Codex CLI default.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>Approval policy</value></data>
-  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>Operation approval level (--ask-for-approval)</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>When Codex should ask for approval (--ask-for-approval)</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
@@ -385,10 +387,10 @@
   <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>Restricts network access.</value></data>
   <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>Profile</value></data>
   <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>e.g., trusted</value></data>
-  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Specifies --profile for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Passed as --profile to Codex CLI</value></data>
   <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>Model</value></data>
   <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>e.g., gpt-5-codex</value></data>
-  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Specifies --model for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Passed as --model to Codex CLI</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
@@ -408,13 +410,13 @@
   <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>Create sub-session</value></data>
   <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>Manage memos</value></data>
   <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>Display name</value></data>
-  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>Session display name</value></data>
+  <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>Custom name (optional)</value></data>
   <data name="SessionSettings.DisplayName.Help" xml:space="preserve"><value>If blank, the folder name will be used</value></data>
   <data name="SessionSettings.Pin.Label" xml:space="preserve"><value>Pin this session</value></data>
   <data name="SessionSettings.Pin.PriorityLabel" xml:space="preserve"><value>Priority:</value></data>
   <data name="SessionSettings.Memo.Label" xml:space="preserve"><value>Memo</value></data>
-  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>Memo for this session</value></data>
-  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>Write any notes about this session here</value></data>
+  <data name="SessionSettings.Memo.Placeholder" xml:space="preserve"><value>e.g., Working on auth refactor</value></data>
+  <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>Shown in session details.</value></data>
   <data name="SessionSettings.Loading" xml:space="preserve"><value>Loading session info...</value></data>
   <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>Apply changes immediately (restart session)</value></data>
   <data name="SessionSettings.Save" xml:space="preserve"><value>Save</value></data>
@@ -511,7 +513,7 @@
   <data name="BottomPanel.CloseTab" xml:space="preserve"><value>Close tab</value></data>
   <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>Add Command Prompt</value></data>
   <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>Add PowerShell</value></data>
-  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>Add memo</value></data>
+  <data name="BottomPanel.AddMemo" xml:space="preserve"><value>Add Memo</value></data>
   <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>Text input</value></data>
   <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>Text input ({0})</value></data>
   <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>Command Prompt ({0})</value></data>
