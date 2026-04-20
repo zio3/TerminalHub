@@ -56,19 +56,10 @@ public class AppSettingsService : IAppSettingsService
         _logger = logger;
         _httpClientFactory = httpClientFactory;
 
-        // 設定ファイルはユーザーの LocalApplicationData 配下 (%LOCALAPPDATA%\TerminalHub\) に保存する。
-        // 実行ファイルと同じディレクトリだと C:\Program Files 配下にインストールした場合に書き込み権限が無く、
-        // サイレントに保存失敗する問題があったため。
-        // ファイル名は Development 環境で "app-settings-dev.json" に切り替え、dev/prod の設定を分離する。
-        // appsettings.Development.json は gitignore 対象なので環境変数ベースの既定を採用。
-        var userDataRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TerminalHub");
-        Directory.CreateDirectory(userDataRoot);
-
-        var defaultFileName = hostEnvironment.IsDevelopment() ? "app-settings-dev.json" : "app-settings.json";
-        var fileName = configuration.GetValue<string>("AppSettings:FileName") ?? defaultFileName;
-        _settingsFilePath = Path.Combine(userDataRoot, fileName);
+        // 設定ファイルは %LOCALAPPDATA%\TerminalHub\ 配下に保存 (書き込み権限と dev/prod 分離は AppDataPaths 参照)。
+        _settingsFilePath = AppDataPaths.GetAppSettingsFilePath(
+            hostEnvironment.IsDevelopment(),
+            configuration.GetValue<string>("AppSettings:FileName"));
 
         // 旧バージョン (v1.0.54 以前) の設定ファイルが実行ファイル隣に残っていれば 1 回だけ移行する。
         // 失敗しても既定値で続行できるよう、例外は握り潰してログのみ残す。

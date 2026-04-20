@@ -1354,13 +1354,10 @@
     {
         try
         {
-            // Program.cs と同じロジックで dev/prod のフォルダを解決する (Development 環境は "logs-dev")
-            var defaultLogsFolderName = HostEnvironment.IsDevelopment() ? "logs-dev" : "logs";
-            var logsFolderName = Configuration.GetValue<string>("Logging:FolderName") ?? defaultLogsFolderName;
-            var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "TerminalHub",
-                logsFolderName);
+            // Program.cs と同じヘルパーで dev/prod のフォルダを解決する (Development 環境は "logs-dev")
+            var logPath = AppDataPaths.GetLogsFolder(
+                HostEnvironment.IsDevelopment(),
+                Configuration.GetValue<string>("Logging:FolderName"));
             if (!Directory.Exists(logPath))
             {
                 Directory.CreateDirectory(logPath);
