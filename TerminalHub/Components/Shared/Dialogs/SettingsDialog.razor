@@ -248,16 +248,16 @@
                         else if (activeTab == "display")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">表示設定</h6>
+                                <h6 class="mb-3">@L["Settings.Display.Header"]</h6>
 
                                 <div class="mb-4">
-                                    <label class="form-label">テーマ</label>
+                                    <label class="form-label">@L["Settings.Display.Theme.Label"]</label>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="themeMode"
                                                id="themeLight" value="light" checked="@(theme == "light")"
                                                @onchange="@(() => OnThemePreviewChange("light"))">
                                         <label class="form-check-label" for="themeLight">
-                                            <i class="bi bi-sun me-1"></i>ライト
+                                            <i class="bi bi-sun me-1"></i>@L["Settings.Display.Theme.Light"]
                                         </label>
                                     </div>
                                     <div class="form-check">
@@ -265,13 +265,13 @@
                                                id="themeDark" value="dark" checked="@(theme == "dark")"
                                                @onchange="@(() => OnThemePreviewChange("dark"))">
                                         <label class="form-check-label" for="themeDark">
-                                            <i class="bi bi-moon-stars me-1"></i>ダーク
+                                            <i class="bi bi-moon-stars me-1"></i>@L["Settings.Display.Theme.Dark"]
                                         </label>
                                     </div>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">セッションリスト表示倍率</label>
+                                    <label class="form-label">@L["Settings.Display.SessionListScale.Label"]</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
                                                min="0.5" max="1.5" step="0.05"
@@ -280,12 +280,12 @@
                                         <span class="badge bg-secondary" style="min-width: 50px;">@((sessionListScale * 100).ToString("0"))%</span>
                                     </div>
                                     <small class="text-muted">
-                                        セッションリストの表示倍率を調整します（50%〜150%）。
+                                        @L["Settings.Display.SessionListScale.Help"]
                                     </small>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">ターミナルフォントサイズ</label>
+                                    <label class="form-label">@L["Settings.Display.TerminalFontSize.Label"]</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
                                                min="8" max="28" step="1"
@@ -294,12 +294,12 @@
                                         <span class="badge bg-secondary" style="min-width: 50px;">@(terminalFontSize)px</span>
                                     </div>
                                     <small class="text-muted">
-                                        ターミナルのフォントサイズを調整します（8px〜28px）。
+                                        @L["Settings.Display.TerminalFontSize.Help"]
                                     </small>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">サイドバー幅</label>
+                                    <label class="form-label">@L["Settings.Display.SidebarWidth.Label"]</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
                                                min="15" max="40" step="1"
@@ -308,12 +308,12 @@
                                         <span class="badge bg-secondary" style="min-width: 60px;">@(sidebarWidthPercent)%</span>
                                     </div>
                                     <small class="text-muted">
-                                        セッションリストの幅を調整します（15%〜40%）。境界線のドラッグでも変更できます。
+                                        @L["Settings.Display.SidebarWidth.Help"]
                                     </small>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label">ターミナル / 入力パネル比率</label>
+                                    <label class="form-label">@L["Settings.Display.TerminalHeightRatio.Label"]</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
                                                min="20" max="90" step="1"
@@ -322,7 +322,7 @@
                                         <span class="badge bg-secondary" style="min-width: 80px;">@(terminalHeightPercent) / @(100 - terminalHeightPercent)</span>
                                     </div>
                                     <small class="text-muted">
-                                        ターミナルと入力パネルの高さ比率を調整します（50:50〜90:10）。境界線のドラッグでも変更できます。
+                                        @L["Settings.Display.TerminalHeightRatio.Help"]
                                     </small>
                                 </div>
                             </div>
@@ -330,85 +330,83 @@
                         else if (activeTab == "notifications")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">通知設定</h6>
-                    
+                                <h6 class="mb-3">@L["Settings.Notifications.Header"]</h6>
+
                     <div class="mb-4">
                         <div class="d-flex align-items-center justify-content-between mb-2">
-                            <label class="form-label mb-0">ブラウザ通知</label>
-                            <span class="badge @GetNotificationBadgeClass()">@notificationStatus</span>
+                            <label class="form-label mb-0">@L["Settings.Notifications.Browser.Label"]</label>
+                            <span class="badge @GetNotificationBadgeClass()">@GetNotificationStatusText()</span>
                         </div>
-                        @if (notificationStatus == "許可済み")
+                        @if (notificationStatus == NotifStateGranted)
                         {
                             <div class="form-check form-switch mb-2">
                                 <input class="form-check-input" type="checkbox" @bind="browserNotificationEnabled" id="browserNotificationSwitch">
                                 <label class="form-check-label" for="browserNotificationSwitch">
-                                    ブラウザ通知を有効にする
+                                    @L["Settings.Notifications.Browser.Enable"]
                                 </label>
                             </div>
                             <button class="btn btn-outline-secondary btn-sm" @onclick="OpenBrowserNotificationSettings">
-                                <i class="bi bi-gear me-1"></i>通知許可を解除
+                                <i class="bi bi-gear me-1"></i>@L["Settings.Notifications.Browser.Revoke"]
                             </button>
                             <p class="text-muted small mt-2 mb-0">
-                                ブラウザの設定画面で通知許可を解除できます。
+                                @L["Settings.Notifications.Browser.RevokeHelp"]
                             </p>
                         }
-                        else if (notificationStatus == "未許可")
+                        else if (notificationStatus == NotifStateNotRequested)
                         {
                             <button class="btn btn-primary btn-sm" @onclick="RequestNotificationPermission">
-                                <i class="bi bi-bell me-1"></i>通知を許可する
+                                <i class="bi bi-bell me-1"></i>@L["Settings.Notifications.Browser.Request"]
                             </button>
                             <p class="text-muted small mt-2 mb-0">
-                                処理完了時にデスクトップ通知を受け取るには、ブラウザの通知を許可してください。
+                                @L["Settings.Notifications.Browser.RequestHelp"]
                             </p>
                         }
                     </div>
-                    
+
                     <div class="mb-4">
-                        <label class="form-label">通知を送信する処理時間（秒）</label>
+                        <label class="form-label">@L["Settings.Notifications.Threshold.Label"]</label>
                         <input type="number" class="form-control" @bind="thresholdSeconds" min="0" max="3600" />
-                        <small class="text-muted">0に設定すると、すべての処理完了時に通知します</small>
+                        <small class="text-muted">@L["Settings.Notifications.Threshold.Help"]</small>
                     </div>
-                    
+
                     <hr />
-                    
-                    <h6 class="mb-3">WebHook設定</h6>
-                    
+
+                    <h6 class="mb-3">@L["Settings.Notifications.Webhook.Header"]</h6>
+
                     <div class="mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" @bind="webHookEnabled" id="webHookSwitch">
                             <label class="form-check-label" for="webHookSwitch">
-                                WebHook通知を有効にする
+                                @L["Settings.Notifications.Webhook.Enable"]
                             </label>
                         </div>
                     </div>
-                    
+
                     @if (webHookEnabled)
                     {
                         <div class="mb-3">
-                            <label class="form-label">WebHook URL</label>
+                            <label class="form-label">@L["Settings.Notifications.Webhook.UrlLabel"]</label>
                             <input type="url" class="form-control" @bind="webHookUrl" placeholder="https://example.com/webhook" />
                         </div>
                     }
 
                     <hr />
 
-                    <h6 class="mb-3">Claude Code Hook設定</h6>
+                    <h6 class="mb-3">@L["Settings.Notifications.ClaudeHook.Header"]</h6>
                     <p class="text-muted small mb-3">
-                        Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。
-                        セッション作成時に自動的に <code>.claude/settings.local.json</code> に設定が追加されます。
+                        @((MarkupString)L["Settings.Notifications.ClaudeHook.HelpHtml"].Value)
                     </p>
 
                     <div class="mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" @bind="claudeHookEnabled" id="claudeHookSwitch">
                             <label class="form-check-label" for="claudeHookSwitch">
-                                Claude Code Hook を有効にする
+                                @L["Settings.Notifications.ClaudeHook.Enable"]
                             </label>
                         </div>
                         <small class="text-muted d-block mt-1">
                             <i class="bi bi-info-circle me-1"></i>
-                            この設定は各セッションが次に起動／再起動されたタイミングで <code>.claude/settings.local.json</code> に反映されます。
-                            既に起動中のセッションや、TerminalHub 管理外のワークスペースには即時適用されません。
+                            @((MarkupString)L["Settings.Notifications.ClaudeHook.ApplyNoticeHtml"].Value)
                         </small>
                     </div>
 
@@ -417,16 +415,16 @@
                         else if (activeTab == "sessions")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">セッション設定</h6>
+                                <h6 class="mb-3">@L["Settings.Sessions.Header"]</h6>
 
                                 <div class="mb-4">
-                                    <label class="form-label">セッション一覧の並び順</label>
+                                    <label class="form-label">@L["Settings.Sessions.SortOrder.Label"]</label>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="sessionSortMode"
                                                id="sortByCreatedAt" value="createdAt" checked="@(sessionSortMode == "createdAt")"
                                                @onchange="@(() => sessionSortMode = "createdAt")">
                                         <label class="form-check-label" for="sortByCreatedAt">
-                                            <i class="bi bi-calendar-plus me-1"></i>作成日時順
+                                            <i class="bi bi-calendar-plus me-1"></i>@L["Settings.Sessions.SortOrder.ByCreatedAt"]
                                         </label>
                                     </div>
                                     <div class="form-check">
@@ -434,8 +432,8 @@
                                                id="sortByLastAccessed" value="lastAccessed" checked="@(sessionSortMode == "lastAccessed")"
                                                @onchange="@(() => sessionSortMode = "lastAccessed")">
                                         <label class="form-check-label" for="sortByLastAccessed">
-                                            <i class="bi bi-clock-history me-1"></i>最終利用日時順
-                                            <span class="text-muted small">（最近使用したセッションが上に表示）</span>
+                                            <i class="bi bi-clock-history me-1"></i>@L["Settings.Sessions.SortOrder.ByLastAccessed"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.SortOrder.ByLastAccessedSub"]）</span>
                                         </label>
                                     </div>
                                     <div class="form-check">
@@ -443,53 +441,53 @@
                                                id="sortByName" value="name" checked="@(sessionSortMode == "name")"
                                                @onchange="@(() => sessionSortMode = "name")">
                                         <label class="form-check-label" for="sortByName">
-                                            <i class="bi bi-sort-alpha-down me-1"></i>名前順
+                                            <i class="bi bi-sort-alpha-down me-1"></i>@L["Settings.Sessions.SortOrder.ByName"]
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        「最終利用日時順」では、子セッション（Worktree）の利用も親セッションの順序に反映されます。
+                                        @L["Settings.Sessions.SortOrder.Help"]
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <label class="form-label">セッション一覧の表示設定</label>
+                                    <label class="form-label">@L["Settings.Sessions.Display.Label"]</label>
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" @bind="showTerminalType" id="showTerminalType">
                                         <label class="form-check-label" for="showTerminalType">
-                                            <i class="bi bi-tag me-1"></i>ターミナル種別を表示
-                                            <span class="text-muted small">（Claude/Gemini/Codexバッジ）</span>
+                                            <i class="bi bi-tag me-1"></i>@L["Settings.Sessions.Display.ShowTerminalType"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.Display.ShowTerminalTypeSub"]）</span>
                                         </label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" @bind="showGitInfo" id="showGitInfo">
                                         <label class="form-check-label" for="showGitInfo">
-                                            <i class="bi bi-git me-1"></i>Git情報を表示
-                                            <span class="text-muted small">（ブランチ名バッジ）</span>
+                                            <i class="bi bi-git me-1"></i>@L["Settings.Sessions.Display.ShowGitInfo"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.Display.ShowGitInfoSub"]）</span>
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        セッション一覧に表示する追加情報を選択できます。
+                                        @L["Settings.Sessions.Display.Help"]
                                     </p>
                                 </div>
 
                                 <hr />
 
                                 <div class="mb-4">
-                                    <label class="form-label">入力パネル設定</label>
+                                    <label class="form-label">@L["Settings.Sessions.InputPanel.Label"]</label>
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" @bind="hideInputPanel" id="hideInputPanel">
                                         <label class="form-check-label" for="hideInputPanel">
-                                            <i class="bi bi-textarea me-1"></i>入力パネルを非表示
-                                            <span class="text-muted small">（ターミナルのみ表示）</span>
+                                            <i class="bi bi-textarea me-1"></i>@L["Settings.Sessions.InputPanel.Hide"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.InputPanel.HideSub"]）</span>
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        下部の入力パネルを非表示にして、ターミナル領域を広く使えます。
+                                        @L["Settings.Sessions.InputPanel.HideHelp"]
                                     </p>
                                 </div>
                             </div>
@@ -1058,7 +1056,16 @@
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
 
-    private string notificationStatus = "確認中...";
+    // notificationStatus はブラウザの Notification API の permission 値 ("granted"/"denied"/"default")
+    // に、アプリ側の擬似状態 ("checking"/"error"/"unknown") を追加した state key を保持する。
+    // UI 表示文字列は GetNotificationStatusText() / GetNotificationBadgeClass() で解決する。
+    private const string NotifStateChecking = "checking";
+    private const string NotifStateGranted = "granted";
+    private const string NotifStateDenied = "denied";
+    private const string NotifStateNotRequested = "default"; // JS permission "default" = 未許可
+    private const string NotifStateError = "error";
+    private const string NotifStateUnknown = "unknown";
+    private string notificationStatus = NotifStateChecking;
     private int thresholdSeconds = 60;
     private bool browserNotificationEnabled = true;
     private bool webHookEnabled = false;
@@ -1320,15 +1327,15 @@
             var permission = await JSRuntime.InvokeAsync<string>("terminalHubHelpers.checkNotificationPermission");
             notificationStatus = permission switch
             {
-                "granted" => "許可済み",
-                "denied" => "拒否",
-                "default" => "未許可",
-                _ => "不明"
+                "granted" => NotifStateGranted,
+                "denied" => NotifStateDenied,
+                "default" => NotifStateNotRequested,
+                _ => NotifStateUnknown
             };
         }
         catch
         {
-            notificationStatus = "確認エラー";
+            notificationStatus = NotifStateError;
         }
     }
     
@@ -1848,11 +1855,26 @@
     {
         return notificationStatus switch
         {
-            "許可済み" => "bg-success",
-            "拒否" => "bg-danger",
-            "未許可" => "bg-warning",
+            NotifStateGranted => "bg-success",
+            NotifStateDenied => "bg-danger",
+            NotifStateNotRequested => "bg-warning",
             _ => "bg-secondary"
         };
+    }
+
+    // notificationStatus (state key) に対応する localized 表示文字列を返す
+    private string GetNotificationStatusText()
+    {
+        var key = notificationStatus switch
+        {
+            NotifStateGranted => "Granted",
+            NotifStateDenied => "Denied",
+            NotifStateNotRequested => "NotRequested",
+            NotifStateChecking => "Checking",
+            NotifStateError => "CheckError",
+            _ => "Unknown"
+        };
+        return L[$"Settings.Notifications.Status.{key}"];
     }
     
     private async Task Close()

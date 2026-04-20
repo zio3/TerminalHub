@@ -94,4 +94,61 @@
   <data name="Settings.General.Community.Header" xml:space="preserve"><value>Community</value></data>
   <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Join the Discord server</value></data>
   <data name="Settings.General.Community.Help" xml:space="preserve"><value>Bug reports, feature requests, and questions are welcome there.</value></data>
+
+  <!-- Settings: Display Tab -->
+  <data name="Settings.Display.Header" xml:space="preserve"><value>Display</value></data>
+  <data name="Settings.Display.Theme.Label" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings.Display.Theme.Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Settings.Display.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Settings.Display.SessionListScale.Label" xml:space="preserve"><value>Session list scale</value></data>
+  <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>Adjust the session list display scale (50%–150%).</value></data>
+  <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>Terminal font size</value></data>
+  <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Adjust the terminal font size (8px–28px).</value></data>
+  <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
+  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Adjust the session list width (15%–40%). You can also drag the border.</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>
+  <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Adjust the height ratio between the terminal and input panel (50:50–90:10). You can also drag the border.</value></data>
+
+  <!-- Settings: Notifications Tab -->
+  <data name="Settings.Notifications.Header" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Settings.Notifications.Browser.Label" xml:space="preserve"><value>Browser notifications</value></data>
+  <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>Allowed</value></data>
+  <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>Denied</value></data>
+  <data name="Settings.Notifications.Status.NotRequested" xml:space="preserve"><value>Not requested</value></data>
+  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>Checking...</value></data>
+  <data name="Settings.Notifications.Status.CheckError" xml:space="preserve"><value>Check failed</value></data>
+  <data name="Settings.Notifications.Status.Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Settings.Notifications.Browser.Enable" xml:space="preserve"><value>Enable browser notifications</value></data>
+  <data name="Settings.Notifications.Browser.Revoke" xml:space="preserve"><value>Revoke notification permission</value></data>
+  <data name="Settings.Notifications.Browser.RevokeHelp" xml:space="preserve"><value>You can revoke the notification permission from your browser's settings.</value></data>
+  <data name="Settings.Notifications.Browser.Request" xml:space="preserve"><value>Allow notifications</value></data>
+  <data name="Settings.Notifications.Browser.RequestHelp" xml:space="preserve"><value>To receive desktop notifications when processing completes, please allow browser notifications.</value></data>
+  <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>Notify after processing time (seconds)</value></data>
+  <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>Set to 0 to notify on every completion</value></data>
+  <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
+  <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
+  <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook</value></data>
+  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use Claude Code's hook feature to receive notifications more reliably. Settings are automatically added to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; when a session is created.</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Enable Claude Code Hook</value></data>
+  <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>This setting is applied to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; the next time each session is started/restarted. It is not applied immediately to running sessions or workspaces outside TerminalHub's management.</value></data>
+
+  <!-- Settings: Sessions Tab -->
+  <data name="Settings.Sessions.Header" xml:space="preserve"><value>Sessions</value></data>
+  <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
+  <data name="Settings.Sessions.SortOrder.ByCreatedAt" xml:space="preserve"><value>By creation date</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last accessed</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>Most recently used appear at the top</value></data>
+  <data name="Settings.Sessions.SortOrder.ByName" xml:space="preserve"><value>By name</value></data>
+  <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>In "By last accessed" order, usage of child (worktree) sessions is reflected in the parent's position.</value></data>
+  <data name="Settings.Sessions.Display.Label" xml:space="preserve"><value>Session list display settings</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalType" xml:space="preserve"><value>Show terminal type</value></data>
+  <data name="Settings.Sessions.Display.ShowTerminalTypeSub" xml:space="preserve"><value>Claude / Gemini / Codex badges</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfo" xml:space="preserve"><value>Show Git info</value></data>
+  <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>Branch name badge</value></data>
+  <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>Choose which additional info to display in the session list.</value></data>
+  <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>Input panel settings</value></data>
+  <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
+  <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Terminal only</value></data>
+  <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
 </root>
