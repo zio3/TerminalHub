@@ -174,9 +174,13 @@ app.Use((context, next) =>
 {
     context.Response.OnStarting(() =>
     {
-        var culture = System.Globalization.CultureInfo.CurrentUICulture.Name;
-        var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(
-            new Microsoft.AspNetCore.Localization.RequestCulture(culture));
+        // 実リクエストで解決された culture を IRequestCultureFeature から取得する。
+        // CurrentUICulture は AsyncLocal で OnStarting 発火時に壊れているケースがあるので、
+        // より信頼できる Feature 経由で取り直す。
+        var feature = context.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>();
+        var culture = feature?.RequestCulture ??
+                      new Microsoft.AspNetCore.Localization.RequestCulture(System.Globalization.CultureInfo.CurrentUICulture);
+        var cookieValue = Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(culture);
         context.Response.Cookies.Append(
             Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
             cookieValue,

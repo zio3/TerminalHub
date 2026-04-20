@@ -1866,6 +1866,8 @@
     private async Task ChangeUiCulture(ChangeEventArgs e)
     {
         var next = e.Value?.ToString();
+        // 診断用ログ: 切替リクエストが Blazor 側に届いているかを可視化
+        Console.WriteLine($"[TerminalHub i18n] ChangeUiCulture: current={currentCulture}, next={next}, serverUICulture={System.Globalization.CultureInfo.CurrentUICulture.Name}");
         if (string.IsNullOrWhiteSpace(next) || next == currentCulture) return;
         await JSRuntime.InvokeVoidAsync("terminalHubHelpers.setUiCulture", next);
     }
