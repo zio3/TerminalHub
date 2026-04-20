@@ -300,4 +300,98 @@
   <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>Create Folder</value></data>
   <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>Create this folder?</value></data>
   <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>Create</value></data>
+
+  <!-- SessionOptionsSelector: common -->
+  <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>Terminal type</value></data>
+  <data name="SessionOptions.TerminalType.Terminal" xml:space="preserve"><value>Terminal</value></data>
+  <data name="SessionOptions.ExtraArgs.Label" xml:space="preserve"><value>Additional arguments</value></data>
+
+  <!-- SessionOptionsSelector: Terminal (default startup command) -->
+  <data name="SessionOptions.Terminal.StartupCommand.Label" xml:space="preserve"><value>Startup command (optional)</value></data>
+  <data name="SessionOptions.Terminal.StartupCommand.Placeholder" xml:space="preserve"><value>e.g., cmd.exe, powershell.exe</value></data>
+
+  <!-- SessionOptionsSelector: Claude Code -->
+  <data name="SessionOptions.Claude.Header" xml:space="preserve"><value>Claude Code Options</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.Label" xml:space="preserve"><value>Permission mode</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassLabel" xml:space="preserve"><value>Bypass</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>Auto-approves all operations unconditionally (dangerous)</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>Auto mode</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>Default</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every operation</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>Auto-approves all operations unconditionally (--dangerously-skip-permissions).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones (--enable-auto-mode).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every operation.</value></data>
+  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>Continue (--continue)</value></data>
+  <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>Browser integration (--chrome)</value></data>
+  <data name="SessionOptions.Claude.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --model claude-sonnet-4-20250514 --verbose</value></data>
+  <data name="SessionOptions.Claude.PassToCli" xml:space="preserve"><value>Passed as-is to Claude Code</value></data>
+
+  <!-- SessionOptionsSelector: Gemini CLI -->
+  <data name="SessionOptions.Gemini.Header" xml:space="preserve"><value>Gemini CLI Options</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.Label" xml:space="preserve"><value>Approval mode</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every tool use (default)</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.AutoEditTitle" xml:space="preserve"><value>Auto-approves safe operations like file edits</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.YoloTitle" xml:space="preserve"><value>Auto-approves all operations without warning (dangerous)</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every tool use (default).</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpAutoEdit" xml:space="preserve"><value>Auto-approves safe operations like file edits.</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpYolo" xml:space="preserve"><value>Auto-approves all operations without warning (dangerous).</value></data>
+  <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>Sandbox mode (-s)</value></data>
+  <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>Docker Desktop must be installed to use this feature.</value></data>
+  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>Continue (--resume latest)</value></data>
+  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>Customize model</value></data>
+  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>Model to use</value></data>
+  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>Model list management</value></data>
+  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>Add a model name...</value></data>
+  <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --debug --allowed-tools shell,file</value></data>
+  <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>Passed as-is to Gemini CLI</value></data>
+
+  <!-- SessionOptionsSelector: Codex CLI -->
+  <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
+  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>Execution mode</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (recommended)</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>Mostly automates edits, builds, and tests</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Adds `--full-auto` for mostly automatic execution.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume last session (resume --last)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>Sandbox mode</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI default</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>Do not add --sandbox; use the Codex CLI default.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyLabel" xml:space="preserve"><value>Read-only</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyTitle" xml:space="preserve"><value>Read-only. Writes are blocked.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceLabel" xml:space="preserve"><value>Workspace (recommended)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceTitle" xml:space="preserve"><value>Writable only within the workspace.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessLabel" xml:space="preserve"><value>Full access</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessTitle" xml:space="preserve"><value>Full access (dangerous).</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>Limits external communication and file access.</value></data>
+  <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Uses the Codex CLI default.</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>Approval policy</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Unspecified" xml:space="preserve"><value>Unspecified</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>Operation approval level (--ask-for-approval)</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>Network access</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>Network permission for workspace-write (-c sandbox_workspace_write.network_access). Default is enabled.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>Allows network access.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>Restricts network access.</value></data>
+  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>Profile</value></data>
+  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>e.g., trusted</value></data>
+  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Specifies --profile for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>Model</value></data>
+  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>e.g., gpt-5-codex</value></data>
+  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Specifies --model for Codex CLI</value></data>
+  <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
 </root>

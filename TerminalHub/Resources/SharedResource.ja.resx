@@ -300,4 +300,98 @@
   <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>フォルダの作成</value></data>
   <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>このフォルダを作成しますか？</value></data>
   <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>作成する</value></data>
+
+  <!-- SessionOptionsSelector: common -->
+  <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>ターミナルタイプ</value></data>
+  <data name="SessionOptions.TerminalType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
+  <data name="SessionOptions.ExtraArgs.Label" xml:space="preserve"><value>追加引数</value></data>
+
+  <!-- SessionOptionsSelector: Terminal (default startup command) -->
+  <data name="SessionOptions.Terminal.StartupCommand.Label" xml:space="preserve"><value>起動コマンド（任意）</value></data>
+  <data name="SessionOptions.Terminal.StartupCommand.Placeholder" xml:space="preserve"><value>例: cmd.exe, powershell.exe</value></data>
+
+  <!-- SessionOptionsSelector: Claude Code -->
+  <data name="SessionOptions.Claude.Header" xml:space="preserve"><value>Claude Code オプション</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.Label" xml:space="preserve"><value>権限モード</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassLabel" xml:space="preserve"><value>バイパス</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>全操作を無条件で自動承認します（危険）</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>オートモード</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>デフォルト</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>全ての操作で都度確認を求めます</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>全操作を無条件で自動承認します（--dangerously-skip-permissions）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>全ての操作で都度確認を求めます。</value></data>
+  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>コンティニュー (--continue)</value></data>
+  <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>ブラウザ連携 (--chrome)</value></data>
+  <data name="SessionOptions.Claude.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model claude-sonnet-4-20250514 --verbose</value></data>
+  <data name="SessionOptions.Claude.PassToCli" xml:space="preserve"><value>そのまま Claude Code に渡します</value></data>
+
+  <!-- SessionOptionsSelector: Gemini CLI -->
+  <data name="SessionOptions.Gemini.Header" xml:space="preserve"><value>Gemini CLI オプション</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.Label" xml:space="preserve"><value>承認モード</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.DefaultTitle" xml:space="preserve"><value>ツール使用時に都度確認を求めます（デフォルト）</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.AutoEditTitle" xml:space="preserve"><value>ファイル編集など、安全な操作を自動で承認します</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.YoloTitle" xml:space="preserve"><value>全ての操作を警告なしで自動的に承認します（危険）</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpDefault" xml:space="preserve"><value>ツール使用時に都度確認を求めます（デフォルト）。</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpAutoEdit" xml:space="preserve"><value>ファイル編集など、安全な操作を自動で承認します。</value></data>
+  <data name="SessionOptions.Gemini.ApprovalMode.HelpYolo" xml:space="preserve"><value>全ての操作を警告なしで自動的に承認します（危険）。</value></data>
+  <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>サンドボックスモード (-s)</value></data>
+  <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>この機能を使用するには、Docker Desktop がインストールされている必要があります。</value></data>
+  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>コンティニュー (--resume latest)</value></data>
+  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>モデルをカスタマイズ</value></data>
+  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>使用するモデル</value></data>
+  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>モデルリスト管理</value></data>
+  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>モデル名を追加...</value></data>
+  <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --debug --allowed-tools shell,file</value></data>
+  <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>そのまま Gemini CLI に渡します</value></data>
+
+  <!-- SessionOptionsSelector: Codex CLI -->
+  <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
+  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>実行モード</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (推奨)</value></data>
+  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>編集＋ビルド/テスト等を基本自動化</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
+  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (危険)</value></data>
+  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--full-auto` を付けて自動実行寄りに進めます。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨です。</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>最新セッションを再開 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
+  <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyLabel" xml:space="preserve"><value>読み取り専用</value></data>
+  <data name="SessionOptions.Codex.Sandbox.ReadOnlyTitle" xml:space="preserve"><value>読み取り専用。書き込みはブロック。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceLabel" xml:space="preserve"><value>ワークスペース (推奨)</value></data>
+  <data name="SessionOptions.Codex.Sandbox.WorkspaceTitle" xml:space="preserve"><value>ワークスペース内のみ書き込み可能。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessLabel" xml:space="preserve"><value>フルアクセス</value></data>
+  <data name="SessionOptions.Codex.Sandbox.FullAccessTitle" xml:space="preserve"><value>フルアクセス（危険）。</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>外部通信やファイルアクセス範囲を制限</value></data>
+  <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Codex CLI の既定値に任せます。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>承認ポリシー</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Unspecified" xml:space="preserve"><value>未指定</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>操作の承認レベル（--ask-for-approval）</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>ネットワークアクセス</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>workspace-write 時の通信許可（-c sandbox_workspace_write.network_access）。デフォルトは enabled。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>ネットワークアクセスを許可します。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>ネットワークアクセスを制限します。</value></data>
+  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>プロファイル</value></data>
+  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>例: trusted</value></data>
+  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Codex CLI の `--profile` を指定します</value></data>
+  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>モデル</value></data>
+  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>例: gpt-5-codex</value></data>
+  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Codex CLI の `--model` を指定します</value></data>
+  <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
+  <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
 </root>

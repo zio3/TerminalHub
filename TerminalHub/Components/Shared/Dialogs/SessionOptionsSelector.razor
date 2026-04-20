@@ -1,19 +1,21 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.Localization
 @using Microsoft.JSInterop
 @inject IConfiguration Configuration
 @inject ILocalStorageService LocalStorage
+@inject IStringLocalizer<SharedResource> L
 
 <div class="session-options">
     <div class="mb-3">
-        <label class="form-label d-block">ターミナルタイプ</label>
+        <label class="form-label d-block">@L["SessionOptions.TerminalType.Label"]</label>
         <div class="btn-group d-flex" role="group">
             <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType1{UniqueId}")"
                    checked="@(SelectedType == TerminalType.Terminal)"
                    @onchange="() => OnTerminalTypeChanged(TerminalType.Terminal)" autocomplete="off">
             <label class="btn btn-outline-primary" for="@($"terminalType1{UniqueId}")">
-                <i class="bi bi-terminal"></i> ターミナル
+                <i class="bi bi-terminal"></i> @L["SessionOptions.TerminalType.Terminal"]
             </label>
 
             @if (Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true))
@@ -51,31 +53,31 @@
     @if (SelectedType == TerminalType.ClaudeCode && Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true))
     {
         <div class="mb-3">
-            <label class="form-label">Claude Code オプション</label>
+            <label class="form-label">@L["SessionOptions.Claude.Header"]</label>
 
             <!-- 権限モード -->
             <div class="mt-2">
-                <label class="form-label small text-muted mb-1">権限モード</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Claude.PermissionMode.Label"]</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermBypass{UniqueId}")"
                            checked="@(ClaudeOptions.PermissionMode == "bypass")"
                            @onchange="@(() => ClaudeOptions.PermissionMode = "bypass")" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"claudePermBypass{UniqueId}")" title="全操作を無条件で自動承認します（危険）">
-                        バイパス
+                    <label class="btn btn-outline-danger btn-sm" for="@($"claudePermBypass{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.BypassTitle"]">
+                        @L["SessionOptions.Claude.PermissionMode.BypassLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermAuto{UniqueId}")"
                            checked="@(ClaudeOptions.PermissionMode == "auto")"
                            @onchange="@(() => ClaudeOptions.PermissionMode = "auto")" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"claudePermAuto{UniqueId}")" title="低リスク操作を自動承認し、高リスク操作のみ確認を求めます">
-                        オートモード
+                    <label class="btn btn-outline-success btn-sm" for="@($"claudePermAuto{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.AutoTitle"]">
+                        @L["SessionOptions.Claude.PermissionMode.AutoLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermDefault{UniqueId}")"
                            checked="@(ClaudeOptions.PermissionMode == "default")"
                            @onchange="@(() => ClaudeOptions.PermissionMode = "default")" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"claudePermDefault{UniqueId}")" title="全ての操作で都度確認を求めます">
-                        デフォルト
+                    <label class="btn btn-outline-primary btn-sm" for="@($"claudePermDefault{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.DefaultTitle"]">
+                        @L["SessionOptions.Claude.PermissionMode.DefaultLabel"]
                     </label>
                 </div>
                 @if (!string.IsNullOrWhiteSpace(GetPermissionModeHelp()))
@@ -89,51 +91,51 @@
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.Continue" id="@($"claudeContinue{UniqueId}")">
                     <label class="form-check-label" for="@($"claudeContinue{UniqueId}")">
-                        コンティニュー (--continue)
+                        @L["SessionOptions.Claude.Continue"]
                     </label>
                 </div>
             }
             <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" @bind="ClaudeOptions.ChromeMode" id="@($"claudeChrome{UniqueId}")">
                 <label class="form-check-label" for="@($"claudeChrome{UniqueId}")">
-                    ブラウザ連携 (--chrome)
+                    @L["SessionOptions.Claude.Chrome"]
                 </label>
             </div>
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">追加引数</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="ClaudeOptions.ExtraArgs"
-                       placeholder="例: --model claude-sonnet-4-20250514 --verbose" />
-                <div class="form-text small">そのままClaude Codeに渡します</div>
+                       placeholder="@L["SessionOptions.Claude.ExtraArgsPlaceholder"]" />
+                <div class="form-text small">@L["SessionOptions.Claude.PassToCli"]</div>
             </div>
         </div>
     }
     else if (SelectedType == TerminalType.GeminiCLI && Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
     {
         <div class="mb-3">
-            <label class="form-label">Gemini CLI オプション</label>
+            <label class="form-label">@L["SessionOptions.Gemini.Header"]</label>
 
             <!-- Approval Mode -->
             <div class="mt-2">
-                <label class="form-label small text-muted mb-1">承認モード</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ApprovalMode.Label"]</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeDefault{UniqueId}")"
                            checked="@(GeminiOptions.ApprovalMode == "default")"
                            @onchange=@(() => GeminiOptions.ApprovalMode = "default") autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"geminiModeDefault{UniqueId}")" title="ツール使用時に都度確認を求めます（デフォルト）">
+                    <label class="btn btn-outline-primary btn-sm" for="@($"geminiModeDefault{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.DefaultTitle"]">
                         Default
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeAutoEdit{UniqueId}")"
                            checked="@(GeminiOptions.ApprovalMode == "auto_edit")"
                            @onchange=@(() => GeminiOptions.ApprovalMode = "auto_edit") autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"geminiModeAutoEdit{UniqueId}")" title="ファイル編集など、安全な操作を自動で承認します">
+                    <label class="btn btn-outline-success btn-sm" for="@($"geminiModeAutoEdit{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.AutoEditTitle"]">
                         Auto-Edit
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeYolo{UniqueId}")"
                            checked="@(GeminiOptions.ApprovalMode == "yolo")"
                            @onchange=@(() => GeminiOptions.ApprovalMode = "yolo") autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"geminiModeYolo{UniqueId}")" title="全ての操作を警告なしで自動的に承認します（危険）">
+                    <label class="btn btn-outline-danger btn-sm" for="@($"geminiModeYolo{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.YoloTitle"]">
                         YOLO
                     </label>
                 </div>
@@ -148,10 +150,10 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" @bind="GeminiOptions.SandboxMode" id="@($"geminiSandbox{UniqueId}")">
                     <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
-                        サンドボックスモード (-s)
+                        @L["SessionOptions.Gemini.Sandbox"]
                     </label>
                     <div class="form-text text-muted small mt-0">
-                        <i class="bi bi-info-circle"></i> この機能を使用するには、Docker Desktopがインストールされている必要があります。
+                        <i class="bi bi-info-circle"></i> @L["SessionOptions.Gemini.SandboxHelp"]
                     </div>
                 </div>
 
@@ -160,7 +162,7 @@
                     <div class="form-check mt-2">
                         <input class="form-check-input" type="checkbox" @bind="GeminiOptions.Continue" id="@($"geminiContinue{UniqueId}")">
                         <label class="form-check-label" for="@($"geminiContinue{UniqueId}")">
-                            コンティニュー (--resume latest)
+                            @L["SessionOptions.Gemini.Continue"]
                         </label>
                     </div>
                 }
@@ -171,7 +173,7 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" @bind="GeminiOptions.UseCustomModel" id="@($"geminiUseCustomModel{UniqueId}")">
                     <label class="form-check-label" for="@($"geminiUseCustomModel{UniqueId}")">
-                        モデルをカスタマイズ
+                        @L["SessionOptions.Gemini.UseCustomModel"]
                     </label>
                 </div>
 
@@ -179,7 +181,7 @@
                 {
                     <div class="mt-2 ps-4">
                         <div class="mb-2">
-                            <label for="@($"geminiModelSelect{UniqueId}")" class="form-label small text-muted mb-1">使用するモデル</label>
+                            <label for="@($"geminiModelSelect{UniqueId}")" class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ModelSelectLabel"]</label>
                             <select class="form-select form-select-sm" id="@($"geminiModelSelect{UniqueId}")" @bind="GeminiOptions.Model">
                                 @foreach (var model in geminiModelList)
                                 {
@@ -188,10 +190,10 @@
                             </select>
                         </div>
                         <div>
-                            <label class="form-label small text-muted mb-1">モデルリスト管理</label>
+                            <label class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ModelManagementLabel"]</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" @bind="newGeminiModelName" placeholder="モデル名を追加..." @onkeydown="OnModelInputKeyDown" />
-                                <button class="btn btn-outline-secondary" type="button" @onclick="AddGeminiModel">追加</button>
+                                <input type="text" class="form-control" @bind="newGeminiModelName" placeholder="@L["SessionOptions.Gemini.ModelAddPlaceholder"]" @onkeydown="OnModelInputKeyDown" />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="AddGeminiModel">@L["Common.Add"]</button>
                             </div>
                             <ul class="list-group mt-2" style="max-height: 150px; overflow-y: auto;">
                                 @foreach (var model in geminiModelList.OrderBy(m => m))
@@ -210,40 +212,40 @@
             </div>
             
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">追加引数</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="GeminiOptions.ExtraArgs"
-                       placeholder="例: --debug --allowed-tools shell,file" />
-                <div class="form-text small">そのままGemini CLIに渡します</div>
+                       placeholder="@L["SessionOptions.Gemini.ExtraArgsPlaceholder"]" />
+                <div class="form-text small">@L["SessionOptions.Gemini.PassToCli"]</div>
             </div>
         </div>
     }
     else if (SelectedType == TerminalType.CodexCLI && Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
     {
         <div class="mb-3">
-            <label class="form-label">Codex CLI オプション</label>
+            <label class="form-label">@L["SessionOptions.Codex.Header"]</label>
 
             <div class="mt-2">
-                <label class="form-label small text-muted mb-1">実行モード</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Mode.Label"]</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeAuto{UniqueId}")"
                            checked="@(CodexOptions.Mode == "auto")"
                            @onchange="() => SetCodexMode(CodexMode.Auto)" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"codexModeAuto{UniqueId}")" title="編集＋ビルド/テスト等を基本自動化">
-                        Auto (推奨)
+                    <label class="btn btn-outline-success btn-sm" for="@($"codexModeAuto{UniqueId}")" title="@L["SessionOptions.Codex.Mode.AutoTitle"]">
+                        @L["SessionOptions.Codex.Mode.AutoLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
                            checked="@(CodexOptions.Mode == "standard")"
                            @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="明示的な自動実行フラグを付けず、対話ベースで進行します">
-                        Interactive
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="@L["SessionOptions.Codex.Mode.StandardTitle"]">
+                        @L["SessionOptions.Codex.Mode.StandardLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
                            checked="@(CodexOptions.Mode == "yolo")"
                            @onchange="() => SetCodexMode(CodexMode.Yolo)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="全自動実行（危険）。隔離環境推奨。">
-                        YOLO (危険)
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="@L["SessionOptions.Codex.Mode.YoloTitle"]">
+                        @L["SessionOptions.Codex.Mode.YoloLabel"]
                     </label>
                 </div>
                 @if (!string.IsNullOrWhiteSpace(GetCodexModeHelp()))
@@ -256,49 +258,49 @@
             {
                 <div class="alert alert-danger mt-2 py-2 small">
                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                    <strong>警告:</strong> YOLOモードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。
+                    <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
                 </div>
             }
 
             <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumeLast" id="@($"codexResumeLast{UniqueId}")">
                 <label class="form-check-label" for="@($"codexResumeLast{UniqueId}")">
-                    最新セッションを再開 (resume --last)
+                    @L["SessionOptions.Codex.ResumeLast"]
                 </label>
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">サンドボックスモード</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Sandbox.Label"]</label>
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
                            checked="@(string.IsNullOrEmpty(CodexOptions.SandboxMode))"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.Default)" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="--sandbox を付けず、Codex CLI の既定値に任せます。">
-                        CLI既定
+                    <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.DefaultTitle"]">
+                        @L["SessionOptions.Codex.Sandbox.DefaultLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxReadOnly{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "read-only")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.ReadOnly)" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="読み取り専用。書き込みはブロック。">
-                        読み取り専用
+                    <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.ReadOnlyTitle"]">
+                        @L["SessionOptions.Codex.Sandbox.ReadOnlyLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxWorkspace{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "workspace-write")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.WorkspaceWrite)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="ワークスペース内のみ書き込み可能。">
-                        ワークスペース (推奨)
+                    <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.WorkspaceTitle"]">
+                        @L["SessionOptions.Codex.Sandbox.WorkspaceLabel"]
                     </label>
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxFull{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "danger-full-access")"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.FullAccess)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="フルアクセス（危険）。">
-                        フルアクセス
+                    <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.FullAccessTitle"]">
+                        @L["SessionOptions.Codex.Sandbox.FullAccessLabel"]
                     </label>
                 </div>
-                <div class="form-text small">外部通信やファイルアクセス範囲を制限</div>
+                <div class="form-text small">@L["SessionOptions.Codex.Sandbox.Help"]</div>
                 @if (!string.IsNullOrWhiteSpace(GetSandboxModeHelp()))
                 {
                     <div class="form-text small">@GetSandboxModeHelp()</div>
@@ -306,14 +308,14 @@
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">承認ポリシー</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.ApprovalPolicy.Label"]</label>
                 <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy">
-                    <option value="">未指定</option>
+                    <option value="">@L["SessionOptions.Codex.ApprovalPolicy.Unspecified"]</option>
                     <option value="untrusted">untrusted</option>
                     <option value="on-request">on-request</option>
                     <option value="never">never</option>
                 </select>
-                <div class="form-text small">操作の承認レベル（--ask-for-approval）</div>
+                <div class="form-text small">@L["SessionOptions.Codex.ApprovalPolicy.Help"]</div>
                 @if (!string.IsNullOrWhiteSpace(GetApprovalPolicyHelp()))
                 {
                     <div class="form-text small">@GetApprovalPolicyHelp()</div>
@@ -321,13 +323,13 @@
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">ネットワークアクセス</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.NetworkAccess.Label"]</label>
                 <select class="form-select form-select-sm" @bind="CodexOptions.NetworkAccess">
-                    <option value="">未指定</option>
+                    <option value="">@L["SessionOptions.Codex.ApprovalPolicy.Unspecified"]</option>
                     <option value="restricted">restricted</option>
                     <option value="enabled">enabled</option>
                 </select>
-                <div class="form-text small">workspace-write時の通信許可（-c sandbox_workspace_write.network_access）。デフォルトは enabled。</div>
+                <div class="form-text small">@L["SessionOptions.Codex.NetworkAccess.Help"]</div>
                 @if (!string.IsNullOrWhiteSpace(GetNetworkAccessHelp()))
                 {
                     <div class="form-text small">@GetNetworkAccessHelp()</div>
@@ -335,46 +337,46 @@
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">プロファイル</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Profile.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Profile"
-                       placeholder="例: trusted" />
-                <div class="form-text small">Codex CLI の `--profile` を指定します</div>
+                       placeholder="@L["SessionOptions.Codex.Profile.Placeholder"]" />
+                <div class="form-text small">@L["SessionOptions.Codex.Profile.Help"]</div>
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">モデル</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Model.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Model"
-                       placeholder="例: gpt-5-codex" />
-                <div class="form-text small">Codex CLI の `--model` を指定します</div>
+                       placeholder="@L["SessionOptions.Codex.Model.Placeholder"]" />
+                <div class="form-text small">@L["SessionOptions.Codex.Model.Help"]</div>
             </div>
 
             <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
                 <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
-                    Web 検索を有効化 (--search)
+                    @L["SessionOptions.Codex.Search"]
                 </label>
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">追加ディレクトリ</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
                 <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
-                          rows="3" placeholder="1行に1ディレクトリずつ指定"></textarea>
-                <div class="form-text small">各行を `--add-dir` として渡します</div>
+                          rows="3" placeholder="@L["SessionOptions.Codex.AdditionalDirs.Placeholder"]"></textarea>
+                <div class="form-text small">@L["SessionOptions.Codex.AdditionalDirs.Help"]</div>
             </div>
 
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">追加引数</label>
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="CodexOptions.ExtraArgs"
-                       placeholder="例: --reasoning-effort high" />
-                <div class="form-text small">そのままCodex CLIに渡します</div>
+                       placeholder="@L["SessionOptions.Codex.ExtraArgsPlaceholder"]" />
+                <div class="form-text small">@L["SessionOptions.Codex.PassToCli"]</div>
             </div>
         </div>
     }
     else
     {
         <div class="mb-3">
-            <label class="form-label">起動コマンド（任意）</label>
-            <input type="text" class="form-control" @bind="StartupCommand" placeholder="例: cmd.exe, powershell.exe" />
+            <label class="form-label">@L["SessionOptions.Terminal.StartupCommand.Label"]</label>
+            <input type="text" class="form-control" @bind="StartupCommand" placeholder="@L["SessionOptions.Terminal.StartupCommand.Placeholder"]" />
         </div>
     }
 </div>
@@ -634,9 +636,9 @@
     {
         return ClaudeOptions.PermissionMode switch
         {
-            "bypass" => "全操作を無条件で自動承認します（--dangerously-skip-permissions）。",
-            "auto" => "低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。",
-            "default" => "全ての操作で都度確認を求めます。",
+            "bypass" => L["SessionOptions.Claude.PermissionMode.HelpBypass"],
+            "auto" => L["SessionOptions.Claude.PermissionMode.HelpAuto"],
+            "default" => L["SessionOptions.Claude.PermissionMode.HelpDefault"],
             _ => ""
         };
     }
@@ -645,9 +647,9 @@
     {
         return GeminiOptions.ApprovalMode switch
         {
-            "default" => "ツール使用時に都度確認を求めます（デフォルト）。",
-            "auto_edit" => "ファイル編集など、安全な操作を自動で承認します。",
-            "yolo" => "全ての操作を警告なしで自動的に承認します（危険）。",
+            "default" => L["SessionOptions.Gemini.ApprovalMode.HelpDefault"],
+            "auto_edit" => L["SessionOptions.Gemini.ApprovalMode.HelpAutoEdit"],
+            "yolo" => L["SessionOptions.Gemini.ApprovalMode.HelpYolo"],
             _ => ""
         };
     }
@@ -656,9 +658,9 @@
     {
         return CodexOptions.ApprovalPolicy switch
         {
-            "untrusted" => "未信頼扱い。すべての操作で承認を求めます。",
-            "on-request" => "必要なときだけ承認を求めます（デフォルトに近い挙動）。",
-            "never" => "承認を求めません（危険）。",
+            "untrusted" => L["SessionOptions.Codex.ApprovalPolicy.HelpUntrusted"],
+            "on-request" => L["SessionOptions.Codex.ApprovalPolicy.HelpOnRequest"],
+            "never" => L["SessionOptions.Codex.ApprovalPolicy.HelpNever"],
             _ => ""
         };
     }
@@ -667,9 +669,9 @@
     {
         return CodexOptions.Mode switch
         {
-            "auto" => "推奨。`--full-auto` を付けて自動実行寄りに進めます。",
-            "standard" => "明示的な自動実行フラグを付けず、対話ベースで進行します。",
-            "yolo" => "全自動実行（危険）。隔離環境推奨です。",
+            "auto" => L["SessionOptions.Codex.Mode.HelpAuto"],
+            "standard" => L["SessionOptions.Codex.Mode.HelpStandard"],
+            "yolo" => L["SessionOptions.Codex.Mode.HelpYolo"],
             _ => ""
         };
     }
@@ -678,10 +680,10 @@
     {
         return CodexOptions.SandboxMode switch
         {
-            "" => "Codex CLI の既定値に任せます。",
-            "read-only" => "読み取り専用。書き込みはブロック。",
-            "workspace-write" => "ワークスペース内のみ書き込み可能。",
-            "danger-full-access" => "フルアクセス（危険）。",
+            "" => L["SessionOptions.Codex.Sandbox.HelpDefault"],
+            "read-only" => L["SessionOptions.Codex.Sandbox.ReadOnlyTitle"],
+            "workspace-write" => L["SessionOptions.Codex.Sandbox.WorkspaceTitle"],
+            "danger-full-access" => L["SessionOptions.Codex.Sandbox.FullAccessTitle"],
             _ => ""
         };
     }
@@ -690,8 +692,8 @@
     {
         return CodexOptions.NetworkAccess switch
         {
-            "enabled" => "ネットワークアクセスを許可します。",
-            "restricted" => "ネットワークアクセスを制限します。",
+            "enabled" => L["SessionOptions.Codex.NetworkAccess.HelpEnabled"],
+            "restricted" => L["SessionOptions.Codex.NetworkAccess.HelpRestricted"],
             _ => ""
         };
     }
