@@ -1074,7 +1074,9 @@
     private string activeTab = "general";
 
     // 現在の UI culture (dropdown の選択値)。CultureInfo の two-letter name をそのまま使う (ja / en)。
-    private string currentCulture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    // 実際の値はコンポーネント初期化時 (OnInitialized) に設定する。
+    // RequestLocalization middleware が culture を差し替えた後で確定させるため。
+    private string currentCulture = "en";
     private bool remoteLaunchEnabled = false;
     private string remoteLaunchTopicGuid = "";
     private string remoteLaunchPassword = "";
@@ -1141,6 +1143,9 @@
     protected override void OnInitialized()
     {
         MqttService.StateChanged += OnMqttStateChanged;
+        // Blazor Server の初期レンダー時には UseRequestLocalization middleware が
+        // 既に CultureInfo.CurrentUICulture を差し替え済みなので、ここで確定値を拾う。
+        currentCulture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
     }
 
     public void Dispose()

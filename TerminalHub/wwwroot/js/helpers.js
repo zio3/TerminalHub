@@ -406,7 +406,11 @@ window.terminalHubHelpers = {
             var oneYear = 60 * 60 * 24 * 365;
             document.cookie = '.AspNetCore.Culture=' + value +
                 '; path=/; max-age=' + oneYear + '; samesite=lax';
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            // Cookie ブロック環境では書き込みが失敗する。reload 自体は走らせるが、
+            // デバッグ時に原因を追えるよう console に警告を残す。
+            console.warn('[TerminalHub i18n] setUiCulture: cookie write failed', e);
+        }
         window.location.reload();
     }
 };
