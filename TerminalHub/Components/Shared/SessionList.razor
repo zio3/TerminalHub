@@ -105,7 +105,7 @@
                             <span class="@GetConnectionOpacityClass(session)">@session.GetDisplayName()</span>
                             @if (!string.IsNullOrEmpty(session.FolderPath) && !Directory.Exists(session.FolderPath))
                             {
-                                <span class="text-warning ms-1" title="@string.Format(L["SessionList.Badge.DirectoryNotFoundFormat"], session.FolderPath)">
+                                <span class="text-warning ms-1" title="@string.Format(L["Common.DirectoryNotFoundFormat"], session.FolderPath)">
                                     <i class="bi bi-exclamation-triangle-fill" style="font-size: 0.75rem;"></i>
                                 </span>
                             }
