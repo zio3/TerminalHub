@@ -4,6 +4,7 @@
 @using Microsoft.Extensions.Configuration
 @inject INotificationService NotificationService
 @inject IConfiguration Configuration
+@inject IHostEnvironment HostEnvironment
 @inject IJSRuntime JSRuntime
 @inject ILocalStorageService LocalStorageService
 @inject IAppSettingsService AppSettingsService
@@ -1353,7 +1354,13 @@
     {
         try
         {
-            var logPath = Path.Combine(AppContext.BaseDirectory, "logs");
+            // Program.cs と同じロジックで dev/prod のフォルダを解決する (Development 環境は "logs-dev")
+            var defaultLogsFolderName = HostEnvironment.IsDevelopment() ? "logs-dev" : "logs";
+            var logsFolderName = Configuration.GetValue<string>("Logging:FolderName") ?? defaultLogsFolderName;
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TerminalHub",
+                logsFolderName);
             if (!Directory.Exists(logPath))
             {
                 Directory.CreateDirectory(logPath);

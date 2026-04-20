@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TerminalHub.Models;
 
@@ -47,14 +49,57 @@ public class AppSettingsService : IAppSettingsService
 
     public AppSettingsService(
         ILogger<AppSettingsService> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        IHostEnvironment hostEnvironment)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
 
-        // 実行ファイルと同じディレクトリに設定ファイルを保存
-        var exeDir = AppContext.BaseDirectory;
-        _settingsFilePath = Path.Combine(exeDir, "app-settings.json");
+        // 設定ファイルはユーザーの LocalApplicationData 配下 (%LOCALAPPDATA%\TerminalHub\) に保存する。
+        // 実行ファイルと同じディレクトリだと C:\Program Files 配下にインストールした場合に書き込み権限が無く、
+        // サイレントに保存失敗する問題があったため。
+        // ファイル名は Development 環境で "app-settings-dev.json" に切り替え、dev/prod の設定を分離する。
+        // appsettings.Development.json は gitignore 対象なので環境変数ベースの既定を採用。
+        var userDataRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TerminalHub");
+        Directory.CreateDirectory(userDataRoot);
+
+        var defaultFileName = hostEnvironment.IsDevelopment() ? "app-settings-dev.json" : "app-settings.json";
+        var fileName = configuration.GetValue<string>("AppSettings:FileName") ?? defaultFileName;
+        _settingsFilePath = Path.Combine(userDataRoot, fileName);
+
+        // 旧バージョン (v1.0.54 以前) の設定ファイルが実行ファイル隣に残っていれば 1 回だけ移行する。
+        // 失敗しても既定値で続行できるよう、例外は握り潰してログのみ残す。
+        TryMigrateLegacySettingsFile();
+    }
+
+    private void TryMigrateLegacySettingsFile()
+    {
+        try
+        {
+            if (File.Exists(_settingsFilePath))
+            {
+                // 既に新しい場所に存在する場合はそちらを優先 (上書きしない)
+                return;
+            }
+
+            var legacyPath = Path.Combine(AppContext.BaseDirectory, "app-settings.json");
+            if (!File.Exists(legacyPath))
+            {
+                return;
+            }
+
+            File.Copy(legacyPath, _settingsFilePath, overwrite: false);
+            _logger.LogInformation(
+                "[AppSettings] 旧設定ファイルを移行しました: {LegacyPath} → {NewPath}",
+                legacyPath, _settingsFilePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AppSettings] 旧設定ファイルの移行に失敗 (既定値で続行)");
+        }
     }
 
     public AppSettings GetSettings()
