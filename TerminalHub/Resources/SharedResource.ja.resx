@@ -185,6 +185,8 @@
   <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>接続中</value></data>
   <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>未接続</value></data>
   <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>接続試行中…</value></data>
+  <data name="Settings.RemoteLaunch.LastTested" xml:space="preserve"><value>最終確認</value></data>
+  <data name="Settings.RemoteLaunch.ResultCodeFormat" xml:space="preserve"><value>ResultCode: {0}</value></data>
   <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>疎通確認</value></data>
   <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>確認中…</value></data>
   <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (往復 {0} ms)</value></data>

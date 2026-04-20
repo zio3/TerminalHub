@@ -689,11 +689,19 @@
                                                 }
                                                 @if (MqttService.LastConnectResult is not null)
                                                 {
+                                                    var isSuccess = MqttService.LastConnectResult.ResultCode == MQTTnet.MqttClientConnectResultCode.Success;
                                                     <small class="text-muted">
-                                                        ResultCode: @MqttService.LastConnectResult.ResultCode
+                                                        @if (isSuccess)
+                                                        {
+                                                            <span>@L["Settings.RemoteLaunch.LastTested"]:</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>@string.Format(L["Settings.RemoteLaunch.ResultCodeFormat"], MqttService.LastConnectResult.ResultCode)</span>
+                                                        }
                                                         @if (MqttService.LastConnectAttemptAt.HasValue)
                                                         {
-                                                            <span> (@MqttService.LastConnectAttemptAt.Value.ToLocalTime().ToString("HH:mm:ss"))</span>
+                                                            <span> @MqttService.LastConnectAttemptAt.Value.ToLocalTime().ToString("HH:mm:ss")</span>
                                                         }
                                                     </small>
                                                 }
