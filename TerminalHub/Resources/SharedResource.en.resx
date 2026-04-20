@@ -446,7 +446,7 @@
   <data name="SubSession.ExistingWorktree.Loading" xml:space="preserve"><value>Loading worktree list...</value></data>
   <data name="SubSession.ExistingWorktree.Empty" xml:space="preserve"><value>No worktrees available</value></data>
   <data name="SubSession.ExistingWorktree.Placeholder" xml:space="preserve"><value>Please select a worktree</value></data>
-  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>main</value></data>
+  <data name="SubSession.WorktreeMainSuffix" xml:space="preserve"><value>- main</value></data>
   <data name="SubSession.SamePath.InfoFormat" xml:space="preserve"><value>Opens in the same folder as parent session "{0}"</value></data>
   <data name="SubSession.NewFolder.Label" xml:space="preserve"><value>New folder path</value></data>
   <data name="SubSession.NewFolder.Placeholder" xml:space="preserve"><value>C:\path\to\new\folder or relative path</value></data>
