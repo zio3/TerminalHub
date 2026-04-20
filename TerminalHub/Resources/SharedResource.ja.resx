@@ -58,6 +58,8 @@
   <!-- Common -->
   <data name="Common.Close" xml:space="preserve"><value>閉じる</value></data>
   <data name="Common.Add" xml:space="preserve"><value>追加</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>キャンセル</value></data>
+  <data name="Common.Create" xml:space="preserve"><value>作成</value></data>
   <data name="Common.ErrorFormat" xml:space="preserve"><value>エラー: {0}</value></data>
 
   <!-- Settings Dialog -->
@@ -272,7 +274,7 @@
   <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>通知時間は 0 以上にしてください</value></data>
   <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Webhook URL を入力してください</value></data>
   <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>指定されたパスが存在しません</value></data>
-  <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>指定されたフォルダが存在しません</value></data>
+  <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>指定されたフォルダが存在しません。</value></data>
   <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>このフォルダは既に追加されています</value></data>
   <data name="Settings.Message.SaveSuccess" xml:space="preserve"><value>設定を保存しました</value></data>
   <data name="Settings.Message.SaveErrorFormat" xml:space="preserve"><value>保存エラー: {0}</value></data>
@@ -285,4 +287,17 @@
   <data name="Settings.Message.FileReadErrorFormat" xml:space="preserve"><value>ファイル読み込みエラー: {0}</value></data>
   <data name="Settings.Message.ImportResultFormat" xml:space="preserve"><value>インポートが完了しました（{0} 件追加、{1} 件は重複のためスキップ）。ページを再読み込みしてください。</value></data>
   <data name="Settings.Message.ImportErrorFormat" xml:space="preserve"><value>インポートエラー: {0}</value></data>
+
+  <!-- SessionCreate Dialog -->
+  <data name="SessionCreate.Title" xml:space="preserve"><value>新しいセッションを作成</value></data>
+  <data name="SessionCreate.FolderLabel" xml:space="preserve"><value>フォルダを選択</value></data>
+  <data name="SessionCreate.FolderPlaceholder" xml:space="preserve"><value>フォルダパスを入力または選択</value></data>
+  <data name="SessionCreate.BrowseButton" xml:space="preserve"><value>参照</value></data>
+  <data name="SessionCreate.FavoriteFolders" xml:space="preserve"><value>お気に入りフォルダ</value></data>
+  <data name="SessionCreate.DefaultFolder" xml:space="preserve"><value>デフォルトフォルダ</value></data>
+  <data name="SessionCreate.UserHome" xml:space="preserve"><value>ユーザーホーム</value></data>
+  <data name="SessionCreate.PickFolder" xml:space="preserve"><value>フォルダを選択...</value></data>
+  <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>フォルダの作成</value></data>
+  <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>このフォルダを作成しますか？</value></data>
+  <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>作成する</value></data>
 </root>
