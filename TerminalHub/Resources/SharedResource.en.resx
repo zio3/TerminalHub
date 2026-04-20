@@ -459,7 +459,7 @@
   <data name="SubSession.ErrorFormat" xml:space="preserve"><value>An error occurred during the operation: {0}</value></data>
 
   <!-- SessionList (left sidebar) -->
-  <data name="SessionList.CreateSession" xml:space="preserve"><value>New session</value></data>
+  <data name="SessionList.CreateSession" xml:space="preserve"><value>New Session</value></data>
   <data name="SessionList.EmptyHint" xml:space="preserve"><value>Use the button above to create a session</value></data>
   <data name="SessionList.SearchPlaceholder" xml:space="preserve"><value>Search sessions...</value></data>
   <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>Archived sessions</value></data>
@@ -481,7 +481,7 @@
   <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>Delete selected</value></data>
   <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>Directory not found</value></data>
   <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>Archived at: {0}</value></data>
-  <data name="ArchivedSessions.Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>Unknown</value></data>
   <data name="ArchivedSessions.Restore" xml:space="preserve"><value>Restore</value></data>
   <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>Delete permanently</value></data>
   <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>No search results</value></data>

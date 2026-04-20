@@ -481,7 +481,7 @@
   <data name="ArchivedSessions.DeleteSelected" xml:space="preserve"><value>選択を削除</value></data>
   <data name="ArchivedSessions.DirectoryNotFound" xml:space="preserve"><value>ディレクトリが見つかりません</value></data>
   <data name="ArchivedSessions.ArchivedAtFormat" xml:space="preserve"><value>アーカイブ日時: {0}</value></data>
-  <data name="ArchivedSessions.Unknown" xml:space="preserve"><value>不明</value></data>
+  <data name="ArchivedSessions.DateUnknown" xml:space="preserve"><value>不明</value></data>
   <data name="ArchivedSessions.Restore" xml:space="preserve"><value>復帰</value></data>
   <data name="ArchivedSessions.DeletePermanently" xml:space="preserve"><value>完全に削除</value></data>
   <data name="ArchivedSessions.NoResults" xml:space="preserve"><value>検索結果がありません</value></data>
