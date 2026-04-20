@@ -493,4 +493,17 @@
   <data name="ArchivedSessions.DeleteConfirm.SingleFormat" xml:space="preserve"><value>「{0}」を完全に削除しますか？</value></data>
   <data name="ArchivedSessions.DeleteConfirm.Irreversible" xml:space="preserve"><value>この操作は取り消せません。</value></data>
   <data name="ArchivedSessions.DeleteConfirm.Execute" xml:space="preserve"><value>削除する</value></data>
+
+  <!-- BottomPanels: TextInputPanel -->
+  <data name="TextInput.KeyHints.Send" xml:space="preserve"><value>送信</value></data>
+  <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>改行</value></data>
+  <data name="TextInput.KeyHints.History" xml:space="preserve"><value>履歴</value></data>
+  <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
+  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Claude Code で誤字脱字・表現を整える</value></data>
+  <data name="TextInput.Refine.Label" xml:space="preserve"><value>事前整形</value></data>
+  <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
+  <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
+
+  <!-- BottomPanels: MemoPanel -->
+  <data name="MemoPanel.Placeholder" xml:space="preserve"><value>メモ… (Enter で改行、自動保存)</value></data>
 </root>
