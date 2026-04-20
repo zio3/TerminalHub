@@ -151,4 +151,46 @@
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
   <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Terminal only</value></data>
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
+
+  <!-- Settings: Export/Import Tab -->
+  <data name="Settings.Export.Header" xml:space="preserve"><value>Export / Import Data</value></data>
+  <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: sessions ({0})</value></data>
+  <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
+  <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>
+  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. It will be added to the current storage ({0}).</value></data>
+  <data name="Settings.Export.Import.PreviewHeader" xml:space="preserve"><value>Import preview</value></data>
+  <data name="Settings.Export.Import.PreviewSessions" xml:space="preserve"><value>Sessions: {0}</value></data>
+  <data name="Settings.Export.Import.RunButton" xml:space="preserve"><value>Run import</value></data>
+
+  <!-- Settings: Commands Tab -->
+  <data name="Settings.Commands.Header" xml:space="preserve"><value>Custom Commands</value></data>
+  <data name="Settings.Commands.Help" xml:space="preserve"><value>Register commands shown in the button bar for each terminal type.</value></data>
+  <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>Text</value></data>
+  <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>Key</value></data>
+  <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>Title (optional)</value></data>
+  <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>Command (e.g., /plan)</value></data>
+  <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>Drag to reorder</value></data>
+
+  <!-- Settings: Remote Launch Tab -->
+  <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>Remote Launch</value></data>
+  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Launch Claude Code sessions from your phone while away and obtain a Remote Control URL.</value></data>
+  <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>Enable remote launch</value></data>
+  <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>Disconnected</value></data>
+  <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>Connecting...</value></data>
+  <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>Test connection</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>Checking...</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (round-trip {0} ms)</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>Failed: {0}</value></data>
+  <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>Access URL</value></data>
+  <data name="Settings.RemoteLaunch.CopyUrlTitle" xml:space="preserve"><value>Copy URL</value></data>
+  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>Do not share this URL. Anyone who knows it can launch sessions.</value></data>
+  <data name="Settings.RemoteLaunch.PasswordLabel" xml:space="preserve"><value>Password (optional)</value></data>
+  <data name="Settings.RemoteLaunch.PasswordPlaceholder" xml:space="preserve"><value>When set, a password will be required at access time</value></data>
+  <data name="Settings.RemoteLaunch.PasswordHelp" xml:space="preserve"><value>If empty, the URL alone grants access.</value></data>
+  <data name="Settings.RemoteLaunch.TopicGuid" xml:space="preserve"><value>Topic GUID</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidTitle" xml:space="preserve"><value>Regenerate GUID (existing access URL will be invalidated)</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>Regenerating invalidates the existing access URL.</value></data>
 </root>

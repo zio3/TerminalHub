@@ -87,7 +87,7 @@
   <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>セッション作成時にフォルダ選択の候補として表示されます。</value></data>
   <data name="Settings.General.Version.Header" xml:space="preserve"><value>バージョン情報</value></data>
   <data name="Settings.General.Version.Current" xml:space="preserve"><value>現在のバージョン:</value></data>
-  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中...</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中…</value></data>
   <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>新しいバージョン &lt;strong&gt;v{0}&lt;/strong&gt; があります</value></data>
   <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>GitHubで確認</value></data>
   <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>最新バージョンです</value></data>
@@ -115,7 +115,7 @@
   <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>許可済み</value></data>
   <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>拒否</value></data>
   <data name="Settings.Notifications.Status.NotRequested" xml:space="preserve"><value>未許可</value></data>
-  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>確認中...</value></data>
+  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>確認中…</value></data>
   <data name="Settings.Notifications.Status.CheckError" xml:space="preserve"><value>確認エラー</value></data>
   <data name="Settings.Notifications.Status.Unknown" xml:space="preserve"><value>不明</value></data>
   <data name="Settings.Notifications.Browser.Enable" xml:space="preserve"><value>ブラウザ通知を有効にする</value></data>
@@ -151,4 +151,46 @@
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>入力パネルを非表示</value></data>
   <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>ターミナルのみ表示</value></data>
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>下部の入力パネルを非表示にして、ターミナル領域を広く使えます。</value></data>
+
+  <!-- Settings: Export/Import Tab -->
+  <data name="Settings.Export.Header" xml:space="preserve"><value>データのエクスポート/インポート</value></data>
+  <data name="Settings.Export.Export.Header" xml:space="preserve"><value>エクスポート</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>現在のストレージ（{0}）からセッション情報をJSONファイルとしてダウンロードします。</value></data>
+  <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>エクスポート対象: セッション情報（{0} 件）</value></data>
+  <data name="Settings.Export.Export.Button" xml:space="preserve"><value>エクスポート</value></data>
+  <data name="Settings.Export.Import.Header" xml:space="preserve"><value>インポート</value></data>
+  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>JSONファイルを選択してセッション情報をインポートします。現在のストレージ（{0}）に追加されます。</value></data>
+  <data name="Settings.Export.Import.PreviewHeader" xml:space="preserve"><value>インポートプレビュー</value></data>
+  <data name="Settings.Export.Import.PreviewSessions" xml:space="preserve"><value>セッション情報: {0} 件</value></data>
+  <data name="Settings.Export.Import.RunButton" xml:space="preserve"><value>インポート実行</value></data>
+
+  <!-- Settings: Commands Tab -->
+  <data name="Settings.Commands.Header" xml:space="preserve"><value>カスタムコマンド</value></data>
+  <data name="Settings.Commands.Help" xml:space="preserve"><value>ターミナル種別ごとにボタンバーに表示するコマンドを登録できます。</value></data>
+  <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>テキスト</value></data>
+  <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>キー</value></data>
+  <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>タイトル（省略可）</value></data>
+  <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>コマンド（例: /plan）</value></data>
+  <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>ドラッグで並び替え</value></data>
+
+  <!-- Settings: Remote Launch Tab -->
+  <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>リモート起動</value></data>
+  <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>外出先のスマートフォンから Claude Code セッションを起動し、Remote Control URL を取得できます。</value></data>
+  <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>リモート起動を有効にする</value></data>
+  <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>接続中</value></data>
+  <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>未接続</value></data>
+  <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>接続試行中…</value></data>
+  <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>疎通確認</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>確認中…</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (往復 {0} ms)</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>NG: {0}</value></data>
+  <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>アクセスURL</value></data>
+  <data name="Settings.RemoteLaunch.CopyUrlTitle" xml:space="preserve"><value>URLをコピー</value></data>
+  <data name="Settings.RemoteLaunch.UrlWarning" xml:space="preserve"><value>このURLは他人に公開しないでください。URLを知っている人がセッションを起動できます。</value></data>
+  <data name="Settings.RemoteLaunch.PasswordLabel" xml:space="preserve"><value>パスワード（任意）</value></data>
+  <data name="Settings.RemoteLaunch.PasswordPlaceholder" xml:space="preserve"><value>設定するとアクセス時にパスワードが必要になります</value></data>
+  <data name="Settings.RemoteLaunch.PasswordHelp" xml:space="preserve"><value>空欄の場合はURLのみでアクセスできます。</value></data>
+  <data name="Settings.RemoteLaunch.TopicGuid" xml:space="preserve"><value>トピックGUID</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidTitle" xml:space="preserve"><value>GUIDを再発行（既存のアクセスURLが無効になります）</value></data>
+  <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>再発行すると既存のアクセスURLが無効になります。</value></data>
 </root>
