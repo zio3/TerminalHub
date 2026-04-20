@@ -137,8 +137,8 @@
   <data name="Settings.Sessions.Header" xml:space="preserve"><value>Sessions</value></data>
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
   <data name="Settings.Sessions.SortOrder.ByCreatedAt" xml:space="preserve"><value>By creation date</value></data>
-  <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last accessed</value></data>
-  <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>Most recently used appear at the top</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last used</value></data>
+  <data name="Settings.Sessions.SortOrder.ByLastAccessedSub" xml:space="preserve"><value>Most recently used sessions appear at the top</value></data>
   <data name="Settings.Sessions.SortOrder.ByName" xml:space="preserve"><value>By name</value></data>
   <data name="Settings.Sessions.SortOrder.Help" xml:space="preserve"><value>In "By last accessed" order, usage of child (worktree) sessions is reflected in the parent's position.</value></data>
   <data name="Settings.Sessions.Display.Label" xml:space="preserve"><value>Session list display settings</value></data>

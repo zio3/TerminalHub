@@ -125,9 +125,9 @@
   <data name="Settings.Notifications.Browser.RequestHelp" xml:space="preserve"><value>処理完了時にデスクトップ通知を受け取るには、ブラウザの通知を許可してください。</value></data>
   <data name="Settings.Notifications.Threshold.Label" xml:space="preserve"><value>通知を送信する処理時間（秒）</value></data>
   <data name="Settings.Notifications.Threshold.Help" xml:space="preserve"><value>0に設定すると、すべての処理完了時に通知します</value></data>
-  <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>WebHook設定</value></data>
-  <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>WebHook通知を有効にする</value></data>
-  <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>WebHook URL</value></data>
+  <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook 設定</value></data>
+  <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Webhook 通知を有効にする</value></data>
+  <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
   <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook設定</value></data>
   <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。セッション作成時に自動的に &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に設定が追加されます。</value></data>
   <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Claude Code Hook を有効にする</value></data>
