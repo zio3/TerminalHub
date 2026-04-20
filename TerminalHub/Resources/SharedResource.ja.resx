@@ -87,7 +87,7 @@
   <data name="Settings.General.FavoriteFolders.Help" xml:space="preserve"><value>セッション作成時にフォルダ選択の候補として表示されます。</value></data>
   <data name="Settings.General.Version.Header" xml:space="preserve"><value>バージョン情報</value></data>
   <data name="Settings.General.Version.Current" xml:space="preserve"><value>現在のバージョン:</value></data>
-  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中...</value></data>
+  <data name="Settings.General.Version.Checking" xml:space="preserve"><value>バージョンを確認中…</value></data>
   <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>新しいバージョン &lt;strong&gt;v{0}&lt;/strong&gt; があります</value></data>
   <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>GitHubで確認</value></data>
   <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>最新バージョンです</value></data>
@@ -115,7 +115,7 @@
   <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>許可済み</value></data>
   <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>拒否</value></data>
   <data name="Settings.Notifications.Status.NotRequested" xml:space="preserve"><value>未許可</value></data>
-  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>確認中...</value></data>
+  <data name="Settings.Notifications.Status.Checking" xml:space="preserve"><value>確認中…</value></data>
   <data name="Settings.Notifications.Status.CheckError" xml:space="preserve"><value>確認エラー</value></data>
   <data name="Settings.Notifications.Status.Unknown" xml:space="preserve"><value>不明</value></data>
   <data name="Settings.Notifications.Browser.Enable" xml:space="preserve"><value>ブラウザ通知を有効にする</value></data>
@@ -181,7 +181,7 @@
   <data name="Settings.RemoteLaunch.Disconnected" xml:space="preserve"><value>未接続</value></data>
   <data name="Settings.RemoteLaunch.Connecting" xml:space="preserve"><value>接続試行中…</value></data>
   <data name="Settings.RemoteLaunch.DiagPing" xml:space="preserve"><value>疎通確認</value></data>
-  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>確認中...</value></data>
+  <data name="Settings.RemoteLaunch.DiagPingChecking" xml:space="preserve"><value>確認中…</value></data>
   <data name="Settings.RemoteLaunch.DiagPingOkFormat" xml:space="preserve"><value>OK (往復 {0} ms)</value></data>
   <data name="Settings.RemoteLaunch.DiagPingNgFormat" xml:space="preserve"><value>NG: {0}</value></data>
   <data name="Settings.RemoteLaunch.AccessUrl" xml:space="preserve"><value>アクセスURL</value></data>
