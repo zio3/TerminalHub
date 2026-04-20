@@ -545,4 +545,6 @@
   <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>--continue オプションなしでセッションを再作成しました</value></data>
   <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>セッション再作成に失敗しました</value></data>
   <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>セッション再作成エラー: {0}</value></data>
+  <data name="Root.Confirm.DeleteSessionFormat" xml:space="preserve"><value>セッション「{0}」を削除しますか？</value></data>
+  <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>セッション「{0}」をアーカイブしますか？</value></data>
 </root>

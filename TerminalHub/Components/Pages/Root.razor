@@ -1165,7 +1165,7 @@
             bool confirmed;
             try
             {
-                confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」を削除しますか？");
+                confirmed = await JSRuntime.InvokeAsync<bool>("confirm", string.Format(L["Root.Confirm.DeleteSessionFormat"], sessionName));
             }
             catch (JSDisconnectedException)
             {
@@ -1240,7 +1240,7 @@
         bool confirmed;
         try
         {
-            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"セッション「{sessionName}」をアーカイブしますか？");
+            confirmed = await JSRuntime.InvokeAsync<bool>("confirm", string.Format(L["Root.Confirm.ArchiveSessionFormat"], sessionName));
         }
         catch (JSDisconnectedException)
         {

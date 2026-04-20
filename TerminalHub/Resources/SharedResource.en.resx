@@ -545,4 +545,6 @@
   <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>Session recreated without --continue option</value></data>
   <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>Failed to recreate session</value></data>
   <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>Session recreate error: {0}</value></data>
+  <data name="Root.Confirm.DeleteSessionFormat" xml:space="preserve"><value>Delete session "{0}"?</value></data>
+  <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>Archive session "{0}"?</value></data>
 </root>
