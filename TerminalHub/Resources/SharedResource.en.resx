@@ -81,7 +81,6 @@
   <data name="Settings.Tab.DevNotify" xml:space="preserve"><value>Notification Test</value></data>
 
   <!-- Settings: General Tab -->
-  <data name="Settings.General.Header" xml:space="preserve"><value>General</value></data>
   <data name="Settings.General.Language.Label" xml:space="preserve"><value>Language</value></data>
   <data name="Settings.General.Language.Help" xml:space="preserve"><value>Switch the UI language. Selecting a value reloads the page.</value></data>
   <data name="Settings.General.DefaultFolder.Label" xml:space="preserve"><value>Default folder path</value></data>
@@ -101,7 +100,6 @@
   <data name="Settings.General.Community.Help" xml:space="preserve"><value>Bug reports, feature requests, and questions are welcome there.</value></data>
 
   <!-- Settings: Display Tab -->
-  <data name="Settings.Display.Header" xml:space="preserve"><value>Display</value></data>
   <data name="Settings.Display.Theme.Label" xml:space="preserve"><value>Theme</value></data>
   <data name="Settings.Display.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Display.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
@@ -115,7 +113,6 @@
   <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Height split between terminal and input panel (50:50–90:10). Drag the border to adjust.</value></data>
 
   <!-- Settings: Notifications Tab -->
-  <data name="Settings.Notifications.Header" xml:space="preserve"><value>Notifications</value></data>
   <data name="Settings.Notifications.Browser.Label" xml:space="preserve"><value>Browser notifications</value></data>
   <data name="Settings.Notifications.Status.Granted" xml:space="preserve"><value>Allowed</value></data>
   <data name="Settings.Notifications.Status.Denied" xml:space="preserve"><value>Denied</value></data>
@@ -139,7 +136,6 @@
   <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>This setting is applied to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; the next time each session is started/restarted. It is not applied immediately to running sessions or workspaces outside TerminalHub's management.</value></data>
 
   <!-- Settings: Sessions Tab -->
-  <data name="Settings.Sessions.Header" xml:space="preserve"><value>Sessions</value></data>
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
   <data name="Settings.Sessions.SortOrder.ByCreatedAt" xml:space="preserve"><value>By creation date</value></data>
   <data name="Settings.Sessions.SortOrder.ByLastAccessed" xml:space="preserve"><value>By last used</value></data>
@@ -158,19 +154,17 @@
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
 
   <!-- Settings: Export/Import Tab -->
-  <data name="Settings.Export.Header" xml:space="preserve"><value>Export / Import Data</value></data>
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
   <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: {0} sessions</value></data>
   <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>
-  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. It will be added to the current storage ({0}).</value></data>
+  <data name="Settings.Export.Import.Help" xml:space="preserve"><value>Select a JSON file to import session data. Existing sessions are kept and the imported data is added.</value></data>
   <data name="Settings.Export.Import.PreviewHeader" xml:space="preserve"><value>Import preview</value></data>
   <data name="Settings.Export.Import.PreviewSessions" xml:space="preserve"><value>Sessions: {0}</value></data>
   <data name="Settings.Export.Import.RunButton" xml:space="preserve"><value>Run import</value></data>
 
   <!-- Settings: Commands Tab -->
-  <data name="Settings.Commands.Header" xml:space="preserve"><value>Custom Commands</value></data>
   <data name="Settings.Commands.Help" xml:space="preserve"><value>Register commands shown in the button bar for each terminal type.</value></data>
   <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>Text</value></data>
   <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>Key</value></data>
@@ -179,7 +173,6 @@
   <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>Drag to reorder</value></data>
 
   <!-- Settings: Remote Launch Tab -->
-  <data name="Settings.RemoteLaunch.Header" xml:space="preserve"><value>Remote Launch</value></data>
   <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Start Claude Code sessions from your phone when you're away from your PC. Use the URL below on your mobile device.</value></data>
   <data name="Settings.RemoteLaunch.Enable" xml:space="preserve"><value>Enable remote launch</value></data>
   <data name="Settings.RemoteLaunch.Connected" xml:space="preserve"><value>Connected</value></data>
@@ -202,7 +195,6 @@
   <data name="Settings.RemoteLaunch.RegenerateGuidHelp" xml:space="preserve"><value>Regenerating invalidates the existing access URL.</value></data>
 
   <!-- Settings: Special Tab -->
-  <data name="Settings.Special.Header" xml:space="preserve"><value>Special Settings</value></data>
   <data name="Settings.Special.ClaudeModeKey.Header" xml:space="preserve"><value>Claude Code mode switch key</value></data>
   <data name="Settings.Special.ClaudeModeKey.Help" xml:space="preserve"><value>Select the keyboard shortcut used for mode switching in Claude Code.</value></data>
   <data name="Settings.Special.ClaudeModeKey.None" xml:space="preserve"><value>None</value></data>
@@ -219,7 +211,6 @@
   <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>
 
   <!-- Settings: Dev Diagnose Tab -->
-  <data name="Settings.DevDiagnose.Header" xml:space="preserve"><value>Diagnostics</value></data>
   <data name="Settings.DevDiagnose.Refresh" xml:space="preserve"><value>Refresh diagnostics</value></data>
   <data name="Settings.DevDiagnose.RunJs" xml:space="preserve"><value>Run JS diagnostics</value></data>
   <data name="Settings.DevDiagnose.SessionList" xml:space="preserve"><value>Session list</value></data>
@@ -239,7 +230,6 @@
   <data name="Settings.DevDiagnose.ScrollInfo.PositionFormat" xml:space="preserve"><value>Scroll position: {0} - {1}</value></data>
 
   <!-- Settings: Dev Buffer Tab -->
-  <data name="Settings.DevBuffer.Header" xml:space="preserve"><value>Buffer Dump</value></data>
   <data name="Settings.DevBuffer.Help" xml:space="preserve"><value>Downloads the session's output buffer (up to 2MB) as a file.</value></data>
   <data name="Settings.DevBuffer.SelectLabel" xml:space="preserve"><value>Select session</value></data>
   <data name="Settings.DevBuffer.SelectPlaceholder" xml:space="preserve"><value>-- Select a session --</value></data>
@@ -256,7 +246,6 @@
   <data name="Settings.DevBuffer.HeaderBufferContent" xml:space="preserve"><value>Buffer Content</value></data>
 
   <!-- Settings: Dev Notify Tab -->
-  <data name="Settings.DevNotify.Header" xml:space="preserve"><value>Notification Test</value></data>
   <data name="Settings.DevNotify.TestElapsedLabel" xml:space="preserve"><value>Test elapsed time (seconds)</value></data>
   <data name="Settings.DevNotify.TestBrowser" xml:space="preserve"><value>Test browser notification</value></data>
   <data name="Settings.DevNotify.TestWebhook" xml:space="preserve"><value>Test webhook notification</value></data>

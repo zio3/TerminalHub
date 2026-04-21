@@ -118,8 +118,6 @@
                         @if (activeTab == "general")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.General.Header"]</h6>
-
                                 <!-- UI 言語切替 -->
                                 <div class="mb-4">
                                     <label class="form-label">@L["Settings.General.Language.Label"]</label>
@@ -248,8 +246,6 @@
                         else if (activeTab == "display")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Display.Header"]</h6>
-
                                 <div class="mb-4">
                                     <label class="form-label">@L["Settings.Display.Theme.Label"]</label>
                                     <div class="form-check">
@@ -330,8 +326,6 @@
                         else if (activeTab == "notifications")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Notifications.Header"]</h6>
-
                     <div class="mb-4">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <label class="form-label mb-0">@L["Settings.Notifications.Browser.Label"]</label>
@@ -415,8 +409,6 @@
                         else if (activeTab == "sessions")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Sessions.Header"]</h6>
-
                                 <div class="mb-4">
                                     <label class="form-label">@L["Settings.Sessions.SortOrder.Label"]</label>
                                     <div class="form-check">
@@ -495,8 +487,6 @@
                         else if (activeTab == "export")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Export.Header"]</h6>
-
                                 <!-- エクスポート -->
                                 <div class="mb-4">
                                     <h6 class="mb-2">@L["Settings.Export.Export.Header"]</h6>
@@ -522,7 +512,7 @@
                                 <div>
                                     <h6 class="mb-2">@L["Settings.Export.Import.Header"]</h6>
                                     <p class="text-muted small">
-                                        @string.Format(L["Settings.Export.Import.Help"], "SQLite")
+                                        @L["Settings.Export.Import.Help"]
                                     </p>
 
                                     <div class="mb-3">
@@ -548,7 +538,6 @@
                         else if (activeTab == "commands")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Commands.Header"]</h6>
                                 <small class="text-muted d-block mb-3">
                                     @L["Settings.Commands.Help"]
                                 </small>
@@ -657,7 +646,6 @@
                         else if (activeTab == "remoteLaunch")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.RemoteLaunch.Header"]</h6>
                                 <small class="text-muted d-block mb-3">
                                     @L["Settings.RemoteLaunch.Help"]
                                 </small>
@@ -796,8 +784,6 @@
                         else if (activeTab == "special")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.Special.Header"]</h6>
-
                                 <div class="mb-4">
                                     <h6 class="mb-2">@L["Settings.Special.ClaudeModeKey.Header"]</h6>
                                     <p class="text-muted small">@L["Settings.Special.ClaudeModeKey.Help"]</p>
@@ -883,8 +869,6 @@
                         else if (activeTab == "devDiagnose")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.DevDiagnose.Header"]</h6>
-
                                 <div class="mb-3">
                                     <button class="btn btn-info btn-sm me-2" @onclick="RefreshDiagnostics">
                                         <i class="bi bi-arrow-clockwise me-1"></i>@L["Settings.DevDiagnose.Refresh"]
@@ -954,7 +938,6 @@
                         else if (activeTab == "devBuffer")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.DevBuffer.Header"]</h6>
                                 <p class="text-muted small mb-3">@L["Settings.DevBuffer.Help"]</p>
 
                                 <div class="mb-3">
@@ -1000,8 +983,6 @@
                         else if (activeTab == "devNotify")
                         {
                             <div class="tab-pane fade show active">
-                                <h6 class="mb-3">@L["Settings.DevNotify.Header"]</h6>
-
                                 <div class="mb-3">
                                     <label class="form-label">@L["Settings.DevNotify.TestElapsedLabel"]</label>
                                     <input type="number" class="form-control" @bind="testElapsedSeconds" min="1" max="300" style="max-width: 150px;" />
