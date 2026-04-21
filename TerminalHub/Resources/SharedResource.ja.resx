@@ -312,7 +312,7 @@
   <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>全操作を無条件で自動承認します（--dangerously-skip-permissions）。</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>全ての操作で都度確認を求めます。</value></data>
-  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>コンティニュー (--continue)</value></data>
+  <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>直前のセッションに接続 (--continue)</value></data>
   <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>ブラウザ連携 (--chrome)</value></data>
   <data name="SessionOptions.Claude.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model claude-sonnet-4-20250514 --verbose</value></data>
   <data name="SessionOptions.Claude.PassToCli" xml:space="preserve"><value>そのまま Claude Code に渡します</value></data>
@@ -328,7 +328,7 @@
   <data name="SessionOptions.Gemini.ApprovalMode.HelpYolo" xml:space="preserve"><value>全ての操作を警告なしで自動的に承認します（危険）。</value></data>
   <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>サンドボックスモード (-s)</value></data>
   <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>この機能を使用するには、Docker Desktop がインストールされている必要があります。</value></data>
-  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>コンティニュー (--resume latest)</value></data>
+  <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>直前のセッションに接続 (--resume latest)</value></data>
   <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>モデルをカスタマイズ</value></data>
   <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>使用するモデル</value></data>
   <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>モデルリスト管理</value></data>
@@ -350,7 +350,7 @@
   <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨です。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
-  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>最新セッションを再開 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
@@ -360,10 +360,10 @@
   <data name="SessionOptions.Codex.Sandbox.WorkspaceTitle" xml:space="preserve"><value>ワークスペース内のみ書き込み可能。</value></data>
   <data name="SessionOptions.Codex.Sandbox.FullAccessLabel" xml:space="preserve"><value>フルアクセス</value></data>
   <data name="SessionOptions.Codex.Sandbox.FullAccessTitle" xml:space="preserve"><value>フルアクセス（危険）。</value></data>
-  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>外部通信やファイルアクセス範囲を制限</value></data>
+  <data name="SessionOptions.Codex.Sandbox.Help" xml:space="preserve"><value>外部通信やファイルアクセス範囲を制限します。</value></data>
   <data name="SessionOptions.Codex.Sandbox.HelpDefault" xml:space="preserve"><value>Codex CLI の既定値に任せます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.Label" xml:space="preserve"><value>承認ポリシー</value></data>
-  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>操作の承認レベル（--ask-for-approval）</value></data>
+  <data name="SessionOptions.Codex.ApprovalPolicy.Help" xml:space="preserve"><value>Codex が承認を求めるタイミング（--ask-for-approval）</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
@@ -509,6 +509,7 @@
   <data name="Root.NoSessionSelected" xml:space="preserve"><value>左側からセッションを選択してください</value></data>
   <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Claude Code へのメッセージを入力…</value></data>
   <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Gemini CLI へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.CodexCLI" xml:space="preserve"><value>Codex CLI へのメッセージを入力…</value></data>
   <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>コマンドを入力…</value></data>
   <data name="Root.SessionType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
   <data name="Root.SessionType.Fallback" xml:space="preserve"><value>セッション</value></data>
