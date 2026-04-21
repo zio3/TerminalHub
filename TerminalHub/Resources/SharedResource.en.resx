@@ -155,7 +155,7 @@
 
   <!-- Settings: Export/Import Tab -->
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>
-  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data from the current storage ({0}) as a JSON file.</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>Downloads session data as a JSON file.</value></data>
   <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>Export target: {0} sessions</value></data>
   <data name="Settings.Export.Export.Button" xml:space="preserve"><value>Export</value></data>
   <data name="Settings.Export.Import.Header" xml:space="preserve"><value>Import</value></data>

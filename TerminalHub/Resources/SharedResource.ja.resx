@@ -155,7 +155,7 @@
 
   <!-- Settings: Export/Import Tab -->
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>エクスポート</value></data>
-  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>現在のストレージ（{0}）からセッション情報をJSONファイルとしてダウンロードします。</value></data>
+  <data name="Settings.Export.Export.Help" xml:space="preserve"><value>セッション情報をJSONファイルとしてダウンロードします。</value></data>
   <data name="Settings.Export.Export.TargetInfo" xml:space="preserve"><value>エクスポート対象: セッション情報（{0} 件）</value></data>
   <data name="Settings.Export.Export.Button" xml:space="preserve"><value>エクスポート</value></data>
   <data name="Settings.Export.Import.Header" xml:space="preserve"><value>インポート</value></data>
