@@ -853,22 +853,6 @@
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">@L["Settings.Special.TextRefine.Header"]</h6>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" @bind="textRefineEnabled" id="textRefineSwitch">
-                                        <label class="form-check-label" for="textRefineSwitch">
-                                            @L["Settings.Special.TextRefine.Enable"]
-                                        </label>
-                                    </div>
-                                    <p class="text-muted small mt-2 mb-0">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        @((MarkupString)L["Settings.Special.TextRefine.HelpHtml"].Value)
-                                    </p>
-                                </div>
-
-                                <hr />
-
-                                <div class="mb-4">
                                     <h6 class="mb-2">@L["Settings.Special.DevTools.Header"]</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
@@ -1101,7 +1085,6 @@
     private DateTime? diagPingExecutedAt = null;
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
-    private bool textRefineEnabled = false;
     private string sessionSortMode = "lastAccessed";
     private bool showTerminalType = false;
     private bool showGitInfo = false;
@@ -1144,7 +1127,6 @@
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
     [Parameter] public EventCallback<int> OnSidebarWidthPercentChanged { get; set; }
     [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
-    [Parameter] public EventCallback<bool> OnTextRefineEnabledChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
@@ -1245,7 +1227,6 @@
                 _ => "none"
             };
             voiceInputEnabled = settings.Special.VoiceInputEnabled;
-            textRefineEnabled = settings.Special.TextRefineEnabled;
 
             // セッション表示設定
             // 未知の SortMode 値は lastAccessed にフォールバック（UI ラジオの未選択状態を防ぐ）
@@ -1470,8 +1451,7 @@
                 Special = new SpecialSettings
                 {
                     ClaudeModeSwitchKey = claudeModeSwitchKey,
-                    VoiceInputEnabled = voiceInputEnabled,
-                    TextRefineEnabled = textRefineEnabled
+                    VoiceInputEnabled = voiceInputEnabled
                 },
                 Sessions = new SessionDisplaySettings
                 {
@@ -1535,7 +1515,6 @@
 
             // 音声入力設定の変更を通知
             await OnVoiceInputEnabledChanged.InvokeAsync(voiceInputEnabled);
-            await OnTextRefineEnabledChanged.InvokeAsync(textRefineEnabled);
 
             // テーマの変更を通知
             await OnThemeChanged.InvokeAsync(theme);

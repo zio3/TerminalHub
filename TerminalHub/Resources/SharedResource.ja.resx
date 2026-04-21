@@ -211,9 +211,6 @@
   <data name="Settings.Special.VoiceInput.Header" xml:space="preserve"><value>音声入力</value></data>
   <data name="Settings.Special.VoiceInput.Enable" xml:space="preserve"><value>音声入力を有効にする（実験的）</value></data>
   <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>有効にすると、テキスト入力パネルにマイクボタンが表示されます。ボタンを押している間だけ音声認識が動作します（Chrome 推奨）。</value></data>
-  <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>テキスト事前整形</value></data>
-  <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>事前整形ボタンを有効にする（実験的）</value></data>
-  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>有効にすると、テキスト入力パネルに「&lt;i class="bi bi-stars"&gt;&lt;/i&gt; 事前整形」ボタンが表示されます。押すと Claude Code CLI（Haiku モデル）で誤字脱字や表現の揺れを修正します。&lt;br/&gt;整形指示は &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt; を編集してカスタマイズ可能。</value></data>
   <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>開発ツール</value></data>
   <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>開発ツールを有効にする</value></data>
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>有効にすると、診断・バッファ・通知テストのタブが表示されます。</value></data>
@@ -501,8 +498,6 @@
   <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>改行</value></data>
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>履歴</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
-  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Claude Code で誤字脱字・表現を整える</value></data>
-  <data name="TextInput.Refine.Label" xml:space="preserve"><value>事前整形</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
 

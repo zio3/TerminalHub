@@ -2,7 +2,6 @@
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
 @inject IInputHistoryService InputHistoryService
-@inject ITextRefineService TextRefine
 @inject ILogger<TextInputPanel> Logger
 @inject IJSRuntime JS
 @inject IStringLocalizer<SharedResource> L
@@ -70,23 +69,6 @@
                         <i class="bi bi-mic"></i>
                     </button>
                 }
-                @if (TextRefineEnabled)
-                {
-                    <button class="btn btn-secondary @(isRefining ? "active" : "")"
-                            @onclick="OnRefineClick"
-                            disabled="@(isRefining || string.IsNullOrWhiteSpace(inputText))"
-                            title="@L["TextInput.Refine.Tooltip"]">
-                        @if (isRefining)
-                        {
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-stars"></i>
-                        }
-                        <span class="d-none d-md-inline ms-1">@L["TextInput.Refine.Label"]</span>
-                    </button>
-                }
                 <button class="btn btn-primary" @onclick="OnSendClick">
                     <i class="bi bi-send d-none d-md-inline"></i> @L["TextInput.Send"]
                 </button>
@@ -101,7 +83,6 @@
     [Parameter] public string ClaudeModeSwitchKey { get; set; } = "altM";
     [Parameter] public string PlaceholderText { get; set; } = "コマンドを入力...";
     [Parameter] public bool VoiceInputEnabled { get; set; } = false;
-    [Parameter] public bool TextRefineEnabled { get; set; } = false;
 
     [Parameter] public string Text { get; set; } = "";
     [Parameter] public EventCallback<string> TextChanged { get; set; }
@@ -130,7 +111,6 @@
     private bool isModeSwitchPressed = false;
     private bool isSending = false;
     private bool isVoiceRecording = false;
-    private bool isRefining = false;
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
 
@@ -362,40 +342,6 @@
     {
         inputText = text;
         StateHasChanged();
-    }
-
-    /// <summary>
-    /// 「事前整形」ボタン: テキストを Claude Code -p で整形し、結果でテキストエリアを置換する。
-    /// </summary>
-    private async Task OnRefineClick()
-    {
-        if (isRefining) return;
-        var source = inputText;
-        if (string.IsNullOrWhiteSpace(source)) return;
-
-        isRefining = true;
-        StateHasChanged();
-        try
-        {
-            var refined = await TextRefine.RefineAsync(source);
-            if (!string.IsNullOrEmpty(refined))
-            {
-                inputText = refined;
-            }
-            else
-            {
-                Logger.LogWarning("[TextInputPanel] 事前整形に失敗（null 返却）");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "[TextInputPanel] 事前整形中にエラー");
-        }
-        finally
-        {
-            isRefining = false;
-            StateHasChanged();
-        }
     }
 
     /// <summary>

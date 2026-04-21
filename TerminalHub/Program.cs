@@ -127,9 +127,6 @@ builder.Services.AddSingleton<IAppSettingsService, AppSettingsService>();
 // FolderPickerServiceを登録
 builder.Services.AddSingleton<IFolderPickerService, FolderPickerService>();
 
-// TextRefineService（テキスト事前整形、実験的）
-builder.Services.AddSingleton<ITextRefineService, TextRefineService>();
-
 // リモート起動サービスを登録
 builder.Services.AddSingleton<IRemoteLaunchService, RemoteLaunchService>();
 builder.Services.AddSingleton<MqttService>();

@@ -211,9 +211,6 @@
   <data name="Settings.Special.VoiceInput.Header" xml:space="preserve"><value>Voice input</value></data>
   <data name="Settings.Special.VoiceInput.Enable" xml:space="preserve"><value>Enable voice input (experimental)</value></data>
   <data name="Settings.Special.VoiceInput.Help" xml:space="preserve"><value>When enabled, a microphone button appears in the text input panel. Speech recognition only runs while the button is held down (Chrome recommended).</value></data>
-  <data name="Settings.Special.TextRefine.Header" xml:space="preserve"><value>Text pre-refinement</value></data>
-  <data name="Settings.Special.TextRefine.Enable" xml:space="preserve"><value>Enable pre-refinement button (experimental)</value></data>
-  <data name="Settings.Special.TextRefine.HelpHtml" xml:space="preserve"><value>When enabled, a &lt;i class="bi bi-stars"&gt;&lt;/i&gt; Refine button appears in the text input panel. Pressing it runs Claude Code CLI (Haiku model) to fix typos and polish phrasing.&lt;br/&gt;The refinement instructions can be customized by editing &lt;code&gt;%LOCALAPPDATA%\TerminalHub\refine-workdir\CLAUDE.md&lt;/code&gt;.</value></data>
   <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>Developer tools</value></data>
   <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>Enable developer tools</value></data>
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs appear in the input panel.</value></data>
@@ -501,8 +498,6 @@
   <data name="TextInput.KeyHints.Newline" xml:space="preserve"><value>Newline</value></data>
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>History</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>Voice input (hold to record)</value></data>
-  <data name="TextInput.Refine.Tooltip" xml:space="preserve"><value>Clean up typos and phrasing with Claude Code</value></data>
-  <data name="TextInput.Refine.Label" xml:space="preserve"><value>Refine</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>Send</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>Mode switch ({0})</value></data>
 
