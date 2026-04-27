@@ -12,7 +12,6 @@ public class AppSettings
     public SessionDisplaySettings Sessions { get; set; } = new();
     public DevToolsSettings DevTools { get; set; } = new();
     public GeneralSettings General { get; set; } = new();
-    public GeminiSettings Gemini { get; set; } = new();
     public CustomCommandSettings Commands { get; set; } = new();
     public CustomCliOptionsSettings CliOptions { get; set; } = new();
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
@@ -86,14 +85,6 @@ public class GeneralSettings
     public int TerminalHeightPercent { get; set; } = 70;
     public int SidebarWidthPercent { get; set; } = 25;
     public string Theme { get; set; } = "dark";
-}
-
-/// <summary>
-/// Gemini設定
-/// </summary>
-public class GeminiSettings
-{
-    public List<string> Models { get; set; } = new();
 }
 
 /// <summary>
