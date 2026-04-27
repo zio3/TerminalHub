@@ -168,11 +168,33 @@ namespace TerminalHub.Services
             if (currentVersion < 3)
             {
                 // v3: ピン留め・優先度カラムを追加
+                // ⚠️ 過去に IsPinned/PinPriority が先回りして入っているのに
+                //    SchemaVersion=2 のまま残された DB が観測されたため、
+                //    カラムの存在を個別チェックして不足分だけ追加する冪等実装にしている。
                 _logger.LogInformation("[DB][マイグレーション] v3 適用開始: IsPinned, PinPriority カラム追加");
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
-                await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN IsPinned INTEGER DEFAULT 0");
-                await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN PinPriority INTEGER");
+
+                if (!await ColumnExistsAsync(connection, "Sessions", "IsPinned"))
+                {
+                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN IsPinned INTEGER DEFAULT 0");
+                    _logger.LogInformation("[DB][マイグレーション] v3: IsPinned カラムを追加");
+                }
+                else
+                {
+                    _logger.LogInformation("[DB][マイグレーション] v3: IsPinned カラムは既存のためスキップ");
+                }
+
+                if (!await ColumnExistsAsync(connection, "Sessions", "PinPriority"))
+                {
+                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN PinPriority INTEGER");
+                    _logger.LogInformation("[DB][マイグレーション] v3: PinPriority カラムを追加");
+                }
+                else
+                {
+                    _logger.LogInformation("[DB][マイグレーション] v3: PinPriority カラムは既存のためスキップ");
+                }
+
                 await SetSchemaVersionAsync(3);
                 _logger.LogInformation("[DB][マイグレーション] v3 適用完了");
             }
@@ -404,6 +426,23 @@ namespace TerminalHub.Services
             ";
 
             await connection.ExecuteNonQueryAsync(sql);
+        }
+
+        /// <summary>
+        /// 指定したテーブルに指定カラムが存在するか確認する。
+        /// PRAGMA table_info の結果を走査して名前一致を見る。
+        /// </summary>
+        private static async Task<bool> ColumnExistsAsync(SqliteConnection connection, string table, string column)
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info({table})";
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                // PRAGMA table_info: cid(0), name(1), type(2), notnull(3), dflt_value(4), pk(5)
+                if (reader.GetString(1) == column) return true;
+            }
+            return false;
         }
 
         /// <summary>
