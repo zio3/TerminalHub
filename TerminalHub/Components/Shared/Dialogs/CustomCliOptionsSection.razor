@@ -1,0 +1,46 @@
+@namespace TerminalHub.Components.Shared.Dialogs
+@using TerminalHub.Models
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
+
+@if (Options is { Count: > 0 })
+{
+    <div class="mt-3">
+        <label class="form-label small text-muted mb-1">@L["SessionOptions.CustomOptions.Label"]</label>
+        @foreach (var opt in Options)
+        {
+            var checkedState = States.GetValueOrDefault(opt.Id, opt.DefaultEnabled);
+            var domId = $"customOpt-{Prefix}-{opt.Id}";
+            var ariaLabel = string.IsNullOrEmpty(opt.Label) ? opt.Arguments : $"{opt.Label} ({opt.Arguments})";
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="@domId"
+                       checked="@checkedState"
+                       aria-label="@ariaLabel"
+                       @onchange="(e) => OnToggle(opt.Id, (bool)e.Value!)" />
+                <label class="form-check-label" for="@domId">
+                    @if (!string.IsNullOrEmpty(opt.Label))
+                    {
+                        <strong>@opt.Label</strong>
+                        <code class="ms-2 small text-muted">@opt.Arguments</code>
+                    }
+                    else
+                    {
+                        <code class="small">@opt.Arguments</code>
+                    }
+                </label>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<UserCliOption>? Options { get; set; }
+    [Parameter] public Dictionary<string, bool> States { get; set; } = new();
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public EventCallback<(string Id, bool Enabled)> OnStateChanged { get; set; }
+
+    // State の真実は親 (SessionOptionsSelector) が持つ。子は変更を通知するだけにし、
+    // Dictionary を直接書かないことで責務をレイヤリング。
+    private Task OnToggle(string id, bool enabled) =>
+        OnStateChanged.InvokeAsync((id, enabled));
+}

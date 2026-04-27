@@ -74,6 +74,7 @@
   <data name="Settings.Tab.Sessions" xml:space="preserve"><value>Sessions</value></data>
   <data name="Settings.Tab.ExportImport" xml:space="preserve"><value>Export / Import</value></data>
   <data name="Settings.Tab.Commands" xml:space="preserve"><value>Commands</value></data>
+  <data name="Settings.Tab.CliOptions" xml:space="preserve"><value>Custom Options</value></data>
   <data name="Settings.Tab.RemoteLaunch" xml:space="preserve"><value>Remote Launch</value></data>
   <data name="Settings.Tab.Special" xml:space="preserve"><value>Special</value></data>
   <data name="Settings.Tab.DevDiagnose" xml:space="preserve"><value>Diagnostics</value></data>
@@ -171,6 +172,13 @@
   <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>Title (optional)</value></data>
   <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>Command (e.g., /plan)</value></data>
   <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>Drag to reorder</value></data>
+
+  <!-- Settings: Custom CLI Options Tab -->
+  <data name="Settings.CliOptions.Help" xml:space="preserve"><value>Register frequently used command-line options per CLI. Toggle them on or off via checkboxes when creating a new session. Options with the switch turned on are pre-checked by default. Wrap values containing spaces in double quotes (e.g. --add-dir "C:\path with space").</value></data>
+  <data name="Settings.CliOptions.Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Settings.CliOptions.LabelPlaceholder" xml:space="preserve"><value>Label (optional)</value></data>
+  <data name="Settings.CliOptions.ArgsPlaceholder" xml:space="preserve"><value>e.g. --model gpt-5</value></data>
+  <data name="Settings.CliOptions.DefaultEnabled.Title" xml:space="preserve"><value>On by default</value></data>
 
   <!-- Settings: Remote Launch Tab -->
   <data name="Settings.RemoteLaunch.Help" xml:space="preserve"><value>Start Claude Code sessions from your phone when you're away from your PC. Use the URL below on your mobile device.</value></data>
@@ -295,6 +303,7 @@
   <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>Terminal type</value></data>
   <data name="SessionOptions.TerminalType.Terminal" xml:space="preserve"><value>Terminal</value></data>
   <data name="SessionOptions.ExtraArgs.Label" xml:space="preserve"><value>Additional arguments</value></data>
+  <data name="SessionOptions.CustomOptions.Label" xml:space="preserve"><value>Custom options</value></data>
 
   <!-- SessionOptionsSelector: Terminal (default startup command) -->
   <data name="SessionOptions.Terminal.StartupCommand.Label" xml:space="preserve"><value>Startup command (optional)</value></data>

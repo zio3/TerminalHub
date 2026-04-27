@@ -5,6 +5,7 @@
 @using Microsoft.JSInterop
 @inject IConfiguration Configuration
 @inject ILocalStorageService LocalStorage
+@inject IAppSettingsService AppSettingsService
 @inject IStringLocalizer<SharedResource> L
 
 <div class="session-options">
@@ -107,6 +108,9 @@
                        placeholder="@L["SessionOptions.Claude.ExtraArgsPlaceholder"]" />
                 <div class="form-text small">@L["SessionOptions.Claude.PassToCli"]</div>
             </div>
+
+            <CustomCliOptionsSection Options="claudeCustomOptions" States="customOptionStates"
+                                     Prefix="@($"claude{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
         </div>
     }
     else if (SelectedType == TerminalType.GeminiCLI && Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
@@ -217,6 +221,9 @@
                        placeholder="@L["SessionOptions.Gemini.ExtraArgsPlaceholder"]" />
                 <div class="form-text small">@L["SessionOptions.Gemini.PassToCli"]</div>
             </div>
+
+            <CustomCliOptionsSection Options="geminiCustomOptions" States="customOptionStates"
+                                     Prefix="@($"gemini{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
         </div>
     }
     else if (SelectedType == TerminalType.CodexCLI && Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
@@ -370,6 +377,9 @@
                        placeholder="@L["SessionOptions.Codex.ExtraArgsPlaceholder"]" />
                 <div class="form-text small">@L["SessionOptions.Codex.PassToCli"]</div>
             </div>
+
+            <CustomCliOptionsSection Options="codexCustomOptions" States="customOptionStates"
+                                     Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
         </div>
     }
     else
@@ -398,6 +408,18 @@
     private List<string> geminiModelList = new();
     private string newGeminiModelName = "";
 
+    // ユーザー定義カスタムオプション (AppSettings.CliOptions から読み込む)
+    private List<UserCliOption> claudeCustomOptions = new();
+    private List<UserCliOption> geminiCustomOptions = new();
+    private List<UserCliOption> codexCustomOptions = new();
+    // チェック状態は Id 単位で保持 (CLI 切替で消えないようにするため)
+    private Dictionary<string, bool> customOptionStates = new();
+
+    protected override void OnInitialized()
+    {
+        LoadCustomCliOptions();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -405,6 +427,68 @@
             await LoadGeminiModelsAsync();
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// 設定変更後にダイアログを開き直したケースを拾うため、外部から再読込できるよう公開している。
+    /// </summary>
+    public void ReloadCustomCliOptions()
+    {
+        LoadCustomCliOptions();
+        StateHasChanged();
+    }
+
+    private void LoadCustomCliOptions()
+    {
+        try
+        {
+            var settings = AppSettingsService.GetSettings();
+            var cli = settings.CliOptions ?? new CustomCliOptionsSettings();
+            claudeCustomOptions = new List<UserCliOption>(cli.ClaudeCode);
+            geminiCustomOptions = new List<UserCliOption>(cli.GeminiCLI);
+            codexCustomOptions = new List<UserCliOption>(cli.CodexCLI);
+
+            // 既存 state はそのまま、新規エントリは DefaultEnabled で初期化
+            var aliveIds = new HashSet<string>();
+            foreach (var opt in claudeCustomOptions.Concat(geminiCustomOptions).Concat(codexCustomOptions))
+            {
+                aliveIds.Add(opt.Id);
+                if (!customOptionStates.ContainsKey(opt.Id))
+                {
+                    customOptionStates[opt.Id] = opt.DefaultEnabled;
+                }
+            }
+            // 設定で削除されたエントリの state は破棄して整合性を保つ
+            var staleIds = customOptionStates.Keys.Where(k => !aliveIds.Contains(k)).ToList();
+            foreach (var id in staleIds)
+            {
+                customOptionStates.Remove(id);
+            }
+        }
+        catch
+        {
+            // 設定読み込みに失敗しても起動を阻害しない (カスタムオプションなし扱い)
+        }
+    }
+
+    private void OnCustomOptionToggled((string Id, bool Enabled) change)
+    {
+        customOptionStates[change.Id] = change.Enabled;
+    }
+
+    private List<UserCliOption> GetActiveCustomOptions()
+    {
+        var list = SelectedType switch
+        {
+            TerminalType.ClaudeCode => claudeCustomOptions,
+            TerminalType.GeminiCLI => geminiCustomOptions,
+            TerminalType.CodexCLI => codexCustomOptions,
+            _ => new List<UserCliOption>()
+        };
+        return list
+            .Where(o => customOptionStates.GetValueOrDefault(o.Id, o.DefaultEnabled)
+                        && !string.IsNullOrWhiteSpace(o.Arguments))
+            .ToList();
     }
 
     private async Task LoadGeminiModelsAsync()
@@ -595,6 +679,14 @@
                     options["extra-args"] = CodexOptions.ExtraArgs.Trim();
                 }
                 break;
+        }
+
+        // ON にされたカスタムオプションを空白連結して "custom-args" に束ねる。
+        // TerminalConstants.Build*Args が末尾に追記する。
+        var activeCustom = GetActiveCustomOptions();
+        if (activeCustom.Count > 0)
+        {
+            options["custom-args"] = string.Join(" ", activeCustom.Select(o => o.Arguments.Trim()));
         }
 
         return options;
