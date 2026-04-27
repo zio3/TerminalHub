@@ -174,7 +174,7 @@
   <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>ドラッグで並び替え</value></data>
 
   <!-- Settings: Custom CLI Options Tab -->
-  <data name="Settings.CliOptions.Help" xml:space="preserve"><value>各 CLI ごとに、よく使うコマンドラインオプションを登録できます。新規セッション作成時のチェックボックスで ON/OFF できます。スイッチをオンにしたものは、デフォルトでチェックされた状態で表示されます。</value></data>
+  <data name="Settings.CliOptions.Help" xml:space="preserve"><value>各 CLI ごとに、よく使うコマンドラインオプションを登録できます。新規セッション作成時のチェックボックスで ON/OFF できます。スイッチをオンにしたものは、デフォルトでチェックされた状態で表示されます。値にスペースを含む場合はダブルクォートで囲んでください（例: --add-dir "C:\path with space"）。</value></data>
   <data name="Settings.CliOptions.Add" xml:space="preserve"><value>追加</value></data>
   <data name="Settings.CliOptions.LabelPlaceholder" xml:space="preserve"><value>ラベル（省略可）</value></data>
   <data name="Settings.CliOptions.ArgsPlaceholder" xml:space="preserve"><value>例: --model gpt-5</value></data>

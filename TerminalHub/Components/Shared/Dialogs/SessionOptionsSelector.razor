@@ -449,12 +449,20 @@
             codexCustomOptions = new List<UserCliOption>(cli.CodexCLI);
 
             // 既存 state はそのまま、新規エントリは DefaultEnabled で初期化
+            var aliveIds = new HashSet<string>();
             foreach (var opt in claudeCustomOptions.Concat(geminiCustomOptions).Concat(codexCustomOptions))
             {
+                aliveIds.Add(opt.Id);
                 if (!customOptionStates.ContainsKey(opt.Id))
                 {
                     customOptionStates[opt.Id] = opt.DefaultEnabled;
                 }
+            }
+            // 設定で削除されたエントリの state は破棄して整合性を保つ
+            var staleIds = customOptionStates.Keys.Where(k => !aliveIds.Contains(k)).ToList();
+            foreach (var id in staleIds)
+            {
+                customOptionStates.Remove(id);
             }
         }
         catch
