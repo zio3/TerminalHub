@@ -102,6 +102,8 @@ namespace TerminalHub.Constants
                 args.Add(extraArgs.Trim());
             }
 
+            AppendCustomArgs(args, options);
+
             return string.Join(" ", args);
         }
 
@@ -133,6 +135,8 @@ namespace TerminalHub.Constants
             {
                 args.Add(extraArgs);
             }
+
+            AppendCustomArgs(args, options);
 
             return string.Join(" ", args);
         }
@@ -224,7 +228,19 @@ namespace TerminalHub.Constants
                 args.Add(extraArgs.Trim());
             }
 
+            AppendCustomArgs(args, options);
+
             return string.Join(" ", args);
+        }
+
+        // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。
+        // SessionOptionsSelector が options["custom-args"] にスペース連結済みの文字列を入れる。
+        private static void AppendCustomArgs(List<string> args, Dictionary<string, string> options)
+        {
+            if (options.TryGetValue("custom-args", out var custom) && !string.IsNullOrWhiteSpace(custom))
+            {
+                args.Add(custom.Trim());
+            }
         }
     }
 }

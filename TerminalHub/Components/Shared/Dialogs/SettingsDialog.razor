@@ -74,6 +74,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "cliOptions" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "cliOptions")">
+                                <i class="bi bi-sliders me-1"></i>@L["Settings.Tab.CliOptions"]
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "remoteLaunch" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "remoteLaunch")">
@@ -643,6 +650,67 @@
                                 }
                             </div>
                         }
+                        else if (activeTab == "cliOptions")
+                        {
+                            <div class="tab-pane fade show active">
+                                <small class="text-muted d-block mb-3">
+                                    @L["Settings.CliOptions.Help"]
+                                </small>
+
+                                @foreach (var cli in CliOptionTypes)
+                                {
+                                    var type = cli;
+                                    var displayName = type switch
+                                    {
+                                        TerminalType.ClaudeCode => "Claude Code",
+                                        TerminalType.GeminiCLI => "Gemini CLI",
+                                        TerminalType.CodexCLI => "Codex CLI",
+                                        _ => type.ToString()
+                                    };
+                                    var list = editingCliOptions.GetValueOrDefault(type, new List<UserCliOption>());
+
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">@displayName</label>
+
+                                        @if (list.Any())
+                                        {
+                                            <ul class="list-group list-group-sm mb-2">
+                                                @for (var i = 0; i < list.Count; i++)
+                                                {
+                                                    var idx = i;
+                                                    var opt = list[i];
+                                                    <li class="list-group-item py-1 px-2">
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   style="max-width: 160px;"
+                                                                   placeholder="@L["Settings.CliOptions.LabelPlaceholder"]"
+                                                                   @bind="opt.Label" />
+                                                            <input type="text" class="form-control form-control-sm flex-grow-1"
+                                                                   placeholder="@L["Settings.CliOptions.ArgsPlaceholder"]"
+                                                                   @bind="opt.Arguments" />
+                                                            <div class="form-check form-switch m-0" title="@L["Settings.CliOptions.DefaultEnabled.Title"]">
+                                                                <input class="form-check-input" type="checkbox"
+                                                                       @bind="opt.DefaultEnabled" />
+                                                            </div>
+                                                            <button class="btn btn-outline-danger btn-sm border-0" type="button"
+                                                                    @onclick="() => RemoveCliOption(type, idx)"
+                                                                    style="font-size: 0.7rem;">
+                                                                <i class="bi bi-x-lg"></i>
+                                                            </button>
+                                                        </div>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+
+                                        <button class="btn btn-outline-primary btn-sm" type="button"
+                                                @onclick="() => AddCliOption(type)">
+                                            <i class="bi bi-plus-lg me-1"></i>@L["Settings.CliOptions.Add"]
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
                         else if (activeTab == "remoteLaunch")
                         {
                             <div class="tab-pane fade show active">
@@ -1048,6 +1116,14 @@
     private Dictionary<string, string> newCommandTexts = new();
     private Dictionary<string, CustomCommandType> newCommandTypes = new();
     private Dictionary<string, string> newCommandKeyNames = new();
+
+    // カスタムオプション (CLI 別)
+    private static readonly TerminalType[] CliOptionTypes = new[]
+    {
+        TerminalType.ClaudeCode, TerminalType.GeminiCLI, TerminalType.CodexCLI
+    };
+    private Dictionary<TerminalType, List<UserCliOption>> editingCliOptions = new();
+
     private string activeTab = "general";
 
     // 現在の UI culture (dropdown の選択値)。CultureInfo の two-letter name をそのまま使う (ja / en)。
@@ -1248,6 +1324,15 @@
                 if (!newCommandKeyNames.ContainsKey(type))
                     newCommandKeyNames[type] = KeySequencePresets.DefaultKey;
             }
+
+            // カスタムCLIオプション (CLI 別、編集中はリストを clone してから扱う)
+            var cliOptions = settings.CliOptions ?? new CustomCliOptionsSettings();
+            editingCliOptions = new Dictionary<TerminalType, List<UserCliOption>>
+            {
+                [TerminalType.ClaudeCode] = cliOptions.ClaudeCode.Select(CloneCliOption).ToList(),
+                [TerminalType.GeminiCLI] = cliOptions.GeminiCLI.Select(CloneCliOption).ToList(),
+                [TerminalType.CodexCLI] = cliOptions.CodexCLI.Select(CloneCliOption).ToList(),
+            };
 
             // リモート起動設定
             remoteLaunchEnabled = settings.RemoteLaunch.Enabled;
@@ -1460,6 +1545,19 @@
                     CommandsByTerminalType = editingCommands
                         .ToDictionary(kv => kv.Key, kv => new List<CustomCommand>(kv.Value))
                 },
+                CliOptions = new CustomCliOptionsSettings
+                {
+                    // 空の Arguments は永続化しない (ノイズになるため)
+                    ClaudeCode = editingCliOptions.GetValueOrDefault(TerminalType.ClaudeCode, new())
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
+                        .Select(CloneCliOption).ToList(),
+                    GeminiCLI = editingCliOptions.GetValueOrDefault(TerminalType.GeminiCLI, new())
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
+                        .Select(CloneCliOption).ToList(),
+                    CodexCLI = editingCliOptions.GetValueOrDefault(TerminalType.CodexCLI, new())
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
+                        .Select(CloneCliOption).ToList(),
+                },
                 RemoteLaunch = new RemoteLaunchSettings
                 {
                     Enabled = remoteLaunchEnabled,
@@ -1556,6 +1654,31 @@
     private void RemoveFavoriteFolder(string folder)
     {
         favoriteFolders.Remove(folder);
+    }
+
+    private static UserCliOption CloneCliOption(UserCliOption src) => new()
+    {
+        Id = src.Id,
+        Label = src.Label,
+        Arguments = src.Arguments,
+        DefaultEnabled = src.DefaultEnabled
+    };
+
+    private void AddCliOption(TerminalType terminalType)
+    {
+        if (!editingCliOptions.ContainsKey(terminalType))
+        {
+            editingCliOptions[terminalType] = new List<UserCliOption>();
+        }
+        editingCliOptions[terminalType].Add(new UserCliOption());
+    }
+
+    private void RemoveCliOption(TerminalType terminalType, int index)
+    {
+        if (editingCliOptions.TryGetValue(terminalType, out var list) && index >= 0 && index < list.Count)
+        {
+            list.RemoveAt(index);
+        }
     }
 
     private void AddCommand(string terminalType)

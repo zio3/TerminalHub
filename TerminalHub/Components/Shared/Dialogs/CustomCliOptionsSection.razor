@@ -1,0 +1,45 @@
+@namespace TerminalHub.Components.Shared.Dialogs
+@using TerminalHub.Models
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
+
+@if (Options is { Count: > 0 })
+{
+    <div class="mt-3">
+        <label class="form-label small text-muted mb-1">@L["SessionOptions.CustomOptions.Label"]</label>
+        @foreach (var opt in Options)
+        {
+            var checkedState = States.GetValueOrDefault(opt.Id, opt.DefaultEnabled);
+            var domId = $"customOpt-{Prefix}-{opt.Id}";
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="@domId"
+                       checked="@checkedState"
+                       @onchange="(e) => OnToggle(opt.Id, (bool)e.Value!)" />
+                <label class="form-check-label" for="@domId">
+                    @if (!string.IsNullOrEmpty(opt.Label))
+                    {
+                        <strong>@opt.Label</strong>
+                        <code class="ms-2 small text-muted">@opt.Arguments</code>
+                    }
+                    else
+                    {
+                        <code class="small">@opt.Arguments</code>
+                    }
+                </label>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<UserCliOption>? Options { get; set; }
+    [Parameter] public Dictionary<string, bool> States { get; set; } = new();
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public EventCallback<(string Id, bool Enabled)> OnStateChanged { get; set; }
+
+    private async Task OnToggle(string id, bool enabled)
+    {
+        States[id] = enabled;
+        await OnStateChanged.InvokeAsync((id, enabled));
+    }
+}

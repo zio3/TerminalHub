@@ -14,6 +14,7 @@ public class AppSettings
     public GeneralSettings General { get; set; } = new();
     public GeminiSettings Gemini { get; set; } = new();
     public CustomCommandSettings Commands { get; set; } = new();
+    public CustomCliOptionsSettings CliOptions { get; set; } = new();
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
 }
 
@@ -124,6 +125,40 @@ public class CustomCommand
     public CustomCommandType Type { get; set; } = CustomCommandType.Text;
     /// <summary>KeySequence 時に参照するプリセットキー名（KeySequencePresets.All のキー）</summary>
     public string? KeyName { get; set; }
+}
+
+/// <summary>
+/// CLI ごとに保存しておくユーザー定義カスタムオプションのコンテナ。
+/// 起動時にチェックボックスで ON/OFF できる「お気に入りのコマンドラインオプション」を CLI 別に保持する。
+/// </summary>
+public class CustomCliOptionsSettings
+{
+    public List<UserCliOption> ClaudeCode { get; set; } = new();
+    public List<UserCliOption> GeminiCLI { get; set; } = new();
+    public List<UserCliOption> CodexCLI { get; set; } = new();
+
+    public List<UserCliOption> ForType(TerminalType type) => type switch
+    {
+        TerminalType.ClaudeCode => ClaudeCode,
+        TerminalType.GeminiCLI => GeminiCLI,
+        TerminalType.CodexCLI => CodexCLI,
+        _ => new List<UserCliOption>()
+    };
+}
+
+/// <summary>
+/// ユーザーが定義した一行ぶんのコマンドラインオプション。
+/// Arguments はそのまま起動コマンドラインの末尾に連結されるので、複数フラグを 1 行にまとめても良い。
+/// </summary>
+public class UserCliOption
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    /// <summary>UI に表示する短いラベル (空文字も許容、その場合は Arguments 自体を表示)</summary>
+    public string Label { get; set; } = "";
+    /// <summary>実引数文字列 (例: "--model gpt-5", "-c sandbox.foo=true")</summary>
+    public string Arguments { get; set; } = "";
+    /// <summary>新規セッション作成ダイアログを開いた時に初期 ON にするか</summary>
+    public bool DefaultEnabled { get; set; } = false;
 }
 
 /// <summary>

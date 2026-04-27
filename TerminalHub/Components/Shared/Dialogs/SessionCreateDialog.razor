@@ -191,6 +191,9 @@
                 folderPath = defaultPath;
             }
             favoriteFolders = new List<string>(settings.General.FavoriteFolders);
+
+            // 設定タブで CLI オプションを編集した直後にダイアログを開き直したケースに対応するため、再ロードを促す。
+            optionsSelector?.ReloadCustomCliOptions();
         }
         catch (Exception ex)
         {
