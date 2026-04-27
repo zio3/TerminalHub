@@ -51,6 +51,14 @@ jobs:
           $json.Mqtt.Password = "${{ secrets.MQTT_PASSWORD }}"
           $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -NoNewline
 
+      - name: Inject Discord error-report webhook URL
+        shell: pwsh
+        run: |
+          $settingsPath = "TerminalHub/appsettings.json"
+          $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+          $json.ErrorReport.WebhookUrl = "${{ secrets.DISCORD_ERROR_WEBHOOK_URL }}"
+          $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -NoNewline
+
       - name: Publish application
         run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
 
