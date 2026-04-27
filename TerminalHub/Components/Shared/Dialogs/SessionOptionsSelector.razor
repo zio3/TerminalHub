@@ -2,9 +2,7 @@
 @using TerminalHub.Services
 @using Microsoft.Extensions.Configuration
 @using Microsoft.Extensions.Localization
-@using Microsoft.JSInterop
 @inject IConfiguration Configuration
-@inject ILocalStorageService LocalStorage
 @inject IAppSettingsService AppSettingsService
 @inject IStringLocalizer<SharedResource> L
 
@@ -172,49 +170,6 @@
                 }
             </div>
 
-            <!-- Custom Model -->
-            <div class="mt-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.UseCustomModel" id="@($"geminiUseCustomModel{UniqueId}")">
-                    <label class="form-check-label" for="@($"geminiUseCustomModel{UniqueId}")">
-                        @L["SessionOptions.Gemini.UseCustomModel"]
-                    </label>
-                </div>
-
-                @if (GeminiOptions.UseCustomModel)
-                {
-                    <div class="mt-2 ps-4">
-                        <div class="mb-2">
-                            <label for="@($"geminiModelSelect{UniqueId}")" class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ModelSelectLabel"]</label>
-                            <select class="form-select form-select-sm" id="@($"geminiModelSelect{UniqueId}")" @bind="GeminiOptions.Model">
-                                @foreach (var model in geminiModelList)
-                                {
-                                    <option value="@model">@model</option>
-                                }
-                            </select>
-                        </div>
-                        <div>
-                            <label class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ModelManagementLabel"]</label>
-                            <div class="input-group input-group-sm">
-                                <input type="text" class="form-control" @bind="newGeminiModelName" placeholder="@L["SessionOptions.Gemini.ModelAddPlaceholder"]" @onkeydown="OnModelInputKeyDown" />
-                                <button class="btn btn-outline-secondary" type="button" @onclick="AddGeminiModel">@L["Common.Add"]</button>
-                            </div>
-                            <ul class="list-group mt-2" style="max-height: 150px; overflow-y: auto;">
-                                @foreach (var model in geminiModelList.OrderBy(m => m))
-                                {
-                                    <li class="list-group-item list-group-item-sm d-flex justify-content-between align-items-center py-1">
-                                        <span class="text-truncate" title="@model">@model</span>
-                                        <button class="btn btn-sm btn-outline-danger p-0" style="width: 1.5rem; height: 1.5rem;" @onclick="() => RemoveGeminiModel(model)">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </li>
-                                }
-                            </ul>
-                        </div>
-                    </div>
-                }
-            </div>
-            
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="GeminiOptions.ExtraArgs"
@@ -329,34 +284,6 @@
                 }
             </div>
 
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.NetworkAccess.Label"]</label>
-                <select class="form-select form-select-sm" @bind="CodexOptions.NetworkAccess">
-                    <option value="">@L["Common.Unspecified"]</option>
-                    <option value="restricted">restricted</option>
-                    <option value="enabled">enabled</option>
-                </select>
-                <div class="form-text small">@L["SessionOptions.Codex.NetworkAccess.Help"]</div>
-                @if (!string.IsNullOrWhiteSpace(GetNetworkAccessHelp()))
-                {
-                    <div class="form-text small">@GetNetworkAccessHelp()</div>
-                }
-            </div>
-
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Profile.Label"]</label>
-                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Profile"
-                       placeholder="@L["SessionOptions.Codex.Profile.Placeholder"]" />
-                <div class="form-text small">@L["SessionOptions.Codex.Profile.Help"]</div>
-            </div>
-
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Model.Label"]</label>
-                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.Model"
-                       placeholder="@L["SessionOptions.Codex.Model.Placeholder"]" />
-                <div class="form-text small">@L["SessionOptions.Codex.Model.Help"]</div>
-            </div>
-
             <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
                 <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
@@ -402,11 +329,6 @@
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
-    private const string GEMINI_MODELS_KEY = "gemini_models";
-
-    // Geminiモデル管理用
-    private List<string> geminiModelList = new();
-    private string newGeminiModelName = "";
 
     // ユーザー定義カスタムオプション (AppSettings.CliOptions から読み込む)
     private List<UserCliOption> claudeCustomOptions = new();
@@ -418,15 +340,6 @@
     protected override void OnInitialized()
     {
         LoadCustomCliOptions();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await LoadGeminiModelsAsync();
-            StateHasChanged();
-        }
     }
 
     /// <summary>
@@ -491,71 +404,9 @@
             .ToList();
     }
 
-    private async Task LoadGeminiModelsAsync()
-    {
-        try
-        {
-            var models = await LocalStorage.GetAsync<List<string>>(GEMINI_MODELS_KEY);
-            if (models == null || !models.Any())
-            {
-                // LocalStorageにない場合はappsettings.jsonから読み込む
-                models = Configuration.GetSection("ExternalTools:GeminiModels").Get<List<string>>() ?? new List<string>();
-                await LocalStorage.SetAsync(GEMINI_MODELS_KEY, models);
-            }
-            geminiModelList = models;
-
-            // 選択中のモデルがリストにない場合は、リストの先頭を選択する
-            if (!string.IsNullOrEmpty(GeminiOptions.Model) && !geminiModelList.Contains(GeminiOptions.Model))
-            {
-                GeminiOptions.Model = geminiModelList.FirstOrDefault();
-            }
-            else if (string.IsNullOrEmpty(GeminiOptions.Model))
-            {
-                GeminiOptions.Model = geminiModelList.FirstOrDefault();
-            }
-        }
-        catch
-        {
-            geminiModelList = new List<string> { "gemini-1.5-pro-latest" };
-        }
-    }
-
-    private async Task AddGeminiModel()
-    {
-        if (!string.IsNullOrWhiteSpace(newGeminiModelName) && !geminiModelList.Contains(newGeminiModelName.Trim()))
-        {
-            geminiModelList.Add(newGeminiModelName.Trim());
-            newGeminiModelName = "";
-            await LocalStorage.SetAsync(GEMINI_MODELS_KEY, geminiModelList);
-        }
-    }
-
-    private async Task RemoveGeminiModel(string modelToRemove)
-    {
-        geminiModelList.Remove(modelToRemove);
-        if (GeminiOptions.Model == modelToRemove)
-        {
-            GeminiOptions.Model = geminiModelList.FirstOrDefault();
-        }
-        await LocalStorage.SetAsync(GEMINI_MODELS_KEY, geminiModelList);
-    }
-
-    private async Task OnModelInputKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await AddGeminiModel();
-        }
-    }
-
     private async Task OnTerminalTypeChanged(TerminalType newType)
     {
         SelectedType = newType;
-        if (newType == TerminalType.GeminiCLI)
-        {
-            // Geminiが選択されたときにモデルリストを再読み込み
-            await LoadGeminiModelsAsync();
-        }
         await SelectedTypeChanged.InvokeAsync(newType);
     }
 
@@ -630,10 +481,6 @@
                 {
                     options["approval-mode"] = GeminiOptions.ApprovalMode;
                 }
-                if (GeminiOptions.UseCustomModel && !string.IsNullOrWhiteSpace(GeminiOptions.Model))
-                {
-                    options["model"] = GeminiOptions.Model;
-                }
                 if (!string.IsNullOrWhiteSpace(GeminiOptions.ExtraArgs))
                 {
                     options["extra-args"] = GeminiOptions.ExtraArgs.Trim();
@@ -653,18 +500,6 @@
                 if (!string.IsNullOrWhiteSpace(CodexOptions.ApprovalPolicy))
                 {
                     options["ask-for-approval"] = CodexOptions.ApprovalPolicy;
-                }
-                if (!string.IsNullOrWhiteSpace(CodexOptions.NetworkAccess))
-                {
-                    options["network-access"] = CodexOptions.NetworkAccess;
-                }
-                if (!string.IsNullOrWhiteSpace(CodexOptions.Profile))
-                {
-                    options["profile"] = CodexOptions.Profile.Trim();
-                }
-                if (!string.IsNullOrWhiteSpace(CodexOptions.Model))
-                {
-                    options["model"] = CodexOptions.Model.Trim();
                 }
                 if (CodexOptions.SearchEnabled)
                 {
@@ -705,8 +540,6 @@
         public bool Continue { get; set; } = true;
         public bool SandboxMode { get; set; }
         public string ApprovalMode { get; set; } = "default"; // default, auto_edit, yolo
-        public bool UseCustomModel { get; set; }
-        public string? Model { get; set; }
         public string ExtraArgs { get; set; } = "";
     }
 
@@ -716,9 +549,6 @@
         public bool ResumeLast { get; set; } = false;
         public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
-        public string NetworkAccess { get; set; } = "";
-        public string Profile { get; set; } = "";
-        public string Model { get; set; } = "";
         public bool SearchEnabled { get; set; }
         public string AdditionalDirectories { get; set; } = "";
         public string ExtraArgs { get; set; } = "";
@@ -780,13 +610,4 @@
         };
     }
 
-    private string GetNetworkAccessHelp()
-    {
-        return CodexOptions.NetworkAccess switch
-        {
-            "enabled" => L["SessionOptions.Codex.NetworkAccess.HelpEnabled"],
-            "restricted" => L["SessionOptions.Codex.NetworkAccess.HelpRestricted"],
-            _ => ""
-        };
-    }
 }

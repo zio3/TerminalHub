@@ -338,10 +338,6 @@
   <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>Sandbox mode (-s)</value></data>
   <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>Docker Desktop must be installed to use this feature.</value></data>
   <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>Resume previous session (--resume latest)</value></data>
-  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>Customize model</value></data>
-  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>Model to use</value></data>
-  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>Model list management</value></data>
-  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>Add a model name...</value></data>
   <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --debug --allowed-tools shell,file</value></data>
   <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>Passed as-is to Gemini CLI</value></data>
 
@@ -376,16 +372,6 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>Network access</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>Network permission for workspace-write (-c sandbox_workspace_write.network_access). Default is enabled.</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>Allows network access.</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>Restricts network access.</value></data>
-  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>Profile</value></data>
-  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>e.g., trusted</value></data>
-  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Passed as --profile to Codex CLI</value></data>
-  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>Model</value></data>
-  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>e.g., gpt-5-codex</value></data>
-  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Passed as --model to Codex CLI</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>

@@ -338,10 +338,6 @@
   <data name="SessionOptions.Gemini.Sandbox" xml:space="preserve"><value>サンドボックスモード (-s)</value></data>
   <data name="SessionOptions.Gemini.SandboxHelp" xml:space="preserve"><value>この機能を使用するには、Docker Desktop がインストールされている必要があります。</value></data>
   <data name="SessionOptions.Gemini.Continue" xml:space="preserve"><value>直前のセッションに接続 (--resume latest)</value></data>
-  <data name="SessionOptions.Gemini.UseCustomModel" xml:space="preserve"><value>モデルをカスタマイズ</value></data>
-  <data name="SessionOptions.Gemini.ModelSelectLabel" xml:space="preserve"><value>使用するモデル</value></data>
-  <data name="SessionOptions.Gemini.ModelManagementLabel" xml:space="preserve"><value>モデルリスト管理</value></data>
-  <data name="SessionOptions.Gemini.ModelAddPlaceholder" xml:space="preserve"><value>モデル名を追加...</value></data>
   <data name="SessionOptions.Gemini.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --debug --allowed-tools shell,file</value></data>
   <data name="SessionOptions.Gemini.PassToCli" xml:space="preserve"><value>そのまま Gemini CLI に渡します</value></data>
 
@@ -376,16 +372,6 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>ネットワークアクセス</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>workspace-write 時の通信許可（-c sandbox_workspace_write.network_access）。デフォルトは enabled。</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.HelpEnabled" xml:space="preserve"><value>ネットワークアクセスを許可します。</value></data>
-  <data name="SessionOptions.Codex.NetworkAccess.HelpRestricted" xml:space="preserve"><value>ネットワークアクセスを制限します。</value></data>
-  <data name="SessionOptions.Codex.Profile.Label" xml:space="preserve"><value>プロファイル</value></data>
-  <data name="SessionOptions.Codex.Profile.Placeholder" xml:space="preserve"><value>例: trusted</value></data>
-  <data name="SessionOptions.Codex.Profile.Help" xml:space="preserve"><value>Codex CLI の `--profile` を指定します</value></data>
-  <data name="SessionOptions.Codex.Model.Label" xml:space="preserve"><value>モデル</value></data>
-  <data name="SessionOptions.Codex.Model.Placeholder" xml:space="preserve"><value>例: gpt-5-codex</value></data>
-  <data name="SessionOptions.Codex.Model.Help" xml:space="preserve"><value>Codex CLI の `--model` を指定します</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>

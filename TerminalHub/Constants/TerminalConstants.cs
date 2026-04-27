@@ -116,11 +116,6 @@ namespace TerminalHub.Constants
                 args.Add($"--approval-mode {mode}");
             }
 
-            if (options.TryGetValue("model", out var model) && !string.IsNullOrWhiteSpace(model))
-            {
-                args.Add($"-m {model}");
-            }
-
             if (options.ContainsKey("sandbox") && options["sandbox"] == "true")
             {
                 args.Add("-s");
@@ -145,16 +140,6 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-            if (options.TryGetValue("profile", out var profile) && !string.IsNullOrWhiteSpace(profile))
-            {
-                args.Add($"--profile {profile.Trim()}");
-            }
-
-            if (options.TryGetValue("model", out var model) && !string.IsNullOrWhiteSpace(model))
-            {
-                args.Add($"--model {model.Trim()}");
-            }
-
             if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
             {
                 args.Add("resume --last");
@@ -177,14 +162,14 @@ namespace TerminalHub.Constants
             }
 
             // 実行モード: auto, standard, yolo
-            var applyDefaultAutoPolicy = false;
+            // --full-auto は内部的に workspace-write サンドボックス + on-request approval をデフォルト適用するため、
+            // sandbox-mode / ask-for-approval を UI で指定していない限りアプリ側で仮設定はしない。
             if (options.TryGetValue("mode", out var mode))
             {
                 switch (mode)
                 {
                     case "auto":
                         args.Add("--full-auto");
-                        applyDefaultAutoPolicy = true;
                         break;
                     case "yolo":
                         args.Add("--yolo");
@@ -194,33 +179,14 @@ namespace TerminalHub.Constants
             }
 
             // サンドボックスモード: read-only, workspace-write, danger-full-access
-            var hasSandboxMode = options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode);
-            if (hasSandboxMode)
+            if (options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode))
             {
                 args.Add($"--sandbox {sandboxMode}");
             }
-            else if (applyDefaultAutoPolicy)
-            {
-                sandboxMode = "workspace-write";
-            }
 
-            options.TryGetValue("ask-for-approval", out var approvalPolicy);
-            if (!string.IsNullOrEmpty(approvalPolicy))
+            if (options.TryGetValue("ask-for-approval", out var approvalPolicy) && !string.IsNullOrEmpty(approvalPolicy))
             {
                 args.Add($"--ask-for-approval {approvalPolicy}");
-            }
-            else if (applyDefaultAutoPolicy)
-            {
-                approvalPolicy = "on-request";
-            }
-
-            if (options.TryGetValue("network-access", out var networkAccess) && !string.IsNullOrEmpty(networkAccess))
-            {
-                if (sandboxMode == "workspace-write")
-                {
-                    var networkAccessEnabled = networkAccess == "enabled" ? "true" : "false";
-                    args.Add($"-c sandbox_workspace_write.network_access={networkAccessEnabled}");
-                }
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))

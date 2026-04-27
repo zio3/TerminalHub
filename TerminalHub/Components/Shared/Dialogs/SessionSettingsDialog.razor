@@ -277,9 +277,7 @@
                     SandboxMode = options.ContainsKey("sandbox") && options["sandbox"] == "true",
                     Continue = options.ContainsKey("continue") && options["continue"] == "true",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : "",
-                    ApprovalMode = options.ContainsKey("approval-mode") ? options["approval-mode"] : "default",
-                    Model = options.ContainsKey("model") ? options["model"] : null,
-                    UseCustomModel = options.ContainsKey("model")
+                    ApprovalMode = options.ContainsKey("approval-mode") ? options["approval-mode"] : "default"
                 };
             }
             else if (selectedType == TerminalType.CodexCLI)
@@ -291,9 +289,6 @@
                         || (options.ContainsKey("resume-picker") && options["resume-picker"] == "true"),
                     SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "",
                     ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
-                    NetworkAccess = options.ContainsKey("network-access") ? options["network-access"] : "",
-                    Profile = options.ContainsKey("profile") ? options["profile"] : "",
-                    Model = options.ContainsKey("model") ? options["model"] : "",
                     SearchEnabled = options.ContainsKey("search") && options["search"] == "true",
                     AdditionalDirectories = options.ContainsKey("add-dir") ? options["add-dir"] : "",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
