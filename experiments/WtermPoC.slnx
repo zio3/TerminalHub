@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="ConPtyTest/ConPtyTest.csproj" />
   <Project Path="WtermPoC/WtermPoC.csproj" />
 </Solution>

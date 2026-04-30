@@ -2,10 +2,25 @@ using ConPtyTest.Services;
 using Microsoft.Extensions.Logging;
 
 // ConPty 単体検証用 console アプリ。
-// 目的: ConPtyService が pwsh.exe を起動したとき、子プロセスの全出力 (バナー、プロンプト、Get-Date 結果など) が
-//       DataReceived イベント経由で届くかどうかを観察する。
-// 期待動作: pwsh のバナー / Import-Module エラー / プロンプト / Get-Date 出力が `[DATA] ...` プレフィックス付きで表示される。
-// 不具合発生時: 同じ出力が `[DATA]` なしの素のテキストとして console に漏れる (= ConPty パイプではなく親 stdout に流れている)。
+// WinExe ビルドのため Console は出ないので、全ログは exe と同じディレクトリの
+// datareceived.log に書き出す (= bin/Debug/net10.0-windows/datareceived.log)。
+
+var logPath = Path.Combine(AppContext.BaseDirectory, "datareceived.log");
+using var logFile = new StreamWriter(logPath, append: false) { AutoFlush = true };
+var logLock = new object();
+
+void Log(string msg)
+{
+    var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
+    Console.WriteLine(line);
+    lock (logLock)
+    {
+        logFile.WriteLine(line);
+    }
+}
+
+Log($"=== ConPty 単体検証開始 (log: {logPath}) ===");
+Log("[INFO] cmd.exe を ConPty で起動します");
 
 using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o =>
 {
@@ -14,37 +29,39 @@ using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole(o =>
 }).SetMinimumLevel(LogLevel.Information));
 var logger = loggerFactory.CreateLogger<ConPtyService>();
 
-Console.WriteLine("=== ConPty 単体検証開始 ===");
-Console.WriteLine("[INFO] pwsh.exe -NoLogo を ConPty で起動します");
-
 var service = new ConPtyService(logger);
-// 本体 TerminalHub の Terminal セッションと同じ条件: cmd.exe を直接渡す
-// → ConPtyService 内部で `cmd.exe /c cmd.exe` (二重 cmd) になる
-var session = await service.CreateSessionAsync("cmd.exe", null, null, 80, 24);
+// 本体 TerminalHub の Terminal セッションと同じ条件: cmd.exe を直接、120x30
+var session = await service.CreateSessionAsync("cmd.exe", null, null, 120, 30);
 
 session.DataReceived += (s, e) =>
 {
     var preview = e.Data.Replace("\x1b", "<ESC>").Replace("\r", "<CR>").Replace("\n", "<LF>\n");
-    Console.WriteLine($"[DATA len={e.Data.Length}] {preview}");
+    Log($"[DATA len={e.Data.Length}] {preview}");
 };
 session.ProcessExited += (s, e) =>
 {
-    Console.WriteLine("[EXITED]");
+    Log("[EXITED]");
 };
 
 session.Start();
 session.Resize(80, 24);  // 本体 SessionManager と同じく Start 直後に Resize
-Console.WriteLine("[INFO] session.Start() + Resize 完了。3 秒待機します");
-await Task.Delay(3000);
+Log("[INFO] session.Start() + Resize(80,24) 完了。500ms 待機");
+await Task.Delay(500);
 
-Console.WriteLine("[INFO] === ver を送信 (cmd で動作する組込みコマンド) ===");
+// 本体は xterm.js の FitAddon が実サイズを計算してから 2 回目の Resize を呼ぶ。
+// 違うサイズで Resize すると ConPty が画面再描画を子プロセスに要求する。
+Log("[INFO] === 異なるサイズで 2 回目の Resize(120,30) ===");
+session.Resize(120, 30);
+await Task.Delay(2500);
+
+Log("[INFO] === ver を送信 (cmd で動作する組込みコマンド) ===");
 await session.WriteAsync("ver\r");
 await Task.Delay(2000);
 
-Console.WriteLine("[INFO] === exit を送信 ===");
+Log("[INFO] === exit を送信 ===");
 await session.WriteAsync("exit\r");
 await Task.Delay(2000);
 
-Console.WriteLine("[INFO] session.Dispose()");
+Log("[INFO] session.Dispose()");
 session.Dispose();
-Console.WriteLine("=== 終了 ===");
+Log("=== 終了 ===");

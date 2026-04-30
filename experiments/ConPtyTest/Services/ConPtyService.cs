@@ -215,6 +215,11 @@ namespace ConPtyTest.Services
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
 
+            // 検証: CreatePseudoConsole 直後に同じサイズで ResizePseudoConsole を呼ぶ
+            // (子プロセス起動前に画面バッファのサイズを確実に確定させる試み)
+            _logger.LogInformation($"[init] ResizePseudoConsole call right after Create: {Cols}x{Rows}");
+            ResizePseudoConsole(_hPC, size);
+
                 // プロセス属性リストの初期化
                 var lpSize = IntPtr.Zero;
                 InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
