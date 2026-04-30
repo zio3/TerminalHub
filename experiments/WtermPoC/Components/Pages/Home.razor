@@ -1,14 +1,18 @@
 @page "/"
 @rendermode InteractiveServer
 @inject IJSRuntime JS
+@inject IConPtyService ConPty
+@inject ILogger<Home> Logger
 @implements IAsyncDisposable
+@using WtermPoC.Services
 
 <PageTitle>wterm PoC</PageTitle>
 
 <div class="wterm-poc-root">
     <div id="terminal" class="wterm-poc-terminal"></div>
     <div class="wterm-poc-input">
-        <textarea @bind="inputText" rows="3" class="form-control" placeholder="ターミナルに送るテキストを入力" disabled="@(!isReady)"></textarea>
+        <textarea @bind="inputText" rows="3" class="form-control"
+                  placeholder="ConPTY に送るコマンドを入力 (例: dir)" disabled="@(!isReady)"></textarea>
         <button class="btn btn-primary mt-2" @onclick="SendAsync" disabled="@(!isReady)">送信</button>
     </div>
 </div>
@@ -44,6 +48,7 @@
     private string inputText = "";
     private bool isReady;
     private IJSObjectReference? module;
+    private ConPtySession? session;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -53,25 +58,80 @@
             {
                 module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/wterm-poc.js");
                 await module.InvokeVoidAsync("init", "terminal");
+
+                session = await ConPty.CreateSessionAsync("pwsh.exe", "-NoLogo", null, 80, 24);
+                session.DataReceived += OnConPtyData;
+                session.ProcessExited += OnProcessExited;
+                session.Start();
+
                 isReady = true;
                 StateHasChanged();
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[wterm-poc] init failed: {ex}");
+                Logger.LogError(ex, "[wterm-poc] init failed");
             }
         }
     }
 
+    private void OnConPtyData(object? sender, DataReceivedEventArgs e)
+    {
+        var data = e.Data;
+        Logger.LogInformation("[OnConPtyData] len={Len} preview={Preview}", data.Length, data.Length > 60 ? data.Substring(0, 60) : data);
+        _ = InvokeAsync(async () =>
+        {
+            if (module is null) return;
+            try
+            {
+                await module.InvokeVoidAsync("write", data);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "[wterm-poc] write failed");
+            }
+        });
+    }
+
+    private void OnProcessExited(object? sender, EventArgs e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (module is null) return;
+            try
+            {
+                await module.InvokeVoidAsync("write", "\r\n[process exited]\r\n");
+            }
+            catch { }
+        });
+    }
+
     private async Task SendAsync()
     {
-        if (module is null || string.IsNullOrEmpty(inputText)) return;
-        await module.InvokeVoidAsync("write", inputText + "\r\n");
+        if (session is null || string.IsNullOrEmpty(inputText)) return;
+        try
+        {
+            await session.WriteAsync(inputText + "\r");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[wterm-poc] WriteAsync failed");
+        }
         inputText = "";
     }
 
     public async ValueTask DisposeAsync()
     {
+        if (session is not null)
+        {
+            try
+            {
+                session.DataReceived -= OnConPtyData;
+                session.ProcessExited -= OnProcessExited;
+                session.Dispose();
+            }
+            catch { }
+            session = null;
+        }
         if (module is not null)
         {
             try
@@ -80,6 +140,7 @@
                 await module.DisposeAsync();
             }
             catch { }
+            module = null;
         }
     }
 }

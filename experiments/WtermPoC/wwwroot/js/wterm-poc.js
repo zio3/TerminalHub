@@ -28,6 +28,7 @@ export function write(text) {
         console.warn("[wterm-poc] not initialized");
         return;
     }
+    console.log("[wterm-poc] write len=", text.length, "preview:", JSON.stringify(text.substring(0, 60)));
     term.write(text);
 }
 
