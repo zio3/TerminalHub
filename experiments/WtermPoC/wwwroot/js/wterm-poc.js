@@ -3,8 +3,9 @@
 import { WTerm } from "https://esm.sh/@wterm/dom";
 
 let term = null;
+let dotnetRef = null;
 
-export async function init(elementId) {
+export async function init(elementId, dotnet) {
     if (term) {
         console.warn("[wterm-poc] already initialized");
         return;
@@ -14,9 +15,20 @@ export async function init(elementId) {
         console.error("[wterm-poc] element not found:", elementId);
         return;
     }
+    dotnetRef = dotnet;
     term = new WTerm(el, {
         onData(data) {
-            console.log("[wterm-poc] onData:", JSON.stringify(data));
+            if (dotnetRef) {
+                dotnetRef.invokeMethodAsync("OnTerminalData", data).catch(e =>
+                    console.error("[wterm-poc] OnTerminalData failed:", e));
+            }
+        },
+        onResize(cols, rows) {
+            console.log("[wterm-poc] onResize", cols, rows);
+            if (dotnetRef) {
+                dotnetRef.invokeMethodAsync("OnTerminalResize", cols, rows).catch(e =>
+                    console.error("[wterm-poc] OnTerminalResize failed:", e));
+            }
         },
     });
     await term.init();
@@ -28,13 +40,13 @@ export function write(text) {
         console.warn("[wterm-poc] not initialized");
         return;
     }
-    console.log("[wterm-poc] write len=", text.length, "preview:", JSON.stringify(text.substring(0, 60)));
     term.write(text);
 }
 
 export function dispose() {
-    if (term?.dispose) {
-        try { term.dispose(); } catch (e) { console.error("[wterm-poc] dispose error:", e); }
+    if (term?.destroy) {
+        try { term.destroy(); } catch (e) { console.error("[wterm-poc] destroy error:", e); }
     }
     term = null;
+    dotnetRef = null;
 }

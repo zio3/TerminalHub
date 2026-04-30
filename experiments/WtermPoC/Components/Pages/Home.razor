@@ -49,6 +49,7 @@
     private bool isReady;
     private IJSObjectReference? module;
     private ConPtySession? session;
+    private DotNetObjectReference<Home>? dotnetRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -57,7 +58,8 @@
             try
             {
                 module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/wterm-poc.js");
-                await module.InvokeVoidAsync("init", "terminal");
+                dotnetRef = DotNetObjectReference.Create(this);
+                await module.InvokeVoidAsync("init", "terminal", dotnetRef);
 
                 session = await ConPty.CreateSessionAsync("pwsh.exe", "-NoLogo", null, 80, 24);
                 session.DataReceived += OnConPtyData;
@@ -72,6 +74,23 @@
                 Logger.LogError(ex, "[wterm-poc] init failed");
             }
         }
+    }
+
+    [JSInvokable]
+    public Task OnTerminalResize(int cols, int rows)
+    {
+        Logger.LogInformation("[OnTerminalResize] {Cols}x{Rows}", cols, rows);
+        try { session?.Resize(cols, rows); }
+        catch (Exception ex) { Logger.LogError(ex, "[wterm-poc] Resize failed"); }
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task OnTerminalData(string data)
+    {
+        if (session is null) return;
+        try { await session.WriteAsync(data); }
+        catch (Exception ex) { Logger.LogError(ex, "[wterm-poc] OnTerminalData WriteAsync failed"); }
     }
 
     private void OnConPtyData(object? sender, DataReceivedEventArgs e)
