@@ -36,25 +36,70 @@
                         <i class="bi bi-arrow-repeat d-none d-md-inline"></i> @GetModeSwitchLabel()
                     </button>
                 }
-                @foreach (var (cmd, index) in CustomCommands.Select((c, i) => (c, i)))
+                @foreach (var displayItem in BuildDisplayItems(CustomCommands))
                 {
-                    var idx = index;
-                    var isKey = cmd.Type == CustomCommandType.KeySequence;
-                    var keyDisplay = isKey ? KeySequencePresets.GetDisplayName(cmd.KeyName) : null;
-                    var label = !string.IsNullOrEmpty(cmd.Title) ? cmd.Title
-                                : isKey ? (keyDisplay ?? cmd.KeyName ?? "?")
-                                : cmd.CommandText;
-                    var tooltip = isKey ? (keyDisplay ?? cmd.KeyName ?? "") : cmd.CommandText;
-                    <button class="btn btn-secondary @(pressedCommandIndex == idx ? "active" : "")"
-                            @onclick="() => OnCustomCommandClick(idx)"
-                            title="@tooltip"
-                            style="@(pressedCommandIndex == idx ? "transform: scale(0.95);" : "")">
-                        @if (isKey)
-                        {
-                            <i class="bi bi-keyboard d-none d-md-inline me-1"></i>
-                        }
-                        @label
-                    </button>
+                    if (displayItem.GroupName == null)
+                    {
+                        var (cmd, idx) = displayItem.Items[0];
+                        var isKey = cmd.Type == CustomCommandType.KeySequence;
+                        var keyDisplay = isKey ? KeySequencePresets.GetDisplayName(cmd.KeyName) : null;
+                        var label = !string.IsNullOrEmpty(cmd.Title) ? cmd.Title
+                                    : isKey ? (keyDisplay ?? cmd.KeyName ?? "?")
+                                    : GetCommandLabel(cmd);
+                        var tooltip = isKey ? (keyDisplay ?? cmd.KeyName ?? "") : cmd.CommandText;
+                        var isInsert = !isKey && cmd.SendMode == CustomCommandSendMode.InsertToInput;
+                        <button class="btn btn-secondary @(pressedCommandIndex == idx ? "active" : "")"
+                                @onclick="() => OnCustomCommandClick(idx)"
+                                title="@tooltip"
+                                style="@(pressedCommandIndex == idx ? "transform: scale(0.95);" : "")">
+                            @if (isKey)
+                            {
+                                <i class="bi bi-keyboard d-none d-md-inline me-1"></i>
+                            }
+                            else if (isInsert)
+                            {
+                                <i class="bi bi-pencil-square d-none d-md-inline me-1"></i>
+                            }
+                            @label
+                        </button>
+                    }
+                    else
+                    {
+                        var groupName = displayItem.GroupName;
+                        var anyPressed = displayItem.Items.Any(t => pressedCommandIndex == t.Index);
+                        <div class="btn-group">
+                            <button class="btn btn-secondary dropdown-toggle @(anyPressed ? "active" : "")"
+                                    type="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    title="@groupName"
+                                    style="@(anyPressed ? "transform: scale(0.95);" : "")">
+                                @groupName
+                            </button>
+                            <ul class="dropdown-menu">
+                                @foreach (var (cmd, idx) in displayItem.Items)
+                                {
+                                    var isKey = cmd.Type == CustomCommandType.KeySequence;
+                                    var isInsert = !isKey && cmd.SendMode == CustomCommandSendMode.InsertToInput;
+                                    var label = GetCommandLabel(cmd);
+                                    <li>
+                                        <button class="dropdown-item d-flex align-items-center" type="button"
+                                                @onclick="() => OnCustomCommandClick(idx)">
+                                            @if (isKey)
+                                            {
+                                                <i class="bi bi-keyboard me-2 text-muted"></i>
+                                            }
+                                            else if (isInsert)
+                                            {
+                                                <i class="bi bi-pencil-square me-2 text-muted"></i>
+                                            }
+                                            <span class="text-truncate">@label</span>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
                 }
                 @if (VoiceInputEnabled)
                 {
@@ -213,6 +258,11 @@
         {
             await OnSendCustomKey.InvokeAsync(cmd.KeyName);
         }
+        else if (cmd.SendMode == CustomCommandSendMode.InsertToInput)
+        {
+            // 入力欄に流し込み、送信はユーザー操作に任せる（OnVoiceResult と同じパターン）。
+            inputText = cmd.CommandText;
+        }
         else
         {
             await OnSendInput.InvokeAsync(cmd.CommandText);
@@ -220,6 +270,50 @@
         await Task.Delay(100);
         pressedCommandIndex = null;
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// 表示用にカスタムコマンドを「単独ボタン」と「ドロップダウン (連続ラン)」に分解する。
+    /// GroupName が null/空のものは単独ボタン、同じ GroupName が連続するものは 1 つのドロップダウンにまとめる。
+    /// </summary>
+    private record CommandDisplayItem(string? GroupName, List<(CustomCommand Cmd, int Index)> Items);
+
+    private static List<CommandDisplayItem> BuildDisplayItems(List<CustomCommand> commands)
+    {
+        var result = new List<CommandDisplayItem>();
+        CommandDisplayItem? currentGroup = null;
+        for (var i = 0; i < commands.Count; i++)
+        {
+            var cmd = commands[i];
+            var groupName = string.IsNullOrWhiteSpace(cmd.GroupName) ? null : cmd.GroupName;
+            if (groupName == null)
+            {
+                result.Add(new CommandDisplayItem(null, new() { (cmd, i) }));
+                currentGroup = null;
+            }
+            else if (currentGroup != null && currentGroup.GroupName == groupName)
+            {
+                currentGroup.Items.Add((cmd, i));
+            }
+            else
+            {
+                currentGroup = new CommandDisplayItem(groupName, new() { (cmd, i) });
+                result.Add(currentGroup);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>ドロップダウン項目用のラベル。Title 優先、なければ CommandText/KeyName を ~30 文字で切る。</summary>
+    private static string GetCommandLabel(CustomCommand cmd)
+    {
+        if (!string.IsNullOrEmpty(cmd.Title)) return cmd.Title;
+        if (cmd.Type == CustomCommandType.KeySequence)
+            return KeySequencePresets.GetDisplayName(cmd.KeyName) ?? cmd.KeyName ?? "?";
+        var text = cmd.CommandText ?? "";
+        var newline = text.IndexOfAny(new[] { '\r', '\n' });
+        if (newline >= 0) text = text.Substring(0, newline);
+        return text.Length > 30 ? text.Substring(0, 30) + "…" : text;
     }
 
     private async Task OnCtrlCClick()

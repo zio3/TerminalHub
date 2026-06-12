@@ -172,6 +172,14 @@
   <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>タイトル（省略可）</value></data>
   <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>コマンド（例: /plan）</value></data>
   <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>ドラッグで並び替え</value></data>
+  <data name="Settings.Commands.AdvancedDetails" xml:space="preserve"><value>詳細（グループ／送信モード／長文）</value></data>
+  <data name="Settings.Commands.GroupName" xml:space="preserve"><value>グループ名</value></data>
+  <data name="Settings.Commands.GroupNamePlaceholder" xml:space="preserve"><value>空ならドロップダウンにまとめない</value></data>
+  <data name="Settings.Commands.SendMode" xml:space="preserve"><value>送信モード</value></data>
+  <data name="Settings.Commands.SendMode.Direct" xml:space="preserve"><value>直接送信</value></data>
+  <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>入力欄に挿入</value></data>
+  <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>長文コマンド</value></data>
+  <data name="Settings.Commands.LongCommandPlaceholder" xml:space="preserve"><value>複数行 OK。挿入モードなら textarea に流し込まれます。</value></data>
 
   <!-- Settings: Custom CLI Options Tab -->
   <data name="Settings.CliOptions.Help" xml:space="preserve"><value>各 CLI ごとに、よく使うコマンドラインオプションを登録できます。新規セッション作成時のチェックボックスで ON/OFF できます。スイッチをオンにしたものは、デフォルトでチェックされた状態で表示されます。値にスペースを含む場合はダブルクォートで囲んでください（例: --add-dir "C:\path with space"）。</value></data>
