@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Text;
 using System.Text.RegularExpressions;
 using TerminalHub.Models;
 
@@ -6,20 +6,55 @@ namespace TerminalHub.Services;
 
 public interface IRemoteLaunchService
 {
+    /// <summary>
+    /// 対象セッションから Remote Control URL を取得する。
+    /// </summary>
+    /// <returns>
+    /// 成功時は URL、失敗時は null。null が返るパターンは以下:
+    /// <list type="bullet">
+    ///   <item>セッションが存在しない (<see cref="ISessionManager.GetSessionInfo"/> が null)</item>
+    ///   <item>ターミナルタイプが ClaudeCode 以外</item>
+    ///   <item>ConPty 取得失敗 (<see cref="ISessionManager.GetSessionAsync"/> が null)</item>
+    ///   <item>Busy 状態 (<see cref="Models.SessionInfo.ProcessingStatus"/> が非空)</item>
+    ///   <item>応答なし: <c>/remote-control</c> 送信後 1 秒経過しても URL も <c>connecting…</c> も検出されない</item>
+    ///   <item>URL タイムアウト: <c>connecting…</c> 検出 → 接続完了待ち → 2 回目の <c>/remote-control</c> 送信後、URL を <paramref name="timeoutSeconds"/> 秒以内に検出できず</item>
+    ///   <item>内部例外 (catch ブロック到達)</item>
+    /// </list>
+    /// 詳細は <c>docs/mqtt-api-spec.md</c> の「<c>launch failed or timeout</c> の内訳」節を参照。
+    /// </returns>
     Task<string?> LaunchRemoteControlAsync(Guid sessionId, int timeoutSeconds = 60);
+
+    /// <summary>
+    /// SessionInfo の <see cref="Models.SessionInfo.RemoteControlUrl"/> 表示状態をクリアする。
+    /// 新方式では既存セッションを使い回しているため、リモート接続自体は切らない (TUI で手動操作が必要)。
+    /// </summary>
     void DisconnectRemoteSession(Guid sessionId);
 }
 
+/// <summary>
+/// 起動済み（または遅延起動した）Claude Code セッションに対して /remote-control コマンドを送って
+/// Remote Control の URL を取得する。
+///
+/// Claude Code v2.1.162 以降、--remote-control 起動時の URL は stdout の startup message に
+/// 出力されなくなり、フッターピル (TUI) に格納される形式に変わったため、起動引数経由ではなく
+/// 既存セッションへ /remote-control コマンドを送る方式に切替えている。
+///
+/// URL は TerminalHub 側にキャッシュせず、要求の都度セッションに問い合わせる方針。
+///
+/// フロー:
+///   1. SessionManager.GetSessionAsync で ConPty を取得 (未起動なら遅延初期化)
+///   2. SessionInfo.ProcessingStatus を見て Busy なら即 null
+///   3. /remote-control を送信 → 1 秒待って応答を確認:
+///      - 直接 URL が出る = 既に RC 接続済みだったので status panel が即時オープン → 完了
+///      - "connecting…" が出る = 新規接続中 → 接続完了を待って 2 回目の /remote-control 送信
+///   4. (必要なら) 2 回目の /remote-control を送り、status panel から URL を取り出す
+///   5. Esc を送って panel を閉じる
+///   6. URL を SessionInfo に保存 (UI 表示用) し返却
+/// </summary>
 public class RemoteLaunchService : IRemoteLaunchService
 {
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<RemoteLaunchService> _logger;
-
-    /// <summary>セッションIDから最新のConPTYセッションを管理（GC防止兼ライフサイクル管理）</summary>
-    private readonly ConcurrentDictionary<Guid, ConPtySession> _activeRemoteSessions = new();
-
-    /// <summary>--continueエラーによるリトライを示す内部シグナル</summary>
-    private const string ContinueErrorSentinel = "__CONTINUE_ERROR__";
 
     private static readonly Regex RemoteControlUrlPattern = new(
         @"https://claude\.ai/code/[a-zA-Z0-9\-_/]+",
@@ -28,6 +63,15 @@ public class RemoteLaunchService : IRemoteLaunchService
     private static readonly Regex AnsiEscapePattern = new(
         @"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\r",
         RegexOptions.Compiled);
+
+    /// <summary>送信後、応答を見極めるために待つ固定時間。</summary>
+    private static readonly TimeSpan ResponseInspectDelay = TimeSpan.FromSeconds(1);
+
+    /// <summary>"connecting…" 検出後、接続完了を待つ固定時間。</summary>
+    private static readonly TimeSpan ConnectingSettleDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>URL を polling で探すときの interval。</summary>
+    private static readonly TimeSpan UrlPollInterval = TimeSpan.FromMilliseconds(500);
 
     public RemoteLaunchService(
         ISessionManager sessionManager,
@@ -52,19 +96,35 @@ public class RemoteLaunchService : IRemoteLaunchService
             return null;
         }
 
-        _logger.LogInformation("[RemoteLaunch] [状態: STARTING] セッション起動開始: {SessionId} ({Name})", sessionId, sessionInfo.GetDisplayName());
+        _logger.LogInformation("[RemoteLaunch] [状態: STARTING] セッション準備: {SessionId} ({Name})", sessionId, sessionInfo.GetDisplayName());
 
         try
         {
-            var url = await LaunchAndWaitForUrlAsync(sessionId, sessionInfo, includeContinue: true, timeoutSeconds: timeoutSeconds);
+            // ConPty を取得 (未起動なら遅延初期化で起動される)
+            var conPtySession = await _sessionManager.GetSessionAsync(sessionId);
+            if (conPtySession == null)
+            {
+                _logger.LogWarning("[RemoteLaunch] [状態: FAILED] ConPty 取得失敗: {SessionId}", sessionId);
+                return null;
+            }
+
+            // Busy 判定: OutputAnalyzer が処理中ステータスを立てていれば抜ける
+            if (!string.IsNullOrEmpty(sessionInfo.ProcessingStatus))
+            {
+                _logger.LogWarning("[RemoteLaunch] [状態: BUSY] 処理中のため中止: {SessionId} (status={Status})", sessionId, sessionInfo.ProcessingStatus);
+                return null;
+            }
+
+            var url = await RequestUrlViaRcCommandAsync(conPtySession, timeoutSeconds);
 
             if (url == null)
             {
-                _logger.LogWarning("[RemoteLaunch] [状態: FAILED] URL取得失敗: {SessionId}", sessionId);
+                _logger.LogWarning("[RemoteLaunch] [状態: FAILED] URL 取得失敗: {SessionId}", sessionId);
             }
             else
             {
-                _logger.LogInformation("[RemoteLaunch] [状態: SUCCESS] URL返却: {Url}", url);
+                sessionInfo.RemoteControlUrl = url;
+                _logger.LogInformation("[RemoteLaunch] [状態: SUCCESS] URL 返却: {Url}", url);
             }
 
             return url;
@@ -77,173 +137,149 @@ public class RemoteLaunchService : IRemoteLaunchService
     }
 
     /// <summary>
-    /// ConPTYセッションを起動し、Remote Control URLの検知を待機する。
-    /// --continueエラーが検出された場合は、--continueなしで自動リトライする。
+    /// 既存 ConPty に /remote-control を送って URL を取り出す。
+    /// 「送信 → 1 秒待つ → 応答文字列を見て分岐」方式。
     /// </summary>
-    private async Task<string?> LaunchAndWaitForUrlAsync(Guid sessionId, SessionInfo sessionInfo, bool includeContinue, int timeoutSeconds)
+    private async Task<string?> RequestUrlViaRcCommandAsync(ConPtySession conPtySession, int timeoutSeconds)
     {
-        // 既存オプションを引き継ぎ、--remote-controlを追加
-        var options = new Dictionary<string, string>(sessionInfo.Options)
-        {
-            ["remote-control"] = "true"
-        };
-        // extra-argsはリモート起動時に除外（予期しない確認画面の回避）
-        options.Remove("extra-args");
-
-        // --continueを除外する場合
-        if (!includeContinue)
-        {
-            options.Remove("continue");
-        }
-
-        _logger.LogInformation("[RemoteLaunch] [状態: CREATING_SESSION] オプション: {Options}",
-            string.Join(", ", options.Select(kv => $"{kv.Key}={kv.Value}")));
-
-        // SessionManager経由で新しいConPTYセッションを起動
-        var conPtySession = await _sessionManager.GetOrCreateRemoteControlSessionAsync(sessionId, options);
-        if (conPtySession == null)
-        {
-            _logger.LogWarning("[RemoteLaunch] [状態: FAILED] セッション作成失敗: {SessionId}", sessionId);
-            return null;
-        }
-
-        // 前回のリモートセッションがあれば解放してから登録
-        ReleaseExistingSession(sessionId);
-        _activeRemoteSessions[sessionId] = conPtySession;
-        _logger.LogInformation("[RemoteLaunch] [状態: WAITING_URL] ConPTYセッション作成完了、URL検知待機中...（アクティブ: {Count}件）", _activeRemoteSessions.Count);
-
-        // URL検知を待機
-        var urlTcs = new TaskCompletionSource<string?>();
-        var cleanBuffer = "";
-        var urlDetected = false;
-        var continueErrorDetected = false;
-        var hasContinueOption = includeContinue && options.ContainsKey("continue");
+        var buffer = new StringBuilder();
+        var bufferLock = new object();
 
         void OnDataReceived(object? sender, DataReceivedEventArgs e)
         {
-            if (urlDetected || continueErrorDetected) return;
-
             var clean = AnsiEscapePattern.Replace(e.Data, " ");
-            cleanBuffer += clean;
-
-            // --continueエラーを検出（セッション開始直後のみ）
-            if (hasContinueOption && cleanBuffer.Contains("No conversation found to continue"))
+            lock (bufferLock)
             {
-                continueErrorDetected = true;
-                _logger.LogInformation("[RemoteLaunch] 'No conversation found to continue' エラーを検出。--continueなしでリトライします: {SessionId}", sessionId);
-
-                conPtySession.DataReceived -= OnDataReceived;
-                conPtySession.ProcessExited -= OnProcessExited;
-
-                // リトライシグナルとして特別な値を返す
-                urlTcs.TrySetResult(ContinueErrorSentinel);
-                return;
+                buffer.Append(clean);
             }
-
-            // 最後にマッチしたURLを採用（過去の会話ログにURLが含まれる場合の誤検知防止）
-            var matches = RemoteControlUrlPattern.Matches(cleanBuffer);
-            if (matches.Count > 0)
-            {
-                urlDetected = true;
-                var url = matches[^1].Value.TrimEnd(')', ']', '}', '>');
-                _logger.LogInformation("[RemoteLaunch] [状態: URL_DETECTED] URL検知: {Url}（マッチ{Count}件中最後）", url, matches.Count);
-                sessionInfo.RemoteControlUrl = url;
-
-                // URL検知後はイベントハンドラーを即座に解除
-                conPtySession.DataReceived -= OnDataReceived;
-                conPtySession.ProcessExited -= OnProcessExited;
-
-                urlTcs.TrySetResult(url);
-            }
-        }
-
-        void OnProcessExited(object? sender, EventArgs e)
-        {
-            _logger.LogWarning("[RemoteLaunch] [状態: PROCESS_EXITED] プロセスが予期せず終了: {SessionId}", sessionId);
-            _activeRemoteSessions.TryRemove(sessionId, out _);
-            urlTcs.TrySetResult(null);
         }
 
         conPtySession.DataReceived += OnDataReceived;
-        conPtySession.ProcessExited += OnProcessExited;
 
-        conPtySession.Start();
-        _logger.LogInformation("[RemoteLaunch] [状態: PROCESS_STARTED] ConPTYプロセス開始");
-
-        // タイムアウト付きでURL検知を待機
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        cts.Token.Register(() =>
+        try
         {
-            _logger.LogWarning("[RemoteLaunch] [状態: TIMEOUT] {Timeout}秒経過", timeoutSeconds);
-            urlTcs.TrySetResult(null);
-        });
+            // フェーズ 1: /remote-control 送信 → 1 秒待って応答確認
+            var phase1Offset = SnapshotBufferLength(buffer, bufferLock);
+            _logger.LogInformation("[RemoteLaunch] [状態: SENDING_RC_1] /remote-control 1 回目送信");
+            await conPtySession.WriteAsync("/remote-control\r");
+            await Task.Delay(ResponseInspectDelay);
 
-        var result = await urlTcs.Task;
+            var phase1Snap = GetBufferSlice(buffer, bufferLock, phase1Offset);
 
-        // タイムアウト時のイベントハンドラー解除
-        if (!urlDetected && !continueErrorDetected)
+            // ケース B: URL が即出ている (起動時から接続済みだった)
+            var directUrl = ExtractUrl(phase1Snap);
+            if (directUrl != null)
+            {
+                _logger.LogInformation("[RemoteLaunch] [状態: URL_DIRECT] 1 回目で URL 検出（接続済みだった）: {Url}", directUrl);
+                await TryCloseStatusPanelAsync(conPtySession);
+                return directUrl;
+            }
+
+            // ケース A: "connecting" 検出 → 接続中なのでもう一度送る
+            if (ContainsConnectingIndicator(phase1Snap))
+            {
+                _logger.LogInformation("[RemoteLaunch] [状態: CONNECTING_DETECTED] connecting… を検出、接続完了を待機");
+                await Task.Delay(ConnectingSettleDelay);
+
+                var phase2Offset = SnapshotBufferLength(buffer, bufferLock);
+                _logger.LogInformation("[RemoteLaunch] [状態: SENDING_RC_2] /remote-control 2 回目送信");
+                await conPtySession.WriteAsync("/remote-control\r");
+
+                // URL を timeoutSeconds 秒まで polling
+                var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+                while (DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(UrlPollInterval);
+                    var snap2 = GetBufferSlice(buffer, bufferLock, phase2Offset);
+                    var url2 = ExtractUrl(snap2);
+                    if (url2 != null)
+                    {
+                        _logger.LogInformation("[RemoteLaunch] [状態: URL_AFTER_CONNECT] URL 取得: {Url}", url2);
+                        await TryCloseStatusPanelAsync(conPtySession);
+                        return url2;
+                    }
+                }
+
+                _logger.LogWarning("[RemoteLaunch] [状態: TIMEOUT_PHASE2] 2 回目の /remote-control 後、URL を {Timeout} 秒以内に検出できず", timeoutSeconds);
+                LogBufferTail(buffer, bufferLock);
+                return null;
+            }
+
+            _logger.LogWarning("[RemoteLaunch] [状態: UNEXPECTED] {Delay} 秒経過しても URL/connecting どちらも検出できず", ResponseInspectDelay.TotalSeconds);
+            LogBufferTail(buffer, bufferLock);
+            return null;
+        }
+        finally
         {
             conPtySession.DataReceived -= OnDataReceived;
-            conPtySession.ProcessExited -= OnProcessExited;
         }
+    }
 
-        // --continueエラーの場合、既存セッションを破棄して--continueなしでリトライ
-        if (result == ContinueErrorSentinel)
+    private static int SnapshotBufferLength(StringBuilder buffer, object bufferLock)
+    {
+        lock (bufferLock)
         {
-            ReleaseExistingSession(sessionId);
-            return await LaunchAndWaitForUrlAsync(sessionId, sessionInfo, includeContinue: false, timeoutSeconds: timeoutSeconds);
+            return buffer.Length;
         }
+    }
 
-        if (result == null)
+    private static string GetBufferSlice(StringBuilder buffer, object bufferLock, int offset)
+    {
+        lock (bufferLock)
         {
-            _logger.LogWarning("[RemoteLaunch] [状態: FAILED] URL検知タイムアウト({Timeout}秒): {SessionId}", timeoutSeconds, sessionId);
-            var tail = cleanBuffer.Length > 500 ? cleanBuffer[^500..] : cleanBuffer;
-            _logger.LogWarning("[RemoteLaunch] クリーンバッファ末尾: {Tail}", tail);
+            if (buffer.Length <= offset) return string.Empty;
+            return buffer.ToString(offset, buffer.Length - offset);
         }
+    }
 
-        return result;
+    private static string? ExtractUrl(string snapshot)
+    {
+        var matches = RemoteControlUrlPattern.Matches(snapshot);
+        if (matches.Count == 0) return null;
+        return matches[^1].Value.TrimEnd(')', ']', '}', '>');
+    }
+
+    private static bool ContainsConnectingIndicator(string snapshot)
+    {
+        return snapshot.Contains("connecting", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task TryCloseStatusPanelAsync(ConPtySession conPtySession)
+    {
+        try
+        {
+            await conPtySession.WriteAsync("\x1b");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RemoteLaunch] Esc 送信失敗（無視）");
+        }
+    }
+
+    private void LogBufferTail(StringBuilder buffer, object bufferLock)
+    {
+        string content;
+        lock (bufferLock)
+        {
+            content = buffer.ToString();
+        }
+        var tail = content.Length > 500 ? content[^500..] : content;
+        _logger.LogWarning("[RemoteLaunch] クリーンバッファ末尾: {Tail}", tail);
     }
 
     public void DisconnectRemoteSession(Guid sessionId)
     {
-        // SessionInfoのRemoteControlUrlをクリア
+        // 旧実装はリモート専用 ConPty を破棄していたが、新方式では既存セッションを使い回すので
+        // ConPty には触らない。SessionInfo の URL 表示状態だけクリアする。
         var sessionInfo = _sessionManager.GetSessionInfo(sessionId);
         if (sessionInfo != null)
         {
             sessionInfo.RemoteControlUrl = null;
-        }
-
-        if (_activeRemoteSessions.TryRemove(sessionId, out var session))
-        {
-            try
-            {
-                session.Dispose();
-                _logger.LogInformation("[RemoteLaunch] リモートセッション切断: {SessionId}（残り: {Count}件）", sessionId, _activeRemoteSessions.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[RemoteLaunch] リモートセッション切断エラー: {SessionId}", sessionId);
-            }
+            _logger.LogInformation("[RemoteLaunch] RemoteControlUrl をクリア: {SessionId}", sessionId);
         }
         else
         {
-            _logger.LogWarning("[RemoteLaunch] 切断対象のリモートセッションが見つかりません: {SessionId}", sessionId);
-        }
-    }
-
-    private void ReleaseExistingSession(Guid sessionId)
-    {
-        if (_activeRemoteSessions.TryRemove(sessionId, out var oldSession))
-        {
-            try
-            {
-                oldSession.Dispose();
-                _logger.LogInformation("[RemoteLaunch] 既存リモートセッションを解放: {SessionId}", sessionId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[RemoteLaunch] 既存リモートセッション解放エラー: {SessionId}", sessionId);
-            }
+            _logger.LogWarning("[RemoteLaunch] 切断対象のセッションが見つかりません: {SessionId}", sessionId);
         }
     }
 }
