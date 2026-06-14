@@ -107,6 +107,17 @@ public enum CustomCommandType
 }
 
 /// <summary>
+/// テキスト型カスタムコマンドの送信方法。
+/// </summary>
+public enum CustomCommandSendMode
+{
+    /// <summary>従来動作：CommandText をターミナルに直接書き込み、Enter を自動付与する。</summary>
+    DirectSend = 0,
+    /// <summary>TextInputPanel のテキストエリアに流し込み、送信はユーザー操作に任せる。</summary>
+    InsertToInput = 1
+}
+
+/// <summary>
 /// カスタムコマンド
 /// </summary>
 public class CustomCommand
@@ -116,6 +127,10 @@ public class CustomCommand
     public CustomCommandType Type { get; set; } = CustomCommandType.Text;
     /// <summary>KeySequence 時に参照するプリセットキー名（KeySequencePresets.All のキー）</summary>
     public string? KeyName { get; set; }
+    /// <summary>表示側で同名のものをドロップダウンに集約するためのグループ名。null/空なら単独ボタン。</summary>
+    public string? GroupName { get; set; }
+    /// <summary>Text 型のときの送信方法。KeySequence 型では無視する。</summary>
+    public CustomCommandSendMode SendMode { get; set; } = CustomCommandSendMode.DirectSend;
 }
 
 /// <summary>

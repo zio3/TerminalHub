@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
     <Version>1.0.58</Version>
+    <UserSecretsId>d24c2b6b-274a-45ae-9889-2950682fff62</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

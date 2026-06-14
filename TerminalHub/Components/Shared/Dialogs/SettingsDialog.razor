@@ -552,50 +552,17 @@
                                 @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
                                 {
                                     var type = terminalType;
-                                    var displayName = type switch
-                                    {
-                                        "ClaudeCode" => "Claude Code",
-                                        "GeminiCLI" => "Gemini CLI",
-                                        "CodexCLI" => "Codex CLI",
-                                        _ => "Terminal"
-                                    };
+                                    var displayName = GetTerminalTypeDisplayName(type);
 
                                     <div class="mb-4">
-                                        <label class="form-label fw-bold">@displayName</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <select class="form-select" style="max-width: 110px;"
-                                                    @bind="newCommandTypes[type]">
-                                                <option value="@CustomCommandType.Text">@L["Settings.Commands.Type.Text"]</option>
-                                                <option value="@CustomCommandType.KeySequence">@L["Settings.Commands.Type.Key"]</option>
-                                            </select>
-                                            <input type="text" class="form-control"
-                                                   @bind="newCommandTitles[type]" @bind:event="oninput"
-                                                   placeholder="@L["Settings.Commands.TitlePlaceholder"]" style="max-width: 140px;" />
-                                            @if (newCommandTypes.GetValueOrDefault(type, CustomCommandType.Text) == CustomCommandType.KeySequence)
-                                            {
-                                                <select class="form-select" @bind="newCommandKeyNames[type]">
-                                                    @foreach (var preset in KeySequencePresets.All)
-                                                    {
-                                                        <option value="@preset.Key">@preset.Value.DisplayName</option>
-                                                    }
-                                                </select>
-                                                <button class="btn btn-outline-primary" type="button"
-                                                        @onclick="() => AddCommand(type)">
-                                                    <i class="bi bi-plus-lg"></i>
-                                                </button>
-                                            }
-                                            else
-                                            {
-                                                <input type="text" class="form-control"
-                                                       @bind="newCommandTexts[type]" @bind:event="oninput"
-                                                       placeholder="@L["Settings.Commands.CommandPlaceholder"]" />
-                                                <button class="btn btn-outline-primary" type="button"
-                                                        @onclick="() => AddCommand(type)"
-                                                        disabled="@string.IsNullOrWhiteSpace(newCommandTexts.GetValueOrDefault(type))">
-                                                    <i class="bi bi-plus-lg"></i>
-                                                </button>
-                                            }
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <label class="form-label fw-bold mb-0">@displayName</label>
+                                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                                    @onclick="() => OpenAddCommandDialog(type)">
+                                                <i class="bi bi-plus-lg me-1"></i>@L["Settings.Commands.AddNew"]
+                                            </button>
                                         </div>
+
                                         @if (editingCommands.ContainsKey(type) && editingCommands[type].Any())
                                         {
                                             var canReorder = editingCommands[type].Count > 1;
@@ -607,7 +574,8 @@
                                                     var isKey = cmd.Type == CustomCommandType.KeySequence;
                                                     var bodyText = isKey
                                                         ? (KeySequencePresets.GetDisplayName(cmd.KeyName) ?? cmd.KeyName ?? "?")
-                                                        : cmd.CommandText;
+                                                        : SummarizeCommandText(cmd.CommandText);
+                                                    var isInsert = !isKey && cmd.SendMode == CustomCommandSendMode.InsertToInput;
                                                     var isDragOver = _dragOverType == type && _dragOverIndex == idx;
                                                     <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2 @(isDragOver ? "drag-over" : "")"
                                                         draggable="@(canReorder ? "true" : "false")"
@@ -627,6 +595,14 @@
                                                             {
                                                                 <i class="bi bi-keyboard me-1 text-muted"></i>
                                                             }
+                                                            @if (!string.IsNullOrEmpty(cmd.GroupName))
+                                                            {
+                                                                <span class="badge bg-secondary bg-opacity-25 text-muted me-2" style="font-weight: normal;">@cmd.GroupName</span>
+                                                            }
+                                                            @if (isInsert)
+                                                            {
+                                                                <i class="bi bi-pencil-square me-1 text-muted" title="@L["Settings.Commands.SendMode.Insert"]"></i>
+                                                            }
                                                             @if (!string.IsNullOrEmpty(cmd.Title))
                                                             {
                                                                 <strong>@cmd.Title</strong>
@@ -637,14 +613,28 @@
                                                                 <span class="text-truncate">@bodyText</span>
                                                             }
                                                         </small>
-                                                        <button class="btn btn-outline-danger btn-sm border-0" type="button"
-                                                                @onclick="() => RemoveCommand(type, idx)"
-                                                                style="font-size: 0.7rem;">
-                                                            <i class="bi bi-x-lg"></i>
-                                                        </button>
+                                                        <div class="d-flex align-items-center gap-1" draggable="false">
+                                                            <button class="btn btn-outline-secondary btn-sm border-0" type="button"
+                                                                    title="@L["Settings.Commands.Edit"]"
+                                                                    draggable="false"
+                                                                    @onclick="() => OpenEditCommandDialog(type, idx)"
+                                                                    style="font-size: 0.75rem;">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <button class="btn btn-outline-danger btn-sm border-0" type="button"
+                                                                    draggable="false"
+                                                                    @onclick="() => RemoveCommand(type, idx)"
+                                                                    style="font-size: 0.7rem;">
+                                                                <i class="bi bi-x-lg"></i>
+                                                            </button>
+                                                        </div>
                                                     </li>
                                                 }
                                             </ul>
+                                        }
+                                        else
+                                        {
+                                            <p class="text-muted small mb-0 fst-italic">@L["Settings.Commands.Empty"]</p>
                                         }
                                     </div>
                                 }
@@ -1088,6 +1078,13 @@
             </div>
         </div>
     </div>
+
+    <CommandEditDialog IsVisible="commandEditDialogVisible"
+                       IsVisibleChanged="OnCommandDialogVisibleChanged"
+                       IsNew="commandEditDialogIsNew"
+                       TerminalTypeLabel="@commandEditDialogTerminalLabel"
+                       Command="commandEditDialogSource"
+                       OnSave="HandleCommandDialogSave" />
 }
 
 @code {
@@ -1112,10 +1109,14 @@
     private string saveMessage = "";
     private bool saveSuccess = false;
     private Dictionary<string, List<CustomCommand>> editingCommands = new();
-    private Dictionary<string, string> newCommandTitles = new();
-    private Dictionary<string, string> newCommandTexts = new();
-    private Dictionary<string, CustomCommandType> newCommandTypes = new();
-    private Dictionary<string, string> newCommandKeyNames = new();
+
+    // コマンド編集ダイアログ
+    private bool commandEditDialogVisible = false;
+    private bool commandEditDialogIsNew = false;
+    private string? commandEditDialogTerminalType = null;
+    private int? commandEditDialogIndex = null;
+    private CustomCommand? commandEditDialogSource = null;
+    private string? commandEditDialogTerminalLabel = null;
 
     // カスタムオプション (CLI 別)
     private static readonly TerminalType[] CliOptionTypes = new[]
@@ -1315,14 +1316,6 @@
             {
                 if (!editingCommands.ContainsKey(type))
                     editingCommands[type] = new();
-                if (!newCommandTitles.ContainsKey(type))
-                    newCommandTitles[type] = "";
-                if (!newCommandTexts.ContainsKey(type))
-                    newCommandTexts[type] = "";
-                if (!newCommandTypes.ContainsKey(type))
-                    newCommandTypes[type] = CustomCommandType.Text;
-                if (!newCommandKeyNames.ContainsKey(type))
-                    newCommandKeyNames[type] = KeySequencePresets.DefaultKey;
             }
 
             // カスタムCLIオプション (CLI 別、編集中はリストを clone してから扱う)
@@ -1681,51 +1674,85 @@
         }
     }
 
-    private void AddCommand(string terminalType)
-    {
-        if (!editingCommands.ContainsKey(terminalType))
-            editingCommands[terminalType] = new();
-
-        var type = newCommandTypes.GetValueOrDefault(terminalType, CustomCommandType.Text);
-        var rawTitle = newCommandTitles.GetValueOrDefault(terminalType, "").Trim();
-        var title = string.IsNullOrWhiteSpace(rawTitle) ? null : rawTitle;
-
-        if (type == CustomCommandType.KeySequence)
-        {
-            var keyName = newCommandKeyNames.GetValueOrDefault(terminalType, "");
-            if (!KeySequencePresets.Contains(keyName)) return;
-
-            editingCommands[terminalType].Add(new CustomCommand
-            {
-                Type = CustomCommandType.KeySequence,
-                Title = title,
-                KeyName = keyName,
-                CommandText = ""
-            });
-        }
-        else
-        {
-            var text = newCommandTexts.GetValueOrDefault(terminalType, "");
-            if (string.IsNullOrWhiteSpace(text)) return;
-
-            editingCommands[terminalType].Add(new CustomCommand
-            {
-                Type = CustomCommandType.Text,
-                Title = title,
-                CommandText = text.Trim()
-            });
-        }
-
-        newCommandTitles[terminalType] = "";
-        newCommandTexts[terminalType] = "";
-    }
-
     private void RemoveCommand(string terminalType, int index)
     {
         if (editingCommands.ContainsKey(terminalType) && index < editingCommands[terminalType].Count)
         {
             editingCommands[terminalType].RemoveAt(index);
         }
+    }
+
+    private void OpenAddCommandDialog(string terminalType)
+    {
+        commandEditDialogTerminalType = terminalType;
+        commandEditDialogTerminalLabel = GetTerminalTypeDisplayName(terminalType);
+        commandEditDialogIndex = null;
+        commandEditDialogSource = null;
+        commandEditDialogIsNew = true;
+        commandEditDialogVisible = true;
+    }
+
+    private void OpenEditCommandDialog(string terminalType, int index)
+    {
+        if (!editingCommands.ContainsKey(terminalType) || index >= editingCommands[terminalType].Count)
+            return;
+
+        commandEditDialogTerminalType = terminalType;
+        commandEditDialogTerminalLabel = GetTerminalTypeDisplayName(terminalType);
+        commandEditDialogIndex = index;
+        commandEditDialogSource = editingCommands[terminalType][index];
+        commandEditDialogIsNew = false;
+        commandEditDialogVisible = true;
+    }
+
+    private void HandleCommandDialogSave(CustomCommand command)
+    {
+        if (commandEditDialogTerminalType == null) return;
+        var terminalType = commandEditDialogTerminalType;
+
+        if (!editingCommands.ContainsKey(terminalType))
+            editingCommands[terminalType] = new();
+
+        if (commandEditDialogIndex is int idx && idx >= 0 && idx < editingCommands[terminalType].Count)
+        {
+            // 編集：既存位置に上書き
+            editingCommands[terminalType][idx] = command;
+        }
+        else
+        {
+            // 新規：末尾に追加
+            editingCommands[terminalType].Add(command);
+        }
+        // ダイアログ側が Close を呼んで OnCommandDialogVisibleChanged 経由で state クリアされる。
+    }
+
+    private void OnCommandDialogVisibleChanged(bool visible)
+    {
+        commandEditDialogVisible = visible;
+        if (!visible)
+        {
+            // 閉じたタイミングで、保存・キャンセル経路に関わらず state を初期化する。
+            commandEditDialogTerminalType = null;
+            commandEditDialogTerminalLabel = null;
+            commandEditDialogIndex = null;
+            commandEditDialogSource = null;
+        }
+    }
+
+    private static string GetTerminalTypeDisplayName(string terminalType) => terminalType switch
+    {
+        "ClaudeCode" => "Claude Code",
+        "GeminiCLI" => "Gemini CLI",
+        "CodexCLI" => "Codex CLI",
+        _ => "Terminal"
+    };
+
+    /// <summary>一覧の行に出すコマンド本文の表示用要約。複数行は先頭行 + "…" で短縮する。</summary>
+    private static string SummarizeCommandText(string commandText)
+    {
+        if (string.IsNullOrEmpty(commandText)) return commandText;
+        var newline = commandText.IndexOfAny(new[] { '\r', '\n' });
+        return newline < 0 ? commandText : commandText.Substring(0, newline) + " …";
     }
 
     // ===== カスタムコマンドの並び替え (ドラッグ&ドロップ) =====

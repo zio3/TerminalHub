@@ -170,8 +170,24 @@
   <data name="Settings.Commands.Type.Text" xml:space="preserve"><value>テキスト</value></data>
   <data name="Settings.Commands.Type.Key" xml:space="preserve"><value>キー</value></data>
   <data name="Settings.Commands.TitlePlaceholder" xml:space="preserve"><value>タイトル（省略可）</value></data>
-  <data name="Settings.Commands.CommandPlaceholder" xml:space="preserve"><value>コマンド（例: /plan）</value></data>
   <data name="Settings.Commands.DragToReorder" xml:space="preserve"><value>ドラッグで並び替え</value></data>
+  <data name="Settings.Commands.GroupName" xml:space="preserve"><value>グループ名</value></data>
+  <data name="Settings.Commands.GroupNamePlaceholder" xml:space="preserve"><value>空ならドロップダウンにまとめない</value></data>
+  <data name="Settings.Commands.SendMode" xml:space="preserve"><value>送信モード</value></data>
+  <data name="Settings.Commands.SendMode.Direct" xml:space="preserve"><value>直接送信</value></data>
+  <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>入力欄に挿入</value></data>
+  <data name="Settings.Commands.CommandBody" xml:space="preserve"><value>コマンド</value></data>
+  <data name="Settings.Commands.CommandBodyPlaceholder" xml:space="preserve"><value>複数行 OK。挿入モードなら textarea に流し込まれます。</value></data>
+  <data name="Settings.Commands.AddNew" xml:space="preserve"><value>新規追加</value></data>
+  <data name="Settings.Commands.Edit" xml:space="preserve"><value>編集</value></data>
+  <data name="Settings.Commands.Empty" xml:space="preserve"><value>登録済みのコマンドはありません。</value></data>
+  <data name="Settings.Commands.Type" xml:space="preserve"><value>種別</value></data>
+  <data name="Settings.Commands.TitleField" xml:space="preserve"><value>タイトル</value></data>
+  <data name="Settings.Commands.KeyField" xml:space="preserve"><value>キー</value></data>
+  <data name="Settings.Commands.Dialog.NewTitle" xml:space="preserve"><value>コマンド追加</value></data>
+  <data name="Settings.Commands.Dialog.EditTitle" xml:space="preserve"><value>コマンド編集</value></data>
+  <data name="Settings.Commands.Dialog.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Settings.Commands.Dialog.Cancel" xml:space="preserve"><value>キャンセル</value></data>
 
   <!-- Settings: Custom CLI Options Tab -->
   <data name="Settings.CliOptions.Help" xml:space="preserve"><value>各 CLI ごとに、よく使うコマンドラインオプションを登録できます。新規セッション作成時のチェックボックスで ON/OFF できます。スイッチをオンにしたものは、デフォルトでチェックされた状態で表示されます。値にスペースを含む場合はダブルクォートで囲んでください（例: --add-dir "C:\path with space"）。</value></data>
