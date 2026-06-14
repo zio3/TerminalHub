@@ -9,7 +9,9 @@ namespace TerminalHub.Models
         Terminal,
         ClaudeCode,
         GeminiCLI,
-        CodexCLI
+        CodexCLI,
+        Antigravity,
+        Grok
     }
 
     public enum BottomPanelTabType

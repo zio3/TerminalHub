@@ -549,7 +549,7 @@
                                     @L["Settings.Commands.Help"]
                                 </small>
 
-                                @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
+                                @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI", "Antigravity", "Grok" })
                                 {
                                     var type = terminalType;
                                     var displayName = GetTerminalTypeDisplayName(type);
@@ -655,6 +655,8 @@
                                         TerminalType.ClaudeCode => "Claude Code",
                                         TerminalType.GeminiCLI => "Gemini CLI",
                                         TerminalType.CodexCLI => "Codex CLI",
+                                        TerminalType.Antigravity => "Antigravity",
+                                        TerminalType.Grok => "Grok",
                                         _ => type.ToString()
                                     };
                                     var list = editingCliOptions.GetValueOrDefault(type, new List<UserCliOption>());
@@ -1121,7 +1123,8 @@
     // カスタムオプション (CLI 別)
     private static readonly TerminalType[] CliOptionTypes = new[]
     {
-        TerminalType.ClaudeCode, TerminalType.GeminiCLI, TerminalType.CodexCLI
+        TerminalType.ClaudeCode, TerminalType.GeminiCLI, TerminalType.CodexCLI,
+        TerminalType.Antigravity, TerminalType.Grok
     };
     private Dictionary<TerminalType, List<UserCliOption>> editingCliOptions = new();
 
@@ -1312,7 +1315,7 @@
             // カスタムコマンド
             editingCommands = settings.Commands.CommandsByTerminalType
                 .ToDictionary(kv => kv.Key, kv => new List<CustomCommand>(kv.Value));
-            foreach (var type in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
+            foreach (var type in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI", "Antigravity", "Grok" })
             {
                 if (!editingCommands.ContainsKey(type))
                     editingCommands[type] = new();
@@ -1325,6 +1328,8 @@
                 [TerminalType.ClaudeCode] = cliOptions.ClaudeCode.Select(CloneCliOption).ToList(),
                 [TerminalType.GeminiCLI] = cliOptions.GeminiCLI.Select(CloneCliOption).ToList(),
                 [TerminalType.CodexCLI] = cliOptions.CodexCLI.Select(CloneCliOption).ToList(),
+                [TerminalType.Antigravity] = cliOptions.Antigravity.Select(CloneCliOption).ToList(),
+                [TerminalType.Grok] = cliOptions.Grok.Select(CloneCliOption).ToList(),
             };
 
             // リモート起動設定
@@ -1550,6 +1555,12 @@
                     CodexCLI = editingCliOptions.GetValueOrDefault(TerminalType.CodexCLI, new())
                         .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
                         .Select(CloneCliOption).ToList(),
+                    Antigravity = editingCliOptions.GetValueOrDefault(TerminalType.Antigravity, new())
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
+                        .Select(CloneCliOption).ToList(),
+                    Grok = editingCliOptions.GetValueOrDefault(TerminalType.Grok, new())
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
+                        .Select(CloneCliOption).ToList(),
                 },
                 RemoteLaunch = new RemoteLaunchSettings
                 {
@@ -1744,6 +1755,8 @@
         "ClaudeCode" => "Claude Code",
         "GeminiCLI" => "Gemini CLI",
         "CodexCLI" => "Codex CLI",
+        "Antigravity" => "Antigravity",
+        "Grok" => "Grok",
         _ => "Terminal"
     };
 

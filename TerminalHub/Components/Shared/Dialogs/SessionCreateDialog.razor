@@ -81,7 +81,9 @@
                                       @bind-StartupCommand="startupCommand"
                                       ClaudeOptions="claudeCodeOptions"
                                       GeminiOptions="geminiOptions"
-                                      CodexOptions="codexOptions" />
+                                      CodexOptions="codexOptions"
+                                      AntigravityOptions="antigravityOptions"
+                                      GrokOptions="grokOptions" />
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="Cancel">@L["Common.Cancel"]</button>
@@ -136,6 +138,8 @@
     private SessionOptionsSelector.ClaudeCodeOptions claudeCodeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
     private SessionOptionsSelector.CodexOptionsData codexOptions = new();
+    private SessionOptionsSelector.AntigravityOptionsData antigravityOptions = new();
+    private SessionOptionsSelector.GrokOptionsData grokOptions = new();
     private List<string> favoriteFolders = new();
     private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
     private bool showCreateFolderDialog = false;
@@ -353,6 +357,8 @@
         claudeCodeOptions = new();
         geminiOptions = new();
         codexOptions = new();
+        antigravityOptions = new();
+        grokOptions = new();
         showCreateFolderDialog = false;
         pendingSessionCreation = false;
     }

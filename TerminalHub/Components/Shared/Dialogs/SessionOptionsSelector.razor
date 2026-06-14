@@ -46,6 +46,26 @@
                     <i class="bi bi-braces"></i> Codex CLI
                 </label>
             }
+
+            @if (Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType5{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.Antigravity)"
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.Antigravity)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType5{UniqueId}")">
+                    <i class="bi bi-arrow-up-circle"></i> Antigravity
+                </label>
+            }
+
+            @if (Configuration.GetValue<bool>("ExternalTools:UseGrokCli", true))
+            {
+                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType6{UniqueId}")"
+                       checked="@(SelectedType == TerminalType.Grok)"
+                       @onchange="() => OnTerminalTypeChanged(TerminalType.Grok)" autocomplete="off">
+                <label class="btn btn-outline-primary" for="@($"terminalType6{UniqueId}")">
+                    <i class="bi bi-lightning-charge"></i> Grok
+                </label>
+            }
         </div>
     </div>
 
@@ -309,6 +329,40 @@
                                      Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
         </div>
     }
+    else if (SelectedType == TerminalType.Antigravity && Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true))
+    {
+        <div class="mb-3">
+            <label class="form-label">@L["SessionOptions.Antigravity.Header"]</label>
+            <div class="form-text small mb-2">@L["SessionOptions.Antigravity.Help"]</div>
+
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
+                <input type="text" class="form-control form-control-sm" @bind="AntigravityOptions.ExtraArgs"
+                       placeholder="@L["SessionOptions.Antigravity.ExtraArgsPlaceholder"]" />
+                <div class="form-text small">@L["SessionOptions.Antigravity.PassToCli"]</div>
+            </div>
+
+            <CustomCliOptionsSection Options="antigravityCustomOptions" States="customOptionStates"
+                                     Prefix="@($"antigravity{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
+        </div>
+    }
+    else if (SelectedType == TerminalType.Grok && Configuration.GetValue<bool>("ExternalTools:UseGrokCli", true))
+    {
+        <div class="mb-3">
+            <label class="form-label">@L["SessionOptions.Grok.Header"]</label>
+            <div class="form-text small mb-2">@L["SessionOptions.Grok.Help"]</div>
+
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
+                <input type="text" class="form-control form-control-sm" @bind="GrokOptions.ExtraArgs"
+                       placeholder="@L["SessionOptions.Grok.ExtraArgsPlaceholder"]" />
+                <div class="form-text small">@L["SessionOptions.Grok.PassToCli"]</div>
+            </div>
+
+            <CustomCliOptionsSection Options="grokCustomOptions" States="customOptionStates"
+                                     Prefix="@($"grok{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
+        </div>
+    }
     else
     {
         <div class="mb-3">
@@ -326,6 +380,8 @@
     [Parameter] public ClaudeCodeOptions ClaudeOptions { get; set; } = new();
     [Parameter] public GeminiOptionsData GeminiOptions { get; set; } = new();
     [Parameter] public CodexOptionsData CodexOptions { get; set; } = new();
+    [Parameter] public AntigravityOptionsData AntigravityOptions { get; set; } = new();
+    [Parameter] public GrokOptionsData GrokOptions { get; set; } = new();
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
@@ -334,6 +390,8 @@
     private List<UserCliOption> claudeCustomOptions = new();
     private List<UserCliOption> geminiCustomOptions = new();
     private List<UserCliOption> codexCustomOptions = new();
+    private List<UserCliOption> antigravityCustomOptions = new();
+    private List<UserCliOption> grokCustomOptions = new();
     // チェック状態は Id 単位で保持 (CLI 切替で消えないようにするため)
     private Dictionary<string, bool> customOptionStates = new();
 
@@ -360,10 +418,16 @@
             claudeCustomOptions = new List<UserCliOption>(cli.ClaudeCode);
             geminiCustomOptions = new List<UserCliOption>(cli.GeminiCLI);
             codexCustomOptions = new List<UserCliOption>(cli.CodexCLI);
+            antigravityCustomOptions = new List<UserCliOption>(cli.Antigravity);
+            grokCustomOptions = new List<UserCliOption>(cli.Grok);
 
             // 既存 state はそのまま、新規エントリは DefaultEnabled で初期化
             var aliveIds = new HashSet<string>();
-            foreach (var opt in claudeCustomOptions.Concat(geminiCustomOptions).Concat(codexCustomOptions))
+            foreach (var opt in claudeCustomOptions
+                .Concat(geminiCustomOptions)
+                .Concat(codexCustomOptions)
+                .Concat(antigravityCustomOptions)
+                .Concat(grokCustomOptions))
             {
                 aliveIds.Add(opt.Id);
                 if (!customOptionStates.ContainsKey(opt.Id))
@@ -396,6 +460,8 @@
             TerminalType.ClaudeCode => claudeCustomOptions,
             TerminalType.GeminiCLI => geminiCustomOptions,
             TerminalType.CodexCLI => codexCustomOptions,
+            TerminalType.Antigravity => antigravityCustomOptions,
+            TerminalType.Grok => grokCustomOptions,
             _ => new List<UserCliOption>()
         };
         return list
@@ -514,6 +580,20 @@
                     options["extra-args"] = CodexOptions.ExtraArgs.Trim();
                 }
                 break;
+
+            case TerminalType.Antigravity:
+                if (!string.IsNullOrWhiteSpace(AntigravityOptions.ExtraArgs))
+                {
+                    options["extra-args"] = AntigravityOptions.ExtraArgs.Trim();
+                }
+                break;
+
+            case TerminalType.Grok:
+                if (!string.IsNullOrWhiteSpace(GrokOptions.ExtraArgs))
+                {
+                    options["extra-args"] = GrokOptions.ExtraArgs.Trim();
+                }
+                break;
         }
 
         // ON にされたカスタムオプションを空白連結して "custom-args" に束ねる。
@@ -551,6 +631,16 @@
         public string ApprovalPolicy { get; set; } = "";
         public bool SearchEnabled { get; set; }
         public string AdditionalDirectories { get; set; } = "";
+        public string ExtraArgs { get; set; } = "";
+    }
+
+    public class AntigravityOptionsData
+    {
+        public string ExtraArgs { get; set; } = "";
+    }
+
+    public class GrokOptionsData
+    {
         public string ExtraArgs { get; set; } = "";
     }
     
