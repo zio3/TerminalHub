@@ -113,20 +113,7 @@ TerminalHubがセッション鍵を生成し、RSA暗号化して返却する。
 
 **Busy 判定**: 対象セッションの ClaudeCode が処理中 (LLM 思考中・ツール実行中など) の場合は `/remote-control` を送らず、エラーで返す（誤って処理割り込みを起こさないため）。
 
-#### リモートセッション切断
-
-```json
-{ "action": "disconnect", "sessionId": "セッションGUID", "handshakeId": "...", "nonce": "..." }
-```
-
-パスワード設定時:
-```json
-{ "action": "disconnect", "sessionId": "...", "handshakeId": "...", "nonce": "...", "passwordHash": "SHA256(パスワード)" }
-```
-
-SessionInfo の `RemoteControlUrl` 表示状態をクリアする。
-
-> **注**: 新方式では既存セッションを使い回しているため、disconnect は ConPty には触らない（旧方式のように専用プロセスを kill することはない）。リモート接続自体を切るには、TerminalHub 側のセッションで `/remote-control` を手動で再送信し、status panel で `Disconnect this session` を選ぶ必要がある。
+> **注**: 旧仕様で存在した `disconnect` アクションは廃止された。旧方式では専用 ConPty プロセスを kill するために必要だったが、新方式では既存セッションを使い回しているため、リモート接続自体を切るには TerminalHub 側のセッションで `/remote-control` を手動で再送信し、status panel で `Disconnect this session` を選ぶ。
 
 ## レスポンス
 
@@ -213,12 +200,6 @@ SessionInfo の `RemoteControlUrl` 表示状態をクリアする。
 
 ```json
 { "action": "launch", "status": "ready", "sessionId": "guid", "url": "https://claude.ai/code/..." }
-```
-
-#### 切断完了
-
-```json
-{ "action": "disconnect", "status": "ok", "sessionId": "guid" }
 ```
 
 #### エラー（暗号化レスポンス内）

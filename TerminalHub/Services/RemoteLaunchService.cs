@@ -23,12 +23,6 @@ public interface IRemoteLaunchService
     /// 詳細は <c>docs/mqtt-api-spec.md</c> の「<c>launch failed or timeout</c> の内訳」節を参照。
     /// </returns>
     Task<string?> LaunchRemoteControlAsync(Guid sessionId, int timeoutSeconds = 60);
-
-    /// <summary>
-    /// SessionInfo の <see cref="Models.SessionInfo.RemoteControlUrl"/> 表示状態をクリアする。
-    /// 新方式では既存セッションを使い回しているため、リモート接続自体は切らない (TUI で手動操作が必要)。
-    /// </summary>
-    void DisconnectRemoteSession(Guid sessionId);
 }
 
 /// <summary>
@@ -267,19 +261,4 @@ public class RemoteLaunchService : IRemoteLaunchService
         _logger.LogWarning("[RemoteLaunch] クリーンバッファ末尾: {Tail}", tail);
     }
 
-    public void DisconnectRemoteSession(Guid sessionId)
-    {
-        // 旧実装はリモート専用 ConPty を破棄していたが、新方式では既存セッションを使い回すので
-        // ConPty には触らない。SessionInfo の URL 表示状態だけクリアする。
-        var sessionInfo = _sessionManager.GetSessionInfo(sessionId);
-        if (sessionInfo != null)
-        {
-            sessionInfo.RemoteControlUrl = null;
-            _logger.LogInformation("[RemoteLaunch] RemoteControlUrl をクリア: {SessionId}", sessionId);
-        }
-        else
-        {
-            _logger.LogWarning("[RemoteLaunch] 切断対象のセッションが見つかりません: {SessionId}", sessionId);
-        }
-    }
 }
