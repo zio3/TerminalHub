@@ -449,12 +449,6 @@ public class MqttService : IHostedService, IDisposable
                 else
                     await PublishEncryptedResponseAsync(new { action = "error", message = "sessionId required" }, _sessionKey);
                 break;
-            case "disconnect":
-                if (request.SessionId.HasValue)
-                    await HandleDisconnectAsync(request.SessionId.Value, _sessionKey);
-                else
-                    await PublishEncryptedResponseAsync(new { action = "error", message = "sessionId required" }, _sessionKey);
-                break;
             default:
                 await PublishEncryptedResponseAsync(new { action = "error", message = "unknown action" }, _sessionKey);
                 break;
@@ -643,13 +637,6 @@ public class MqttService : IHostedService, IDisposable
         {
             await PublishEncryptedResponseAsync(new { action = "error", message = "launch failed or timeout" }, sessionKey);
         }
-    }
-
-    private async Task HandleDisconnectAsync(Guid sessionId, byte[] sessionKey)
-    {
-        _remoteLaunchService.DisconnectRemoteSession(sessionId);
-        await PublishEncryptedResponseAsync(new { action = "disconnect", status = "ok", sessionId = sessionId.ToString() }, sessionKey);
-        _logger.LogInformation("[MQTT] リモートセッション切断: {SessionId}", sessionId);
     }
 
     #endregion
