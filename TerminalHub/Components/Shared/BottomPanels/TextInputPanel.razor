@@ -273,15 +273,16 @@
     }
 
     /// <summary>
-    /// 表示用にカスタムコマンドを「単独ボタン」と「ドロップダウン (連続ラン)」に分解する。
-    /// GroupName が null/空のものは単独ボタン、同じ GroupName が連続するものは 1 つのドロップダウンにまとめる。
+    /// 表示用にカスタムコマンドを「単独ボタン」と「ドロップダウン」に分解する。
+    /// GroupName が null/空のものは単独ボタン、同じ GroupName のものは並び順に関わらず 1 つのドロップダウンに集約する。
+    /// 集約後の表示位置はそのグループ名が最初に出現した位置とする。
     /// </summary>
     private record CommandDisplayItem(string? GroupName, List<(CustomCommand Cmd, int Index)> Items);
 
     private static List<CommandDisplayItem> BuildDisplayItems(List<CustomCommand> commands)
     {
         var result = new List<CommandDisplayItem>();
-        CommandDisplayItem? currentGroup = null;
+        var groupLookup = new Dictionary<string, CommandDisplayItem>();
         for (var i = 0; i < commands.Count; i++)
         {
             var cmd = commands[i];
@@ -289,16 +290,16 @@
             if (groupName == null)
             {
                 result.Add(new CommandDisplayItem(null, new() { (cmd, i) }));
-                currentGroup = null;
             }
-            else if (currentGroup != null && currentGroup.GroupName == groupName)
+            else if (groupLookup.TryGetValue(groupName, out var existing))
             {
-                currentGroup.Items.Add((cmd, i));
+                existing.Items.Add((cmd, i));
             }
             else
             {
-                currentGroup = new CommandDisplayItem(groupName, new() { (cmd, i) });
-                result.Add(currentGroup);
+                var group = new CommandDisplayItem(groupName, new() { (cmd, i) });
+                groupLookup[groupName] = group;
+                result.Add(group);
             }
         }
         return result;

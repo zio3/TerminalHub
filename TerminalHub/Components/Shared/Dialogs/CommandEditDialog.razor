@@ -1,0 +1,213 @@
+@namespace TerminalHub.Components.Shared.Dialogs
+@using TerminalHub.Models
+@using TerminalHub.Services
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
+
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog"
+         style="background-color: var(--th-surface-overlay); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi @(IsNew ? "bi-plus-square" : "bi-pencil-square") me-2"></i>
+                        @(IsNew ? L["Settings.Commands.Dialog.NewTitle"] : L["Settings.Commands.Dialog.EditTitle"])
+                        @if (!string.IsNullOrEmpty(TerminalTypeLabel))
+                        {
+                            <span class="text-muted ms-2 small">[@TerminalTypeLabel]</span>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HandleCancel"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">@L["Settings.Commands.Type"]</label>
+                            <select class="form-select" @bind="editType">
+                                <option value="@CustomCommandType.Text">@L["Settings.Commands.Type.Text"]</option>
+                                <option value="@CustomCommandType.KeySequence">@L["Settings.Commands.Type.Key"]</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">@L["Settings.Commands.TitleField"]</label>
+                            <input type="text" class="form-control"
+                                   @bind="editTitle" @bind:event="oninput"
+                                   placeholder="@L["Settings.Commands.TitlePlaceholder"]" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">@L["Settings.Commands.GroupName"]</label>
+                            <input type="text" class="form-control"
+                                   @bind="editGroupName" @bind:event="oninput"
+                                   placeholder="@L["Settings.Commands.GroupNamePlaceholder"]" />
+                        </div>
+                        @if (editType == CustomCommandType.KeySequence)
+                        {
+                            <div class="col-12">
+                                <label class="form-label">@L["Settings.Commands.KeyField"]</label>
+                                <select class="form-select" @bind="editKeyName">
+                                    @foreach (var preset in KeySequencePresets.All)
+                                    {
+                                        <option value="@preset.Key">@preset.Value.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="col-12">
+                                <label class="form-label">@L["Settings.Commands.SendMode"]</label>
+                                <div class="d-flex gap-3">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio"
+                                               id="sendmode-direct-dlg" name="sendmode-dlg"
+                                               checked="@(editSendMode == CustomCommandSendMode.DirectSend)"
+                                               @onchange="() => editSendMode = CustomCommandSendMode.DirectSend" />
+                                        <label class="form-check-label" for="sendmode-direct-dlg">@L["Settings.Commands.SendMode.Direct"]</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio"
+                                               id="sendmode-insert-dlg" name="sendmode-dlg"
+                                               checked="@(editSendMode == CustomCommandSendMode.InsertToInput)"
+                                               @onchange="() => editSendMode = CustomCommandSendMode.InsertToInput" />
+                                        <label class="form-check-label" for="sendmode-insert-dlg">@L["Settings.Commands.SendMode.Insert"]</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">@L["Settings.Commands.LongCommand"]</label>
+                                <textarea class="form-control"
+                                          rows="10"
+                                          style="font-family: 'Consolas', 'Monaco', monospace; resize: vertical;"
+                                          @bind="editCommandText" @bind:event="oninput"
+                                          placeholder="@L["Settings.Commands.LongCommandPlaceholder"]"></textarea>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HandleCancel">
+                        @L["Settings.Commands.Dialog.Cancel"]
+                    </button>
+                    <button type="button" class="btn btn-primary"
+                            @onclick="HandleSave"
+                            disabled="@(!CanSave())">
+                        <i class="bi bi-check-lg me-1"></i>@L["Settings.Commands.Dialog.Save"]
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
+    [Parameter] public bool IsNew { get; set; }
+    [Parameter] public string? TerminalTypeLabel { get; set; }
+    /// <summary>編集対象のコマンド。null なら新規作成。Save 時はこの参照を直接書き換えず、新インスタンスを返す。</summary>
+    [Parameter] public CustomCommand? Command { get; set; }
+    [Parameter] public EventCallback<CustomCommand> OnSave { get; set; }
+
+    private CustomCommandType editType = CustomCommandType.Text;
+    private string editTitle = "";
+    private string editGroupName = "";
+    private string editCommandText = "";
+    private string editKeyName = KeySequencePresets.DefaultKey;
+    private CustomCommandSendMode editSendMode = CustomCommandSendMode.DirectSend;
+
+    // Command 参照が変わったタイミング (= ダイアログを別アイテムで開き直したタイミング) でのみフォームを初期化する。
+    private CustomCommand? _lastLoaded;
+    private bool _lastVisible;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && (!_lastVisible || !ReferenceEquals(Command, _lastLoaded)))
+        {
+            LoadFromCommand();
+            _lastLoaded = Command;
+        }
+        else if (!IsVisible)
+        {
+            _lastLoaded = null;
+        }
+        _lastVisible = IsVisible;
+    }
+
+    private void LoadFromCommand()
+    {
+        if (Command == null)
+        {
+            editType = CustomCommandType.Text;
+            editTitle = "";
+            editGroupName = "";
+            editCommandText = "";
+            editKeyName = KeySequencePresets.DefaultKey;
+            editSendMode = CustomCommandSendMode.DirectSend;
+        }
+        else
+        {
+            editType = Command.Type;
+            editTitle = Command.Title ?? "";
+            editGroupName = Command.GroupName ?? "";
+            editCommandText = Command.CommandText ?? "";
+            editKeyName = string.IsNullOrEmpty(Command.KeyName) ? KeySequencePresets.DefaultKey : Command.KeyName;
+            editSendMode = Command.SendMode;
+        }
+    }
+
+    private bool CanSave()
+    {
+        if (editType == CustomCommandType.KeySequence)
+            return !string.IsNullOrWhiteSpace(editKeyName);
+        return !string.IsNullOrWhiteSpace(editCommandText);
+    }
+
+    private async Task HandleSave()
+    {
+        if (!CanSave()) return;
+
+        var title = string.IsNullOrWhiteSpace(editTitle) ? null : editTitle.Trim();
+        var groupName = string.IsNullOrWhiteSpace(editGroupName) ? null : editGroupName.Trim();
+
+        CustomCommand result;
+        if (editType == CustomCommandType.KeySequence)
+        {
+            result = new CustomCommand
+            {
+                Type = CustomCommandType.KeySequence,
+                Title = title,
+                KeyName = editKeyName,
+                CommandText = "",
+                GroupName = groupName
+            };
+        }
+        else
+        {
+            var text = editCommandText ?? "";
+            // 複数行なら前後の改行のみ削る、単一行なら全空白 Trim。
+            var isMultiline = text.IndexOfAny(new[] { '\r', '\n' }) >= 0;
+            var commandText = isMultiline ? text.Trim('\r', '\n') : text.Trim();
+            result = new CustomCommand
+            {
+                Type = CustomCommandType.Text,
+                Title = title,
+                CommandText = commandText,
+                GroupName = groupName,
+                SendMode = editSendMode
+            };
+        }
+
+        await OnSave.InvokeAsync(result);
+        await Close();
+    }
+
+    private Task HandleCancel() => Close();
+
+    private async Task Close()
+    {
+        IsVisible = false;
+        await IsVisibleChanged.InvokeAsync(false);
+    }
+}

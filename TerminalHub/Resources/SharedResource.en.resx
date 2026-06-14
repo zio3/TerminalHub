@@ -180,6 +180,16 @@
   <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>Insert into input</value></data>
   <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>Long-form command</value></data>
   <data name="Settings.Commands.LongCommandPlaceholder" xml:space="preserve"><value>Multi-line OK. With Insert mode, this gets put into the textarea.</value></data>
+  <data name="Settings.Commands.AddNew" xml:space="preserve"><value>Add new</value></data>
+  <data name="Settings.Commands.Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Settings.Commands.Empty" xml:space="preserve"><value>No commands registered yet.</value></data>
+  <data name="Settings.Commands.Type" xml:space="preserve"><value>Type</value></data>
+  <data name="Settings.Commands.TitleField" xml:space="preserve"><value>Title</value></data>
+  <data name="Settings.Commands.KeyField" xml:space="preserve"><value>Key</value></data>
+  <data name="Settings.Commands.Dialog.NewTitle" xml:space="preserve"><value>Add command</value></data>
+  <data name="Settings.Commands.Dialog.EditTitle" xml:space="preserve"><value>Edit command</value></data>
+  <data name="Settings.Commands.Dialog.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Settings.Commands.Dialog.Cancel" xml:space="preserve"><value>Cancel</value></data>
 
   <!-- Settings: Custom CLI Options Tab -->
   <data name="Settings.CliOptions.Help" xml:space="preserve"><value>Register frequently used command-line options per CLI. Toggle them on or off via checkboxes when creating a new session. Options with the switch turned on are pre-checked by default. Wrap values containing spaces in double quotes (e.g. --add-dir "C:\path with space").</value></data>
