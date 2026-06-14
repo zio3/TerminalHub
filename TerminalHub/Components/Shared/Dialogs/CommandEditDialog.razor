@@ -61,17 +61,17 @@
                                 <div class="d-flex gap-3">
                                     <div class="form-check form-check-inline">
                                         <input class="form-check-input" type="radio"
-                                               id="sendmode-direct-dlg" name="sendmode-dlg"
+                                               id="@($"sendmode-direct-{_instanceId}")" name="@($"sendmode-{_instanceId}")"
                                                checked="@(editSendMode == CustomCommandSendMode.DirectSend)"
                                                @onchange="() => editSendMode = CustomCommandSendMode.DirectSend" />
-                                        <label class="form-check-label" for="sendmode-direct-dlg">@L["Settings.Commands.SendMode.Direct"]</label>
+                                        <label class="form-check-label" for="@($"sendmode-direct-{_instanceId}")">@L["Settings.Commands.SendMode.Direct"]</label>
                                     </div>
                                     <div class="form-check form-check-inline">
                                         <input class="form-check-input" type="radio"
-                                               id="sendmode-insert-dlg" name="sendmode-dlg"
+                                               id="@($"sendmode-insert-{_instanceId}")" name="@($"sendmode-{_instanceId}")"
                                                checked="@(editSendMode == CustomCommandSendMode.InsertToInput)"
                                                @onchange="() => editSendMode = CustomCommandSendMode.InsertToInput" />
-                                        <label class="form-check-label" for="sendmode-insert-dlg">@L["Settings.Commands.SendMode.Insert"]</label>
+                                        <label class="form-check-label" for="@($"sendmode-insert-{_instanceId}")">@L["Settings.Commands.SendMode.Insert"]</label>
                                     </div>
                                 </div>
                             </div>
@@ -109,6 +109,9 @@
     /// <summary>編集対象のコマンド。null なら新規作成。Save 時はこの参照を直接書き換えず、新インスタンスを返す。</summary>
     [Parameter] public CustomCommand? Command { get; set; }
     [Parameter] public EventCallback<CustomCommand> OnSave { get; set; }
+
+    // ラジオボタンの DOM id/name が他のダイアログ/設定タブと衝突しないようインスタンス毎にユニーク化する。
+    private readonly string _instanceId = Guid.NewGuid().ToString("N").Substring(0, 8);
 
     private CustomCommandType editType = CustomCommandType.Text;
     private string editTitle = "";
@@ -174,13 +177,16 @@
         CustomCommand result;
         if (editType == CustomCommandType.KeySequence)
         {
+            // KeySequence では SendMode は無視されるが、種別を Text に戻して再編集したときに
+            // 以前のラジオ選択が消えないよう値を保持しておく。
             result = new CustomCommand
             {
                 Type = CustomCommandType.KeySequence,
                 Title = title,
                 KeyName = editKeyName,
                 CommandText = "",
-                GroupName = groupName
+                GroupName = groupName,
+                SendMode = editSendMode
             };
         }
         else

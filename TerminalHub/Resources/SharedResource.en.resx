@@ -178,7 +178,7 @@
   <data name="Settings.Commands.SendMode" xml:space="preserve"><value>Send mode</value></data>
   <data name="Settings.Commands.SendMode.Direct" xml:space="preserve"><value>Direct send</value></data>
   <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>Insert into input</value></data>
-  <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>Long-form command</value></data>
+  <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>Command</value></data>
   <data name="Settings.Commands.LongCommandPlaceholder" xml:space="preserve"><value>Multi-line OK. With Insert mode, this gets put into the textarea.</value></data>
   <data name="Settings.Commands.AddNew" xml:space="preserve"><value>Add new</value></data>
   <data name="Settings.Commands.Edit" xml:space="preserve"><value>Edit</value></data>

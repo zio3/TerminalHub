@@ -552,13 +552,7 @@
                                 @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI" })
                                 {
                                     var type = terminalType;
-                                    var displayName = type switch
-                                    {
-                                        "ClaudeCode" => "Claude Code",
-                                        "GeminiCLI" => "Gemini CLI",
-                                        "CodexCLI" => "Codex CLI",
-                                        _ => "Terminal"
-                                    };
+                                    var displayName = GetTerminalTypeDisplayName(type);
 
                                     <div class="mb-4">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -619,14 +613,16 @@
                                                                 <span class="text-truncate">@bodyText</span>
                                                             }
                                                         </small>
-                                                        <div class="d-flex align-items-center gap-1">
+                                                        <div class="d-flex align-items-center gap-1" draggable="false">
                                                             <button class="btn btn-outline-secondary btn-sm border-0" type="button"
                                                                     title="@L["Settings.Commands.Edit"]"
+                                                                    draggable="false"
                                                                     @onclick="() => OpenEditCommandDialog(type, idx)"
                                                                     style="font-size: 0.75rem;">
                                                                 <i class="bi bi-pencil"></i>
                                                             </button>
                                                             <button class="btn btn-outline-danger btn-sm border-0" type="button"
+                                                                    draggable="false"
                                                                     @onclick="() => RemoveCommand(type, idx)"
                                                                     style="font-size: 0.7rem;">
                                                                 <i class="bi bi-x-lg"></i>
@@ -1083,7 +1079,8 @@
         </div>
     </div>
 
-    <CommandEditDialog @bind-IsVisible="commandEditDialogVisible"
+    <CommandEditDialog IsVisible="commandEditDialogVisible"
+                       IsVisibleChanged="OnCommandDialogVisibleChanged"
                        IsNew="commandEditDialogIsNew"
                        TerminalTypeLabel="@commandEditDialogTerminalLabel"
                        Command="commandEditDialogSource"
@@ -1726,10 +1723,20 @@
             // 新規：末尾に追加
             editingCommands[terminalType].Add(command);
         }
+        // ダイアログ側が Close を呼んで OnCommandDialogVisibleChanged 経由で state クリアされる。
+    }
 
-        commandEditDialogTerminalType = null;
-        commandEditDialogIndex = null;
-        commandEditDialogSource = null;
+    private void OnCommandDialogVisibleChanged(bool visible)
+    {
+        commandEditDialogVisible = visible;
+        if (!visible)
+        {
+            // 閉じたタイミングで、保存・キャンセル経路に関わらず state を初期化する。
+            commandEditDialogTerminalType = null;
+            commandEditDialogTerminalLabel = null;
+            commandEditDialogIndex = null;
+            commandEditDialogSource = null;
+        }
     }
 
     private static string GetTerminalTypeDisplayName(string terminalType) => terminalType switch

@@ -178,7 +178,7 @@
   <data name="Settings.Commands.SendMode" xml:space="preserve"><value>送信モード</value></data>
   <data name="Settings.Commands.SendMode.Direct" xml:space="preserve"><value>直接送信</value></data>
   <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>入力欄に挿入</value></data>
-  <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>長文コマンド</value></data>
+  <data name="Settings.Commands.LongCommand" xml:space="preserve"><value>コマンド</value></data>
   <data name="Settings.Commands.LongCommandPlaceholder" xml:space="preserve"><value>複数行 OK。挿入モードなら textarea に流し込まれます。</value></data>
   <data name="Settings.Commands.AddNew" xml:space="preserve"><value>新規追加</value></data>
   <data name="Settings.Commands.Edit" xml:space="preserve"><value>編集</value></data>
