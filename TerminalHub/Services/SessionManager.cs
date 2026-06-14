@@ -204,6 +204,20 @@ namespace TerminalHub.Services
                         : $"/k codex {codexArgs}";
                     return ("cmd.exe", codexArgsString);
 
+                case TerminalType.Antigravity:
+                    var agyArgs = TerminalConstants.BuildAntigravityArgs(options);
+                    var agyArgsString = string.IsNullOrWhiteSpace(agyArgs)
+                        ? "/k agy"
+                        : $"/k agy {agyArgs}";
+                    return ("cmd.exe", agyArgsString);
+
+                case TerminalType.Grok:
+                    var grokArgs = TerminalConstants.BuildGrokArgs(options);
+                    var grokArgsString = string.IsNullOrWhiteSpace(grokArgs)
+                        ? "/k grok"
+                        : $"/k grok {grokArgs}";
+                    return ("cmd.exe", grokArgsString);
+
                 default:
                     if (options.ContainsKey("command") && !string.IsNullOrWhiteSpace(options["command"]))
                     {
@@ -279,6 +293,8 @@ namespace TerminalHub.Services
                     TerminalType.ClaudeCode => $"Claude Codeの起動に失敗しました。Claude Codeがインストールされているか確認してください。",
                     TerminalType.GeminiCLI => $"Gemini CLIの起動に失敗しました。Gemini CLIがインストールされているか確認してください。",
                     TerminalType.CodexCLI => $"Codex CLIの起動に失敗しました。Codex CLIがインストールされているか確認してください。",
+                    TerminalType.Antigravity => $"Antigravity CLI (agy) の起動に失敗しました。インストールされているか確認してください。",
+                    TerminalType.Grok => $"Grok CLI (grok) の起動に失敗しました。インストールされているか確認してください。",
                     _ => $"ターミナルの起動に失敗しました。"
                 };
                 
@@ -741,6 +757,8 @@ namespace TerminalHub.Services
                     TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
                     TerminalType.GeminiCLI => $"{sessionInfo.FolderName} (Gemini)",
                     TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
+                    TerminalType.Antigravity => $"{sessionInfo.FolderName} (Antigravity)",
+                    TerminalType.Grok => $"{sessionInfo.FolderName} (Grok)",
                     _ => sessionInfo.FolderName
                 };
 

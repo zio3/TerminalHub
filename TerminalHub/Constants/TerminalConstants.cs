@@ -74,7 +74,7 @@ namespace TerminalHub.Constants
             if (options.TryGetValue("permission-mode", out var permMode))
             {
                 if (permMode == "bypass") args.Add("--dangerously-skip-permissions");
-                else if (permMode == "auto") args.Add("--enable-auto-mode");
+                else if (permMode == "auto") args.Add("--permission-mode auto");
             }
             else if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
             {
@@ -161,33 +161,65 @@ namespace TerminalHub.Constants
                 }
             }
 
-            // 実行モード: auto, standard, yolo
-            // --full-auto は内部的に workspace-write サンドボックス + on-request approval をデフォルト適用するため、
-            // sandbox-mode / ask-for-approval を UI で指定していない限りアプリ側で仮設定はしない。
-            if (options.TryGetValue("mode", out var mode))
+            var mode = options.GetValueOrDefault("mode");
+            var sandboxMode = options.GetValueOrDefault("sandbox-mode");
+            var approvalPolicy = options.GetValueOrDefault("ask-for-approval");
+
+            // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
+            if (mode == "yolo")
             {
-                switch (mode)
+                args.Add("--dangerously-bypass-approvals-and-sandbox");
+            }
+            else
+            {
+                // Auto は workspace-write + on-request。詳細設定がある場合はユーザー指定を優先する。
+                if (mode == "auto")
                 {
-                    case "auto":
-                        args.Add("--full-auto");
-                        break;
-                    case "yolo":
-                        args.Add("--yolo");
-                        break;
-                    // standard はオプションなし
+                    sandboxMode = string.IsNullOrEmpty(sandboxMode) ? "workspace-write" : sandboxMode;
+                    approvalPolicy = string.IsNullOrEmpty(approvalPolicy) ? "on-request" : approvalPolicy;
+                }
+
+                if (!string.IsNullOrEmpty(sandboxMode))
+                {
+                    args.Add($"--sandbox {sandboxMode}");
+                }
+
+                if (!string.IsNullOrEmpty(approvalPolicy))
+                {
+                    args.Add($"--ask-for-approval {approvalPolicy}");
                 }
             }
 
-            // サンドボックスモード: read-only, workspace-write, danger-full-access
-            if (options.TryGetValue("sandbox-mode", out var sandboxMode) && !string.IsNullOrEmpty(sandboxMode))
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {
-                args.Add($"--sandbox {sandboxMode}");
+                args.Add(extraArgs.Trim());
             }
 
-            if (options.TryGetValue("ask-for-approval", out var approvalPolicy) && !string.IsNullOrEmpty(approvalPolicy))
+            AppendCustomArgs(args, options);
+
+            return string.Join(" ", args);
+        }
+
+        // Antigravity CLI (agy) は今のところ TerminalHub 側で公式オプションを解釈しない。
+        // ユーザーが extra-args / custom-args で自由に渡せるようにするだけの最小サポート。
+        public static string BuildAntigravityArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
+
+            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {
-                args.Add($"--ask-for-approval {approvalPolicy}");
+                args.Add(extraArgs.Trim());
             }
+
+            AppendCustomArgs(args, options);
+
+            return string.Join(" ", args);
+        }
+
+        // Grok CLI も同様に最小サポート。認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せる。
+        public static string BuildGrokArgs(Dictionary<string, string> options)
+        {
+            var args = new List<string>();
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {

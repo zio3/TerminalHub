@@ -335,7 +335,7 @@
   <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>デフォルト</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>全ての操作で都度確認を求めます</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>全操作を無条件で自動承認します（--dangerously-skip-permissions）。</value></data>
-  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--enable-auto-mode）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--permission-mode auto）。</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>全ての操作で都度確認を求めます。</value></data>
   <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>直前のセッションに接続 (--continue)</value></data>
   <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>ブラウザ連携 (--chrome)</value></data>
@@ -366,9 +366,9 @@
   <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します</value></data>
   <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (危険)</value></data>
   <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--full-auto` を付けて自動実行寄りに進めます。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--sandbox workspace-write --ask-for-approval on-request` で実行します。個別指定がある項目はそちらを優先します。</value></data>
   <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨です。</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します（危険）。サンドボックスと承認の個別指定は適用されません。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
@@ -392,8 +392,20 @@
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --no-alt-screen</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
+
+  <!-- Antigravity CLI Options -->
+  <data name="SessionOptions.Antigravity.Header" xml:space="preserve"><value>Antigravity (agy) オプション</value></data>
+  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>現時点では TerminalHub 側で公式オプションを解析しません。必要な引数は下の欄に直接入力してください。</value></data>
+  <data name="SessionOptions.Antigravity.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --help</value></data>
+  <data name="SessionOptions.Antigravity.PassToCli" xml:space="preserve"><value>そのまま agy に渡します</value></data>
+
+  <!-- Grok CLI Options -->
+  <data name="SessionOptions.Grok.Header" xml:space="preserve"><value>Grok CLI オプション</value></data>
+  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>現時点では TerminalHub 側で公式オプションを解析しません。認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せます。</value></data>
+  <data name="SessionOptions.Grok.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --help</value></data>
+  <data name="SessionOptions.Grok.PassToCli" xml:space="preserve"><value>そのまま grok に渡します</value></data>
 
   <!-- SessionSettings Dialog -->
   <data name="SessionSettings.Title" xml:space="preserve"><value>セッション設定</value></data>
@@ -521,6 +533,8 @@
   <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Claude Code へのメッセージを入力…</value></data>
   <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Gemini CLI へのメッセージを入力…</value></data>
   <data name="Root.Placeholder.CodexCLI" xml:space="preserve"><value>Codex CLI へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.Antigravity" xml:space="preserve"><value>Antigravity (agy) へのメッセージを入力…</value></data>
+  <data name="Root.Placeholder.Grok" xml:space="preserve"><value>Grok へのメッセージを入力…</value></data>
   <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>コマンドを入力…</value></data>
   <data name="Root.SessionType.Terminal" xml:space="preserve"><value>ターミナル</value></data>
   <data name="Root.SessionType.Fallback" xml:space="preserve"><value>セッション</value></data>

@@ -128,6 +128,8 @@
                                           ClaudeOptions="claudeOptions"
                                           GeminiOptions="geminiOptions"
                                           CodexOptions="codexOptions"
+                                          AntigravityOptions="antigravityOptions"
+                                          GrokOptions="grokOptions"
                                           DisableContinueOption="false" />
 
                     <ErrorAlert @bind-ErrorMessage="errorMessage" />
@@ -183,6 +185,8 @@
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
     private SessionOptionsSelector.GeminiOptionsData geminiOptions = new();
     private SessionOptionsSelector.CodexOptionsData codexOptions = new();
+    private SessionOptionsSelector.AntigravityOptionsData antigravityOptions = new();
+    private SessionOptionsSelector.GrokOptionsData grokOptions = new();
     private bool isPinned = false;
     private int? pinPriority = null;
     private string errorMessage = "";
@@ -291,6 +295,20 @@
                     ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
                     SearchEnabled = options.ContainsKey("search") && options["search"] == "true",
                     AdditionalDirectories = options.ContainsKey("add-dir") ? options["add-dir"] : "",
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
+                };
+            }
+            else if (selectedType == TerminalType.Antigravity)
+            {
+                antigravityOptions = new SessionOptionsSelector.AntigravityOptionsData
+                {
+                    ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
+                };
+            }
+            else if (selectedType == TerminalType.Grok)
+            {
+                grokOptions = new SessionOptionsSelector.GrokOptionsData
+                {
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
             }

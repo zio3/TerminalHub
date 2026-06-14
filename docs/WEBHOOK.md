@@ -63,6 +63,8 @@ TerminalHubは、CLI（Claude Code / Gemini CLI / Codex CLI）の処理開始・
 | `ClaudeCode` | Claude Code CLI |
 | `GeminiCLI` | Gemini CLI |
 | `CodexCLI` | Codex CLI |
+| `Antigravity` | Antigravity CLI (agy) — 出力解析なし、start/complete は通知されません |
+| `Grok` | Grok CLI — 出力解析なし、start/complete は通知されません |
 
 ## イベントタイミング
 

@@ -142,12 +142,16 @@ public class CustomCliOptionsSettings
     public List<UserCliOption> ClaudeCode { get; set; } = new();
     public List<UserCliOption> GeminiCLI { get; set; } = new();
     public List<UserCliOption> CodexCLI { get; set; } = new();
+    public List<UserCliOption> Antigravity { get; set; } = new();
+    public List<UserCliOption> Grok { get; set; } = new();
 
     public List<UserCliOption> ForType(TerminalType type) => type switch
     {
         TerminalType.ClaudeCode => ClaudeCode,
         TerminalType.GeminiCLI => GeminiCLI,
         TerminalType.CodexCLI => CodexCLI,
+        TerminalType.Antigravity => Antigravity,
+        TerminalType.Grok => Grok,
         _ => new List<UserCliOption>()
     };
 }

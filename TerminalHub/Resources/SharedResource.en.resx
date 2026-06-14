@@ -335,7 +335,7 @@
   <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>Default</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every operation</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>Auto-approves all operations unconditionally (--dangerously-skip-permissions).</value></data>
-  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones (--enable-auto-mode).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones (--permission-mode auto).</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every operation.</value></data>
   <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>Resume previous session (--continue)</value></data>
   <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>Browser integration (--chrome)</value></data>
@@ -366,9 +366,9 @@
   <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
   <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
   <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Adds `--full-auto` for mostly automatic execution.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Uses `--sandbox workspace-write --ask-for-approval on-request`. Explicit per-setting choices take precedence.</value></data>
   <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
+  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution (dangerous). Per-setting sandbox and approval choices are ignored.</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
@@ -392,8 +392,20 @@
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --reasoning-effort high</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --no-alt-screen</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
+
+  <!-- Antigravity CLI Options -->
+  <data name="SessionOptions.Antigravity.Header" xml:space="preserve"><value>Antigravity (agy) options</value></data>
+  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>TerminalHub does not yet parse Antigravity-specific options. Type any args you need into the field below.</value></data>
+  <data name="SessionOptions.Antigravity.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --help</value></data>
+  <data name="SessionOptions.Antigravity.PassToCli" xml:space="preserve"><value>Passed as-is to agy</value></data>
+
+  <!-- Grok CLI Options -->
+  <data name="SessionOptions.Grok.Header" xml:space="preserve"><value>Grok CLI options</value></data>
+  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>TerminalHub does not yet parse Grok-specific options. Auth is left to the GROK_CODE_XAI_API_KEY env var or first-run browser OAuth.</value></data>
+  <data name="SessionOptions.Grok.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --help</value></data>
+  <data name="SessionOptions.Grok.PassToCli" xml:space="preserve"><value>Passed as-is to grok</value></data>
 
   <!-- SessionSettings Dialog -->
   <data name="SessionSettings.Title" xml:space="preserve"><value>Session Settings</value></data>
@@ -521,6 +533,8 @@
   <data name="Root.Placeholder.ClaudeCode" xml:space="preserve"><value>Type a message for Claude Code...</value></data>
   <data name="Root.Placeholder.GeminiCLI" xml:space="preserve"><value>Type a message for Gemini CLI...</value></data>
   <data name="Root.Placeholder.CodexCLI" xml:space="preserve"><value>Type a message for Codex CLI...</value></data>
+  <data name="Root.Placeholder.Antigravity" xml:space="preserve"><value>Type a message for Antigravity (agy)...</value></data>
+  <data name="Root.Placeholder.Grok" xml:space="preserve"><value>Type a message for Grok...</value></data>
   <data name="Root.Placeholder.Terminal" xml:space="preserve"><value>Enter a command...</value></data>
   <data name="Root.SessionType.Terminal" xml:space="preserve"><value>Terminal</value></data>
   <data name="Root.SessionType.Fallback" xml:space="preserve"><value>Session</value></data>
