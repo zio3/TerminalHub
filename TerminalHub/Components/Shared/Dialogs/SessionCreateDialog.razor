@@ -239,41 +239,49 @@
         }
     }
 
+    // 復元値ホワイトリスト: LocalStorage が手動編集等で汚染された場合に
+    // 不正値で起動引数が壊れるのを防ぐ。SessionOptionsSelector の UI 選択肢と一致させる。
+    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
+    private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
+    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
+    private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
+    private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
+
     // CLI モード系ラジオの最終選択値を LocalStorage から復元する。
-    // 値が無いキーはデフォルト値（各 OptionsData の初期化値）のまま。
+    // 値が無い・ホワイトリスト外のキーはデフォルト値（各 OptionsData の初期化値）のまま。
     // 初回利用ユーザーは現状の安全側デフォルト (Claude=bypass 等) を維持する。
     private async Task LoadLastUsedCliModes()
     {
         try
         {
             var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
-            if (!string.IsNullOrEmpty(claudePerm))
+            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
             {
                 claudeCodeOptions.PermissionMode = claudePerm;
             }
 
             var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
-            if (!string.IsNullOrEmpty(geminiApproval))
+            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
             {
                 geminiOptions.ApprovalMode = geminiApproval;
             }
 
             var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
-            if (!string.IsNullOrEmpty(codexMode))
+            if (codexMode != null && ValidCodexModes.Contains(codexMode))
             {
                 codexOptions.Mode = codexMode;
             }
 
-            // Codex SandboxMode / ApprovalPolicy は "" (Default) を有効値として持つので
-            // null 判定で復元する (空文字列を上書きしてしまうのを防ぐ)。
+            // Codex SandboxMode / ApprovalPolicy は "" (Default) を有効値として含むため
+            // ホワイトリストにも "" を入れている。
             var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
-            if (codexSandbox != null)
+            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
             {
                 codexOptions.SandboxMode = codexSandbox;
             }
 
             var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
-            if (codexApproval != null)
+            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
             {
                 codexOptions.ApprovalPolicy = codexApproval;
             }
