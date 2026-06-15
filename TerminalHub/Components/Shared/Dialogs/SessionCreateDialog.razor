@@ -142,6 +142,11 @@
     private SessionOptionsSelector.GrokOptionsData grokOptions = new();
     private List<string> favoriteFolders = new();
     private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
+    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
+    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
+    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
+    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
+    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
 
@@ -177,6 +182,7 @@
         if (firstRender)
         {
             await LoadLastSelectedTerminalType();
+            await LoadLastUsedCliModes();
             LoadSettings();
             _isInitialized = true;
             StateHasChanged();
@@ -226,6 +232,67 @@
         try
         {
             await LocalStorage.SetAsync(LAST_TERMINAL_TYPE_KEY, (int)type);
+        }
+        catch
+        {
+            // エラーが発生しても継続
+        }
+    }
+
+    // CLI モード系ラジオの最終選択値を LocalStorage から復元する。
+    // 値が無いキーはデフォルト値（各 OptionsData の初期化値）のまま。
+    // 初回利用ユーザーは現状の安全側デフォルト (Claude=bypass 等) を維持する。
+    private async Task LoadLastUsedCliModes()
+    {
+        try
+        {
+            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
+            if (!string.IsNullOrEmpty(claudePerm))
+            {
+                claudeCodeOptions.PermissionMode = claudePerm;
+            }
+
+            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
+            if (!string.IsNullOrEmpty(geminiApproval))
+            {
+                geminiOptions.ApprovalMode = geminiApproval;
+            }
+
+            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
+            if (!string.IsNullOrEmpty(codexMode))
+            {
+                codexOptions.Mode = codexMode;
+            }
+
+            // Codex SandboxMode / ApprovalPolicy は "" (Default) を有効値として持つので
+            // null 判定で復元する (空文字列を上書きしてしまうのを防ぐ)。
+            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
+            if (codexSandbox != null)
+            {
+                codexOptions.SandboxMode = codexSandbox;
+            }
+
+            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
+            if (codexApproval != null)
+            {
+                codexOptions.ApprovalPolicy = codexApproval;
+            }
+        }
+        catch
+        {
+            // エラーが発生してもデフォルト値を使用
+        }
+    }
+
+    private async Task SaveLastUsedCliModes()
+    {
+        try
+        {
+            await LocalStorage.SetAsync(LAST_CLAUDE_PERMISSION_MODE_KEY, claudeCodeOptions.PermissionMode);
+            await LocalStorage.SetAsync(LAST_GEMINI_APPROVAL_MODE_KEY, geminiOptions.ApprovalMode);
+            await LocalStorage.SetAsync(LAST_CODEX_MODE_KEY, codexOptions.Mode);
+            await LocalStorage.SetAsync(LAST_CODEX_SANDBOX_MODE_KEY, codexOptions.SandboxMode);
+            await LocalStorage.SetAsync(LAST_CODEX_APPROVAL_POLICY_KEY, codexOptions.ApprovalPolicy);
         }
         catch
         {
@@ -285,8 +352,12 @@
             Options = optionsSelector?.GetOptions() ?? new Dictionary<string, string>()
         };
 
+        // ユーザーが実際に Create を押したタイミングで CLI モード選択を永続化する。
+        // (途中で開いてキャンセルした選択は保存しない)
+        await SaveLastUsedCliModes();
+
         await OnSessionCreate.InvokeAsync(result);
-        ResetForm();
+        await ResetForm();
     }
 
     private async Task ConfirmFolderCreation()
@@ -329,7 +400,7 @@
 
     private async Task Cancel()
     {
-        ResetForm();
+        await ResetForm();
         await OnCancel.InvokeAsync();
     }
 
@@ -349,7 +420,7 @@
         isMouseDownOnBackdrop = false;
     }
 
-    private void ResetForm()
+    private async Task ResetForm()
     {
         folderPath = _cachedDefaultFolderPath;
         // selectedType は保持する（最後に選択したタイプを継続）
@@ -359,6 +430,9 @@
         codexOptions = new();
         antigravityOptions = new();
         grokOptions = new();
+        // Create 後・次回ダイアログ表示で前回の CLI モード選択が見えるよう、
+        // 新しい OptionsData インスタンスに LocalStorage の値を反映しなおす。
+        await LoadLastUsedCliModes();
         showCreateFolderDialog = false;
         pendingSessionCreation = false;
     }
