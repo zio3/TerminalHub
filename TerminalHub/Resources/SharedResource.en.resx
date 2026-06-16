@@ -545,6 +545,7 @@
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>
+  <data name="Root.Terminal.Redraw.Title" xml:space="preserve"><value>Redraw if display is corrupted</value></data>
   <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>Please select this session first, then recreate the terminal</value></data>
   <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>Terminal recreate error: {0}</value></data>
   <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' created</value></data>
