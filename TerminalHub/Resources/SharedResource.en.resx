@@ -445,6 +445,13 @@
   <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>Branch selection</value></data>
   <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>New branch</value></data>
   <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>Existing branch</value></data>
+  <data name="SubSession.BranchSelection.Detached" xml:space="preserve"><value>No branch</value></data>
+  <data name="SubSession.Detached.Help" xml:space="preserve"><value>Create a worktree with detached HEAD (no branch). Suitable for experiments or throwaway workspaces.</value></data>
+  <data name="SubSession.FolderSuffix.Label" xml:space="preserve"><value>Folder name suffix (optional)</value></data>
+  <data name="SubSession.FolderSuffix.Help" xml:space="preserve"><value>Leave empty for auto-naming. When set, the worktree folder will be named {parent}-{suffix}.</value></data>
+  <data name="SubSession.FolderSuffix.Placeholder.Default" xml:space="preserve"><value>Empty: auto-derive from branch name</value></data>
+  <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>Empty: use "detached"</value></data>
+  <data name="SubSession.FolderSuffix.Invalid" xml:space="preserve"><value>Contains invalid characters (&lt; &gt; : " / \ | ? * not allowed; cannot start with "." "-" or end with ".")</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>
@@ -548,6 +555,7 @@
   <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>Please select this session first, then recreate the terminal</value></data>
   <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>Terminal recreate error: {0}</value></data>
   <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' created</value></data>
+  <data name="Root.Toast.WorktreeCreatedDetached" xml:space="preserve"><value>Detached worktree created</value></data>
   <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>Existing worktree '{0}' added</value></data>
   <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>New {0} session created</value></data>
   <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>New session created in folder '{0}'</value></data>

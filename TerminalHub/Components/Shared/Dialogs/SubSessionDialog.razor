@@ -80,6 +80,11 @@
                                            checked="@(branchSelectionMode == BranchSelectionMode.ExistingBranch)"
                                            @onclick="@(() => branchSelectionMode = BranchSelectionMode.ExistingBranch)">
                                     <label class="btn btn-outline-secondary" for="existingBranch">@L["SubSession.BranchSelection.Existing"]</label>
+
+                                    <input type="radio" class="btn-check" name="branchOption" id="detachedBranch"
+                                           checked="@(branchSelectionMode == BranchSelectionMode.Detached)"
+                                           @onclick="@(() => branchSelectionMode = BranchSelectionMode.Detached)">
+                                    <label class="btn btn-outline-secondary" for="detachedBranch">@L["SubSession.BranchSelection.Detached"]</label>
                                 </div>
                             </div>
 
@@ -96,6 +101,13 @@
                                     <small class="form-text text-muted">
                                         @L["SubSession.NewBranch.Help"]
                                     </small>
+                                </div>
+                            }
+                            else if (branchSelectionMode == BranchSelectionMode.Detached)
+                            {
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    @L["SubSession.Detached.Help"]
                                 </div>
                             }
                             else
@@ -139,6 +151,25 @@
                                 }
                             }
                             
+                            <!-- フォルダ名サフィックス(任意) -->
+                            <div class="mb-3">
+                                <label for="folderSuffix" class="form-label">@L["SubSession.FolderSuffix.Label"]</label>
+                                <input type="text" class="form-control" id="folderSuffix"
+                                       @bind="folderSuffix"
+                                       @bind:event="oninput"
+                                       @onkeydown="OnKeyDown"
+                                       placeholder="@GetFolderSuffixPlaceholder()">
+                                <small class="form-text text-muted">
+                                    @L["SubSession.FolderSuffix.Help"]
+                                </small>
+                                @if (!string.IsNullOrWhiteSpace(folderSuffix) && !IsValidFolderSuffix(folderSuffix))
+                                {
+                                    <div class="text-danger small mt-1">
+                                        <i class="bi bi-exclamation-circle me-1"></i>@L["SubSession.FolderSuffix.Invalid"]
+                                    </div>
+                                }
+                            </div>
+
                             <!-- 共通オプションセレクター -->
                             <SessionOptionsSelector @ref="optionsSelector"
                                                   SelectedType="selectedTerminalType"
@@ -318,11 +349,15 @@
     private string branchName = "";
     private string errorMessage = "";
     private bool isProcessing = false;
-    
+
     // 新規プロパティ
     private BranchSelectionMode branchSelectionMode = BranchSelectionMode.NewBranch;
     private string selectedExistingBranch = "";
+    private string folderSuffix = "";
     private List<string>? availableBranches = null;
+
+    // Windows のファイル名禁止文字 + Git/Path 的に避けたい文字
+    private static readonly char[] InvalidFolderSuffixChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -344,17 +379,48 @@
     {
         get
         {
+            // サフィックス入力ありで内容が不正な場合はブロック
+            if (activeTab == TabType.Create && !string.IsNullOrWhiteSpace(folderSuffix) && !IsValidFolderSuffix(folderSuffix))
+            {
+                return false;
+            }
+
             return activeTab switch
             {
-                TabType.Create => IsGitRepository && (branchSelectionMode == BranchSelectionMode.NewBranch 
-                    ? !string.IsNullOrWhiteSpace(branchName)
-                    : (!string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null)),
+                TabType.Create => IsGitRepository && branchSelectionMode switch
+                {
+                    BranchSelectionMode.NewBranch => !string.IsNullOrWhiteSpace(branchName),
+                    BranchSelectionMode.ExistingBranch => !string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null,
+                    BranchSelectionMode.Detached => true,
+                    _ => false
+                },
                 TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
-                TabType.SamePath => true, // 同じフォルダの場合は常に有効
-                TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath), // 新しいフォルダパスが入力されている
+                TabType.SamePath => true,
+                TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath),
                 _ => false
             };
         }
+    }
+
+    private bool IsValidFolderSuffix(string suffix)
+    {
+        var trimmed = suffix.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return true; // 空は「未入力扱い」なのでOK
+        if (trimmed.IndexOfAny(InvalidFolderSuffixChars) >= 0)
+            return false;
+        if (trimmed.StartsWith('.') || trimmed.StartsWith('-') || trimmed.EndsWith('.'))
+            return false;
+        return true;
+    }
+
+    private string GetFolderSuffixPlaceholder()
+    {
+        return branchSelectionMode switch
+        {
+            BranchSelectionMode.Detached => L["SubSession.FolderSuffix.Placeholder.Detached"],
+            _ => L["SubSession.FolderSuffix.Placeholder.Default"]
+        };
     }
     
     // 新しいフォルダ用の変数
@@ -376,6 +442,7 @@
             isProcessing = false;
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
+            folderSuffix = "";
             selectedTerminalType = TerminalType.Terminal;
             availableBranches = null;
             availableWorktrees = null;
@@ -418,10 +485,15 @@
                     TabType.NewFolder => SubSessionType.NewFolder,
                     _ => SubSessionType.CreateNew
                 },
-                BranchName = activeTab == TabType.Create 
-                    ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
+                BranchName = activeTab == TabType.Create
+                    ? branchSelectionMode switch
+                    {
+                        BranchSelectionMode.NewBranch => branchName,
+                        BranchSelectionMode.ExistingBranch => selectedExistingBranch,
+                        _ => ""
+                    }
                     : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
-                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath : 
+                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath :
                                activeTab == TabType.NewFolder ? newFolderPath : null,
                 TerminalType = selectedTerminalType,
                 Options = activeTab switch
@@ -432,7 +504,9 @@
                     TabType.NewFolder => optionsSelectorNewFolder?.GetOptions() ?? new Dictionary<string, string>(),
                     _ => new Dictionary<string, string>()
                 },
-                UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
+                UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch,
+                UseDetached = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.Detached,
+                FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : ""
             };
 
             await OnSubSessionOperation.InvokeAsync(result);
@@ -596,8 +670,10 @@
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
         public bool UseExistingBranch { get; set; }
+        public bool UseDetached { get; set; }
+        public string FolderSuffix { get; set; } = "";
     }
-    
+
     public enum SubSessionType
     {
         CreateNew,
@@ -605,11 +681,12 @@
         SamePath,
         NewFolder
     }
-    
+
     private enum BranchSelectionMode
     {
         NewBranch,
-        ExistingBranch
+        ExistingBranch,
+        Detached
     }
 
 

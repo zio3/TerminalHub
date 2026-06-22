@@ -92,7 +92,7 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task<bool> CreateWorktreeAsync(string sourcePath, string branchName, string worktreePath)
+        public async Task<bool> CreateWorktreeAsync(string sourcePath, string branchName, string worktreePath, bool detach = false)
         {
             try
             {
@@ -108,26 +108,34 @@ namespace TerminalHub.Services
                     return false;
                 }
 
-                // ブランチが既に存在するかチェック
-                var branchCheckResult = await ExecuteGitCommandAsync(sourcePath, $"rev-parse --verify refs/heads/{branchName}");
-                
                 string command;
-                if (branchCheckResult.Success)
+                if (detach)
                 {
-                    // 既存のブランチを使用してWorktreeを作成
-                    command = $"worktree add \"{worktreePath}\" \"{branchName}\"";
+                    // ブランチを作らず detached HEAD で作成
+                    command = $"worktree add --detach \"{worktreePath}\"";
                 }
                 else
                 {
-                    // 新しいブランチでWorktreeを作成
-                    command = $"worktree add -b \"{branchName}\" \"{worktreePath}\"";
+                    // ブランチが既に存在するかチェック
+                    var branchCheckResult = await ExecuteGitCommandAsync(sourcePath, $"rev-parse --verify refs/heads/{branchName}");
+
+                    if (branchCheckResult.Success)
+                    {
+                        // 既存のブランチを使用してWorktreeを作成
+                        command = $"worktree add \"{worktreePath}\" \"{branchName}\"";
+                    }
+                    else
+                    {
+                        // 新しいブランチでWorktreeを作成
+                        command = $"worktree add -b \"{branchName}\" \"{worktreePath}\"";
+                    }
                 }
-                
+
                 var result = await ExecuteGitCommandAsync(sourcePath, command);
 
                 if (result.Success)
                 {
-                    _logger.LogInformation("Worktree作成成功: ブランチ={Branch}, パス={Path}", branchName, worktreePath);
+                    _logger.LogInformation("Worktree作成成功: detach={Detach}, ブランチ={Branch}, パス={Path}", detach, branchName, worktreePath);
                     return true;
                 }
                 else

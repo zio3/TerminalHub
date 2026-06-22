@@ -48,6 +48,7 @@ namespace TerminalHub.Services
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options, string? folderSuffix, bool detached);
         Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
         Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false);
         Task<bool> RestartSessionAsync(Guid sessionId);
@@ -582,10 +583,15 @@ namespace TerminalHub.Services
 
         public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName)
         {
-            return await CreateWorktreeSessionAsync(parentSessionId, branchName, TerminalType.Terminal, null);
+            return await CreateWorktreeSessionAsync(parentSessionId, branchName, TerminalType.Terminal, null, null, false);
         }
 
         public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType = TerminalType.Terminal, Dictionary<string, string>? options = null)
+        {
+            return await CreateWorktreeSessionAsync(parentSessionId, branchName, terminalType, options, null, false);
+        }
+
+        public async Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options, string? folderSuffix, bool detached)
         {
             try
             {
@@ -603,60 +609,70 @@ namespace TerminalHub.Services
                     return null;
                 }
 
-                // 既存のworktreeリストを取得
-                var existingWorktrees = await _gitService.GetWorktreeListAsync(parentSession.FolderPath);
-                
-                // 指定したブランチのworktreeが既に存在するかチェック
-                var existingWorktree = existingWorktrees.FirstOrDefault(w => w.BranchName == branchName);
-                if (existingWorktree != null)
+                // detached以外のときだけ、既存ブランチに紐づくworktreeを再利用
+                if (!detached)
                 {
-                    _logger.LogInformation("既存のWorktreeを使用します: ブランチ={Branch}, パス={Path}", branchName, existingWorktree.Path);
-                    
-                    // 既存のworktreeパスでセッションを作成
-                    var existingWorktreeSessionInfo = new SessionInfo
+                    var existingWorktrees = await _gitService.GetWorktreeListAsync(parentSession.FolderPath);
+                    var existingWorktree = existingWorktrees.FirstOrDefault(w => w.BranchName == branchName);
+                    if (existingWorktree != null)
                     {
-                        SessionId = Guid.NewGuid(),
-                        FolderPath = existingWorktree.Path,
-                        FolderName = Path.GetFileName(existingWorktree.Path),
-                        DisplayName = $"{parentSession.DisplayName} ({branchName})",
-                        TerminalType = terminalType,
-                        Options = options ?? new Dictionary<string, string>(),
-                        ParentSessionId = parentSessionId
-                    };
+                        _logger.LogInformation("既存のWorktreeを使用します: ブランチ={Branch}, パス={Path}", branchName, existingWorktree.Path);
 
-                    // Git情報を設定
-                    await PopulateGitInfoAsync(existingWorktreeSessionInfo);
+                        var existingWorktreeSessionInfo = new SessionInfo
+                        {
+                            SessionId = Guid.NewGuid(),
+                            FolderPath = existingWorktree.Path,
+                            FolderName = Path.GetFileName(existingWorktree.Path),
+                            DisplayName = $"{parentSession.DisplayName} ({branchName})",
+                            TerminalType = terminalType,
+                            Options = options ?? new Dictionary<string, string>(),
+                            ParentSessionId = parentSessionId
+                        };
 
-                    // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
-                    _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
-                    _initializationLocks[existingWorktreeSessionInfo.SessionId] = new SemaphoreSlim(1, 1);
+                        await PopulateGitInfoAsync(existingWorktreeSessionInfo);
 
-                    _logger.LogInformation("既存Worktreeセッション情報作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
-                        branchName, existingWorktree.Path, existingWorktreeSessionInfo.SessionId);
+                        _sessionInfos.TryAdd(existingWorktreeSessionInfo.SessionId, existingWorktreeSessionInfo);
+                        _initializationLocks[existingWorktreeSessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                    return existingWorktreeSessionInfo;
+                        _logger.LogInformation("既存Worktreeセッション情報作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}",
+                            branchName, existingWorktree.Path, existingWorktreeSessionInfo.SessionId);
+
+                        return existingWorktreeSessionInfo;
+                    }
                 }
 
                 // Worktreeの作成先パスを決定（常に親と同じ階層に作成）
                 var parentPath = parentSession.FolderPath;
-                // 末尾のディレクトリ区切り文字を削除
                 if (parentPath.EndsWith(Path.DirectorySeparatorChar) || parentPath.EndsWith(Path.AltDirectorySeparatorChar))
                 {
                     parentPath = parentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 }
-                // ブランチ名の "/" はフォルダ名として不正なので "-" に置換する（feature/hoge → feature-hoge）
-                var safeBranchName = branchName.Replace('/', '-').Replace('\\', '-');
-                var worktreeName = $"{Path.GetFileName(parentPath)}-{safeBranchName}";
-                // 親ディレクトリと同じ階層に作成（親ディレクトリが取得できない場合は、親の親を使用）
+
+                // フォルダ名サフィックスを決定: ユーザー入力 > ブランチ名 > "detached"
+                string folderSegment;
+                if (!string.IsNullOrWhiteSpace(folderSuffix))
+                {
+                    folderSegment = folderSuffix.Trim();
+                }
+                else if (detached)
+                {
+                    folderSegment = "detached";
+                }
+                else
+                {
+                    // ブランチ名の "/" はフォルダ名として不正なので "-" に置換する
+                    folderSegment = branchName.Replace('/', '-').Replace('\\', '-');
+                }
+
+                var worktreeName = $"{Path.GetFileName(parentPath)}-{folderSegment}";
                 var parentDir = Path.GetDirectoryName(parentPath);
                 if (string.IsNullOrEmpty(parentDir))
                 {
-                    // ルートディレクトリの場合は、一つ上の階層を作成
                     parentDir = Path.GetDirectoryName(Path.GetFullPath(parentPath)) ?? parentPath;
                 }
                 var worktreePath = Path.Combine(parentDir, worktreeName);
 
-                // 既に存在する場合は別の名前を試す
+                // 既に存在する場合は連番で別の名前を試す
                 int counter = 1;
                 var originalWorktreePath = worktreePath;
                 while (Directory.Exists(worktreePath))
@@ -666,40 +682,39 @@ namespace TerminalHub.Services
                 }
 
                 // Worktreeを作成
-                var success = await _gitService.CreateWorktreeAsync(parentPath, branchName, worktreePath);
+                var success = await _gitService.CreateWorktreeAsync(parentPath, branchName, worktreePath, detached);
                 if (!success)
                 {
-                    _logger.LogWarning("Worktree作成に失敗しました: ブランチ={Branch}, パス={Path}", branchName, worktreePath);
+                    _logger.LogWarning("Worktree作成に失敗しました: detach={Detach}, ブランチ={Branch}, パス={Path}", detached, branchName, worktreePath);
                     return null;
                 }
 
-                // 新しいセッションを作成
+                // 表示名: detached なら (detached)、それ以外は (ブランチ名)
+                var displaySuffix = detached ? "detached" : branchName;
                 var worktreeSessionInfo = new SessionInfo
                 {
                     SessionId = Guid.NewGuid(),
                     FolderPath = worktreePath,
                     FolderName = Path.GetFileName(worktreePath),
-                    DisplayName = $"{parentSession.DisplayName} ({branchName})",
+                    DisplayName = $"{parentSession.DisplayName} ({displaySuffix})",
                     TerminalType = terminalType,
                     Options = options ?? new Dictionary<string, string>(),
                     ParentSessionId = parentSessionId
                 };
 
-                // Git情報を設定
                 await PopulateGitInfoAsync(worktreeSessionInfo);
 
-                // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos.TryAdd(worktreeSessionInfo.SessionId, worktreeSessionInfo);
                 _initializationLocks[worktreeSessionInfo.SessionId] = new SemaphoreSlim(1, 1);
 
-                _logger.LogInformation("Worktreeセッション情報作成成功: ブランチ={Branch}, パス={Path}, セッションID={SessionId}", 
-                    branchName, worktreePath, worktreeSessionInfo.SessionId);
+                _logger.LogInformation("Worktreeセッション情報作成成功: detach={Detach}, ブランチ={Branch}, パス={Path}, セッションID={SessionId}",
+                    detached, branchName, worktreePath, worktreeSessionInfo.SessionId);
 
                 return worktreeSessionInfo;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Worktreeセッション作成でエラーが発生しました: 親セッション={ParentSessionId}, ブランチ={Branch}", 
+                _logger.LogError(ex, "Worktreeセッション作成でエラーが発生しました: 親セッション={ParentSessionId}, ブランチ={Branch}",
                     parentSessionId, branchName);
                 return null;
             }
