@@ -450,7 +450,7 @@
   <data name="SubSession.FolderSuffix.Label" xml:space="preserve"><value>フォルダ名サフィックス（任意）</value></data>
   <data name="SubSession.FolderSuffix.Help" xml:space="preserve"><value>空の場合は自動で命名します。入力した場合、Worktree フォルダ名は {親フォルダ名}-{入力値} になります。</value></data>
   <data name="SubSession.FolderSuffix.Placeholder.Default" xml:space="preserve"><value>未入力ならブランチ名から自動生成</value></data>
-  <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>未入力なら "detached" を使用</value></data>
+  <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>未入力なら "worktree-1" など連番で自動命名</value></data>
   <data name="SubSession.FolderSuffix.Invalid" xml:space="preserve"><value>使用できない文字が含まれています（&lt; &gt; : " / \ | ? * は不可、先頭の "." "-" や末尾の "." も不可）</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>新しいブランチ名</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>このブランチ名で新しい Worktree が作成されます</value></data>

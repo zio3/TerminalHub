@@ -450,7 +450,7 @@
   <data name="SubSession.FolderSuffix.Label" xml:space="preserve"><value>Folder name suffix (optional)</value></data>
   <data name="SubSession.FolderSuffix.Help" xml:space="preserve"><value>Leave empty for auto-naming. When set, the worktree folder will be named {parent}-{suffix}.</value></data>
   <data name="SubSession.FolderSuffix.Placeholder.Default" xml:space="preserve"><value>Empty: auto-derive from branch name</value></data>
-  <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>Empty: use "detached"</value></data>
+  <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>Empty: auto-name as "worktree-1", etc.</value></data>
   <data name="SubSession.FolderSuffix.Invalid" xml:space="preserve"><value>Contains invalid characters (&lt; &gt; : " / \ | ? * not allowed; cannot start with "." "-" or end with ".")</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>

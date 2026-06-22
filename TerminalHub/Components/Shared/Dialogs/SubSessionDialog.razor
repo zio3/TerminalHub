@@ -2,6 +2,7 @@
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
+@inject ILocalStorageService LocalStorage
 @inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
@@ -359,6 +360,10 @@
 
     // Windows のファイル名禁止文字 + Git/Path 的に避けたい文字
     private static readonly char[] InvalidFolderSuffixChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
+
+    // LocalStorage: 直近のブランチ選択方法 (全セッション共通で 1 つ保持)
+    private const string LAST_BRANCH_SELECTION_MODE_KEY = "lastBranchSelectionMode";
+    private static readonly HashSet<string> ValidBranchSelectionModes = new() { "NewBranch", "ExistingBranch", "Detached" };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -446,6 +451,9 @@
             folderSuffix = "";
             // 親セッションの TerminalType を初期値として引き継ぐ
             selectedTerminalType = ParentTerminalType;
+
+            // 直近の選択を LocalStorage から復元
+            await LoadLastBranchSelectionMode();
             availableBranches = null;
             availableWorktrees = null;
             selectedWorktreePath = "";
@@ -511,6 +519,12 @@
                 FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : ""
             };
 
+            // Create タブの選択結果を「直近の選択」として LocalStorage に保存
+            if (activeTab == TabType.Create)
+            {
+                await SaveLastBranchSelectionMode();
+            }
+
             await OnSubSessionOperation.InvokeAsync(result);
         }
         catch (Exception ex)
@@ -561,6 +575,35 @@
         // 手動入力でのパス指定を推奨
         // 必要に応じて将来的にFile System Access APIを使用可能
         await Task.CompletedTask;
+    }
+
+    private async Task LoadLastBranchSelectionMode()
+    {
+        try
+        {
+            var saved = await LocalStorage.GetAsync<string>(LAST_BRANCH_SELECTION_MODE_KEY);
+            if (!string.IsNullOrEmpty(saved) && ValidBranchSelectionModes.Contains(saved)
+                && Enum.TryParse<BranchSelectionMode>(saved, out var mode))
+            {
+                branchSelectionMode = mode;
+            }
+        }
+        catch
+        {
+            // LocalStorage アクセス失敗時はデフォルト (NewBranch) のまま
+        }
+    }
+
+    private async Task SaveLastBranchSelectionMode()
+    {
+        try
+        {
+            await LocalStorage.SetAsync(LAST_BRANCH_SELECTION_MODE_KEY, branchSelectionMode.ToString());
+        }
+        catch
+        {
+            // LocalStorage アクセス失敗時は無視
+        }
     }
 
     private async Task LoadAvailableBranches()
