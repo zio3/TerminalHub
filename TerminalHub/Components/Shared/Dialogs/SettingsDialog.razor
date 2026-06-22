@@ -549,7 +549,8 @@
                                     @L["Settings.Commands.Help"]
                                 </small>
 
-                                @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "GeminiCLI", "CodexCLI", "Antigravity", "Grok" })
+                                @* Gemini CLI は廃止 (タブ非表示、ただし内部の編集データは保全) *@
+                                @foreach (var terminalType in new[] { "Terminal", "ClaudeCode", "CodexCLI", "Antigravity", "Grok" })
                                 {
                                     var type = terminalType;
                                     var displayName = GetTerminalTypeDisplayName(type);

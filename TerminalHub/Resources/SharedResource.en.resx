@@ -397,13 +397,19 @@
 
   <!-- Antigravity CLI Options -->
   <data name="SessionOptions.Antigravity.Header" xml:space="preserve"><value>Antigravity (agy) options</value></data>
-  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>TerminalHub does not yet parse Antigravity-specific options. Type any args you need into the field below.</value></data>
+  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>Type any extra args you need into the field below.</value></data>
+  <data name="SessionOptions.Antigravity.SkipPermissions" xml:space="preserve"><value>Skip approvals (--dangerously-skip-permissions)</value></data>
+  <data name="SessionOptions.Antigravity.SkipPermissionsHelp" xml:space="preserve"><value>Auto-approve all tool permission prompts (YOLO-equivalent).</value></data>
+  <data name="SessionOptions.Antigravity.Continue" xml:space="preserve"><value>Continue last conversation (-c)</value></data>
   <data name="SessionOptions.Antigravity.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --help</value></data>
   <data name="SessionOptions.Antigravity.PassToCli" xml:space="preserve"><value>Passed as-is to agy</value></data>
 
   <!-- Grok CLI Options -->
   <data name="SessionOptions.Grok.Header" xml:space="preserve"><value>Grok CLI options</value></data>
-  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>TerminalHub does not yet parse Grok-specific options. Auth is left to the GROK_CODE_XAI_API_KEY env var or first-run browser OAuth.</value></data>
+  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>Auth is left to the GROK_CODE_XAI_API_KEY env var or first-run browser OAuth.</value></data>
+  <data name="SessionOptions.Grok.AlwaysApprove" xml:space="preserve"><value>Skip approvals (--always-approve)</value></data>
+  <data name="SessionOptions.Grok.AlwaysApproveHelp" xml:space="preserve"><value>Skip interactive approval prompts (intended for CI; use with care).</value></data>
+  <data name="SessionOptions.Grok.Continue" xml:space="preserve"><value>Continue last conversation (-c)</value></data>
   <data name="SessionOptions.Grok.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --help</value></data>
   <data name="SessionOptions.Grok.PassToCli" xml:space="preserve"><value>Passed as-is to grok</value></data>
 
