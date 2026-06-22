@@ -26,13 +26,14 @@ namespace TerminalHub.Services
         Task<GitInfo?> GetGitInfoAsync(string path);
 
         /// <summary>
-        /// 新しいブランチを作成してWorktreeを作成
+        /// Worktreeを作成（新規ブランチ／既存ブランチ／detached を切替）
         /// </summary>
         /// <param name="sourcePath">元のリポジトリパス</param>
-        /// <param name="branchName">新しいブランチ名</param>
+        /// <param name="branchName">ブランチ名。detach=true の場合は無視可</param>
         /// <param name="worktreePath">Worktreeのパス</param>
+        /// <param name="detach">true の場合 --detach で作成（ブランチを作らない）</param>
         /// <returns>成功した場合true</returns>
-        Task<bool> CreateWorktreeAsync(string sourcePath, string branchName, string worktreePath);
+        Task<bool> CreateWorktreeAsync(string sourcePath, string branchName, string worktreePath, bool detach = false);
 
         /// <summary>
         /// Worktreeを削除

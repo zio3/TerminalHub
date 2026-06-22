@@ -49,12 +49,13 @@
                 OnSidebarWidthPercentChanged="HandleSidebarWidthPercentChanged"
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
                 OnThemeChanged="HandleThemeChanged" />
-<SubSessionDialog IsVisible="showSubSessionDialog" 
+<SubSessionDialog IsVisible="showSubSessionDialog"
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
                          ParentSessionPath="@subSessionParentSessionPath"
                          IsGitRepository="@subSessionParentSessionIsGitRepository"
-                         OnSubSessionOperation="OnSubSessionOperation" 
+                         ParentTerminalType="@subSessionParentTerminalType"
+                         OnSubSessionOperation="OnSubSessionOperation"
                          OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
                        SessionId="@settingsSessionId"
@@ -206,6 +207,7 @@
     private Guid? subSessionParentSessionId = null;
     private string? subSessionParentSessionPath = null;
     private bool subSessionParentSessionIsGitRepository = true;
+    private TerminalType subSessionParentTerminalType = TerminalType.Terminal;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
     private bool showArchivedSessionsDialog = false;
@@ -1728,6 +1730,7 @@
             subSessionParentSessionName = session.GetDisplayName();
             subSessionParentSessionPath = session.FolderPath;
             subSessionParentSessionIsGitRepository = session.IsGitRepository;
+            subSessionParentTerminalType = session.TerminalType;
             showSubSessionDialog = true;
         }
     }
@@ -1747,9 +1750,11 @@
             switch (result.OperationType)
             {
                 case SubSessionDialog.SubSessionType.CreateNew:
-                    // Worktree作成（新規・既存ブランチ共通）
+                    // Worktree作成（新規ブランチ／既存ブランチ／detached 共通）
                     newSession = await SessionManager.CreateWorktreeSessionAsync(
-                        subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options);
+                        subSessionParentSessionId.Value, result.BranchName, result.TerminalType, result.Options,
+                        string.IsNullOrWhiteSpace(result.FolderSuffix) ? null : result.FolderSuffix,
+                        result.UseDetached);
                     break;
 
                 case SubSessionDialog.SubSessionType.AddExisting:
@@ -1793,7 +1798,9 @@
                 string successMessage = result.OperationType switch
                 {
                     SubSessionDialog.SubSessionType.CreateNew =>
-                        string.Format(L["Root.Toast.WorktreeCreatedFormat"], result.BranchName),
+                        result.UseDetached
+                            ? L["Root.Toast.WorktreeCreatedDetached"]
+                            : string.Format(L["Root.Toast.WorktreeCreatedFormat"], result.BranchName),
                     SubSessionDialog.SubSessionType.AddExisting =>
                         string.Format(L["Root.Toast.WorktreeAddedFormat"], result.BranchName),
                     SubSessionDialog.SubSessionType.SamePath =>
@@ -1822,6 +1829,7 @@
             subSessionParentSessionName = null;
             subSessionParentSessionPath = null;
             subSessionParentSessionIsGitRepository = true;
+            subSessionParentTerminalType = TerminalType.Terminal;
         }
     }
 
@@ -1846,10 +1854,10 @@
             return null;
         }
 
-        // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
+        // 既存のWorktreeをセッションとして追加（親はツリー表示でぶら下がるため省略）
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
-            $"{parentSession.DisplayName} ({branchName})",
+            branchName,
             terminalType,
             options
         );

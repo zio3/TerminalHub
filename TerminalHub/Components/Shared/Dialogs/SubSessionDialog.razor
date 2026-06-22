@@ -2,6 +2,7 @@
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
+@inject ILocalStorageService LocalStorage
 @inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
@@ -80,6 +81,11 @@
                                            checked="@(branchSelectionMode == BranchSelectionMode.ExistingBranch)"
                                            @onclick="@(() => branchSelectionMode = BranchSelectionMode.ExistingBranch)">
                                     <label class="btn btn-outline-secondary" for="existingBranch">@L["SubSession.BranchSelection.Existing"]</label>
+
+                                    <input type="radio" class="btn-check" name="branchOption" id="detachedBranch"
+                                           checked="@(branchSelectionMode == BranchSelectionMode.Detached)"
+                                           @onclick="@(() => branchSelectionMode = BranchSelectionMode.Detached)">
+                                    <label class="btn btn-outline-secondary" for="detachedBranch">@L["SubSession.BranchSelection.Detached"]</label>
                                 </div>
                             </div>
 
@@ -96,6 +102,13 @@
                                     <small class="form-text text-muted">
                                         @L["SubSession.NewBranch.Help"]
                                     </small>
+                                </div>
+                            }
+                            else if (branchSelectionMode == BranchSelectionMode.Detached)
+                            {
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    @L["SubSession.Detached.Help"]
                                 </div>
                             }
                             else
@@ -139,6 +152,25 @@
                                 }
                             }
                             
+                            <!-- フォルダ名サフィックス(任意) -->
+                            <div class="mb-3">
+                                <label for="folderSuffix" class="form-label">@L["SubSession.FolderSuffix.Label"]</label>
+                                <input type="text" class="form-control" id="folderSuffix"
+                                       @bind="folderSuffix"
+                                       @bind:event="oninput"
+                                       @onkeydown="OnKeyDown"
+                                       placeholder="@GetFolderSuffixPlaceholder()">
+                                <small class="form-text text-muted">
+                                    @L["SubSession.FolderSuffix.Help"]
+                                </small>
+                                @if (!string.IsNullOrWhiteSpace(folderSuffix) && !IsValidFolderSuffix(folderSuffix))
+                                {
+                                    <div class="text-danger small mt-1">
+                                        <i class="bi bi-exclamation-circle me-1"></i>@L["SubSession.FolderSuffix.Invalid"]
+                                    </div>
+                                }
+                            </div>
+
                             <!-- 共通オプションセレクター -->
                             <SessionOptionsSelector @ref="optionsSelector"
                                                   SelectedType="selectedTerminalType"
@@ -311,6 +343,7 @@
     [Parameter] public string? ParentSessionName { get; set; }
     [Parameter] public Guid? ParentSessionId { get; set; }
     [Parameter] public bool IsGitRepository { get; set; }
+    [Parameter] public TerminalType ParentTerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public EventCallback<SubSessionResult> OnSubSessionOperation { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
@@ -318,11 +351,32 @@
     private string branchName = "";
     private string errorMessage = "";
     private bool isProcessing = false;
-    
+
     // 新規プロパティ
     private BranchSelectionMode branchSelectionMode = BranchSelectionMode.NewBranch;
     private string selectedExistingBranch = "";
+    private string folderSuffix = "";
     private List<string>? availableBranches = null;
+
+    // Windows のファイル名禁止文字 + Git/Path 的に避けたい文字
+    private static readonly char[] InvalidFolderSuffixChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
+
+    // LocalStorage: 直近のブランチ選択方法 (全セッション共通で 1 つ保持)
+    private const string LAST_BRANCH_SELECTION_MODE_KEY = "lastBranchSelectionMode";
+    private static readonly HashSet<string> ValidBranchSelectionModes = new() { "NewBranch", "ExistingBranch", "Detached" };
+
+    // LocalStorage: 直近の CLI モード選択 (SessionCreateDialog とキーを共有して値を流用)
+    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
+    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
+    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
+    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
+    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
+
+    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
+    private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
+    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
+    private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
+    private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -344,17 +398,48 @@
     {
         get
         {
+            // サフィックス入力ありで内容が不正な場合はブロック
+            if (activeTab == TabType.Create && !string.IsNullOrWhiteSpace(folderSuffix) && !IsValidFolderSuffix(folderSuffix))
+            {
+                return false;
+            }
+
             return activeTab switch
             {
-                TabType.Create => IsGitRepository && (branchSelectionMode == BranchSelectionMode.NewBranch 
-                    ? !string.IsNullOrWhiteSpace(branchName)
-                    : (!string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null)),
+                TabType.Create => IsGitRepository && branchSelectionMode switch
+                {
+                    BranchSelectionMode.NewBranch => !string.IsNullOrWhiteSpace(branchName),
+                    BranchSelectionMode.ExistingBranch => !string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null,
+                    BranchSelectionMode.Detached => true,
+                    _ => false
+                },
                 TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
-                TabType.SamePath => true, // 同じフォルダの場合は常に有効
-                TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath), // 新しいフォルダパスが入力されている
+                TabType.SamePath => true,
+                TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath),
                 _ => false
             };
         }
+    }
+
+    private bool IsValidFolderSuffix(string suffix)
+    {
+        var trimmed = suffix.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return true; // 空は「未入力扱い」なのでOK
+        if (trimmed.IndexOfAny(InvalidFolderSuffixChars) >= 0)
+            return false;
+        if (trimmed.StartsWith('.') || trimmed.StartsWith('-') || trimmed.EndsWith('.'))
+            return false;
+        return true;
+    }
+
+    private string GetFolderSuffixPlaceholder()
+    {
+        return branchSelectionMode switch
+        {
+            BranchSelectionMode.Detached => L["SubSession.FolderSuffix.Placeholder.Detached"],
+            _ => L["SubSession.FolderSuffix.Placeholder.Default"]
+        };
     }
     
     // 新しいフォルダ用の変数
@@ -376,7 +461,12 @@
             isProcessing = false;
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
-            selectedTerminalType = TerminalType.Terminal;
+            folderSuffix = "";
+            // 親セッションの TerminalType を初期値として引き継ぐ
+            selectedTerminalType = ParentTerminalType;
+
+            // 直近の選択を LocalStorage から復元
+            await LoadLastBranchSelectionMode();
             availableBranches = null;
             availableWorktrees = null;
             selectedWorktreePath = "";
@@ -385,6 +475,8 @@
             claudeOptions = new();
             geminiOptions = new();
             codexOptions = new();
+            // CLI モード系の直近選択も復元（SessionCreateDialog とキー共有）
+            await LoadLastUsedCliModes();
             newFolderPath = "";
             
             // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
@@ -418,10 +510,15 @@
                     TabType.NewFolder => SubSessionType.NewFolder,
                     _ => SubSessionType.CreateNew
                 },
-                BranchName = activeTab == TabType.Create 
-                    ? (branchSelectionMode == BranchSelectionMode.NewBranch ? branchName : selectedExistingBranch)
+                BranchName = activeTab == TabType.Create
+                    ? branchSelectionMode switch
+                    {
+                        BranchSelectionMode.NewBranch => branchName,
+                        BranchSelectionMode.ExistingBranch => selectedExistingBranch,
+                        _ => ""
+                    }
                     : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
-                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath : 
+                WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath :
                                activeTab == TabType.NewFolder ? newFolderPath : null,
                 TerminalType = selectedTerminalType,
                 Options = activeTab switch
@@ -432,8 +529,16 @@
                     TabType.NewFolder => optionsSelectorNewFolder?.GetOptions() ?? new Dictionary<string, string>(),
                     _ => new Dictionary<string, string>()
                 },
-                UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch
+                UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch,
+                UseDetached = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.Detached,
+                FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : ""
             };
+
+            // Create タブの選択結果を「直近の選択」として LocalStorage に保存
+            if (activeTab == TabType.Create)
+            {
+                await SaveLastBranchSelectionMode();
+            }
 
             await OnSubSessionOperation.InvokeAsync(result);
         }
@@ -485,6 +590,77 @@
         // 手動入力でのパス指定を推奨
         // 必要に応じて将来的にFile System Access APIを使用可能
         await Task.CompletedTask;
+    }
+
+    // SessionCreateDialog が保存した CLI モードの直近選択を、初期値として読むだけ。
+    // SubSessionDialog 側で書き戻しはしない (値の発生源は新規セッション作成画面に一元化)。
+    private async Task LoadLastUsedCliModes()
+    {
+        try
+        {
+            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
+            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
+            {
+                claudeOptions.PermissionMode = claudePerm;
+            }
+
+            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
+            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
+            {
+                geminiOptions.ApprovalMode = geminiApproval;
+            }
+
+            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
+            if (codexMode != null && ValidCodexModes.Contains(codexMode))
+            {
+                codexOptions.Mode = codexMode;
+            }
+
+            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
+            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
+            {
+                codexOptions.SandboxMode = codexSandbox;
+            }
+
+            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
+            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
+            {
+                codexOptions.ApprovalPolicy = codexApproval;
+            }
+        }
+        catch
+        {
+            // 失敗してもデフォルト値のまま続行
+        }
+    }
+
+    private async Task LoadLastBranchSelectionMode()
+    {
+        try
+        {
+            var saved = await LocalStorage.GetAsync<string>(LAST_BRANCH_SELECTION_MODE_KEY);
+            if (!string.IsNullOrEmpty(saved) && ValidBranchSelectionModes.Contains(saved)
+                && Enum.TryParse<BranchSelectionMode>(saved, out var mode))
+            {
+                branchSelectionMode = mode;
+            }
+        }
+        catch
+        {
+            // LocalStorage アクセス失敗時はデフォルト (NewBranch) のまま
+        }
+    }
+
+    private async Task SaveLastBranchSelectionMode()
+    {
+        try
+        {
+            await LocalStorage.SetAsync(LAST_BRANCH_SELECTION_MODE_KEY, branchSelectionMode.ToString());
+        }
+        catch
+        {
+            // LocalStorage アクセス失敗時は無視
+        }
     }
 
     private async Task LoadAvailableBranches()
@@ -596,8 +772,10 @@
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
         public bool UseExistingBranch { get; set; }
+        public bool UseDetached { get; set; }
+        public string FolderSuffix { get; set; } = "";
     }
-    
+
     public enum SubSessionType
     {
         CreateNew,
@@ -605,11 +783,12 @@
         SamePath,
         NewFolder
     }
-    
+
     private enum BranchSelectionMode
     {
         NewBranch,
-        ExistingBranch
+        ExistingBranch,
+        Detached
     }
 
 
