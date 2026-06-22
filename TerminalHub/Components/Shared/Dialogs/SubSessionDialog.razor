@@ -342,6 +342,7 @@
     [Parameter] public string? ParentSessionName { get; set; }
     [Parameter] public Guid? ParentSessionId { get; set; }
     [Parameter] public bool IsGitRepository { get; set; }
+    [Parameter] public TerminalType ParentTerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public EventCallback<SubSessionResult> OnSubSessionOperation { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
@@ -443,7 +444,8 @@
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
             folderSuffix = "";
-            selectedTerminalType = TerminalType.Terminal;
+            // 親セッションの TerminalType を初期値として引き継ぐ
+            selectedTerminalType = ParentTerminalType;
             availableBranches = null;
             availableWorktrees = null;
             selectedWorktreePath = "";

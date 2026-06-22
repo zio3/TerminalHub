@@ -49,12 +49,13 @@
                 OnSidebarWidthPercentChanged="HandleSidebarWidthPercentChanged"
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
                 OnThemeChanged="HandleThemeChanged" />
-<SubSessionDialog IsVisible="showSubSessionDialog" 
+<SubSessionDialog IsVisible="showSubSessionDialog"
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
                          ParentSessionPath="@subSessionParentSessionPath"
                          IsGitRepository="@subSessionParentSessionIsGitRepository"
-                         OnSubSessionOperation="OnSubSessionOperation" 
+                         ParentTerminalType="@subSessionParentTerminalType"
+                         OnSubSessionOperation="OnSubSessionOperation"
                          OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
                        SessionId="@settingsSessionId"
@@ -206,6 +207,7 @@
     private Guid? subSessionParentSessionId = null;
     private string? subSessionParentSessionPath = null;
     private bool subSessionParentSessionIsGitRepository = true;
+    private TerminalType subSessionParentTerminalType = TerminalType.Terminal;
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
     private bool showArchivedSessionsDialog = false;
@@ -1728,6 +1730,7 @@
             subSessionParentSessionName = session.GetDisplayName();
             subSessionParentSessionPath = session.FolderPath;
             subSessionParentSessionIsGitRepository = session.IsGitRepository;
+            subSessionParentTerminalType = session.TerminalType;
             showSubSessionDialog = true;
         }
     }
@@ -1826,6 +1829,7 @@
             subSessionParentSessionName = null;
             subSessionParentSessionPath = null;
             subSessionParentSessionIsGitRepository = true;
+            subSessionParentTerminalType = TerminalType.Terminal;
         }
     }
 
