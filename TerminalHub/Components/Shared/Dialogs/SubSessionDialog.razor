@@ -364,6 +364,19 @@
     // LocalStorage: 直近のブランチ選択方法 (全セッション共通で 1 つ保持)
     private const string LAST_BRANCH_SELECTION_MODE_KEY = "lastBranchSelectionMode";
     private static readonly HashSet<string> ValidBranchSelectionModes = new() { "NewBranch", "ExistingBranch", "Detached" };
+
+    // LocalStorage: 直近の CLI モード選択 (SessionCreateDialog とキーを共有して値を流用)
+    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
+    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
+    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
+    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
+    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
+
+    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
+    private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
+    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
+    private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
+    private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -462,6 +475,8 @@
             claudeOptions = new();
             geminiOptions = new();
             codexOptions = new();
+            // CLI モード系の直近選択も復元（SessionCreateDialog とキー共有）
+            await LoadLastUsedCliModes();
             newFolderPath = "";
             
             // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
@@ -575,6 +590,48 @@
         // 手動入力でのパス指定を推奨
         // 必要に応じて将来的にFile System Access APIを使用可能
         await Task.CompletedTask;
+    }
+
+    // SessionCreateDialog が保存した CLI モードの直近選択を、初期値として読むだけ。
+    // SubSessionDialog 側で書き戻しはしない (値の発生源は新規セッション作成画面に一元化)。
+    private async Task LoadLastUsedCliModes()
+    {
+        try
+        {
+            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
+            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
+            {
+                claudeOptions.PermissionMode = claudePerm;
+            }
+
+            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
+            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
+            {
+                geminiOptions.ApprovalMode = geminiApproval;
+            }
+
+            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
+            if (codexMode != null && ValidCodexModes.Contains(codexMode))
+            {
+                codexOptions.Mode = codexMode;
+            }
+
+            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
+            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
+            {
+                codexOptions.SandboxMode = codexSandbox;
+            }
+
+            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
+            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
+            {
+                codexOptions.ApprovalPolicy = codexApproval;
+            }
+        }
+        catch
+        {
+            // 失敗してもデフォルト値のまま続行
+        }
     }
 
     private async Task LoadLastBranchSelectionMode()
