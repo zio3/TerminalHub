@@ -623,7 +623,7 @@ namespace TerminalHub.Services
                             SessionId = Guid.NewGuid(),
                             FolderPath = existingWorktree.Path,
                             FolderName = Path.GetFileName(existingWorktree.Path),
-                            DisplayName = $"{parentSession.DisplayName} ({branchName})",
+                            DisplayName = branchName,
                             TerminalType = terminalType,
                             Options = options ?? new Dictionary<string, string>(),
                             ParentSessionId = parentSessionId
@@ -648,7 +648,15 @@ namespace TerminalHub.Services
                     parentPath = parentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 }
 
-                // フォルダ名サフィックスを決定: ユーザー入力 > ブランチ名 > "detached"
+                var parentName = Path.GetFileName(parentPath);
+                var parentDir = Path.GetDirectoryName(parentPath);
+                if (string.IsNullOrEmpty(parentDir))
+                {
+                    parentDir = Path.GetDirectoryName(Path.GetFullPath(parentPath)) ?? parentPath;
+                }
+
+                // フォルダ名サフィックスを決定:
+                //  ユーザー入力 > (detachedかつ未入力なら "worktree-{序数}") > ブランチ名
                 string folderSegment;
                 if (!string.IsNullOrWhiteSpace(folderSuffix))
                 {
@@ -656,7 +664,13 @@ namespace TerminalHub.Services
                 }
                 else if (detached)
                 {
-                    folderSegment = "detached";
+                    // 親階層内で未使用の "worktree-{N}" を探す
+                    int idx = 1;
+                    while (Directory.Exists(Path.Combine(parentDir, $"{parentName}-worktree-{idx}")))
+                    {
+                        idx++;
+                    }
+                    folderSegment = $"worktree-{idx}";
                 }
                 else
                 {
@@ -664,15 +678,10 @@ namespace TerminalHub.Services
                     folderSegment = branchName.Replace('/', '-').Replace('\\', '-');
                 }
 
-                var worktreeName = $"{Path.GetFileName(parentPath)}-{folderSegment}";
-                var parentDir = Path.GetDirectoryName(parentPath);
-                if (string.IsNullOrEmpty(parentDir))
-                {
-                    parentDir = Path.GetDirectoryName(Path.GetFullPath(parentPath)) ?? parentPath;
-                }
+                var worktreeName = $"{parentName}-{folderSegment}";
                 var worktreePath = Path.Combine(parentDir, worktreeName);
 
-                // 既に存在する場合は連番で別の名前を試す
+                // 念のため衝突した場合の連番フォールバック
                 int counter = 1;
                 var originalWorktreePath = worktreePath;
                 while (Directory.Exists(worktreePath))
@@ -689,14 +698,13 @@ namespace TerminalHub.Services
                     return null;
                 }
 
-                // 表示名: detached なら (detached)、それ以外は (ブランチ名)
-                var displaySuffix = detached ? "detached" : branchName;
+                // 表示名: detached モードはフォルダ末尾セグメント (worktree-1 等)、ブランチモードはブランチ名
                 var worktreeSessionInfo = new SessionInfo
                 {
                     SessionId = Guid.NewGuid(),
                     FolderPath = worktreePath,
                     FolderName = Path.GetFileName(worktreePath),
-                    DisplayName = $"{parentSession.DisplayName} ({displaySuffix})",
+                    DisplayName = detached ? folderSegment : branchName,
                     TerminalType = terminalType,
                     Options = options ?? new Dictionary<string, string>(),
                     ParentSessionId = parentSessionId

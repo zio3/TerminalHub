@@ -1850,10 +1850,10 @@
             return null;
         }
 
-        // 既存のWorktreeをセッションとして追加（統一された表示名を使用）
+        // 既存のWorktreeをセッションとして追加（親はツリー表示でぶら下がるため省略）
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
-            $"{parentSession.DisplayName} ({branchName})",
+            branchName,
             terminalType,
             options
         );
