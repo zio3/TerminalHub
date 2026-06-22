@@ -445,8 +445,8 @@
   <data name="SubSession.BranchSelection.Label" xml:space="preserve"><value>ブランチ選択方法</value></data>
   <data name="SubSession.BranchSelection.New" xml:space="preserve"><value>新規ブランチ</value></data>
   <data name="SubSession.BranchSelection.Existing" xml:space="preserve"><value>既存ブランチ</value></data>
-  <data name="SubSession.BranchSelection.Detached" xml:space="preserve"><value>ブランチなし</value></data>
-  <data name="SubSession.Detached.Help" xml:space="preserve"><value>ブランチを作らずに detached HEAD で Worktree を作成します。試行錯誤や使い捨ての作業場に適しています。</value></data>
+  <data name="SubSession.BranchSelection.Detached" xml:space="preserve"><value>ブランチを後で選ぶ</value></data>
+  <data name="SubSession.Detached.Help" xml:space="preserve"><value>ブランチを作らず Worktree フォルダだけ作成します。作成後、フォルダ内で git switch で任意のブランチに切り替えて作業できます。</value></data>
   <data name="SubSession.FolderSuffix.Label" xml:space="preserve"><value>フォルダ名サフィックス（任意）</value></data>
   <data name="SubSession.FolderSuffix.Help" xml:space="preserve"><value>空の場合は自動で命名します。入力した場合、Worktree フォルダ名は {親フォルダ名}-{入力値} になります。</value></data>
   <data name="SubSession.FolderSuffix.Placeholder.Default" xml:space="preserve"><value>未入力ならブランチ名から自動生成</value></data>
@@ -555,7 +555,7 @@
   <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>このセッションを選択してからターミナルを再作成してください</value></data>
   <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>ターミナル再作成エラー: {0}</value></data>
   <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' を作成しました</value></data>
-  <data name="Root.Toast.WorktreeCreatedDetached" xml:space="preserve"><value>Worktree を detached HEAD で作成しました</value></data>
+  <data name="Root.Toast.WorktreeCreatedDetached" xml:space="preserve"><value>Worktree を作成しました（ブランチ未指定）</value></data>
   <data name="Root.Toast.WorktreeAddedFormat" xml:space="preserve"><value>既存の Worktree '{0}' を追加しました</value></data>
   <data name="Root.Toast.SamePathSessionCreatedFormat" xml:space="preserve"><value>新しい{0}セッションを作成しました</value></data>
   <data name="Root.Toast.NewFolderSessionCreatedFormat" xml:space="preserve"><value>新しいフォルダ '{0}' でセッションを作成しました</value></data>
