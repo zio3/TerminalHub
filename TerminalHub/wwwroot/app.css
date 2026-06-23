@@ -169,6 +169,39 @@ h1:focus {
     min-height: 400px;
 }
 
+/* xterm 再描画ボタン (CanvasAddon 不整合時のレスキュー用)
+   通常はほぼ透明、hover でうっすら出現する控えめな存在感。 */
+.terminal-section {
+    position: relative;
+}
+
+.terminal-redraw-btn {
+    position: absolute;
+    top: 4px;
+    right: 10px;
+    z-index: 10;
+    background: transparent;
+    color: var(--th-text-muted, rgba(204, 204, 204, 0.7));
+    border: none;
+    border-radius: var(--th-radius-sm);
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.08;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.terminal-redraw-btn:hover {
+    opacity: 0.9;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.terminal-redraw-btn:focus {
+    outline: none;
+    opacity: 0.9;
+}
+
 /* ===========================================
    ボタン
    =========================================== */

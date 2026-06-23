@@ -133,6 +133,17 @@
                              style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
                     }
                 </div>
+                @* xterm の描画が CanvasAddon の不整合で崩れた際の救済用フローティングボタン。
+                   通常はほぼ透明、hover で出現する控えめな存在感を狙う。 *@
+                @if (activeSessionId != null)
+                {
+                    <button type="button"
+                            class="terminal-redraw-btn"
+                            title="@L["Root.Terminal.Redraw.Title"]"
+                            @onclick="() => RecreateTerminal(activeSessionId.Value)">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                }
             </div>
 
             <!-- スプリッター -->
