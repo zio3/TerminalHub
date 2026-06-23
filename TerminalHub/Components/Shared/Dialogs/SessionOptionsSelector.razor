@@ -27,15 +27,7 @@
                 </label>
             }
 
-            @if (Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
-            {
-                <input type="radio" class="btn-check" name="@($"terminalType{UniqueId}")" id="@($"terminalType3{UniqueId}")"
-                       checked="@(SelectedType == TerminalType.GeminiCLI)"
-                       @onchange="() => OnTerminalTypeChanged(TerminalType.GeminiCLI)" autocomplete="off">
-                <label class="btn btn-outline-primary" for="@($"terminalType3{UniqueId}")">
-                    <i class="bi bi-stars"></i> Gemini CLI
-                </label>
-            }
+            @* Gemini CLI は廃止 (enum 値は既存セッションのデシリアライズ互換のため残す) *@
 
             @if (Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
             {
@@ -129,76 +121,6 @@
 
             <CustomCliOptionsSection Options="claudeCustomOptions" States="customOptionStates"
                                      Prefix="@($"claude{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
-        </div>
-    }
-    else if (SelectedType == TerminalType.GeminiCLI && Configuration.GetValue<bool>("ExternalTools:UseGeminiCli", true))
-    {
-        <div class="mb-3">
-            <label class="form-label">@L["SessionOptions.Gemini.Header"]</label>
-
-            <!-- Approval Mode -->
-            <div class="mt-2">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Gemini.ApprovalMode.Label"]</label>
-                <div class="btn-group d-flex" role="group">
-                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeDefault{UniqueId}")"
-                           checked="@(GeminiOptions.ApprovalMode == "default")"
-                           @onchange=@(() => GeminiOptions.ApprovalMode = "default") autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"geminiModeDefault{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.DefaultTitle"]">
-                        Default
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeAutoEdit{UniqueId}")"
-                           checked="@(GeminiOptions.ApprovalMode == "auto_edit")"
-                           @onchange=@(() => GeminiOptions.ApprovalMode = "auto_edit") autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"geminiModeAutoEdit{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.AutoEditTitle"]">
-                        Auto-Edit
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"geminiApprovalMode{UniqueId}")" id="@($"geminiModeYolo{UniqueId}")"
-                           checked="@(GeminiOptions.ApprovalMode == "yolo")"
-                           @onchange=@(() => GeminiOptions.ApprovalMode = "yolo") autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"geminiModeYolo{UniqueId}")" title="@L["SessionOptions.Gemini.ApprovalMode.YoloTitle"]">
-                        YOLO
-                    </label>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(GetGeminiApprovalModeHelp()))
-                {
-                    <div class="form-text small mt-1">@GetGeminiApprovalModeHelp()</div>
-                }
-            </div>
-
-            <!-- Other Options -->
-            <div class="mt-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" @bind="GeminiOptions.SandboxMode" id="@($"geminiSandbox{UniqueId}")">
-                    <label class="form-check-label" for="@($"geminiSandbox{UniqueId}")">
-                        @L["SessionOptions.Gemini.Sandbox"]
-                    </label>
-                    <div class="form-text text-muted small mt-0">
-                        <i class="bi bi-info-circle"></i> @L["SessionOptions.Gemini.SandboxHelp"]
-                    </div>
-                </div>
-
-                @if (!DisableContinueOption)
-                {
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" @bind="GeminiOptions.Continue" id="@($"geminiContinue{UniqueId}")">
-                        <label class="form-check-label" for="@($"geminiContinue{UniqueId}")">
-                            @L["SessionOptions.Gemini.Continue"]
-                        </label>
-                    </div>
-                }
-            </div>
-
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
-                <input type="text" class="form-control form-control-sm" @bind="GeminiOptions.ExtraArgs"
-                       placeholder="@L["SessionOptions.Gemini.ExtraArgsPlaceholder"]" />
-                <div class="form-text small">@L["SessionOptions.Gemini.PassToCli"]</div>
-            </div>
-
-            <CustomCliOptionsSection Options="geminiCustomOptions" States="customOptionStates"
-                                     Prefix="@($"gemini{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
         </div>
     }
     else if (SelectedType == TerminalType.CodexCLI && Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true))
@@ -336,6 +258,28 @@
             <div class="form-text small mb-2">@L["SessionOptions.Antigravity.Help"]</div>
 
             <div class="mt-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" @bind="AntigravityOptions.SkipPermissions" id="@($"antigravitySkip{UniqueId}")">
+                    <label class="form-check-label" for="@($"antigravitySkip{UniqueId}")">
+                        @L["SessionOptions.Antigravity.SkipPermissions"]
+                    </label>
+                    <div class="form-text text-muted small mt-0">
+                        <i class="bi bi-info-circle"></i> @L["SessionOptions.Antigravity.SkipPermissionsHelp"]
+                    </div>
+                </div>
+
+                @if (!DisableContinueOption)
+                {
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" @bind="AntigravityOptions.Continue" id="@($"antigravityContinue{UniqueId}")">
+                        <label class="form-check-label" for="@($"antigravityContinue{UniqueId}")">
+                            @L["SessionOptions.Antigravity.Continue"]
+                        </label>
+                    </div>
+                }
+            </div>
+
+            <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="AntigravityOptions.ExtraArgs"
                        placeholder="@L["SessionOptions.Antigravity.ExtraArgsPlaceholder"]" />
@@ -353,6 +297,28 @@
             <div class="form-text small mb-2">@L["SessionOptions.Grok.Help"]</div>
 
             <div class="mt-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" @bind="GrokOptions.AlwaysApprove" id="@($"grokApprove{UniqueId}")">
+                    <label class="form-check-label" for="@($"grokApprove{UniqueId}")">
+                        @L["SessionOptions.Grok.AlwaysApprove"]
+                    </label>
+                    <div class="form-text text-muted small mt-0">
+                        <i class="bi bi-info-circle"></i> @L["SessionOptions.Grok.AlwaysApproveHelp"]
+                    </div>
+                </div>
+
+                @if (!DisableContinueOption)
+                {
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" @bind="GrokOptions.Continue" id="@($"grokContinue{UniqueId}")">
+                        <label class="form-check-label" for="@($"grokContinue{UniqueId}")">
+                            @L["SessionOptions.Grok.Continue"]
+                        </label>
+                    </div>
+                }
+            </div>
+
+            <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
                 <input type="text" class="form-control form-control-sm" @bind="GrokOptions.ExtraArgs"
                        placeholder="@L["SessionOptions.Grok.ExtraArgsPlaceholder"]" />
@@ -582,6 +548,14 @@
                 break;
 
             case TerminalType.Antigravity:
+                if (AntigravityOptions.SkipPermissions)
+                {
+                    options["skip-permissions"] = "true";
+                }
+                if (AntigravityOptions.Continue && !DisableContinueOption)
+                {
+                    options["continue"] = "true";
+                }
                 if (!string.IsNullOrWhiteSpace(AntigravityOptions.ExtraArgs))
                 {
                     options["extra-args"] = AntigravityOptions.ExtraArgs.Trim();
@@ -589,6 +563,14 @@
                 break;
 
             case TerminalType.Grok:
+                if (GrokOptions.AlwaysApprove)
+                {
+                    options["always-approve"] = "true";
+                }
+                if (GrokOptions.Continue && !DisableContinueOption)
+                {
+                    options["continue"] = "true";
+                }
                 if (!string.IsNullOrWhiteSpace(GrokOptions.ExtraArgs))
                 {
                     options["extra-args"] = GrokOptions.ExtraArgs.Trim();
@@ -636,11 +618,15 @@
 
     public class AntigravityOptionsData
     {
+        public bool Continue { get; set; } = true;
+        public bool SkipPermissions { get; set; } = false; // --dangerously-skip-permissions
         public string ExtraArgs { get; set; } = "";
     }
 
     public class GrokOptionsData
     {
+        public bool Continue { get; set; } = true;
+        public bool AlwaysApprove { get; set; } = false; // --always-approve
         public string ExtraArgs { get; set; } = "";
     }
     

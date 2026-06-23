@@ -186,12 +186,7 @@ namespace TerminalHub.Services
                         return ("cmd.exe", args);
                     }
 
-                case TerminalType.GeminiCLI:
-                    var geminiArgs = TerminalConstants.BuildGeminiArgs(options);
-                    var geminiArgsString = string.IsNullOrWhiteSpace(geminiArgs)
-                        ? "/k gemini"
-                        : $"/k gemini {geminiArgs}";
-                    return ("cmd.exe", geminiArgsString);
+                // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
 
                 case TerminalType.CodexCLI:
                     var codexArgs = TerminalConstants.BuildCodexArgs(options);
@@ -287,7 +282,6 @@ namespace TerminalHub.Services
                 string errorMessage = terminalType switch
                 {
                     TerminalType.ClaudeCode => $"Claude Codeの起動に失敗しました。Claude Codeがインストールされているか確認してください。",
-                    TerminalType.GeminiCLI => $"Gemini CLIの起動に失敗しました。Gemini CLIがインストールされているか確認してください。",
                     TerminalType.CodexCLI => $"Codex CLIの起動に失敗しました。Codex CLIがインストールされているか確認してください。",
                     TerminalType.Antigravity => $"Antigravity CLI (agy) の起動に失敗しました。インストールされているか確認してください。",
                     TerminalType.Grok => $"Grok CLI (grok) の起動に失敗しました。インストールされているか確認してください。",
@@ -756,7 +750,6 @@ namespace TerminalHub.Services
                 sessionInfo.DisplayName = terminalType switch
                 {
                     TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
-                    TerminalType.GeminiCLI => $"{sessionInfo.FolderName} (Gemini)",
                     TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
                     TerminalType.Antigravity => $"{sessionInfo.FolderName} (Antigravity)",
                     TerminalType.Grok => $"{sessionInfo.FolderName} (Grok)",

@@ -107,34 +107,7 @@ namespace TerminalHub.Constants
             return string.Join(" ", args);
         }
 
-        public static string BuildGeminiArgs(Dictionary<string, string> options)
-        {
-            var args = new List<string>();
-
-            if (options.TryGetValue("approval-mode", out var mode) && mode != "default")
-            {
-                args.Add($"--approval-mode {mode}");
-            }
-
-            if (options.ContainsKey("sandbox") && options["sandbox"] == "true")
-            {
-                args.Add("-s");
-            }
-
-            if (options.ContainsKey("continue") && options["continue"] == "true")
-            {
-                args.Add("--resume latest");
-            }
-
-            if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
-            {
-                args.Add(extraArgs);
-            }
-
-            AppendCustomArgs(args, options);
-
-            return string.Join(" ", args);
-        }
+        // BuildGeminiArgs は廃止 (GeminiCLI 起動経路は撤去済み)
 
         public static string BuildCodexArgs(Dictionary<string, string> options)
         {
@@ -200,11 +173,20 @@ namespace TerminalHub.Constants
             return string.Join(" ", args);
         }
 
-        // Antigravity CLI (agy) は今のところ TerminalHub 側で公式オプションを解釈しない。
-        // ユーザーが extra-args / custom-args で自由に渡せるようにするだけの最小サポート。
+        // Antigravity CLI (agy): 承認スキップと会話継続を Claude/Codex と同じ形で扱う。
         public static string BuildAntigravityArgs(Dictionary<string, string> options)
         {
             var args = new List<string>();
+
+            if (options.ContainsKey("skip-permissions") && options["skip-permissions"] == "true")
+            {
+                args.Add("--dangerously-skip-permissions");
+            }
+
+            if (options.ContainsKey("continue") && options["continue"] == "true")
+            {
+                args.Add("-c");
+            }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {
@@ -216,10 +198,21 @@ namespace TerminalHub.Constants
             return string.Join(" ", args);
         }
 
-        // Grok CLI も同様に最小サポート。認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せる。
+        // Grok CLI: --always-approve で承認スキップ、--continue で直近会話の継続。
+        // 認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せる。
         public static string BuildGrokArgs(Dictionary<string, string> options)
         {
             var args = new List<string>();
+
+            if (options.ContainsKey("always-approve") && options["always-approve"] == "true")
+            {
+                args.Add("--always-approve");
+            }
+
+            if (options.ContainsKey("continue") && options["continue"] == "true")
+            {
+                args.Add("-c");
+            }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
             {

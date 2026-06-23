@@ -397,13 +397,19 @@
 
   <!-- Antigravity CLI Options -->
   <data name="SessionOptions.Antigravity.Header" xml:space="preserve"><value>Antigravity (agy) オプション</value></data>
-  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>現時点では TerminalHub 側で公式オプションを解析しません。必要な引数は下の欄に直接入力してください。</value></data>
+  <data name="SessionOptions.Antigravity.Help" xml:space="preserve"><value>必要な追加引数は下の欄に直接入力してください。</value></data>
+  <data name="SessionOptions.Antigravity.SkipPermissions" xml:space="preserve"><value>承認をスキップ (--dangerously-skip-permissions)</value></data>
+  <data name="SessionOptions.Antigravity.SkipPermissionsHelp" xml:space="preserve"><value>全てのツール承認プロンプトを自動で許可します（YOLO 相当）。</value></data>
+  <data name="SessionOptions.Antigravity.Continue" xml:space="preserve"><value>直近の会話を継続する (-c)</value></data>
   <data name="SessionOptions.Antigravity.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --help</value></data>
   <data name="SessionOptions.Antigravity.PassToCli" xml:space="preserve"><value>そのまま agy に渡します</value></data>
 
   <!-- Grok CLI Options -->
   <data name="SessionOptions.Grok.Header" xml:space="preserve"><value>Grok CLI オプション</value></data>
-  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>現時点では TerminalHub 側で公式オプションを解析しません。認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せます。</value></data>
+  <data name="SessionOptions.Grok.Help" xml:space="preserve"><value>認証は環境変数 GROK_CODE_XAI_API_KEY か初回ブラウザ OAuth に任せます。</value></data>
+  <data name="SessionOptions.Grok.AlwaysApprove" xml:space="preserve"><value>承認をスキップ (--always-approve)</value></data>
+  <data name="SessionOptions.Grok.AlwaysApproveHelp" xml:space="preserve"><value>対話的な承認プロンプトをスキップします（CI 用途向け、注意して使用）。</value></data>
+  <data name="SessionOptions.Grok.Continue" xml:space="preserve"><value>直近の会話を継続する (-c)</value></data>
   <data name="SessionOptions.Grok.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --help</value></data>
   <data name="SessionOptions.Grok.PassToCli" xml:space="preserve"><value>そのまま grok に渡します</value></data>
 
