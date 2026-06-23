@@ -4,7 +4,12 @@ on:
   push:
     tags:
       - 'v*'  # v1.0.0 などのタグがプッシュされたときに実行
-  workflow_dispatch:  # 手動実行用（ビルド確認のみ、リリース作成なし）
+  workflow_dispatch:  # 手動実行用（先行テスト版ビルド: GitHub Release は作らず Artifact のみ保存）
+    inputs:
+      build_installer:
+        description: 'Inno Setup インストーラー .exe も生成する'
+        type: boolean
+        default: true
 
 permissions:
   contents: write  # リリース作成に必要
@@ -29,11 +34,14 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=0.0.0-dev" >> $GITHUB_OUTPUT
+            # workflow_dispatch 時は csproj の現行バージョンを読み取って使用
+            # （ビルドコミットは Actions の実行ページから辿れるため、suffix は付けない）
+            BASE=$(grep -oP '(?<=<Version>)[^<]+' TerminalHub/TerminalHub.csproj | head -1)
+            echo "VERSION=${BASE}" >> $GITHUB_OUTPUT
           fi
 
       - name: Update version in installer script
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
         shell: pwsh
         run: |
           $version = "${{ steps.get_version.outputs.VERSION }}"
@@ -63,7 +71,7 @@ jobs:
         run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
 
       - name: Install Inno Setup
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
         shell: pwsh
         run: |
           # Inno Setupをダウンロード
@@ -75,7 +83,7 @@ jobs:
           Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
 
       - name: Build installer
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
         shell: pwsh
         run: |
           # 出力ディレクトリを作成
@@ -84,12 +92,19 @@ jobs:
           # Inno Setupでビルド
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer/TerminalHub.iss"
 
-      - name: Upload build artifact
+      - name: Upload build artifact (publish output)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
           name: TerminalHub-dev-build
           path: ./publish/
+
+      - name: Upload installer artifact (workflow_dispatch のみ)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.build_installer == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: TerminalHub-installer-preview
+          path: installer/output/*.exe
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
