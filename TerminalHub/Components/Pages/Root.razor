@@ -1043,21 +1043,25 @@
                 return;
             }
 
-            // Antigravity / Grok の -c 失敗パターン調査用ログ（リカバリは未実装）
-            // continue オプションあり & 処理開始前の出力チャンクを記録して、
-            // 「継続対象なし」時の実際のエラー文字列を観測してから検知ロジックを実装する。
-            if ((sessionInfo.TerminalType == TerminalType.Antigravity || sessionInfo.TerminalType == TerminalType.Grok) &&
+            // Grok の場合、"No session found for current directory" エラーをチェック
+            // grok -c を初回起動（該当ディレクトリに過去セッションなし）で叩いたときに出るエラーを検出し、
+            // -c なしで再起動する。Antigravity (agy) は -c を無セッションでも grace に扱うため対応不要。
+            if (sessionInfo.TerminalType == TerminalType.Grok &&
                 sessionInfo.ProcessingStartTime == null &&
+                IsCliErrorMessage(data, "No session found for current directory") &&
                 sessionInfo.Options.ContainsKey("continue") &&
                 !sessionInfo.HasContinueErrorOccurred)
             {
-                // 制御シーケンスを軽く除去して人間が読めるテキストに寄せる
-                var sanitized = System.Text.RegularExpressions.Regex.Replace(data, "\\[[0-9;?]*[A-Za-z]", "");
-                if (!string.IsNullOrWhiteSpace(sanitized))
+                sessionInfo.HasContinueErrorOccurred = true;
+
+                Logger.LogInformation("'No session found for current directory' エラーを検出しました。セッションを再作成します: SessionId={SessionId}",
+                    sessionId);
+
+                _ = InvokeAsync(async () =>
                 {
-                    Logger.LogInformation("[continue-probe] {TerminalType} 起動直後の出力: SessionId={SessionId} Data={Data}",
-                        sessionInfo.TerminalType, sessionId, sanitized.Trim());
-                }
+                    await RecreateSessionWithoutContinue(sessionId);
+                });
+                return;
             }
 
             // 処理中の場合、アニメーションパターン（スピナー文字）を検出したらタイムアウトを延長
