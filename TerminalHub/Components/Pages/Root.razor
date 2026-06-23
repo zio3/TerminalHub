@@ -1043,6 +1043,23 @@
                 return;
             }
 
+            // Antigravity / Grok の -c 失敗パターン調査用ログ（リカバリは未実装）
+            // continue オプションあり & 処理開始前の出力チャンクを記録して、
+            // 「継続対象なし」時の実際のエラー文字列を観測してから検知ロジックを実装する。
+            if ((sessionInfo.TerminalType == TerminalType.Antigravity || sessionInfo.TerminalType == TerminalType.Grok) &&
+                sessionInfo.ProcessingStartTime == null &&
+                sessionInfo.Options.ContainsKey("continue") &&
+                !sessionInfo.HasContinueErrorOccurred)
+            {
+                // 制御シーケンスを軽く除去して人間が読めるテキストに寄せる
+                var sanitized = System.Text.RegularExpressions.Regex.Replace(data, "\\[[0-9;?]*[A-Za-z]", "");
+                if (!string.IsNullOrWhiteSpace(sanitized))
+                {
+                    Logger.LogInformation("[continue-probe] {TerminalType} 起動直後の出力: SessionId={SessionId} Data={Data}",
+                        sessionInfo.TerminalType, sessionId, sanitized.Trim());
+                }
+            }
+
             // 処理中の場合、アニメーションパターン（スピナー文字）を検出したらタイムアウトを延長
             // ジッター対策により、完全なステータス行ではなく部分的な更新（スピナー文字のみ）が送られることがある
             OutputAnalyzerService.CheckAnimationPatternAndResetTimer(data, sessionInfo);
