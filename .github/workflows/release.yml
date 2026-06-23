@@ -34,9 +34,10 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
-            # workflow_dispatch 時はコミット SHA で識別可能なバージョン文字列にする
-            SHORT_SHA="${GITHUB_SHA:0:7}"
-            echo "VERSION=0.0.0-preview-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            # workflow_dispatch 時は csproj の現行バージョンを読み取って使用
+            # （ビルドコミットは Actions の実行ページから辿れるため、suffix は付けない）
+            BASE=$(grep -oP '(?<=<Version>)[^<]+' TerminalHub/TerminalHub.csproj | head -1)
+            echo "VERSION=${BASE}" >> $GITHUB_OUTPUT
           fi
 
       - name: Update version in installer script
