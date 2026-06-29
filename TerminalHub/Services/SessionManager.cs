@@ -902,6 +902,8 @@ namespace TerminalHub.Services
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
                 sessionInfo.IsWaitingForUserInput = false;
+                // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
+                sessionInfo.ClearRunningSubagents();
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
@@ -946,6 +948,8 @@ namespace TerminalHub.Services
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
                 sessionInfo.IsWaitingForUserInput = false;
+                // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
+                sessionInfo.ClearRunningSubagents();
 
                 // セッション再起動時は HasContinueErrorOccurred フラグをリセット
                 // （新しいセッションで --continue を再度試行できるようにする）

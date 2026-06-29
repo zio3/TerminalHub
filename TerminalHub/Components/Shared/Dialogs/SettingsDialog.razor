@@ -1017,7 +1017,8 @@
                                 {
                                     <div class="mb-3">
                                         <span class="badge bg-info me-2">@string.Format(L["Settings.DevBuffer.BufferFormat"], FormatBytes(selectedSession.TerminalBufferSize))</span>
-                                        <span class="badge bg-secondary">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount)</span>
+                                        <span class="badge bg-secondary me-2">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount)</span>
+                                        <span class="badge bg-secondary">@string.Format(L["Settings.DevBuffer.HookLogFormat"], selectedSession.HookEventLogCount)</span>
                                     </div>
                                 }
 
@@ -1030,9 +1031,13 @@
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.TerminalBufferSize == 0)">
                                         <i class="bi bi-file-text me-1"></i>@L["Settings.DevBuffer.DownloadBufferClean"]
                                     </button>
-                                    <button class="btn btn-outline-info btn-sm" @onclick="DownloadStatusHistory"
+                                    <button class="btn btn-outline-info btn-sm me-2" @onclick="DownloadStatusHistory"
                                             disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.StatusChangeHistoryCount == 0)">
                                         <i class="bi bi-clock-history me-1"></i>@L["Settings.DevBuffer.DownloadStatusHistory"]
+                                    </button>
+                                    <button class="btn btn-outline-info btn-sm" @onclick="DownloadHookLog"
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.HookEventLogCount == 0)">
+                                        <i class="bi bi-diagram-3 me-1"></i>@L["Settings.DevBuffer.DownloadHookLog"]
                                     </button>
                                 </div>
 
@@ -2316,6 +2321,43 @@
 
             return Task.FromResult<(string?, string, string)?>(
                 (json, $"status_history_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.json", "application/json"));
+        });
+    }
+
+    private async Task DownloadHookLog()
+    {
+        await WithSelectedBufferSession(sessionInfo =>
+        {
+            var log = sessionInfo.GetHookEventLog();
+            if (log.Count == 0)
+                return Task.FromResult<(string?, string, string)?>(null);
+
+            var exportData = new
+            {
+                SessionName = sessionInfo.GetDisplayName(),
+                SessionId = sessionInfo.SessionId,
+                ExportTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                TotalEntries = log.Count,
+                Entries = log.Select(e => new
+                {
+                    Timestamp = e.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    Event = e.EventName,
+                    AgentId = e.AgentId,
+                    AgentType = e.AgentType,
+                    RunningSubagents = e.RunningSubagentCount,
+                    Message = e.Message,
+                    ToolName = e.ToolName
+                }).ToList()
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
+            return Task.FromResult<(string?, string, string)?>(
+                (json, $"hook_log_{SanitizeFilename(sessionInfo.GetDisplayName())}_{DateTime.Now:yyyyMMdd_HHmmss}.json", "application/json"));
         });
     }
 

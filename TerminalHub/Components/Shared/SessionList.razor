@@ -155,6 +155,26 @@
                                 </small>
                             </div>
                         }
+                        @if (session.HasRunningSubagents)
+                        {
+                            @* サブエージェント稼働中バッジ。メイン処理完了後も走っている子を可視化する。 *@
+                            <div>
+                                <small class="text-info" title="@SubagentTooltip(session)">
+                                    <i class="bi bi-diagram-3-fill me-1"></i>
+                                    <span>サブエージェント @session.RunningSubagentCount 実行中</span>
+                                </small>
+                            </div>
+                        }
+                        @if (session.IsCompacting)
+                        {
+                            @* コンパクト中バッジ。PreCompact～PostCompact の間は応答不可（作業中）。 *@
+                            <div>
+                                <small class="text-warning">
+                                    <i class="bi bi-arrows-collapse me-1"></i>
+                                    <span>コンパクト中</span>
+                                </small>
+                            </div>
+                        }
                     </div>
                     <div class="d-flex align-items-center">
                         <button class="btn btn-outline-secondary btn-sm border-0 opacity-50" @onclick:stopPropagation="true"
@@ -415,6 +435,17 @@
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// サブエージェント稼働バッジのツールチップ（実行中の agent_type 一覧）を返す
+    /// </summary>
+    private string SubagentTooltip(SessionInfo session)
+    {
+        var types = session.GetRunningSubagentTypes();
+        return types.Count > 0
+            ? $"実行中: {string.Join(", ", types)}"
+            : $"サブエージェント {session.RunningSubagentCount} 個 実行中";
     }
 
     /// <summary>

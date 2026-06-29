@@ -2117,6 +2117,36 @@
                 // UIを更新
                 StateHasChanged();
                 break;
+
+            case HookEventType.SubagentStart:
+            case HookEventType.SubagentStop:
+                // 実行中サブエージェント集合は HookNotificationService 側で更新済み。
+                // ここでは稼働中バッジを反映するため再描画するだけ。
+                StateHasChanged();
+                break;
+
+            case HookEventType.PreCompact:
+            case HookEventType.PostCompact:
+                // IsCompacting は HookNotificationService 側で更新済み。
+                // ここでは「コンパクト中」バッジを反映するため再描画するだけ。
+                StateHasChanged();
+                break;
+
+            case HookEventType.Notification:
+            case HookEventType.PreToolUse:
+                // Notification（許可待ち等）/ PreToolUse（AskUserQuestion=ユーザーへの質問）は
+                // 「ユーザーの入力が必要」な状態。非アクティブセッションならベル（通知マーク）を立てて、
+                // 別セッションを見ている時でも気づけるようにする。
+                // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
+                if (activeSessionId != notification.SessionId)
+                {
+                    Logger.LogInformation(
+                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), セッション: {SessionName}",
+                        eventType, session.GetDisplayName());
+                    _notificationPendingSessions.Add(notification.SessionId);
+                    StateHasChanged();
+                }
+                break;
         }
     }
 

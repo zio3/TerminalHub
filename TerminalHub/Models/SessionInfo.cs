@@ -80,6 +80,13 @@ namespace TerminalHub.Models
         public bool IsWaitingForUserInput { get; set; }
 
         /// <summary>
+        /// コンテキスト compact 実行中（PreCompact ～ PostCompact の間）。
+        /// この間は実質「作業中（応答不可）」のため、UI でステータス表示する。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsCompacting { get; set; }
+
+        /// <summary>
         /// 最後にセッションに接続した時刻（過去バッファの誤検出防止用）
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -249,6 +256,125 @@ namespace TerminalHub.Models
             }
         }
 
+        // ===== サブエージェント実行追跡 =====
+        // Claude Code の SubagentStart / SubagentStop hook を agent_id で突き合わせて
+        // 「今このセッションで何個のサブエージェントが走っているか」を保持する。
+        // 完了通知のゲートには使わず、UI 表示（稼働中バッジ）専用。
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly Dictionary<string, string?> _runningSubagents = new(); // key: agent_id, value: agent_type
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly object _subagentLock = new();
+
+        /// <summary>サブエージェントを実行中として登録する（SubagentStart）。</summary>
+        public void AddRunningSubagent(string agentId, string? agentType)
+        {
+            if (string.IsNullOrEmpty(agentId)) return;
+            lock (_subagentLock)
+            {
+                _runningSubagents[agentId] = agentType;
+            }
+        }
+
+        /// <summary>サブエージェントを実行中リストから除去する（SubagentStop）。除去できたら true。</summary>
+        public bool RemoveRunningSubagent(string agentId)
+        {
+            if (string.IsNullOrEmpty(agentId)) return false;
+            lock (_subagentLock)
+            {
+                return _runningSubagents.Remove(agentId);
+            }
+        }
+
+        /// <summary>実行中サブエージェント数。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int RunningSubagentCount
+        {
+            get { lock (_subagentLock) { return _runningSubagents.Count; } }
+        }
+
+        /// <summary>実行中サブエージェントがあるか。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasRunningSubagents
+        {
+            get { lock (_subagentLock) { return _runningSubagents.Count > 0; } }
+        }
+
+        /// <summary>実行中サブエージェントの agent_type 一覧（表示用、null/空は除外）。</summary>
+        public List<string> GetRunningSubagentTypes()
+        {
+            lock (_subagentLock)
+            {
+                var list = new List<string>();
+                foreach (var type in _runningSubagents.Values)
+                {
+                    if (!string.IsNullOrEmpty(type)) list.Add(type!);
+                }
+                return list;
+            }
+        }
+
+        /// <summary>サブエージェント追跡をリセットする（新しいターン開始時など、取りこぼし対策）。</summary>
+        public void ClearRunningSubagents()
+        {
+            lock (_subagentLock)
+            {
+                _runningSubagents.Clear();
+            }
+        }
+
+        // ===== Hook イベントログ（診断用: 何の hook が来たか） =====
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly Queue<HookEventEntry> _hookEventLog = new();
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly object _hookEventLogLock = new();
+
+        private const int MaxHookEventLogCount = 300;
+
+        public void RecordHookEvent(string eventName, string? agentId, string? agentType, int runningSubagentCount, string? message = null, string? toolName = null)
+        {
+            lock (_hookEventLogLock)
+            {
+                if (_hookEventLog.Count >= MaxHookEventLogCount)
+                {
+                    _hookEventLog.Dequeue();
+                }
+                _hookEventLog.Enqueue(new HookEventEntry
+                {
+                    Timestamp = DateTime.Now,
+                    EventName = eventName,
+                    AgentId = agentId,
+                    AgentType = agentType,
+                    RunningSubagentCount = runningSubagentCount,
+                    Message = message,
+                    ToolName = toolName
+                });
+            }
+        }
+
+        public List<HookEventEntry> GetHookEventLog()
+        {
+            lock (_hookEventLogLock)
+            {
+                return new List<HookEventEntry>(_hookEventLog);
+            }
+        }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int HookEventLogCount
+        {
+            get { lock (_hookEventLogLock) { return _hookEventLog.Count; } }
+        }
+
+        public void ClearHookEventLog()
+        {
+            lock (_hookEventLogLock)
+            {
+                _hookEventLog.Clear();
+            }
+        }
+
         public string GetDisplayName()
         {
             if (!string.IsNullOrEmpty(DisplayName))
@@ -318,5 +444,25 @@ namespace TerminalHub.Models
         /// ステータス変更のトリガーとなった正規表現マッチテキスト（ANSIクリーン済み）
         /// </summary>
         public string? MatchedText { get; set; }
+    }
+
+    /// <summary>
+    /// Hook イベントログのエントリ（診断用）。受信した Claude Code hook の記録。
+    /// </summary>
+    public class HookEventEntry
+    {
+        public DateTime Timestamp { get; set; }
+        /// <summary>hook_event_name（Stop / SubagentStart / SubagentStop / UserPromptSubmit / Notification 等）</summary>
+        public string EventName { get; set; } = "";
+        /// <summary>サブエージェント固有 ID（サブエージェント内 hook の時のみ）</summary>
+        public string? AgentId { get; set; }
+        /// <summary>サブエージェント種別（Explore など）</summary>
+        public string? AgentType { get; set; }
+        /// <summary>この hook 処理後の実行中サブエージェント数</summary>
+        public int RunningSubagentCount { get; set; }
+        /// <summary>通知メッセージ本文（Notification の message 等）</summary>
+        public string? Message { get; set; }
+        /// <summary>ツール名（PreToolUse の tool_name 等）</summary>
+        public string? ToolName { get; set; }
     }
 }
