@@ -24,18 +24,12 @@ public interface IAppSettingsService
 
     /// <summary>
     /// Webhookを送信（設定が有効な場合のみ）。
-    /// tool は対象ツール名（PreToolUse の tool_name 等）。未指定（null）なら従来どおりツール無しで送る。
+    /// sessionId は常に生のセッション GUID を送る。サブエージェント由来のイベントは agentId に
+    /// agent_id を入れる（キーの振り分けは受信側に委ねる）。
+    /// tool は送信元 CLI 名等。未指定（null）なら従来どおり載せない。
     /// </summary>
     Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null);
-
-    /// <summary>
-    /// Webhookを送信（sessionId を任意文字列で指定する版）。
-    /// サブエージェントを agent_id をキーに個別通知したい場合などに使う。
-    /// tool は対象ツール名。未指定（null）なら従来どおりツール無しで送る。
-    /// </summary>
-    Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null);
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null, string? agentId = null);
 }
 
 public class AppSettingsService : IAppSettingsService
@@ -159,12 +153,8 @@ public class AppSettingsService : IAppSettingsService
         }
     }
 
-    public Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null)
-        => SendWebhookAsync(eventType, sessionId.ToString(), sessionName, terminalType, elapsedSeconds, folderPath, tool);
-
-    public async Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null)
+    public async Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null, string? agentId = null)
     {
         var settings = GetSettings();
         var webhook = settings.Webhook;
@@ -195,7 +185,8 @@ public class AppSettingsService : IAppSettingsService
             {
                 eventType = eventType,
                 tool = tool,
-                sessionId = sessionId,
+                sessionId = sessionId.ToString(),  // 常に生のセッション GUID
+                agentId = agentId,                 // サブエージェント由来のときのみ値。振り分けは受信側
                 sessionName = sessionName,
                 terminalType = terminalType,
                 elapsedSeconds = elapsedSeconds,

@@ -151,7 +151,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 notification.Event,
-                SessionWebhookKey(session.SessionId),
+                session.SessionId,
                 session.GetDisplayName(),
                 session.TerminalType.ToString(),
                 elapsedSeconds,
@@ -219,7 +219,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 notification.Event,
-                SessionWebhookKey(session.SessionId),
+                session.SessionId,
                 session.GetDisplayName(),
                 session.TerminalType.ToString(),
                 null,
@@ -298,12 +298,13 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 notification.Event,
-                SubAgentWebhookKey(notification.AgentId),  // session_id の代わりに agent_id を SubAgent_ プレフィックス付きでキーにする
+                session.SessionId,           // 親セッションの GUID（生）
                 name,
                 session.TerminalType.ToString(),
                 elapsedSeconds,
                 session.FolderPath,
-                ClaudeCodeToolName);
+                ClaudeCodeToolName,
+                notification.AgentId);       // サブエージェント ID（受信側で個別キーに使える）
             _logger.LogInformation(
                 "サブエージェント Webhook 送信: Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
                 notification.Event, notification.AgentId, notification.AgentType);
@@ -314,18 +315,9 @@ public class HookNotificationService : IHookNotificationService
         }
     }
 
-    // Webhook の sessionId フィールドに種別プレフィックスを付ける。
-    // 受信側（LED/MQTT）で生 GUID 同士が並ぶとセッションとサブエージェントの区別がつかないため、
-    // "Session_" / "SubAgent_" を前置して個別キーとして判別できるようにする。
-    private const string SessionKeyPrefix = "Session_";
-    private const string SubAgentKeyPrefix = "SubAgent_";
-
     // Webhook の tool フィールドに入れる送信元 CLI 名。これらの hook はすべて Claude Code 由来。
     // スペース無し（受信側で扱いやすいように）。
     private const string ClaudeCodeToolName = "ClaudeCode";
-
-    private static string SessionWebhookKey(Guid sessionId) => $"{SessionKeyPrefix}{sessionId}";
-    private static string SubAgentWebhookKey(string agentId) => $"{SubAgentKeyPrefix}{agentId}";
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -357,7 +349,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 notification.Event,
-                SessionWebhookKey(session.SessionId),
+                session.SessionId,
                 session.GetDisplayName(),
                 session.TerminalType.ToString(),
                 null,
