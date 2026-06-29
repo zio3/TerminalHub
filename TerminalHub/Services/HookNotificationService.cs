@@ -154,7 +154,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 "complete",
-                session.SessionId,
+                SessionWebhookKey(session.SessionId),
                 session.GetDisplayName(),
                 session.TerminalType.ToString(),
                 elapsedSeconds,
@@ -250,7 +250,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 eventType,
-                notification.AgentId,                  // session_id の代わりに agent_id をキーにする
+                SubAgentWebhookKey(notification.AgentId),  // session_id の代わりに agent_id を SubAgent_ プレフィックス付きでキーにする
                 name,
                 session.TerminalType.ToString(),
                 elapsedSeconds,
@@ -264,6 +264,15 @@ public class HookNotificationService : IHookNotificationService
             _logger.LogWarning(ex, "サブエージェント Webhook 送信に失敗: Event={Event}, AgentId={AgentId}", eventType, notification.AgentId);
         }
     }
+
+    // Webhook の sessionId フィールドに種別プレフィックスを付ける。
+    // 受信側（LED/MQTT）で生 GUID 同士が並ぶとセッションとサブエージェントの区別がつかないため、
+    // "Session_" / "SubAgent_" を前置して個別キーとして判別できるようにする。
+    private const string SessionKeyPrefix = "Session_";
+    private const string SubAgentKeyPrefix = "SubAgent_";
+
+    private static string SessionWebhookKey(Guid sessionId) => $"{SessionKeyPrefix}{sessionId}";
+    private static string SubAgentWebhookKey(string agentId) => $"{SubAgentKeyPrefix}{agentId}";
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -294,7 +303,7 @@ public class HookNotificationService : IHookNotificationService
         {
             await _appSettingsService.SendWebhookAsync(
                 "start",
-                session.SessionId,
+                SessionWebhookKey(session.SessionId),
                 session.GetDisplayName(),
                 session.TerminalType.ToString(),
                 null,
