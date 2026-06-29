@@ -27,6 +27,13 @@ public interface IAppSettingsService
     /// </summary>
     Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
         string terminalType, int? elapsedSeconds, string folderPath);
+
+    /// <summary>
+    /// Webhookを送信（sessionId を任意文字列で指定する版）。
+    /// サブエージェントを agent_id をキーに個別通知したい場合などに使う。
+    /// </summary>
+    Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
+        string terminalType, int? elapsedSeconds, string folderPath);
 }
 
 public class AppSettingsService : IAppSettingsService
@@ -150,7 +157,11 @@ public class AppSettingsService : IAppSettingsService
         }
     }
 
-    public async Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
+    public Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
+        string terminalType, int? elapsedSeconds, string folderPath)
+        => SendWebhookAsync(eventType, sessionId.ToString(), sessionName, terminalType, elapsedSeconds, folderPath);
+
+    public async Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
         string terminalType, int? elapsedSeconds, string folderPath)
     {
         var settings = GetSettings();

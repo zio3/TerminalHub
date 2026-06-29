@@ -215,6 +215,10 @@ app.MapPost("/api/hook/claude/{sessionId:guid}",
     {
         SessionId = sessionId,
         Event = payload.HookEventName ?? "",
+        AgentId = payload.AgentId,
+        AgentType = payload.AgentType,
+        Message = payload.Message,
+        ToolName = payload.ToolName,
         Timestamp = DateTime.UtcNow
     };
     await hookService.HandleHookNotificationAsync(notification);

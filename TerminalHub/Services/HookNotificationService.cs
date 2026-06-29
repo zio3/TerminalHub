@@ -69,9 +69,11 @@ public class HookNotificationService : IHookNotificationService
         }
 
         _logger.LogInformation(
-            "Hook通知を受信: Event={Event}, SessionId={SessionId}, Timestamp={Timestamp}",
+            "Hook通知を受信: Event={Event}, SessionId={SessionId}, AgentId={AgentId}, AgentType={AgentType}, Timestamp={Timestamp}",
             notification.Event,
             notification.SessionId,
+            notification.AgentId,
+            notification.AgentType,
             notification.Timestamp);
 
         // セッション情報を取得
@@ -96,7 +98,38 @@ public class HookNotificationService : IHookNotificationService
             case HookEventType.Notification:
                 await HandleNotificationEventAsync(session, notification);
                 break;
+
+            case HookEventType.SubagentStart:
+                await HandleSubagentStartEventAsync(session, notification);
+                break;
+
+            case HookEventType.SubagentStop:
+                await HandleSubagentStopEventAsync(session, notification);
+                break;
+
+            case HookEventType.PreCompact:
+                // compact 開始 = 作業中入り
+                session.IsCompacting = true;
+                _logger.LogInformation("PreCompact イベント処理（compact中入り）: Session={SessionName}", session.GetDisplayName());
+                break;
+
+            case HookEventType.PostCompact:
+                // compact 完了 = 作業可能に復帰
+                session.IsCompacting = false;
+                _logger.LogInformation("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
+                break;
+
+            case HookEventType.PreToolUse:
+                // AskUserQuestion のみに絞って登録しているため、ここに来る = ユーザーへの質問が出た（回答待ち）。
+                // ベル表示（非アクティブ時の気づき）は Root.razor 側で行う。ここはログのみ。
+                _logger.LogInformation(
+                    "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
+                    notification.ToolName, session.GetDisplayName());
+                break;
         }
+
+        // Hook イベントログに記録（何が来たか・処理後のサブエージェント数・message・tool_name。診断用）
+        session.RecordHookEvent(notification.Event, notification.AgentId, notification.AgentType, session.RunningSubagentCount, notification.Message, notification.ToolName);
 
         // イベントを発火（ステータス更新後にUIを更新させる）
         OnHookNotification?.Invoke(this, new HookNotificationEventArgs(notification));
@@ -155,9 +188,95 @@ public class HookNotificationService : IHookNotificationService
         session.IsWaitingForUserInput = false;
     }
 
+    /// <summary>
+    /// SubagentStart: サブエージェントを agent_id で実行中リストに登録し、
+    /// agent_id をキーに "start" Webhook を送る（個別 LED で稼働可視化するため）。
+    /// </summary>
+    private async Task HandleSubagentStartEventAsync(SessionInfo session, HookNotification notification)
+    {
+        if (!string.IsNullOrEmpty(notification.AgentId))
+        {
+            session.AddRunningSubagent(notification.AgentId, notification.AgentType);
+        }
+        else
+        {
+            _logger.LogWarning("SubagentStart に agent_id がありません: Session={SessionName}", session.GetDisplayName());
+        }
+
+        _logger.LogInformation(
+            "SubagentStart イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, RunningCount={Count}",
+            session.GetDisplayName(), notification.AgentId, notification.AgentType, session.RunningSubagentCount);
+
+        await SendSubagentWebhookAsync(session, notification, "start", null);
+    }
+
+    /// <summary>
+    /// SubagentStop: SubagentStart と同じ agent_id を実行中リストから除去し、
+    /// agent_id をキーに "complete" Webhook を送る（個別 LED を消灯させるため）。
+    /// </summary>
+    private async Task HandleSubagentStopEventAsync(SessionInfo session, HookNotification notification)
+    {
+        var removed = false;
+        if (!string.IsNullOrEmpty(notification.AgentId))
+        {
+            removed = session.RemoveRunningSubagent(notification.AgentId);
+        }
+
+        _logger.LogInformation(
+            "SubagentStop イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, Removed={Removed}, RunningCount={Count}",
+            session.GetDisplayName(), notification.AgentId, notification.AgentType, removed, session.RunningSubagentCount);
+
+        await SendSubagentWebhookAsync(session, notification, "complete", null);
+    }
+
+    /// <summary>
+    /// サブエージェント用 Webhook を送信する。session_id の代わりに agent_id を渡すことで、
+    /// 受信側（LED 等）が各サブエージェントを個別のキーとして扱えるようにする。
+    /// </summary>
+    private async Task SendSubagentWebhookAsync(
+        SessionInfo session, HookNotification notification, string eventType, int? elapsedSeconds)
+    {
+        // agent_id が無いと個別キーにできないため送らない
+        if (string.IsNullOrEmpty(notification.AgentId))
+        {
+            return;
+        }
+
+        var name = string.IsNullOrEmpty(notification.AgentType)
+            ? $"{session.GetDisplayName()} / subagent"
+            : $"{session.GetDisplayName()} / {notification.AgentType}";
+
+        try
+        {
+            await _appSettingsService.SendWebhookAsync(
+                eventType,
+                notification.AgentId,                  // session_id の代わりに agent_id をキーにする
+                name,
+                session.TerminalType.ToString(),
+                elapsedSeconds,
+                session.FolderPath);
+            _logger.LogInformation(
+                "サブエージェント Webhook 送信: Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
+                eventType, notification.AgentId, notification.AgentType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "サブエージェント Webhook 送信に失敗: Event={Event}, AgentId={AgentId}", eventType, notification.AgentId);
+        }
+    }
+
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
         _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
+
+        // 注意: ここでサブエージェント集合をクリアしてはいけない。
+        // サブエージェント走行中でも新しいプロンプトは送信でき、UserPromptSubmit は
+        // 「全サブエージェント終了」を意味しない。クリアすると生きているカウントを
+        // 0 にしてしまい、後続の SubagentStop が空振りする（実機ログで確認済み）。
+        // 取りこぼしは agent_id による SubagentStop の突き合わせに任せる。
+
+        // compact 中フラグは PostCompact 取りこぼしの保険として新ターン開始で必ず倒す。
+        session.IsCompacting = false;
 
         // 処理開始を記録
         _logger.LogInformation(
@@ -190,9 +309,11 @@ public class HookNotificationService : IHookNotificationService
 
     private Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
     {
-        _logger.LogInformation("Notification イベント処理: Session={SessionName}", session.GetDisplayName());
-        // Notification イベントは Claude Code が通知を表示した時に発火
-        // 必要に応じて追加の処理を実装
+        // Notification は許可待ち(permission_prompt)・アイドル(idle_prompt)・認証成功 等で発火。
+        // 【検証フェーズ】message に何が入るか（許可待ち判別できるか）を Hook ログ＋このログで確認する。
+        _logger.LogInformation(
+            "Notification イベント処理: Session={SessionName}, Message={Message}",
+            session.GetDisplayName(), notification.Message);
         return Task.CompletedTask;
     }
 }

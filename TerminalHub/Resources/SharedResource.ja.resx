@@ -263,6 +263,10 @@
   <data name="Settings.DevBuffer.DownloadBuffer" xml:space="preserve"><value>バッファ</value></data>
   <data name="Settings.DevBuffer.DownloadBufferClean" xml:space="preserve"><value>バッファ (ANSI 除去)</value></data>
   <data name="Settings.DevBuffer.DownloadStatusHistory" xml:space="preserve"><value>ステータス履歴 JSON</value></data>
+  <data name="Settings.DevBuffer.HookLogFormat" xml:space="preserve"><value>Hook ログ: {0} 件</value></data>
+  <data name="Settings.DevBuffer.DownloadHookLog" xml:space="preserve"><value>Hook ログ JSON</value></data>
+  <data name="SessionList.Subagent.Running" xml:space="preserve"><value>サブエージェント {0} 実行中</value></data>
+  <data name="SessionList.Compacting" xml:space="preserve"><value>コンパクト中</value></data>
   <data name="Settings.DevBuffer.Result.SelectSession" xml:space="preserve"><value>セッションを選択してください</value></data>
   <data name="Settings.DevBuffer.Result.BufferEmpty" xml:space="preserve"><value>バッファが空です</value></data>
   <data name="Settings.DevBuffer.Result.DownloadedFormat" xml:space="preserve"><value>ダウンロード完了: {0} ({1})</value></data>

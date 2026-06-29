@@ -263,6 +263,10 @@
   <data name="Settings.DevBuffer.DownloadBuffer" xml:space="preserve"><value>Buffer</value></data>
   <data name="Settings.DevBuffer.DownloadBufferClean" xml:space="preserve"><value>Buffer (ANSI stripped)</value></data>
   <data name="Settings.DevBuffer.DownloadStatusHistory" xml:space="preserve"><value>Status history JSON</value></data>
+  <data name="Settings.DevBuffer.HookLogFormat" xml:space="preserve"><value>Hook log: {0}</value></data>
+  <data name="Settings.DevBuffer.DownloadHookLog" xml:space="preserve"><value>Hook log JSON</value></data>
+  <data name="SessionList.Subagent.Running" xml:space="preserve"><value>{0} subagent(s) running</value></data>
+  <data name="SessionList.Compacting" xml:space="preserve"><value>Compacting</value></data>
   <data name="Settings.DevBuffer.Result.SelectSession" xml:space="preserve"><value>Please select a session</value></data>
   <data name="Settings.DevBuffer.Result.BufferEmpty" xml:space="preserve"><value>Buffer is empty</value></data>
   <data name="Settings.DevBuffer.Result.DownloadedFormat" xml:space="preserve"><value>Download complete: {0} ({1})</value></data>

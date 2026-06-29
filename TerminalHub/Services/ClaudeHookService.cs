@@ -10,7 +10,10 @@ namespace TerminalHub.Services;
 public interface IClaudeHookService
 {
     /// <summary>
-    /// セッション用の hook 設定をセットアップする (Stop / UserPromptSubmit / Notification の 3 イベントを一括登録)
+    /// セッション用の hook 設定をセットアップする
+    /// (Stop / UserPromptSubmit / Notification / SubagentStart / SubagentStop /
+    ///  PreCompact / PostCompact / PreToolUse(matcher=AskUserQuestion) の各イベントを一括登録。
+    ///  実際の登録内容は HookRegistrations を参照)
     /// </summary>
     /// <param name="baseUrl">TerminalHub サーバーのベース URL（例: http://localhost:5081）。
     /// hook の送信先 URL に使われる</param>
@@ -31,8 +34,29 @@ public class ClaudeHookService : IClaudeHookService
     private readonly ILogger<ClaudeHookService> _logger;
     private const string SettingsFileName = ".claude/settings.local.json";
 
-    // TerminalHub が登録する Claude Code hook イベント (一括で有効化/削除)
-    private static readonly string[] HookEventNames = { "Stop", "UserPromptSubmit", "Notification" };
+    // TerminalHub が登録する Claude Code hook (event, matcher) の定義。matcher=null は全マッチ。
+    // - SubagentStart / SubagentStop: サブエージェントの起動・終了を agent_id で追跡。
+    // - PreCompact / PostCompact: compact 中の「作業中／作業可能」状態。
+    // - PreToolUse は matcher で AskUserQuestion のみに絞る（質問が出た＝回答待ちを検知するため）。
+    //   matcher 無し（全ツール）にすると Read/Bash/Edit 等あらゆるツール呼び出しで hook HTTP が飛び、
+    //   ツール実行のたびに待ちが入って重くなるため、AskUserQuestion だけに限定する。
+    //   「回答待ち解除」は不要（ユーザーが回答＝そのセッションに切替済み＝ベルは自然に消える）ため
+    //   PostToolUse は登録しない。
+    private static readonly (string Event, string? Matcher)[] HookRegistrations =
+    {
+        ("Stop", null),
+        ("UserPromptSubmit", null),
+        ("Notification", null),
+        ("SubagentStart", null),
+        ("SubagentStop", null),
+        ("PreCompact", null),
+        ("PostCompact", null),
+        ("PreToolUse", "AskUserQuestion"),
+    };
+
+    // クリーンアップ対象のイベント名（重複排除）
+    private static readonly string[] HookEventNames =
+        HookRegistrations.Select(r => r.Event).Distinct().ToArray();
 
     public ClaudeHookService(ILogger<ClaudeHookService> logger)
     {
@@ -73,10 +97,10 @@ public class ClaudeHookService : IClaudeHookService
                 settings["hooks"] = hooks;
             }
 
-            foreach (var eventName in HookEventNames)
+            foreach (var (eventName, matcher) in HookRegistrations)
             {
                 var hookEntry = BuildHookEntry(sessionId, baseUrl);
-                AddOrUpdateHook(hooks, eventName, hookEntry);
+                AddOrUpdateHook(hooks, eventName, hookEntry, matcher);
             }
 
             // 設定を保存
@@ -196,7 +220,7 @@ public class ClaudeHookService : IClaudeHookService
         return false;
     }
 
-    private void AddOrUpdateHook(JsonObject hooks, string eventName, JsonObject newHook)
+    private void AddOrUpdateHook(JsonObject hooks, string eventName, JsonObject newHook, string? matcher = null)
     {
         // イベントの hook 配列を取得または作成
         if (hooks[eventName] is not JsonArray hookArray)
@@ -208,15 +232,20 @@ public class ClaudeHookService : IClaudeHookService
         RemoveTerminalHubHooksFromArray(hookArray);
 
         // 入れ子形式で hook を追加（Claude Code の新仕様に準拠）
-        // 形式: {"hooks": [{"type": "http", "url": "...", "timeout": 5}]}
-        // matcher は省略可能（すべてのイベントにマッチ）
-        var newHookEntry = new JsonObject
+        // 形式: {"matcher": "AskUserQuestion", "hooks": [{"type": "http", "url": "...", "timeout": 5}]}
+        // matcher は省略可能（省略時はすべてにマッチ）。指定時は対象ツール名等で絞り込む。
+        var newHookEntry = new JsonObject();
+        if (!string.IsNullOrEmpty(matcher))
         {
-            ["hooks"] = new JsonArray { newHook }
-        };
+            newHookEntry["matcher"] = matcher;
+        }
+        newHookEntry["hooks"] = new JsonArray { newHook };
         hookArray.Add(newHookEntry);
 
-        _logger.LogDebug("Hook を追加: {EventName} -> {Url}", eventName, newHook["url"]?.GetValue<string>() ?? "");
+        _logger.LogDebug("Hook を追加: {EventName}{Matcher} -> {Url}",
+            eventName,
+            string.IsNullOrEmpty(matcher) ? "" : $"(matcher={matcher})",
+            newHook["url"]?.GetValue<string>() ?? "");
     }
 
     /// <summary>
