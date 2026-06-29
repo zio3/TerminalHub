@@ -494,6 +494,8 @@
   <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>Archived sessions</value></data>
   <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>Pinned</value></data>
   <data name="SessionList.Badge.Notification" xml:space="preserve"><value>Processing completed</value></data>
+  <data name="SessionList.Badge.Confirm" xml:space="preserve"><value>Waiting for permission (confirmation needed)</value></data>
+  <data name="SessionList.Badge.Select" xml:space="preserve"><value>Waiting for selection (please answer the question)</value></data>
   <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git branch</value></data>
   <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>Uncommitted changes</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>

@@ -240,7 +240,9 @@
     private System.Globalization.CultureInfo? _circuitUiCulture;
 
     // 通知対象セッションID（インスタンスごとに独立して管理）
-    private HashSet<Guid> _notificationPendingSessions = new();
+    // セッションごとの通知ベル種別（停止/確認/選択）。色は共通の赤で、SessionList 側がアイコンを出し分ける。
+    // 最新のイベントで上書きする（停止→確認→選択は時系列で排他的に起きるため、直近の状態を出せばよい）。
+    private Dictionary<Guid, SessionBellKind> _notificationPendingSessions = new();
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
@@ -2053,7 +2055,7 @@
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions.Add(sessionId);
+                    _notificationPendingSessions[sessionId] = SessionBellKind.Stopped;
                 }
 
                 // 処理完了の通知（アクティブセッションでも通知する）
@@ -2122,7 +2124,7 @@
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions.Add(notification.SessionId);
+                    _notificationPendingSessions[notification.SessionId] = SessionBellKind.Stopped;
                 }
 
                 // タイマーを停止
@@ -2165,16 +2167,21 @@
 
             case HookEventType.Notification:
             case HookEventType.PreToolUse:
-                // Notification（許可待ち等）/ PreToolUse（AskUserQuestion=ユーザーへの質問）は
+                // Notification（許可待ち）/ PreToolUse（AskUserQuestion=ユーザーへの質問）は
                 // 「ユーザーの入力が必要」な状態。非アクティブセッションならベル（通知マーク）を立てて、
                 // 別セッションを見ている時でも気づけるようにする。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
+                //   - Notification → 確認（許可待ち, bi-shield-exclamation）
+                //   - PreToolUse   → 選択（質問, bi-ui-radios）
                 if (activeSessionId != notification.SessionId)
                 {
+                    var bellKind = eventType == HookEventType.PreToolUse
+                        ? SessionBellKind.Select
+                        : SessionBellKind.Confirm;
                     Logger.LogInformation(
-                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), セッション: {SessionName}",
-                        eventType, session.GetDisplayName());
-                    _notificationPendingSessions.Add(notification.SessionId);
+                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), 種別: {Kind}, セッション: {SessionName}",
+                        eventType, bellKind, session.GetDisplayName());
+                    _notificationPendingSessions[notification.SessionId] = bellKind;
                     StateHasChanged();
                 }
                 break;

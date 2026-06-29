@@ -16,7 +16,8 @@
         100% { transform: rotate(0); }
     }
 
-    .bi-bell-fill {
+    /* 停止/確認/選択どのアイコンでも注意喚起のため軽く揺らす */
+    .session-bell .bi {
         animation: bell-ring 2s ease-in-out infinite;
     }
 </style>
@@ -96,10 +97,11 @@
                                     <i class="bi bi-pin-fill"></i>
                                 </span>
                             }
-                            @if (NotificationPendingSessions.Contains(session.SessionId))
+                            @if (NotificationPendingSessions.TryGetValue(session.SessionId, out var bellKind))
                             {
-                                <span class="text-danger me-1" title="@L["SessionList.Badge.Notification"]">
-                                    <i class="bi bi-bell-fill"></i>
+                                @* 色は共通(赤)。停止=ベル / 確認=盾 / 選択=ラジオ でアイコンの形を変えて区別する *@
+                                <span class="text-danger me-1 session-bell" title="@BellTitle(bellKind)">
+                                    <i class="bi @BellIcon(bellKind)"></i>
                                 </span>
                             }
                             <span class="@GetConnectionOpacityClass(session)">@session.GetDisplayName()</span>
@@ -221,7 +223,7 @@
     [Parameter] public Guid? ActiveSessionId { get; set; }
     [Parameter] public bool IsAddingSession { get; set; }
     [Parameter] public string SortMode { get; set; } = "lastAccessed"; // "createdAt" or "lastAccessed"
-    [Parameter] public ISet<Guid> NotificationPendingSessions { get; set; } = new HashSet<Guid>();
+    [Parameter] public IReadOnlyDictionary<Guid, SessionBellKind> NotificationPendingSessions { get; set; } = new Dictionary<Guid, SessionBellKind>();
     [Parameter] public bool ShowTerminalType { get; set; } = false;
     [Parameter] public bool ShowGitInfo { get; set; } = false;
     [Parameter] public bool IsMobileOpen { get; set; } = false;
@@ -447,6 +449,26 @@
             ? $"実行中: {string.Join(", ", types)}"
             : $"サブエージェント {session.RunningSubagentCount} 個 実行中";
     }
+
+    /// <summary>
+    /// 通知ベルの種類に応じた Bootstrap Icons クラスを返す（色は共通の赤、形で区別）
+    /// </summary>
+    private string BellIcon(SessionBellKind kind) => kind switch
+    {
+        SessionBellKind.Confirm => "bi-shield-exclamation",   // 許可待ち
+        SessionBellKind.Select => "bi-ui-radios",             // 質問（選択）
+        _ => "bi-bell-fill"                                    // 停止
+    };
+
+    /// <summary>
+    /// 通知ベルの種類に応じたツールチップ文言を返す
+    /// </summary>
+    private string BellTitle(SessionBellKind kind) => kind switch
+    {
+        SessionBellKind.Confirm => L["SessionList.Badge.Confirm"],
+        SessionBellKind.Select => L["SessionList.Badge.Select"],
+        _ => L["SessionList.Badge.Notification"]
+    };
 
     /// <summary>
     /// ConPTY接続状態に応じた透明度クラスを返す
