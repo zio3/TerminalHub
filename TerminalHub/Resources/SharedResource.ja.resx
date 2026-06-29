@@ -438,6 +438,8 @@
   <data name="SessionSettings.Memo.Help" xml:space="preserve"><value>このセッションに関する任意のメモを記入できます</value></data>
   <data name="SessionSettings.Commands.Header" xml:space="preserve"><value>このセッション専用のコマンド</value></data>
   <data name="SessionSettings.Commands.Help" xml:space="preserve"><value>このセッションでだけクイック送信バーに表示されるコマンドです（全体設定のコマンドの後ろに並びます）</value></data>
+  <data name="SessionSettings.Commands.ManageButton" xml:space="preserve"><value>専用コマンド</value></data>
+  <data name="SessionSettings.Commands.SaveHint" xml:space="preserve"><value>変更はセッション設定の「保存」で確定します。</value></data>
   <data name="SessionSettings.Loading" xml:space="preserve"><value>セッション情報を読み込み中…</value></data>
   <data name="SessionSettings.RestartOnSave" xml:space="preserve"><value>変更を即座に適用（セッションを再起動）</value></data>
   <data name="SessionSettings.Save" xml:space="preserve"><value>保存</value></data>
