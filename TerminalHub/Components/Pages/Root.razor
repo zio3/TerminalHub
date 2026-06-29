@@ -239,8 +239,8 @@
     private System.Globalization.CultureInfo? _circuitCulture;
     private System.Globalization.CultureInfo? _circuitUiCulture;
 
-    // 通知対象セッションID（インスタンスごとに独立して管理）
-    // セッションごとの通知ベル種別（停止/確認/選択）。色は共通の赤で、SessionList 側がアイコンを出し分ける。
+    // セッションごとの通知ベル種別（停止/確認/選択）。インスタンスごとに独立して管理。
+    // 色は共通の赤で、SessionList 側がアイコンを出し分ける。
     private Dictionary<Guid, SessionBellKind> _notificationPendingSessions = new();
 
     /// <summary>
