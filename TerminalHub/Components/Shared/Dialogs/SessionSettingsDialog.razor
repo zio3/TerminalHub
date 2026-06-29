@@ -61,23 +61,27 @@
                         </div>
                     </div>
 
-                    @if (!sessionInfo.ParentSessionId.HasValue || anyMemoExists)
-                    {
-                        <div class="mt-3 d-flex flex-wrap gap-2">
-                            @if (!sessionInfo.ParentSessionId.HasValue)
+                    <div class="mt-3 d-flex flex-wrap gap-2">
+                        @if (!sessionInfo.ParentSessionId.HasValue)
+                        {
+                            <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
+                                <i class="bi bi-plus-circle me-1"></i>@L["SessionSettings.CreateSubSession"]
+                            </button>
+                        }
+                        @if (anyMemoExists)
+                        {
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenMemoManagement">
+                                <i class="bi bi-journal-text me-1"></i>@L["SessionSettings.OpenMemoManagement"]
+                            </button>
+                        }
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenSessionCommandsDialog">
+                            <i class="bi bi-terminal me-1"></i>@L["SessionSettings.Commands.ManageButton"]
+                            @if (editingSessionCommands.Count > 0)
                             {
-                                <button type="button" class="btn btn-outline-success btn-sm" @onclick="HandleCreateSubSession">
-                                    <i class="bi bi-plus-circle me-1"></i>@L["SessionSettings.CreateSubSession"]
-                                </button>
+                                <span class="badge bg-secondary ms-1">@editingSessionCommands.Count</span>
                             }
-                            @if (anyMemoExists)
-                            {
-                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenMemoManagement">
-                                    <i class="bi bi-journal-text me-1"></i>@L["SessionSettings.OpenMemoManagement"]
-                                </button>
-                            }
-                        </div>
-                    }
+                        </button>
+                    </div>
 
                     <hr />
 
@@ -165,6 +169,92 @@
                       OnClose="CloseMemoManagement"
                       OnMemoRestored="HandleMemoRestored" />
 
+<!-- セッション専用コマンド管理ダイアログ（編集バッファ editingSessionCommands を直接操作。本体ダイアログの保存で確定） -->
+<div class="modal fade @(showSessionCommandsDialog ? "show" : "")" tabindex="-1" style="display: @(showSessionCommandsDialog ? "block" : "none"); background-color: var(--th-surface-overlay);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-terminal me-2"></i>@L["SessionSettings.Commands.Header"]
+                </h5>
+                <button type="button" class="btn-close" @onclick="CloseSessionCommandsDialog"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted">@L["SessionSettings.Commands.Help"]</small>
+                    <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0 ms-2" @onclick="OpenAddSessionCommand">
+                        <i class="bi bi-plus-lg me-1"></i>@L["Settings.Commands.AddNew"]
+                    </button>
+                </div>
+
+                @if (editingSessionCommands.Any())
+                {
+                    <ul class="list-group list-group-sm">
+                        @for (var i = 0; i < editingSessionCommands.Count; i++)
+                        {
+                            var idx = i;
+                            var cmd = editingSessionCommands[i];
+                            var isKey = cmd.Type == CustomCommandType.KeySequence;
+                            var bodyText = isKey
+                                ? (KeySequencePresets.GetDisplayName(cmd.KeyName) ?? cmd.KeyName ?? "?")
+                                : SummarizeCommandText(cmd.CommandText);
+                            <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
+                                <small class="d-flex align-items-center" style="min-width: 0; flex: 1;">
+                                    @if (isKey)
+                                    {
+                                        <i class="bi bi-keyboard me-1 text-muted"></i>
+                                    }
+                                    @if (!string.IsNullOrEmpty(cmd.GroupName))
+                                    {
+                                        <span class="badge bg-secondary bg-opacity-25 text-muted me-2" style="font-weight: normal;">@cmd.GroupName</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(cmd.Title))
+                                    {
+                                        <strong>@cmd.Title</strong>
+                                        <span class="text-muted ms-2 text-truncate">@bodyText</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-truncate">@bodyText</span>
+                                    }
+                                </small>
+                                <div class="d-flex align-items-center gap-1">
+                                    <button class="btn btn-outline-secondary btn-sm border-0" type="button"
+                                            title="@L["Settings.Commands.Edit"]"
+                                            @onclick="() => OpenEditSessionCommand(idx)" style="font-size: 0.75rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm border-0" type="button"
+                                            @onclick="() => RemoveSessionCommand(idx)" style="font-size: 0.7rem;">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted small mb-0 fst-italic">@L["Settings.Commands.Empty"]</p>
+                }
+                <small class="form-text text-muted d-block mt-2">@L["SessionSettings.Commands.SaveHint"]</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseSessionCommandsDialog">
+                    @L["Common.Close"]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<CommandEditDialog IsVisible="commandEditDialogVisible"
+                   IsVisibleChanged="OnSessionCommandDialogVisibleChanged"
+                   IsNew="commandEditDialogIsNew"
+                   TerminalTypeLabel="@commandEditDialogTerminalLabel"
+                   Command="commandEditDialogSource"
+                   OnSave="HandleSessionCommandSave" />
+
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public Guid? SessionId { get; set; }
@@ -175,6 +265,15 @@
 
     private bool showMemoManagement = false;
     private bool anyMemoExists = false;
+
+    // セッション専用コマンドの編集用バッファ（保存時に sessionInfo へ書き戻す）
+    private bool showSessionCommandsDialog = false;
+    private List<CustomCommand> editingSessionCommands = new();
+    private bool commandEditDialogVisible = false;
+    private bool commandEditDialogIsNew = false;
+    private int? commandEditDialogIndex = null;
+    private CustomCommand? commandEditDialogSource = null;
+    private string? commandEditDialogTerminalLabel = null;
 
     private SessionOptionsSelector? optionsSelector;
     private SessionInfo? sessionInfo;
@@ -252,6 +351,19 @@
             isPinned = sessionInfo.IsPinned;
             pinPriority = sessionInfo.PinPriority;
             selectedType = sessionInfo.TerminalType;
+
+            // セッション専用コマンドをディープコピーして編集バッファへ（キャンセル時に元を壊さない）
+            editingSessionCommands = sessionInfo.SessionCommands
+                .Select(c => new CustomCommand
+                {
+                    Title = c.Title,
+                    CommandText = c.CommandText,
+                    Type = c.Type,
+                    KeyName = c.KeyName,
+                    GroupName = c.GroupName,
+                    SendMode = c.SendMode
+                })
+                .ToList();
 
             // オプションを解析
             var options = sessionInfo.Options;
@@ -338,6 +450,9 @@
             // オプションを更新
             sessionInfo.Options = optionsSelector.GetOptions();
 
+            // セッション専用コマンドを書き戻す
+            sessionInfo.SessionCommands = editingSessionCommands;
+
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);
 
@@ -415,6 +530,83 @@
         {
             await OnCreateSubSession.InvokeAsync(SessionId.Value);
         }
+    }
+
+    // ===== セッション専用コマンドの編集 =====
+
+    private void OpenSessionCommandsDialog() => showSessionCommandsDialog = true;
+
+    private void CloseSessionCommandsDialog() => showSessionCommandsDialog = false;
+
+    private void OpenAddSessionCommand()
+    {
+        commandEditDialogTerminalLabel = GetTerminalTypeDisplayName(selectedType);
+        commandEditDialogIndex = null;
+        commandEditDialogSource = null;
+        commandEditDialogIsNew = true;
+        commandEditDialogVisible = true;
+    }
+
+    private void OpenEditSessionCommand(int index)
+    {
+        if (index < 0 || index >= editingSessionCommands.Count)
+            return;
+
+        commandEditDialogTerminalLabel = GetTerminalTypeDisplayName(selectedType);
+        commandEditDialogIndex = index;
+        commandEditDialogSource = editingSessionCommands[index];
+        commandEditDialogIsNew = false;
+        commandEditDialogVisible = true;
+    }
+
+    private void HandleSessionCommandSave(CustomCommand command)
+    {
+        if (commandEditDialogIndex is int idx && idx >= 0 && idx < editingSessionCommands.Count)
+        {
+            editingSessionCommands[idx] = command; // 編集：既存位置に上書き
+        }
+        else
+        {
+            editingSessionCommands.Add(command); // 新規：末尾に追加
+        }
+        // ダイアログ側が Close を呼び OnSessionCommandDialogVisibleChanged 経由で state クリア
+    }
+
+    private void OnSessionCommandDialogVisibleChanged(bool visible)
+    {
+        commandEditDialogVisible = visible;
+        if (!visible)
+        {
+            commandEditDialogIndex = null;
+            commandEditDialogSource = null;
+            commandEditDialogTerminalLabel = null;
+        }
+    }
+
+    private void RemoveSessionCommand(int index)
+    {
+        if (index >= 0 && index < editingSessionCommands.Count)
+        {
+            editingSessionCommands.RemoveAt(index);
+        }
+    }
+
+    private static string GetTerminalTypeDisplayName(TerminalType type) => type switch
+    {
+        TerminalType.ClaudeCode => "Claude Code",
+        TerminalType.GeminiCLI => "Gemini CLI",
+        TerminalType.CodexCLI => "Codex CLI",
+        TerminalType.Antigravity => "Antigravity",
+        TerminalType.Grok => "Grok",
+        _ => "Terminal"
+    };
+
+    /// <summary>一覧の行に出すコマンド本文の表示用要約。複数行は先頭行 + "…" で短縮する。</summary>
+    private static string SummarizeCommandText(string commandText)
+    {
+        if (string.IsNullOrEmpty(commandText)) return commandText;
+        var newline = commandText.IndexOfAny(new[] { '\r', '\n' });
+        return newline < 0 ? commandText : commandText.Substring(0, newline) + " …";
     }
 
 }
