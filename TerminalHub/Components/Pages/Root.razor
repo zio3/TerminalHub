@@ -133,7 +133,7 @@
                              style="display: @(session.SessionId == activeSessionId ? "block" : "none");"></div>
                     }
                 </div>
-                @* xterm の描画が CanvasAddon の不整合で崩れた際の救済用フローティングボタン。
+                @* xterm の描画が WebglAddon の不整合（コンテキスト喪失・スリープ復帰等）で崩れた際の救済用フローティングボタン。
                    通常はほぼ透明、hover で出現する控えめな存在感を狙う。 *@
                 @if (activeSessionId != null)
                 {
