@@ -37,7 +37,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority
+                       IsPinned, PinPriority, SessionCommands
                 FROM Sessions
                 ORDER BY LastAccessedAt DESC");
 
@@ -58,7 +58,8 @@ namespace TerminalHub.Services
                     ArchivedAt = reader.IsDBNull(10) ? null : DateTime.Parse(reader.GetString(10)),
                     ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11)),
                     IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
-                    PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13)
+                    PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
+                    SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14))
                 };
                 sessions.Add(session);
             }
@@ -81,7 +82,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority
+                       IsPinned, PinPriority, SessionCommands
                 FROM Sessions
                 WHERE SessionId = @sessionId",
                 ("@sessionId", sessionId.ToString()));
@@ -106,7 +107,8 @@ namespace TerminalHub.Services
                 ArchivedAt = reader.IsDBNull(10) ? null : DateTime.Parse(reader.GetString(10)),
                 ParentSessionId = reader.IsDBNull(11) ? null : Guid.Parse(reader.GetString(11)),
                 IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
-                PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13)
+                PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
+                SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14))
             };
 
             await reader.CloseAsync();
@@ -134,10 +136,10 @@ namespace TerminalHub.Services
                     INSERT INTO Sessions
                     (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                      IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                     IsPinned, PinPriority)
+                     IsPinned, PinPriority, SessionCommands)
                     VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                             @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                            @isPinned, @pinPriority)
+                            @isPinned, @pinPriority, @sessionCommands)
                     ON CONFLICT(SessionId) DO UPDATE SET
                         DisplayName = excluded.DisplayName,
                         FolderPath = excluded.FolderPath,
@@ -151,7 +153,8 @@ namespace TerminalHub.Services
                         ArchivedAt = excluded.ArchivedAt,
                         ParentSessionId = excluded.ParentSessionId,
                         IsPinned = excluded.IsPinned,
-                        PinPriority = excluded.PinPriority",
+                        PinPriority = excluded.PinPriority,
+                        SessionCommands = excluded.SessionCommands",
                     ("@sessionId", session.SessionId.ToString()),
                     ("@displayName", session.DisplayName),
                     ("@folderPath", session.FolderPath),
@@ -165,7 +168,8 @@ namespace TerminalHub.Services
                     ("@archivedAt", session.ArchivedAt?.ToString("o")),
                     ("@parentSessionId", session.ParentSessionId?.ToString()),
                     ("@isPinned", session.IsPinned ? 1 : 0),
-                    ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value));
+                    ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value),
+                    ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)));
 
                 // オプションを保存
                 await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
@@ -179,6 +183,28 @@ namespace TerminalHub.Services
             {
                 transaction.Rollback();
                 throw;
+            }
+        }
+
+        // セッション専用コマンドは Sessions.SessionCommands カラムに JSON 文字列として保存する。
+        private static object SerializeSessionCommands(List<CustomCommand>? commands)
+        {
+            if (commands == null || commands.Count == 0)
+                return DBNull.Value;
+            return JsonSerializer.Serialize(commands);
+        }
+
+        private static List<CustomCommand> DeserializeSessionCommands(string? json)
+        {
+            if (string.IsNullOrEmpty(json))
+                return new List<CustomCommand>();
+            try
+            {
+                return JsonSerializer.Deserialize<List<CustomCommand>>(json) ?? new List<CustomCommand>();
+            }
+            catch
+            {
+                return new List<CustomCommand>();
             }
         }
 

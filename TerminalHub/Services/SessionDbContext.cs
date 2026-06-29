@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 4;
+        private const int CurrentSchemaVersion = 8;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -229,6 +229,27 @@ namespace TerminalHub.Services
                 await CreateSessionMemoSnapshotsTableAsync();
                 await SetSchemaVersionAsync(7);
                 _logger.LogInformation("[DB][マイグレーション] v7 適用完了");
+            }
+
+            if (currentVersion < 8)
+            {
+                // v8: セッション専用カスタムコマンドを保持する SessionCommands カラム (JSON) を追加
+                _logger.LogInformation("[DB][マイグレーション] v8 適用開始: Sessions に SessionCommands カラムを追加");
+                await using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+
+                if (!await ColumnExistsAsync(connection, "Sessions", "SessionCommands"))
+                {
+                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN SessionCommands TEXT");
+                    _logger.LogInformation("[DB][マイグレーション] v8: SessionCommands カラムを追加");
+                }
+                else
+                {
+                    _logger.LogInformation("[DB][マイグレーション] v8: SessionCommands カラムは既存のためスキップ");
+                }
+
+                await SetSchemaVersionAsync(8);
+                _logger.LogInformation("[DB][マイグレーション] v8 適用完了");
             }
 
             _logger.LogInformation("[DB][マイグレーション] 完了");

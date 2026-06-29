@@ -47,6 +47,10 @@ namespace TerminalHub.Models
         public Dictionary<string, string> Options { get; set; } = new();
         public string Memo { get; set; } = string.Empty;
 
+        // このセッションでだけ表示・送信できるカスタムコマンド（グローバル設定の Commands とは別管理）。
+        // クイック送信バーではグローバル分の後ろに連結して表示する。DB には JSON で永続化。
+        public List<CustomCommand> SessionCommands { get; set; } = new();
+
         // ピン留め状態
         public bool IsPinned { get; set; } = false;
         public int? PinPriority { get; set; }

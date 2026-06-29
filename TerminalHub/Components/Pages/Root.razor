@@ -164,7 +164,7 @@
                                  WorkingDirectory="@bottomPanelSession.FolderPath"
                                  DotNetRef="@dotNetRef"
                                  ShellPanelRefs="@shellPanelRefs"
-                                 CustomCommands="@GetCustomCommandsForSession(bottomPanelSession.TerminalType)"
+                                 CustomCommands="@GetCustomCommandsForSession(bottomPanelSession)"
                                  OnSendInput="HandleTextInputSend"
                                  OnSendCustomKey="SendCustomKey"
                                  OnCtrlC="SendCtrlC"
@@ -1747,13 +1747,19 @@
         };
     }
 
-    private List<CustomCommand> GetCustomCommandsForSession(TerminalType terminalType)
+    private List<CustomCommand> GetCustomCommandsForSession(SessionInfo session)
     {
         var settings = AppSettingsService.GetSettings();
-        var key = terminalType.ToString();
-        if (settings.Commands.CommandsByTerminalType.TryGetValue(key, out var commands))
-            return commands;
-        return new();
+        var key = session.TerminalType.ToString();
+        var result = settings.Commands.CommandsByTerminalType.TryGetValue(key, out var commands)
+            ? new List<CustomCommand>(commands)
+            : new List<CustomCommand>();
+
+        // セッション専用コマンドはグローバル分の後ろに連結する。
+        if (session.SessionCommands.Count > 0)
+            result.AddRange(session.SessionCommands);
+
+        return result;
     }
 
     private string claudeModeSwitchKey = "altM";
