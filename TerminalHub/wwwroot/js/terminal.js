@@ -174,7 +174,7 @@ function setupUrlDetectionFallback(term) {
     // HTTP/HTTPSのURLパターン
     const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
     
-    // xterm.js v5用のregisterLinkProvider実装
+    // registerLinkProvider による手動リンクプロバイダー登録（xterm.js 6.0 でも利用可能）
     if (typeof term.registerLinkProvider === 'function') {
         const linkProvider = {
             provideLinks: (bufferLineNumber, callback) => {
@@ -392,7 +392,7 @@ window.terminalFunctions = {
             // xterm.js 6.0 で windowsMode は廃止。ConPTY 前提の Windows ヒューリスティクスは windowsPty で指定する。
             // buildNumber 未指定（= reflow無効・非空白終端行を折返し扱い）で旧 windowsMode: true 相当の挙動を維持。
             windowsPty: { backend: 'conpty' },
-            allowProposedApi: true  // 提案中のAPIを許可（スクロールバック保持のため）
+            allowProposedApi: true  // 提案中のAPIを許可（windowsPty・スクロールバック保持等で必要）
         });
         
         // FitAddonを使う
@@ -766,7 +766,7 @@ window.terminalFunctions = {
                             terminal.appendChild(termObj.terminal.element);
                         }
                         
-                        // Canvas描画の復元（スリープ復帰等でコンテキストが失われた場合の対策）
+                        // 表示復帰時の再描画トリガー（WebGL コンテキスト喪失時は onContextLoss で DOM レンダラーへフォールバック済み。ここではサイズ同期のみ）
                         // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
                         if (termObj.fitAddon) {
                             termObj.fitAddon.fit();
