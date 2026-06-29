@@ -241,8 +241,26 @@
 
     // 通知対象セッションID（インスタンスごとに独立して管理）
     // セッションごとの通知ベル種別（停止/確認/選択）。色は共通の赤で、SessionList 側がアイコンを出し分ける。
-    // 最新のイベントで上書きする（停止→確認→選択は時系列で排他的に起きるため、直近の状態を出せばよい）。
     private Dictionary<Guid, SessionBellKind> _notificationPendingSessions = new();
+
+    /// <summary>
+    /// 通知ベルを優先度を考慮して立てる。
+    /// 「確認(許可待ち)」「選択(質問)」＝ユーザー操作が必要 は「停止」より優先度が高い。
+    /// AskUserQuestion 等の待機中に 5 秒タイムアウトが誤爆して Stopped で上書きすると、
+    /// 「質問待ち」が「停止」へ格下げされて見えてしまうため、Stopped は既存の
+    /// Confirm/Select を上書きしない。Confirm/Select は常に上書きする（最新が勝つ）。
+    /// </summary>
+    private void SetNotificationBell(Guid sessionId, SessionBellKind kind)
+    {
+        if (kind == SessionBellKind.Stopped
+            && _notificationPendingSessions.TryGetValue(sessionId, out var existing)
+            && existing != SessionBellKind.Stopped)
+        {
+            // 既に Confirm/Select（要操作）が立っている → 格下げしない
+            return;
+        }
+        _notificationPendingSessions[sessionId] = kind;
+    }
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
@@ -2055,7 +2073,7 @@
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions[sessionId] = SessionBellKind.Stopped;
+                    SetNotificationBell(sessionId, SessionBellKind.Stopped);
                 }
 
                 // 処理完了の通知（アクティブセッションでも通知する）
@@ -2124,7 +2142,7 @@
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions[notification.SessionId] = SessionBellKind.Stopped;
+                    SetNotificationBell(notification.SessionId, SessionBellKind.Stopped);
                 }
 
                 // タイマーを停止
@@ -2181,7 +2199,7 @@
                     Logger.LogInformation(
                         "[通知マーク ON] きっかけ: OnHookNotification({Event}), 種別: {Kind}, セッション: {SessionName}",
                         eventType, bellKind, session.GetDisplayName());
-                    _notificationPendingSessions[notification.SessionId] = bellKind;
+                    SetNotificationBell(notification.SessionId, bellKind);
                     StateHasChanged();
                 }
                 break;
