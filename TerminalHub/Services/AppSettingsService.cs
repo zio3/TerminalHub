@@ -23,17 +23,19 @@ public interface IAppSettingsService
     void SaveSettings(AppSettings settings);
 
     /// <summary>
-    /// Webhookを送信（設定が有効な場合のみ）
+    /// Webhookを送信（設定が有効な場合のみ）。
+    /// tool は対象ツール名（PreToolUse の tool_name 等）。未指定（null）なら従来どおりツール無しで送る。
     /// </summary>
     Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath);
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null);
 
     /// <summary>
     /// Webhookを送信（sessionId を任意文字列で指定する版）。
     /// サブエージェントを agent_id をキーに個別通知したい場合などに使う。
+    /// tool は対象ツール名。未指定（null）なら従来どおりツール無しで送る。
     /// </summary>
     Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath);
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null);
 }
 
 public class AppSettingsService : IAppSettingsService
@@ -158,11 +160,11 @@ public class AppSettingsService : IAppSettingsService
     }
 
     public Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath)
-        => SendWebhookAsync(eventType, sessionId.ToString(), sessionName, terminalType, elapsedSeconds, folderPath);
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null)
+        => SendWebhookAsync(eventType, sessionId.ToString(), sessionName, terminalType, elapsedSeconds, folderPath, tool);
 
     public async Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath)
+        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null)
     {
         var settings = GetSettings();
         var webhook = settings.Webhook;
@@ -192,6 +194,7 @@ public class AppSettingsService : IAppSettingsService
             var payload = new
             {
                 eventType = eventType,
+                tool = tool,
                 sessionId = sessionId,
                 sessionName = sessionName,
                 terminalType = terminalType,
