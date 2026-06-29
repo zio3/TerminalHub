@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
@@ -94,21 +94,21 @@ jobs:
 
       - name: Upload build artifact (publish output)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: TerminalHub-dev-build
           path: ./publish/
 
       - name: Upload installer artifact (workflow_dispatch のみ)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.build_installer == true }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: TerminalHub-installer-preview
           path: installer/output/*.exe
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: installer/output/*.exe
           generate_release_notes: true
