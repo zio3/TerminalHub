@@ -239,8 +239,46 @@
     private System.Globalization.CultureInfo? _circuitCulture;
     private System.Globalization.CultureInfo? _circuitUiCulture;
 
-    // 通知対象セッションID（インスタンスごとに独立して管理）
-    private HashSet<Guid> _notificationPendingSessions = new();
+    // セッションごとの通知ベル種別（停止/確認/選択）。インスタンスごとに独立して管理。
+    // 色は共通の赤で、SessionList 側がアイコンを出し分ける。
+    private Dictionary<Guid, SessionBellKind> _notificationPendingSessions = new();
+
+    /// <summary>
+    /// 通知ベルを優先度を考慮して立てる。
+    /// 「確認(許可待ち)」「選択(質問)」＝ユーザー操作が必要 は「停止」より優先度が高い。
+    /// AskUserQuestion 等の待機中に 5 秒タイムアウトが誤爆して Stopped で上書きすると、
+    /// 「質問待ち」が「停止」へ格下げされて見えてしまうため、Stopped は既存の
+    /// Confirm/Select を上書きしない。Confirm/Select は常に上書きする（最新が勝つ）。
+    /// </summary>
+    private void SetNotificationBell(Guid sessionId, SessionBellKind kind)
+    {
+        if (kind == SessionBellKind.Stopped
+            && _notificationPendingSessions.TryGetValue(sessionId, out var existing)
+            && existing != SessionBellKind.Stopped)
+        {
+            // 既に Confirm/Select（要操作）が立っている → 格下げしない
+            return;
+        }
+        _notificationPendingSessions[sessionId] = kind;
+    }
+
+    /// <summary>
+    /// Notification イベントの message から通知ベル種別を判別する。
+    /// Notification は許可待ち(permission)・アイドル(idle)・認証成功 等で発火するため、
+    /// 一律 Confirm（盾＝許可待ち）にすると idle/認証まで「許可待ち」と誤表示してしまう。
+    /// message に "permission" を含むものだけ確認（盾）とし、それ以外は停止（ベル）扱いにする。
+    /// 例: 許可待ち="Claude needs your permission to use Bash" / idle="Claude is waiting for your input"。
+    /// （Claude Code 側の文言変更に弱い substring 判定だが、外れても Stopped に倒れるだけで害は小さい）
+    /// </summary>
+    private static SessionBellKind ClassifyNotificationBell(string? message)
+    {
+        if (!string.IsNullOrEmpty(message)
+            && message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+        {
+            return SessionBellKind.Confirm;
+        }
+        return SessionBellKind.Stopped;
+    }
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
@@ -2053,7 +2091,7 @@
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions.Add(sessionId);
+                    SetNotificationBell(sessionId, SessionBellKind.Stopped);
                 }
 
                 // 処理完了の通知（アクティブセッションでも通知する）
@@ -2122,7 +2160,7 @@
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
-                    _notificationPendingSessions.Add(notification.SessionId);
+                    SetNotificationBell(notification.SessionId, SessionBellKind.Stopped);
                 }
 
                 // タイマーを停止
@@ -2165,16 +2203,22 @@
 
             case HookEventType.Notification:
             case HookEventType.PreToolUse:
-                // Notification（許可待ち等）/ PreToolUse（AskUserQuestion=ユーザーへの質問）は
+                // Notification / PreToolUse（AskUserQuestion=ユーザーへの質問）は
                 // 「ユーザーの入力が必要」な状態。非アクティブセッションならベル（通知マーク）を立てて、
                 // 別セッションを見ている時でも気づけるようにする。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
+                //   - PreToolUse   → 選択（質問, bi-ui-radios）
+                //   - Notification → message で判別。許可待ちのみ確認（盾）、
+                //                    idle/認証成功等は停止（ベル）にして「許可待ち」を誤表示しない。
                 if (activeSessionId != notification.SessionId)
                 {
+                    var bellKind = eventType == HookEventType.PreToolUse
+                        ? SessionBellKind.Select
+                        : ClassifyNotificationBell(notification.Message);
                     Logger.LogInformation(
-                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), セッション: {SessionName}",
-                        eventType, session.GetDisplayName());
-                    _notificationPendingSessions.Add(notification.SessionId);
+                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), 種別: {Kind}, Message={Message}, セッション: {SessionName}",
+                        eventType, bellKind, notification.Message, session.GetDisplayName());
+                    SetNotificationBell(notification.SessionId, bellKind);
                     StateHasChanged();
                 }
                 break;

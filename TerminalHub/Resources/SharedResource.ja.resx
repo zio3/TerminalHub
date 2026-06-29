@@ -494,6 +494,8 @@
   <data name="SessionList.ArchivedTooltip" xml:space="preserve"><value>アーカイブ済みセッション</value></data>
   <data name="SessionList.Badge.Pinned" xml:space="preserve"><value>ピン留め</value></data>
   <data name="SessionList.Badge.Notification" xml:space="preserve"><value>処理が完了しました</value></data>
+  <data name="SessionList.Badge.Confirm" xml:space="preserve"><value>許可待ち（確認が必要です）</value></data>
+  <data name="SessionList.Badge.Select" xml:space="preserve"><value>選択待ち（質問に回答してください）</value></data>
   <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git ブランチ</value></data>
   <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>未コミットの変更があります</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>リモートコントロール接続中</value></data>
