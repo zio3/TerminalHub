@@ -116,11 +116,7 @@ public class HookNotificationService : IHookNotificationService
                 break;
 
             case HookEventType.PreToolUse:
-                // AskUserQuestion のみに絞って登録しているため、ここに来る = ユーザーへの質問が出た（回答待ち）。
-                // ベル表示（非アクティブ時の気づき）は Root.razor 側で行う。ここはログのみ。
-                _logger.LogInformation(
-                    "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
-                    notification.ToolName, session.GetDisplayName());
+                await HandlePreToolUseEventAsync(session, notification);
                 break;
         }
 
@@ -149,14 +145,16 @@ public class HookNotificationService : IHookNotificationService
         // 「Stop = LED 消灯」等の解釈は受け側に委ねる）
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                notification.Event,
-                session.SessionId,
-                session.GetDisplayName(),
-                session.TerminalType.ToString(),
-                elapsedSeconds,
-                session.FolderPath,
-                ClaudeCodeToolName);
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                ElapsedSeconds = elapsedSeconds,
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName
+            });
             _logger.LogInformation("Stop Webhook を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
                 session.GetDisplayName(), elapsedSeconds);
         }
@@ -217,14 +215,17 @@ public class HookNotificationService : IHookNotificationService
     {
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                notification.Event,
-                session.SessionId,
-                session.GetDisplayName(),
-                session.TerminalType.ToString(),
-                null,
-                session.FolderPath,
-                ClaudeCodeToolName);
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName,
+                Message = notification.Message,    // Notification 本文（あれば）
+                ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
+            });
             _logger.LogInformation("Hook Webhook を送信: Event={Event}, Session={SessionName}",
                 notification.Event, session.GetDisplayName());
         }
@@ -296,15 +297,17 @@ public class HookNotificationService : IHookNotificationService
 
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                notification.Event,
-                session.SessionId,           // 親セッションの GUID（生）
-                name,
-                session.TerminalType.ToString(),
-                elapsedSeconds,
-                session.FolderPath,
-                ClaudeCodeToolName,
-                notification.AgentId);       // サブエージェント ID（受信側で個別キーに使える）
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,        // 親セッションの GUID（生）
+                SessionName = name,
+                TerminalType = session.TerminalType.ToString(),
+                ElapsedSeconds = elapsedSeconds,
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName,
+                AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
+            });
             _logger.LogInformation(
                 "サブエージェント Webhook 送信: Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
                 notification.Event, notification.AgentId, notification.AgentType);
@@ -347,14 +350,15 @@ public class HookNotificationService : IHookNotificationService
         // 「UserPromptSubmit = LED 点灯」等の解釈は受け側に委ねる）
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                notification.Event,
-                session.SessionId,
-                session.GetDisplayName(),
-                session.TerminalType.ToString(),
-                null,
-                session.FolderPath,
-                ClaudeCodeToolName);
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName
+            });
             _logger.LogInformation("UserPromptSubmit Webhook を送信: Session={SessionName}", session.GetDisplayName());
         }
         catch (Exception ex)
@@ -363,13 +367,28 @@ public class HookNotificationService : IHookNotificationService
         }
     }
 
-    private Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
+    /// <summary>
+    /// Notification: 許可待ち(permission)・アイドル(idle)・認証成功 等で発火。本来の "Notification" を
+    /// message 付きで Webhook 送信する（受信側で message を見て許可待ち/idle を区別し、LED の色等を変えられる）。
+    /// </summary>
+    private async Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
     {
-        // Notification は許可待ち(permission_prompt)・アイドル(idle_prompt)・認証成功 等で発火。
-        // 【検証フェーズ】message に何が入るか（許可待ち判別できるか）を Hook ログ＋このログで確認する。
         _logger.LogInformation(
             "Notification イベント処理: Session={SessionName}, Message={Message}",
             session.GetDisplayName(), notification.Message);
-        return Task.CompletedTask;
+        await SendSessionHookWebhookAsync(session, notification);
+    }
+
+    /// <summary>
+    /// PreToolUse: AskUserQuestion のみに絞って登録しているため、発火 = ユーザーへの質問（回答待ち）。
+    /// 本来の "PreToolUse" を toolName 付きで Webhook 送信する（受信側で「質問待ち」として LED 色を変えられる）。
+    /// ベル表示（非アクティブ時の気づき）は Root.razor 側で行う。
+    /// </summary>
+    private async Task HandlePreToolUseEventAsync(SessionInfo session, HookNotification notification)
+    {
+        _logger.LogInformation(
+            "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
+            notification.ToolName, session.GetDisplayName());
+        await SendSessionHookWebhookAsync(session, notification);
     }
 }

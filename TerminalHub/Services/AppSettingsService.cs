@@ -24,12 +24,10 @@ public interface IAppSettingsService
 
     /// <summary>
     /// Webhookを送信（設定が有効な場合のみ）。
-    /// sessionId は常に生のセッション GUID を送る。サブエージェント由来のイベントは agentId に
-    /// agent_id を入れる（キーの振り分けは受信側に委ねる）。
-    /// tool は送信元 CLI 名等。未指定（null）なら従来どおり載せない。
+    /// 送信内容は <see cref="WebhookPayload"/> に集約。ワイヤー上の JSON には timestamp と
+    /// elapsedMinutes が自動付与される。
     /// </summary>
-    Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null, string? agentId = null);
+    Task SendWebhookAsync(WebhookPayload payload);
 }
 
 public class AppSettingsService : IAppSettingsService
@@ -153,8 +151,7 @@ public class AppSettingsService : IAppSettingsService
         }
     }
 
-    public async Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath, string? tool = null, string? agentId = null)
+    public async Task SendWebhookAsync(WebhookPayload p)
     {
         var settings = GetSettings();
         var webhook = settings.Webhook;
@@ -180,31 +177,33 @@ public class AppSettingsService : IAppSettingsService
                 }
             }
 
-            // ペイロードを作成
-            var payload = new
+            // ワイヤー上の JSON を組み立て（timestamp / elapsedMinutes はここで付与）
+            var wire = new
             {
-                eventType = eventType,
-                tool = tool,
-                sessionId = sessionId.ToString(),  // 常に生のセッション GUID
-                agentId = agentId,                 // サブエージェント由来のときのみ値。振り分けは受信側
-                sessionName = sessionName,
-                terminalType = terminalType,
-                elapsedSeconds = elapsedSeconds,
-                elapsedMinutes = elapsedSeconds.HasValue ? Math.Round(elapsedSeconds.Value / 60.0, 2) : (double?)null,
+                eventType = p.EventType,
+                tool = p.Tool,
+                message = p.Message,                 // Notification 本文（許可待ち/idle の判別用）
+                toolName = p.ToolName,               // PreToolUse の対象ツール名（AskUserQuestion 等）
+                sessionId = p.SessionId.ToString(),  // 常に生のセッション GUID
+                agentId = p.AgentId,                 // サブエージェント由来のときのみ値。振り分けは受信側
+                sessionName = p.SessionName,
+                terminalType = p.TerminalType,
+                elapsedSeconds = p.ElapsedSeconds,
+                elapsedMinutes = p.ElapsedSeconds.HasValue ? Math.Round(p.ElapsedSeconds.Value / 60.0, 2) : (double?)null,
                 timestamp = DateTime.UtcNow,
-                folderPath = folderPath
+                folderPath = p.FolderPath
             };
 
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            var json = JsonSerializer.Serialize(wire, JsonOptions);
             using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, eventType);
+            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, p.EventType);
 
             using var response = await httpClient.PostAsync(webhook.Url, content);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", eventType, webhook.Url);
+                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", p.EventType, webhook.Url);
             }
             else
             {
