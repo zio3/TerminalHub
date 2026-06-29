@@ -232,6 +232,13 @@
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
 
+    // この Circuit のカルチャ（ja 等）。OnInitializedAsync 時点で確定している。
+    // Hook は Cookie 無しの server-to-server POST（既定 "en"）スレッドから発火するため、
+    // 外部イベント由来の InvokeAsync コールバックでは CurrentUICulture が en に化ける。
+    // 描画前にこれを復元しないと、その再描画だけ英語の resx を引いてしまう（子の数バッジ等も巻き込む）。
+    private System.Globalization.CultureInfo? _circuitCulture;
+    private System.Globalization.CultureInfo? _circuitUiCulture;
+
     // 通知対象セッションID（インスタンスごとに独立して管理）
     private HashSet<Guid> _notificationPendingSessions = new();
 
@@ -328,12 +335,15 @@
     {
         dotNetRef = DotNetObjectReference.Create(this);
 
-
+        // この時点の CurrentUICulture は RequestLocalization で解決済みの Circuit のカルチャ（ja 等）。
+        // 外部イベント由来の再描画で復元するため保持しておく。
+        _circuitCulture = System.Globalization.CultureInfo.CurrentCulture;
+        _circuitUiCulture = System.Globalization.CultureInfo.CurrentUICulture;
 
         // OutputAnalyzerServiceのタイムアウトコールバックを設定
         OutputAnalyzerService.SetTimeoutCallback(sessionId =>
         {
-            _ = InvokeAsync(async () => await OnSessionTimeout(sessionId));
+            _ = InvokeWithCircuitCultureAsync(() => OnSessionTimeout(sessionId));
         });
 
         // HookNotificationServiceのイベントハンドラーを設定（ホットリロード対策で既存を解除）
@@ -343,7 +353,8 @@
         }
         _hookNotificationHandler = (sender, args) =>
         {
-            _ = InvokeAsync(async () => await OnHookNotification(args.Notification));
+            // Hook は en スレッドから発火するため、Circuit のカルチャを復元してから描画する。
+            _ = InvokeWithCircuitCultureAsync(() => OnHookNotification(args.Notification));
         };
         HookNotificationService.OnHookNotification += _hookNotificationHandler;
 
@@ -354,12 +365,32 @@
         }
         _sessionsChangedHandler = (sender, args) =>
         {
-            InvokeAsync(() => OnSessionsChanged());
+            // セッション変更も背景スレッド由来で発火しうるため、カルチャを復元してから描画する。
+            _ = InvokeWithCircuitCultureAsync(() => { OnSessionsChanged(); return Task.CompletedTask; });
         };
         SessionManager.OnSessionsChanged += _sessionsChangedHandler;
 
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 外部イベント（Hook の HTTP POST スレッドや背景スレッド）由来のコールバックを、
+    /// この Circuit のカルチャを復元したうえで Blazor の Dispatcher 上で実行する。
+    /// InvokeAsync は CurrentUICulture を Circuit 単位で復元しないため、これを挟まないと
+    /// en スレッドから来た再描画が英語の resx を引いてしまう（言語のちらつきの原因）。
+    /// </summary>
+    private Task InvokeWithCircuitCultureAsync(Func<Task> work)
+    {
+        return InvokeAsync(async () =>
+        {
+            if (_circuitUiCulture != null)
+            {
+                System.Globalization.CultureInfo.CurrentCulture = _circuitCulture!;
+                System.Globalization.CultureInfo.CurrentUICulture = _circuitUiCulture;
+            }
+            await work();
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
