@@ -174,7 +174,7 @@ function setupUrlDetectionFallback(term) {
     // HTTP/HTTPSのURLパターン
     const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
     
-    // xterm.js v5用のregisterLinkProvider実装
+    // registerLinkProvider による手動リンクプロバイダー登録（xterm.js 6.0 でも利用可能）
     if (typeof term.registerLinkProvider === 'function') {
         const linkProvider = {
             provideLinks: (bufferLineNumber, callback) => {
@@ -389,8 +389,10 @@ window.terminalFunctions = {
             cols: 120,  // 固定列数
             rows: 30,   // 固定行数
             convertEol: true,
-            windowsMode: true,  // Windows環境用の設定
-            allowProposedApi: true  // 提案中のAPIを許可（スクロールバック保持のため）
+            // xterm.js 6.0 で windowsMode は廃止。ConPTY 前提の Windows ヒューリスティクスは windowsPty で指定する。
+            // buildNumber 未指定（= reflow無効・非空白終端行を折返し扱い）で旧 windowsMode: true 相当の挙動を維持。
+            windowsPty: { backend: 'conpty' },
+            allowProposedApi: true  // 提案中のAPIを許可（windowsPty・スクロールバック保持等で必要）
         });
         
         // FitAddonを使う
@@ -525,14 +527,20 @@ window.terminalFunctions = {
                 }
             }
 
-            // CanvasAddonをロード（ブロック文字をCanvas描画で正確にレンダリング）
-            if (typeof CanvasAddon !== 'undefined' && CanvasAddon.CanvasAddon) {
+            // WebglAddonをロード（GPU描画。xterm.js 6.0 で廃止された CanvasAddon の後継）
+            // WebGLコンテキストは GPU リセットやスリープ復帰、コンテキスト数上限超過で失われることがある。
+            // onContextLoss でアドオンを破棄すると xterm.js が自動的に DOM レンダラーへフォールバックする。
+            if (typeof WebglAddon !== 'undefined' && WebglAddon.WebglAddon) {
                 try {
-                    const canvasAddon = new CanvasAddon.CanvasAddon();
-                    term.loadAddon(canvasAddon);
-                    console.log('[CanvasAddon] CanvasAddon loaded successfully');
+                    const webglAddon = new WebglAddon.WebglAddon();
+                    webglAddon.onContextLoss(() => {
+                        console.warn('[WebglAddon] WebGLコンテキスト喪失を検出。アドオンを破棄しDOMレンダラーへフォールバック');
+                        try { webglAddon.dispose(); } catch (e) { /* 破棄失敗は無視 */ }
+                    });
+                    term.loadAddon(webglAddon);
+                    console.log('[WebglAddon] WebglAddon loaded successfully');
                 } catch (error) {
-                    console.error('[CanvasAddon] Failed to load CanvasAddon:', error);
+                    console.error('[WebglAddon] Failed to load WebglAddon:', error);
                 }
             }
             
@@ -758,7 +766,7 @@ window.terminalFunctions = {
                             terminal.appendChild(termObj.terminal.element);
                         }
                         
-                        // Canvas描画の復元（スリープ復帰等でコンテキストが失われた場合の対策）
+                        // 表示復帰時の再描画トリガー（WebGL コンテキスト喪失時は onContextLoss で DOM レンダラーへフォールバック済み。ここではサイズ同期のみ）
                         // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
                         if (termObj.fitAddon) {
                             termObj.fitAddon.fit();
@@ -837,7 +845,7 @@ window.terminalFunctions = {
                 try {
                     window.multiSessionTerminals[sessionId].terminal.dispose();
                 } catch (e) {
-                    // CanvasAddonの内部レンダラーが不整合な状態（スリープ復帰後等）でも安全に破棄
+                    // WebglAddonの内部レンダラーが不整合な状態（スリープ復帰後・コンテキスト喪失後等）でも安全に破棄
                     console.log(`[JS] cleanupTerminal: dispose()エラー（無視）: ${e.message}`);
                 }
                 console.log(`[JS] cleanupTerminal: ターミナル ${sessionId} を破棄`);

@@ -27,13 +27,14 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["TerminalHub.styles.css"]" />
 
-    <!-- xterm.js (@xterm/* スコープ版に移行。グローバル名は従来と同一: Terminal / FitAddon.FitAddon / WebLinksAddon.WebLinksAddon / Unicode11Addon.Unicode11Addon / CanvasAddon.CanvasAddon) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@xterm/xterm@5.5.0/css/xterm.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@@xterm/xterm@5.5.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-canvas@0.7.0/lib/addon-canvas.js"></script>
+    <!-- xterm.js 6.0.0（@xterm/* スコープ版）。グローバル名は従来と同一: Terminal / FitAddon.FitAddon / WebLinksAddon.WebLinksAddon / Unicode11Addon.Unicode11Addon / WebglAddon.WebglAddon
+         6.0 で Canvas レンダラーアドオンが廃止されたため、addon-canvas → addon-webgl（GPU描画）へ移行。 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@xterm/xterm@6.0.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/xterm@6.0.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-web-links@0.12.0/lib/addon-web-links.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-unicode11@0.9.0/lib/addon-unicode11.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
 
 
     <ImportMap />
