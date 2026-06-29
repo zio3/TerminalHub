@@ -161,7 +161,7 @@
                             <div>
                                 <small class="text-info" title="@SubagentTooltip(session)">
                                     <i class="bi bi-diagram-3-fill me-1"></i>
-                                    <span>サブエージェント @session.RunningSubagentCount 実行中</span>
+                                    <span>@string.Format(L["SessionList.Subagent.Running"], session.RunningSubagentCount)</span>
                                 </small>
                             </div>
                         }
@@ -171,7 +171,7 @@
                             <div>
                                 <small class="text-warning">
                                     <i class="bi bi-arrows-collapse me-1"></i>
-                                    <span>コンパクト中</span>
+                                    <span>@L["SessionList.Compacting"]</span>
                                 </small>
                             </div>
                         }

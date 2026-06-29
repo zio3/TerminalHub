@@ -11,7 +11,9 @@ public interface IClaudeHookService
 {
     /// <summary>
     /// セッション用の hook 設定をセットアップする
-    /// (Stop / UserPromptSubmit / Notification / SubagentStart / SubagentStop の 5 イベントを一括登録)
+    /// (Stop / UserPromptSubmit / Notification / SubagentStart / SubagentStop /
+    ///  PreCompact / PostCompact / PreToolUse(matcher=AskUserQuestion) の各イベントを一括登録。
+    ///  実際の登録内容は HookRegistrations を参照)
     /// </summary>
     /// <param name="baseUrl">TerminalHub サーバーのベース URL（例: http://localhost:5081）。
     /// hook の送信先 URL に使われる</param>

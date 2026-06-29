@@ -261,7 +261,8 @@ namespace TerminalHub.Models
         // 「今このセッションで何個のサブエージェントが走っているか」を保持する。
         // 完了通知のゲートには使わず、UI 表示（稼働中バッジ）専用。
         [System.Text.Json.Serialization.JsonIgnore]
-        private readonly Dictionary<string, string?> _runningSubagents = new(); // key: agent_id, value: agent_type
+        // キー: agent_id、値: agent_type
+        private readonly Dictionary<string, string?> _runningSubagents = new();
 
         [System.Text.Json.Serialization.JsonIgnore]
         private readonly object _subagentLock = new();
