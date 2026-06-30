@@ -28,19 +28,26 @@ public class CodexHookService : ICodexHookService
     // ブリッジ起動コマンドに含める識別子。TerminalHub 由来エントリの判定にも使う。
     private const string BridgeMarker = "--source codex";
 
-    // Codex に登録する hook イベント。command 型はプロセス起動コストがあるため、
-    // start/complete/subagent/compact の低頻度イベントに絞る（PreToolUse 等は登録しない）。
-    private static readonly string[] HookEventNames =
+    // Codex に登録する hook (event, matcher)。matcher=null は全マッチ。command 型はプロセス起動コストが
+    // あるため低頻度イベントに絞る。PreToolUse は matcher=request_user_input（Codex のユーザー選択ツール、
+    // Claude の AskUserQuestion 相当）だけに絞り、全ツールでは発火させない。
+    private static readonly (string Event, string? Matcher)[] HookRegistrations =
     {
-        "Stop",
-        "UserPromptSubmit",
-        "SubagentStart",
-        "SubagentStop",
-        "PreCompact",
-        "PostCompact",
+        ("Stop", null),
+        ("UserPromptSubmit", null),
+        ("SubagentStart", null),
+        ("SubagentStop", null),
+        ("PreCompact", null),
+        ("PostCompact", null),
         // 許可待ち（ツール実行の承認待ち）を検知して「確認待ち」ベル/Webhook に載せる。
-        "PermissionRequest",
+        ("PermissionRequest", null),
+        // ユーザーへの選択肢提示（request_user_input）＝「選択待ち」。matcher で絞る。
+        ("PreToolUse", "^request_user_input$"),
     };
+
+    // クリーンアップ対象のイベント名（重複排除）
+    private static readonly string[] HookEventNames =
+        HookRegistrations.Select(r => r.Event).Distinct().ToArray();
 
     public CodexHookService(ILogger<CodexHookService> logger)
     {
@@ -78,9 +85,9 @@ public class CodexHookService : ICodexHookService
             }
 
             var command = BuildBridgeCommand(sessionId, baseUrl);
-            foreach (var eventName in HookEventNames)
+            foreach (var (eventName, matcher) in HookRegistrations)
             {
-                AddOrUpdateHook(hooks, eventName, command);
+                AddOrUpdateHook(hooks, eventName, command, matcher);
             }
 
             var options = new JsonSerializerOptions { WriteIndented = true };
@@ -153,7 +160,7 @@ public class CodexHookService : ICodexHookService
         return Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && uri.Port > 0 ? uri.Port : 5081;
     }
 
-    private void AddOrUpdateHook(JsonObject hooks, string eventName, string command)
+    private void AddOrUpdateHook(JsonObject hooks, string eventName, string command, string? matcher = null)
     {
         if (hooks[eventName] is not JsonArray hookArray)
         {
@@ -163,7 +170,8 @@ public class CodexHookService : ICodexHookService
 
         RemoveTerminalHubHooksFromArray(hookArray);
 
-        // Codex の入れ子形式: { "hooks": [ { "type":"command", "command":"...", "timeout":5 } ] }
+        // Codex の入れ子形式: { "matcher": "...", "hooks": [ { "type":"command", "command":"...", "timeout":5 } ] }
+        // matcher 省略時は全マッチ。指定時は対象ツール名等の正規表現で絞る。
         var inner = new JsonObject
         {
             ["type"] = "command",
@@ -172,7 +180,12 @@ public class CodexHookService : ICodexHookService
             // 5 秒固定。Codex は hook 完了まで待つため短く。ブリッジは POST 投げて即終了する。
             ["timeout"] = 5
         };
-        var entry = new JsonObject { ["hooks"] = new JsonArray { inner } };
+        var entry = new JsonObject();
+        if (!string.IsNullOrEmpty(matcher))
+        {
+            entry["matcher"] = matcher;
+        }
+        entry["hooks"] = new JsonArray { inner };
         hookArray.Add(entry);
     }
 
