@@ -118,6 +118,10 @@ public class HookNotificationService : IHookNotificationService
             case HookEventType.PreToolUse:
                 await HandlePreToolUseEventAsync(session, notification);
                 break;
+
+            case HookEventType.PermissionRequest:
+                await HandlePermissionRequestEventAsync(session, notification);
+                break;
         }
 
         // Hook イベントログに記録（何が来たか・処理後のサブエージェント数・message・tool_name。診断用）
@@ -389,6 +393,19 @@ public class HookNotificationService : IHookNotificationService
     {
         _logger.LogInformation(
             "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
+            notification.ToolName, session.GetDisplayName());
+        await SendSessionHookWebhookAsync(session, notification);
+    }
+
+    /// <summary>
+    /// PermissionRequest（Codex）: ツール実行の承認待ち。本来の "PermissionRequest" を toolName 付きで
+    /// Webhook 送信する（受信側で「確認待ち」として LED 色を変えられる）。ベル表示は Root.razor 側。
+    /// hook 戻り値で承認制御はしない（観測のみ。ブリッジは空応答で Codex の通常承認フローを保つ）。
+    /// </summary>
+    private async Task HandlePermissionRequestEventAsync(SessionInfo session, HookNotification notification)
+    {
+        _logger.LogInformation(
+            "PermissionRequest イベント処理（ツール={ToolName}、承認待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
         await SendSessionHookWebhookAsync(session, notification);
     }

@@ -38,6 +38,8 @@ public class CodexHookService : ICodexHookService
         "SubagentStop",
         "PreCompact",
         "PostCompact",
+        // 許可待ち（ツール実行の承認待ち）を検知して「確認待ち」ベル/Webhook に載せる。
+        "PermissionRequest",
     };
 
     public CodexHookService(ILogger<CodexHookService> logger)

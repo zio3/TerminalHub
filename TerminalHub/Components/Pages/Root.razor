@@ -2209,18 +2209,22 @@
 
             case HookEventType.Notification:
             case HookEventType.PreToolUse:
-                // Notification / PreToolUse（AskUserQuestion=ユーザーへの質問）は
-                // 「ユーザーの入力が必要」な状態。非アクティブセッションならベル（通知マーク）を立てて、
-                // 別セッションを見ている時でも気づけるようにする。
+            case HookEventType.PermissionRequest:
+                // Notification / PreToolUse / PermissionRequest は「ユーザーの入力が必要」な状態。
+                // 非アクティブセッションならベル（通知マーク）を立てて、別セッションを見ている時でも気づけるように。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
-                //   - PreToolUse   → 選択（質問, bi-ui-radios）
-                //   - Notification → message で判別。許可待ちのみ確認（盾）、
-                //                    idle/認証成功等は停止（ベル）にして「許可待ち」を誤表示しない。
+                //   - PreToolUse        → 選択（質問, bi-ui-radios）
+                //   - PermissionRequest → 確認（Codex の許可待ち, bi-shield-exclamation）
+                //   - Notification      → message で判別。許可待ちのみ確認（盾）、
+                //                         idle/認証成功等は停止（ベル）にして「許可待ち」を誤表示しない。
                 if (activeSessionId != notification.SessionId)
                 {
-                    var bellKind = eventType == HookEventType.PreToolUse
-                        ? SessionBellKind.Select
-                        : ClassifyNotificationBell(notification.Message);
+                    var bellKind = eventType switch
+                    {
+                        HookEventType.PreToolUse => SessionBellKind.Select,
+                        HookEventType.PermissionRequest => SessionBellKind.Confirm,
+                        _ => ClassifyNotificationBell(notification.Message)
+                    };
                     Logger.LogInformation(
                         "[通知マーク ON] きっかけ: OnHookNotification({Event}), 種別: {Kind}, Message={Message}, セッション: {SessionName}",
                         eventType, bellKind, notification.Message, session.GetDisplayName());
