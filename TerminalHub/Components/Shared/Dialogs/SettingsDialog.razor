@@ -399,15 +399,9 @@
                     </p>
 
                     <div class="mb-3">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" @bind="claudeHookEnabled" id="claudeHookSwitch">
-                            <label class="form-check-label" for="claudeHookSwitch">
-                                @L["Settings.Notifications.ClaudeHook.Enable"]
-                            </label>
-                        </div>
-                        <small class="text-muted d-block mt-1">
+                        <small class="text-muted d-block">
                             <i class="bi bi-info-circle me-1"></i>
-                            @((MarkupString)L["Settings.Notifications.ClaudeHook.ApplyNoticeHtml"].Value)
+                            @L["Settings.Notifications.ClaudeHook.AlwaysOnNotice"]
                         </small>
                     </div>
 
@@ -1113,7 +1107,6 @@
     private bool browserNotificationEnabled = true;
     private bool webHookEnabled = false;
     private string webHookUrl = "";
-    private bool claudeHookEnabled = true;
     private string saveMessage = "";
     private bool saveSuccess = false;
     private Dictionary<string, List<CustomCommand>> editingCommands = new();
@@ -1283,7 +1276,6 @@
             webHookUrl = settings.Webhook.Url ?? "";
 
             // Claude Hook設定
-            claudeHookEnabled = settings.ClaudeHook.Enabled;
 
             // 特殊設定
             // ClaudeModeSwitchKey は過去バージョンで "plan" 等の廃止された値が
@@ -1516,7 +1508,8 @@
                 },
                 ClaudeHook = new ClaudeHookSettings
                 {
-                    Enabled = claudeHookEnabled
+                    // Hook は常時有効（UI トグルは廃止）。設定は常に true で永続化する。
+                    Enabled = true
                 },
                 Special = new SpecialSettings
                 {

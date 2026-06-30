@@ -819,7 +819,7 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// ClaudeCode セッション初期化／再起動の直前に呼び出し、
-        /// AppSettings.ClaudeHook.Enabled に応じて <c>.claude/settings.local.json</c> を更新する共通処理。
+        /// <c>.claude/settings.local.json</c> に hook 設定を追加する共通処理（Hook は常時有効）。
         ///
         /// 反映タイミング: このメソッドはセッション初期化・再作成・再起動の 3 箇所からしか
         /// 呼ばれないので、設定トグルを切り替えた瞬間には反映されない。
@@ -833,23 +833,7 @@ namespace TerminalHub.Services
             if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
                 return;
 
-            // AppSettings で Hook が無効化されている場合は既存 hook を削除してから return
-            var hookEnabled = _appSettingsService?.GetSettings().ClaudeHook.Enabled ?? true;
-            if (!hookEnabled)
-            {
-                try
-                {
-                    await _claudeHookService.RemoveHooksAsync(sessionInfo.FolderPath);
-                    sessionInfo.HookConfigured = false;
-                    _logger.LogInformation("Hook は無効のため既存 hook を削除: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Hook 削除に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                return;
-            }
-
+            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
             // 初回セットアップの場合は既に設定済みならスキップ
             if (!isResetup && sessionInfo.HookConfigured)
                 return;
@@ -871,30 +855,15 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// CodexCLI セッション初期化／再起動の直前に呼び出し、Hook 有効設定に応じて
-        /// <c>.codex/hooks.json</c> を更新する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
-        /// Hook 有効/無効は当面 Claude と共通の AppSettings.ClaudeHook.Enabled で制御する。
+        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
+        /// Hook は常時有効（UI トグルは廃止）。
         /// </summary>
         private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
         {
             if (sessionInfo.TerminalType != TerminalType.CodexCLI || _codexHookService == null)
                 return;
 
-            var hookEnabled = _appSettingsService?.GetSettings().ClaudeHook.Enabled ?? true;
-            if (!hookEnabled)
-            {
-                try
-                {
-                    await _codexHookService.RemoveHooksAsync(sessionInfo.FolderPath);
-                    sessionInfo.HookConfigured = false;
-                    _logger.LogInformation("Codex Hook は無効のため既存 hook を削除: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Codex Hook 削除に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                return;
-            }
-
+            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
             if (!isResetup && sessionInfo.HookConfigured)
                 return;
 

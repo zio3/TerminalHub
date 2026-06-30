@@ -135,6 +135,7 @@
   <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use Claude Code's hook feature to receive notifications more reliably. Settings are automatically added to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; when a session is created.</value></data>
   <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Enable Claude Code Hook</value></data>
   <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>This setting is applied to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; the next time each session is started/restarted. It is not applied immediately to running sessions or workspaces outside TerminalHub's management.</value></data>
+  <data name="Settings.Notifications.ClaudeHook.AlwaysOnNotice" xml:space="preserve"><value>Hooks are always enabled. They are automatically added to the config file (.claude/settings.local.json for Claude Code, .codex/hooks.json for Codex) the next time each session is started/restarted.</value></data>
 
   <!-- Settings: Sessions Tab -->
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
