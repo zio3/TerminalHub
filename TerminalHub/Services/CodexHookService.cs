@@ -138,10 +138,12 @@ public class CodexHookService : ICodexHookService
         // 実行中サーバーの exe パス（= TerminalHub.exe）。ブリッジも同じ exe を別プロセスで起動する。
         var exePath = Environment.ProcessPath ?? "TerminalHub.exe";
         var port = GetPort(baseUrl);
-        // Codex は Windows でコマンドを PowerShell 経由で実行する。PowerShell では先頭の "..." は
-        // 文字列として評価され実行されない（"--notify" でパースエラー→exit 1）。クォート付きパスを
-        // 実行するには呼び出し演算子 & が必須。パスにスペースが含まれてもよいようクォートする。
-        return $"& \"{exePath}\" --notify {BridgeMarker} --session {sessionId} --port {port}";
+        // Codex は hook の command を Windows 既定シェル（cmd.exe /C の場合あり）で実行し、commandWindows は
+        // 読まない。cmd.exe でも PowerShell でも安定して動くよう、command 自体に powershell.exe を明示する。
+        // PowerShell 内ではクォート付き exe パスの実行に呼び出し演算子 & が必要。
+        // exe パスは PowerShell の単一引用符でくくる（シングルクォートは '' でエスケープ）。
+        var escapedExePath = exePath.Replace("'", "''");
+        return $"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& '{escapedExePath}' --notify {BridgeMarker} --session {sessionId} --port {port}\"";
     }
 
     private static int GetPort(string baseUrl)
