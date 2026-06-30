@@ -361,7 +361,9 @@ window.terminalFunctions = {
         const term = new Terminal({
             cursorBlink: true,
             fontSize: terminalFontSize,
-            fontFamily: 'Consolas, monospace',
+            // Consolas は囲み数字（①②③ 等）のグリフが小さく潰れて読みづらいため、
+            // 日本語等幅フォントを fallback に追加して該当グリフだけ補完させる（半角幅は維持）。
+            fontFamily: "Consolas, 'Yu Gothic', 'Meiryo', monospace",
             scrollback: 10000,
             scrollOnInput: true,
             scrollOnOutput: true,
