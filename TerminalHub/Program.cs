@@ -138,6 +138,9 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
+// CodexHookServiceを登録（Codex CLI の lifecycle hook 設定）
+builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
+
 // VersionCheckServiceを登録
 builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
@@ -226,12 +229,40 @@ app.MapPost("/api/hook/claude/{sessionId:guid}",
     return Results.NoContent();
 });
 
+// Hook 通知 API エンドポイント（Codex CLI 専用: ブリッジ(TerminalHub.exe --notify --source codex)が
+// Codex のネイティブ JSON を stdin で受け取り、ここへ転送してくる）
+// TerminalHub のセッションIDは URL パスから取得する（Codex の session_id は別物のため）。
+// Codex の hook イベント名は Claude とほぼ共通なので、HookNotification に正規化して同じ処理へ流す。
+app.MapPost("/api/hook/codex/{sessionId:guid}",
+    async (Guid sessionId, ClaudeHookPayload payload, IHookNotificationService hookService) =>
+{
+    var notification = new HookNotification
+    {
+        SessionId = sessionId,
+        Event = payload.HookEventName ?? "",
+        AgentId = payload.AgentId,
+        AgentType = payload.AgentType,
+        Message = payload.Message,
+        ToolName = payload.ToolName,
+        Timestamp = DateTime.UtcNow
+    };
+    await hookService.HandleHookNotificationAsync(notification);
+    return Results.NoContent();
+});
+
 app.Run();
 return 0;
 
 // CLI モード: Hook 通知を送信
 static async Task<int> RunNotifyModeAsync(string[] args)
 {
+    // Codex CLI ブリッジモード: Codex の lifecycle hook(type:command) から起動され、
+    // stdin で渡された Codex ネイティブ JSON を /api/hook/codex/{sessionId} へ転送する。
+    if (string.Equals(GetArgValue(args, "--source"), "codex", StringComparison.OrdinalIgnoreCase))
+    {
+        return await RunCodexBridgeAsync(args);
+    }
+
     var eventType = GetArgValue(args, "--event") ?? "";
     var sessionIdStr = GetArgValue(args, "--session") ?? "";
     var portStr = GetArgValue(args, "--port") ?? "5081";
@@ -313,6 +344,53 @@ static async Task<int> RunNotifyModeAsync(string[] args)
         // 接続失敗時はサイレントに終了（hook 実行をブロックしない）
         Console.Error.WriteLine($"Error: {ex.Message}");
         return 0; // 成功扱いで終了
+    }
+}
+
+// CLI モード（Codex ブリッジ）: stdin の Codex JSON を /api/hook/codex/{sessionId} へ素通し転送する。
+static async Task<int> RunCodexBridgeAsync(string[] args)
+{
+    var sessionIdStr = GetArgValue(args, "--session") ?? "";
+    var portStr = GetArgValue(args, "--port") ?? "5081";
+
+    if (!Guid.TryParse(sessionIdStr, out var sessionId))
+    {
+        Console.Error.WriteLine($"Invalid session ID: {sessionIdStr}");
+        return 0; // hook をブロックしないため成功扱い
+    }
+    if (!int.TryParse(portStr, out var port)) port = 5081;
+
+    // Codex は hook の JSON を stdin で渡す。全部読み取って素通し転送する。
+    string body = await Console.In.ReadToEndAsync();
+    if (string.IsNullOrWhiteSpace(body)) return 0;
+
+    try
+    {
+        using var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (m, c, ch, e) => true
+        };
+        using var client = new HttpClient(handler);
+        client.Timeout = TimeSpan.FromSeconds(5);
+
+        var path = $"/api/hook/codex/{sessionId}";
+        // まず HTTP、ダメなら HTTPS（Claude ブリッジと同じフォールバック）。
+        foreach (var scheme in new[] { "http", "https" })
+        {
+            try
+            {
+                using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                var res = await client.PostAsync($"{scheme}://localhost:{port}{path}", content);
+                if (res.IsSuccessStatusCode) return 0;
+            }
+            catch { /* 次の scheme を試す */ }
+        }
+        return 0; // 失敗しても hook はブロックしない
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error: {ex.Message}");
+        return 0;
     }
 }
 

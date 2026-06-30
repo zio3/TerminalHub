@@ -89,6 +89,7 @@ namespace TerminalHub.Services
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
         private readonly IClaudeHookService? _claudeHookService;
+        private readonly ICodexHookService? _codexHookService;
         private readonly IAppSettingsService? _appSettingsService;
         private readonly IServer? _server;
         private Guid? _activeSessionId;
@@ -99,7 +100,7 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
@@ -108,6 +109,7 @@ namespace TerminalHub.Services
             _claudeHookService = claudeHookService;
             _appSettingsService = appSettingsService;
             _server = server;
+            _codexHookService = codexHookService;
         }
 
         /// <summary>
@@ -412,6 +414,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -867,6 +870,50 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// CodexCLI セッション初期化／再起動の直前に呼び出し、Hook 有効設定に応じて
+        /// <c>.codex/hooks.json</c> を更新する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
+        /// Hook 有効/無効は当面 Claude と共通の AppSettings.ClaudeHook.Enabled で制御する。
+        /// </summary>
+        private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
+        {
+            if (sessionInfo.TerminalType != TerminalType.CodexCLI || _codexHookService == null)
+                return;
+
+            var hookEnabled = _appSettingsService?.GetSettings().ClaudeHook.Enabled ?? true;
+            if (!hookEnabled)
+            {
+                try
+                {
+                    await _codexHookService.RemoveHooksAsync(sessionInfo.FolderPath);
+                    sessionInfo.HookConfigured = false;
+                    _logger.LogInformation("Codex Hook は無効のため既存 hook を削除: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Codex Hook 削除に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+                return;
+            }
+
+            if (!isResetup && sessionInfo.HookConfigured)
+                return;
+
+            try
+            {
+                var baseUrl = GetServerBaseUrl();
+                await _codexHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
+                sessionInfo.HookConfigured = true;
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogInformation($"Codex Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
+            }
+            catch (Exception ex)
+            {
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogWarning(ex, $"Codex Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
+            }
+        }
+
+        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
@@ -907,6 +954,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -960,6 +1008,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);

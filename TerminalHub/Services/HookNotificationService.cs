@@ -153,7 +153,7 @@ public class HookNotificationService : IHookNotificationService
                 TerminalType = session.TerminalType.ToString(),
                 ElapsedSeconds = elapsedSeconds,
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName
+                Tool = SourceToolName(session)
             });
             _logger.LogInformation("Stop Webhook を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
                 session.GetDisplayName(), elapsedSeconds);
@@ -222,7 +222,7 @@ public class HookNotificationService : IHookNotificationService
                 SessionName = session.GetDisplayName(),
                 TerminalType = session.TerminalType.ToString(),
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName,
+                Tool = SourceToolName(session),
                 Message = notification.Message,    // Notification 本文（あれば）
                 ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
             });
@@ -305,7 +305,7 @@ public class HookNotificationService : IHookNotificationService
                 TerminalType = session.TerminalType.ToString(),
                 ElapsedSeconds = elapsedSeconds,
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName,
+                Tool = SourceToolName(session),
                 AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
             });
             _logger.LogInformation(
@@ -318,9 +318,10 @@ public class HookNotificationService : IHookNotificationService
         }
     }
 
-    // Webhook の tool フィールドに入れる送信元 CLI 名。これらの hook はすべて Claude Code 由来。
-    // スペース無し（受信側で扱いやすいように）。
-    private const string ClaudeCodeToolName = "ClaudeCode";
+    // Webhook の tool フィールドに入れる送信元 CLI 名（スペース無し、受信側で扱いやすいように）。
+    // セッションの種別から導出する（ClaudeCode→"ClaudeCode" / CodexCLI→"CodexCLI"）。
+    // hook が飛ぶのは ClaudeCode / CodexCLI セッションのみ。
+    private static string SourceToolName(SessionInfo session) => session.TerminalType.ToString();
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -357,7 +358,7 @@ public class HookNotificationService : IHookNotificationService
                 SessionName = session.GetDisplayName(),
                 TerminalType = session.TerminalType.ToString(),
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName
+                Tool = SourceToolName(session)
             });
             _logger.LogInformation("UserPromptSubmit Webhook を送信: Session={SessionName}", session.GetDisplayName());
         }
