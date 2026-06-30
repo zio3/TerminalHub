@@ -239,6 +239,8 @@ public class HookNotificationService : IHookNotificationService
     /// <summary>
     /// SubagentStart: サブエージェントを agent_id で実行中リストに登録し、
     /// agent_id をキーに本来の hook イベント名 "SubagentStart" を Webhook で送る（個別 LED 用）。
+    /// ただし agent_type 空の「意図しない発火」は冒頭でスキップし、登録も Webhook 送信も行わない
+    /// （詳細は <see cref="IsUnintendedSubagentEvent"/>）。
     /// </summary>
     private async Task HandleSubagentStartEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -281,6 +283,8 @@ public class HookNotificationService : IHookNotificationService
     /// <summary>
     /// SubagentStop: SubagentStart と同じ agent_id を実行中リストから除去し、
     /// agent_id をキーに本来の hook イベント名 "SubagentStop" を Webhook で送る（個別 LED を消灯）。
+    /// ただし agent_type 空の「意図しない発火」は冒頭でスキップし、除去も Webhook 送信も行わない
+    /// （詳細は <see cref="IsUnintendedSubagentEvent"/>）。
     /// </summary>
     private async Task HandleSubagentStopEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -320,9 +324,9 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
-        var name = string.IsNullOrEmpty(notification.AgentType)
-            ? $"{session.GetDisplayName()} / subagent"
-            : $"{session.GetDisplayName()} / {notification.AgentType}";
+        // 呼び出し元（SubagentStart/Stop ハンドラ）が agent_type 空をスキップ済みのため、
+        // ここに到達する時点で AgentType は必ず非空。
+        var name = $"{session.GetDisplayName()} / {notification.AgentType}";
 
         try
         {
