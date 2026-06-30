@@ -29,6 +29,11 @@ namespace TerminalHub.Services
             _sessionRepository = sessionRepository;
         }
 
+        // hook 駆動の CLI（start/complete を hook 経由で送るため、出力解析ベースの通知は行わない）。
+        // ClaudeCode に加え、Codex も lifecycle hook 対応済みなので含める。
+        private static bool IsHookDriven(TerminalType type)
+            => type == TerminalType.ClaudeCode || type == TerminalType.CodexCLI;
+
         public void AnalyzeOutput(string data, SessionInfo sessionInfo, Guid activeSessionId, Action<Guid, string?>? updateStatus)
         {
             if (sessionInfo == null)
@@ -98,7 +103,7 @@ namespace TerminalHub.Services
         {
                 // ClaudeCode の場合、Stop イベント直後は OutputAnalyzer からの更新をスキップ
                 // 遅延した出力によるステータス再設定を防ぐ
-                if (session.TerminalType == TerminalType.ClaudeCode && session.LastStopEventTime.HasValue)
+                if (IsHookDriven(session.TerminalType) && session.LastStopEventTime.HasValue)
                 {
                     var timeSinceStop = (DateTime.Now - session.LastStopEventTime.Value).TotalSeconds;
                     if (timeSinceStop < StopEventCooldownSeconds)
@@ -131,9 +136,9 @@ namespace TerminalHub.Services
                 {
                     // 処理開始時（初回のみ）にWebhook通知を送信
                     // ただし、セッション接続直後（10秒以内）は過去バッファの誤検出を防ぐためスキップ
-                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    // hook 駆動 CLI（ClaudeCode / CodexCLI）は Hook 経由で通知されるためスキップ（IsHookDriven）
                     if (session.ProcessingStartTime == null && !skipNotification &&
-                        session.TerminalType != TerminalType.ClaudeCode)
+                        !IsHookDriven(session.TerminalType))
                     {
                         if (!session.IsRecentConnection)
                         {
@@ -190,9 +195,9 @@ namespace TerminalHub.Services
                         session.SessionId, elapsedSeconds);
 
                     // 通知処理（経過時間があり、スキップでない場合のみ）
-                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    // hook 駆動 CLI（ClaudeCode / CodexCLI）は Hook 経由で通知されるためスキップ（IsHookDriven）
                     if (elapsedSeconds.HasValue && !skipNotification &&
-                        session.TerminalType != TerminalType.ClaudeCode)
+                        !IsHookDriven(session.TerminalType))
                     {
                         // セッション情報をコピー（非同期処理で使用するため）
                         var sessionCopy = session.CloneForNotification();

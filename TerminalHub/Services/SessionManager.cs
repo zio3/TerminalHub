@@ -89,6 +89,7 @@ namespace TerminalHub.Services
         private readonly IConfiguration _configuration;
         private readonly IGitService _gitService;
         private readonly IClaudeHookService? _claudeHookService;
+        private readonly ICodexHookService? _codexHookService;
         private readonly IAppSettingsService? _appSettingsService;
         private readonly IServer? _server;
         private Guid? _activeSessionId;
@@ -99,7 +100,7 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
@@ -108,6 +109,7 @@ namespace TerminalHub.Services
             _claudeHookService = claudeHookService;
             _appSettingsService = appSettingsService;
             _server = server;
+            _codexHookService = codexHookService;
         }
 
         /// <summary>
@@ -412,6 +414,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -816,7 +819,7 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// ClaudeCode セッション初期化／再起動の直前に呼び出し、
-        /// AppSettings.ClaudeHook.Enabled に応じて <c>.claude/settings.local.json</c> を更新する共通処理。
+        /// <c>.claude/settings.local.json</c> に hook 設定を追加する共通処理（Hook は常時有効）。
         ///
         /// 反映タイミング: このメソッドはセッション初期化・再作成・再起動の 3 箇所からしか
         /// 呼ばれないので、設定トグルを切り替えた瞬間には反映されない。
@@ -830,23 +833,7 @@ namespace TerminalHub.Services
             if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
                 return;
 
-            // AppSettings で Hook が無効化されている場合は既存 hook を削除してから return
-            var hookEnabled = _appSettingsService?.GetSettings().ClaudeHook.Enabled ?? true;
-            if (!hookEnabled)
-            {
-                try
-                {
-                    await _claudeHookService.RemoveHooksAsync(sessionInfo.FolderPath);
-                    sessionInfo.HookConfigured = false;
-                    _logger.LogInformation("Hook は無効のため既存 hook を削除: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Hook 削除に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-                }
-                return;
-            }
-
+            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
             // 初回セットアップの場合は既に設定済みならスキップ
             if (!isResetup && sessionInfo.HookConfigured)
                 return;
@@ -863,6 +850,35 @@ namespace TerminalHub.Services
             {
                 var action = isResetup ? "再セットアップ" : "セットアップ";
                 _logger.LogWarning(ex, $"Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
+            }
+        }
+
+        /// <summary>
+        /// CodexCLI セッション初期化／再起動の直前に呼び出し、
+        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
+        /// Hook は常時有効（UI トグルは廃止）。
+        /// </summary>
+        private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
+        {
+            if (sessionInfo.TerminalType != TerminalType.CodexCLI || _codexHookService == null)
+                return;
+
+            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
+            if (!isResetup && sessionInfo.HookConfigured)
+                return;
+
+            try
+            {
+                var baseUrl = GetServerBaseUrl();
+                await _codexHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
+                sessionInfo.HookConfigured = true;
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogInformation($"Codex Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
+            }
+            catch (Exception ex)
+            {
+                var action = isResetup ? "再セットアップ" : "セットアップ";
+                _logger.LogWarning(ex, $"Codex Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
             }
         }
 
@@ -907,6 +923,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -960,6 +977,7 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);

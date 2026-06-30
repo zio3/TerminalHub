@@ -20,7 +20,9 @@ public enum HookEventType
     /// <summary>コンテキスト compact 完了後（作業可能に復帰）</summary>
     PostCompact,
     /// <summary>ツール実行直前（AskUserQuestion に絞って登録＝ユーザーへの質問＝回答待ち）</summary>
-    PreToolUse
+    PreToolUse,
+    /// <summary>許可要求（Codex の PermissionRequest＝ツール実行の承認待ち。Claude の Notification(permission) 相当）</summary>
+    PermissionRequest
 }
 
 /// <summary>
@@ -65,6 +67,7 @@ public class HookNotification
             "precompact" => HookEventType.PreCompact,
             "postcompact" => HookEventType.PostCompact,
             "pretooluse" => HookEventType.PreToolUse,
+            "permissionrequest" => HookEventType.PermissionRequest,
             _ => null
         };
     }

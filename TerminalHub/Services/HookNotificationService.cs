@@ -118,6 +118,10 @@ public class HookNotificationService : IHookNotificationService
             case HookEventType.PreToolUse:
                 await HandlePreToolUseEventAsync(session, notification);
                 break;
+
+            case HookEventType.PermissionRequest:
+                await HandlePermissionRequestEventAsync(session, notification);
+                break;
         }
 
         // Hook イベントログに記録（何が来たか・処理後のサブエージェント数・message・tool_name。診断用）
@@ -153,7 +157,7 @@ public class HookNotificationService : IHookNotificationService
                 TerminalType = session.TerminalType.ToString(),
                 ElapsedSeconds = elapsedSeconds,
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName
+                Tool = SourceToolName(session)
             });
             _logger.LogInformation("Stop Webhook を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
                 session.GetDisplayName(), elapsedSeconds);
@@ -222,7 +226,7 @@ public class HookNotificationService : IHookNotificationService
                 SessionName = session.GetDisplayName(),
                 TerminalType = session.TerminalType.ToString(),
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName,
+                Tool = SourceToolName(session),
                 Message = notification.Message,    // Notification 本文（あれば）
                 ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
             });
@@ -338,7 +342,7 @@ public class HookNotificationService : IHookNotificationService
                 TerminalType = session.TerminalType.ToString(),
                 ElapsedSeconds = elapsedSeconds,
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName,
+                Tool = SourceToolName(session),
                 AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
             });
             _logger.LogInformation(
@@ -351,12 +355,23 @@ public class HookNotificationService : IHookNotificationService
         }
     }
 
-    // Webhook の tool フィールドに入れる送信元 CLI 名。これらの hook はすべて Claude Code 由来。
-    // スペース無し（受信側で扱いやすいように）。
-    private const string ClaudeCodeToolName = "ClaudeCode";
+    // Webhook の tool フィールドに入れる送信元 CLI 名（スペース無し、受信側で扱いやすいように）。
+    // セッションの種別から導出する（ClaudeCode→"ClaudeCode" / CodexCLI→"CodexCLI"）。
+    // hook が飛ぶのは ClaudeCode / CodexCLI セッションのみ。
+    private static string SourceToolName(SessionInfo session) => session.TerminalType.ToString();
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
+        // agent_id 付きの UserPromptSubmit はサブエージェントの内部プロンプト（Codex 特有。Claude では付かない）。
+        // メインセッションの「開始」ではないので、メインの処理開始リセット・start Webhook はしない（誤発火防止）。
+        if (!string.IsNullOrEmpty(notification.AgentId))
+        {
+            _logger.LogDebug(
+                "UserPromptSubmit（サブエージェント内部 agent_id={AgentId}）はメイン開始扱いしないでスキップ: Session={SessionName}",
+                notification.AgentId, session.GetDisplayName());
+            return;
+        }
+
         _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
 
         // 注意: ここでサブエージェント集合をクリアしてはいけない。
@@ -390,7 +405,7 @@ public class HookNotificationService : IHookNotificationService
                 SessionName = session.GetDisplayName(),
                 TerminalType = session.TerminalType.ToString(),
                 FolderPath = session.FolderPath,
-                Tool = ClaudeCodeToolName
+                Tool = SourceToolName(session)
             });
             _logger.LogInformation("UserPromptSubmit Webhook を送信: Session={SessionName}", session.GetDisplayName());
         }
@@ -421,6 +436,19 @@ public class HookNotificationService : IHookNotificationService
     {
         _logger.LogInformation(
             "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
+            notification.ToolName, session.GetDisplayName());
+        await SendSessionHookWebhookAsync(session, notification);
+    }
+
+    /// <summary>
+    /// PermissionRequest（Codex）: ツール実行の承認待ち。本来の "PermissionRequest" を toolName 付きで
+    /// Webhook 送信する（受信側で「確認待ち」として LED 色を変えられる）。ベル表示は Root.razor 側。
+    /// hook 戻り値で承認制御はしない（観測のみ。ブリッジは空応答で Codex の通常承認フローを保つ）。
+    /// </summary>
+    private async Task HandlePermissionRequestEventAsync(SessionInfo session, HookNotification notification)
+    {
+        _logger.LogInformation(
+            "PermissionRequest イベント処理（ツール={ToolName}、承認待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
         await SendSessionHookWebhookAsync(session, notification);
     }
