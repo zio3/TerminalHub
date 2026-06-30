@@ -136,7 +136,7 @@ namespace TerminalHub.Services
                 {
                     // 処理開始時（初回のみ）にWebhook通知を送信
                     // ただし、セッション接続直後（10秒以内）は過去バッファの誤検出を防ぐためスキップ
-                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    // hook 駆動 CLI（ClaudeCode / CodexCLI）は Hook 経由で通知されるためスキップ（IsHookDriven）
                     if (session.ProcessingStartTime == null && !skipNotification &&
                         !IsHookDriven(session.TerminalType))
                     {
@@ -195,7 +195,7 @@ namespace TerminalHub.Services
                         session.SessionId, elapsedSeconds);
 
                     // 通知処理（経過時間があり、スキップでない場合のみ）
-                    // ClaudeCode の場合は Hook 経由で通知されるためスキップ
+                    // hook 駆動 CLI（ClaudeCode / CodexCLI）は Hook 経由で通知されるためスキップ（IsHookDriven）
                     if (elapsedSeconds.HasValue && !skipNotification &&
                         !IsHookDriven(session.TerminalType))
                     {

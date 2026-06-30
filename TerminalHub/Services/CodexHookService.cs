@@ -176,7 +176,7 @@ public class CodexHookService : ICodexHookService
         {
             ["type"] = "command",
             ["command"] = command,
-            ["commandWindows"] = command, // TerminalHub は Windows 専用。Windows override も同値で明示
+            ["commandWindows"] = command, // 実際に使われるのは command。commandWindows は念のため同値で設定（Codex 実装差に備える）
             // 5 秒固定。Codex は hook 完了まで待つため短く。ブリッジは POST 投げて即終了する。
             ["timeout"] = 5
         };

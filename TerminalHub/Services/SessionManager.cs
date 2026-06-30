@@ -854,7 +854,7 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// CodexCLI セッション初期化／再起動の直前に呼び出し、Hook 有効設定に応じて
+        /// CodexCLI セッション初期化／再起動の直前に呼び出し、
         /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
         /// Hook は常時有効（UI トグルは廃止）。
         /// </summary>

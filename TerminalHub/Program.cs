@@ -361,7 +361,13 @@ static async Task<int> RunCodexBridgeAsync(string[] args)
     if (!int.TryParse(portStr, out var port)) port = 5081;
 
     // Codex は hook の JSON を stdin で渡す。全部読み取って素通し転送する。
-    string body = await Console.In.ReadToEndAsync();
+    // Console.In は日本語 Windows だと CP932 になりうるため、stdin を明示的に UTF-8 で読む
+    // （非ASCII（日本語 message 等）の文字化け・二重再エンコードを防ぐ）。
+    string body;
+    using (var reader = new StreamReader(Console.OpenStandardInput(), System.Text.Encoding.UTF8))
+    {
+        body = await reader.ReadToEndAsync();
+    }
     if (string.IsNullOrWhiteSpace(body)) return 0;
 
     try
