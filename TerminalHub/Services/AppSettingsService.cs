@@ -164,6 +164,9 @@ public class AppSettingsService : IAppSettingsService
         try
         {
             var httpClient = _httpClientFactory.CreateClient();
+            // Webhook 先が無応答でもバックグラウンド送信が長時間ブロックしないよう 10 秒で打ち切る
+            // （HttpClient 既定の 100 秒を避ける）。Claude Hook 経路・非ClaudeCode 経路の両方がここを通る。
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
 
             // ヘッダーを設定
             if (webhook.Headers != null)

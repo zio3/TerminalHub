@@ -7,7 +7,11 @@ namespace TerminalHub.Models;
 /// </summary>
 public class WebhookPayload
 {
-    /// <summary>発火した hook イベント名そのまま（UserPromptSubmit / Stop / SubagentStart / SubagentStop / PreCompact / PostCompact / Notification / PreToolUse）。</summary>
+    /// <summary>
+    /// イベント名。Claude Code の Hook 由来は発火した hook イベント名そのまま
+    /// （UserPromptSubmit / Stop / SubagentStart / SubagentStop / PreCompact / PostCompact / Notification / PreToolUse）。
+    /// 非 ClaudeCode（Gemini/Codex/Terminal）は出力解析ベースの疑似イベントのため "start" / "complete"（このとき Tool は null）。
+    /// </summary>
     public required string EventType { get; init; }
 
     /// <summary>セッションの生 GUID（プレフィックス無し）。</summary>
@@ -19,7 +23,7 @@ public class WebhookPayload
     /// <summary>ターミナル種別（ClaudeCode 等）。</summary>
     public string TerminalType { get; init; } = "";
 
-    /// <summary>処理秒。Stop のみ値が入り、それ以外は null。</summary>
+    /// <summary>処理秒。完了系イベント（Hook の Stop / 非ClaudeCode の "complete"）のみ値が入り、それ以外は null。</summary>
     public int? ElapsedSeconds { get; init; }
 
     /// <summary>セッションの作業ディレクトリ。</summary>

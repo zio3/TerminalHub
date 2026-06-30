@@ -44,10 +44,10 @@ namespace TerminalHub.Services
                 await SendBrowserNotificationAsync(session, elapsedSeconds);
             }
 
-            // WebHook通知
+            // WebHook通知（出力解析ベースの疑似 complete）
             if (webhookSettings.Enabled)
             {
-                await SendWebHookNotificationAsync(session, elapsedSeconds, webhookSettings);
+                await SendWebHookEventAsync(session, "complete", elapsedSeconds);
             }
         }
 
@@ -74,10 +74,6 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task SendWebHookNotificationAsync(SessionInfo session, int elapsedSeconds, WebhookSettings webhookSettings)
-        {
-            await SendWebHookEventAsync(session, "complete", elapsedSeconds);
-        }
 
         public async Task<bool> RequestBrowserNotificationPermissionAsync()
         {
