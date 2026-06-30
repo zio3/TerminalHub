@@ -186,6 +186,13 @@ public class HookNotificationService : IHookNotificationService
         session.ProcessingElapsedSeconds = null;
         session.LastProcessingUpdateTime = null;
         session.IsWaitingForUserInput = false;
+
+        // compact 中フラグを倒す保険。auto-compact がブロック/中断され PostCompact が
+        // 飛ばないケースがあり（公式仕様上、PreCompact がブロックされると PostCompact は来ない）、
+        // その場合 IsCompacting が立ったままになる。Stop（＝ターン完了）でも必ず倒して、
+        // 「コンパクト中」バッジの出っぱなしと「完了 + コンパクト中」の同時表示を防ぐ。
+        // （従来は UserPromptSubmit でしか倒しておらず、次プロンプトまで残っていた）
+        session.IsCompacting = false;
     }
 
     /// <summary>
