@@ -23,17 +23,11 @@ public interface IAppSettingsService
     void SaveSettings(AppSettings settings);
 
     /// <summary>
-    /// Webhookを送信（設定が有効な場合のみ）
+    /// Webhookを送信（設定が有効な場合のみ）。
+    /// 送信内容は <see cref="WebhookPayload"/> に集約。ワイヤー上の JSON には timestamp と
+    /// elapsedMinutes が自動付与される。
     /// </summary>
-    Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath);
-
-    /// <summary>
-    /// Webhookを送信（sessionId を任意文字列で指定する版）。
-    /// サブエージェントを agent_id をキーに個別通知したい場合などに使う。
-    /// </summary>
-    Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath);
+    Task SendWebhookAsync(WebhookPayload payload);
 }
 
 public class AppSettingsService : IAppSettingsService
@@ -157,12 +151,7 @@ public class AppSettingsService : IAppSettingsService
         }
     }
 
-    public Task SendWebhookAsync(string eventType, Guid sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath)
-        => SendWebhookAsync(eventType, sessionId.ToString(), sessionName, terminalType, elapsedSeconds, folderPath);
-
-    public async Task SendWebhookAsync(string eventType, string sessionId, string sessionName,
-        string terminalType, int? elapsedSeconds, string folderPath)
+    public async Task SendWebhookAsync(WebhookPayload p)
     {
         var settings = GetSettings();
         var webhook = settings.Webhook;
@@ -175,6 +164,9 @@ public class AppSettingsService : IAppSettingsService
         try
         {
             var httpClient = _httpClientFactory.CreateClient();
+            // Webhook 先が無応答でもバックグラウンド送信が長時間ブロックしないよう 10 秒で打ち切る
+            // （HttpClient 既定の 100 秒を避ける）。Claude Hook 経路・非ClaudeCode 経路の両方がここを通る。
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
 
             // ヘッダーを設定
             if (webhook.Headers != null)
@@ -188,34 +180,43 @@ public class AppSettingsService : IAppSettingsService
                 }
             }
 
-            // ペイロードを作成
-            var payload = new
+            // ワイヤー上の JSON を組み立て（timestamp / elapsedMinutes はここで付与）
+            var wire = new
             {
-                eventType = eventType,
-                sessionId = sessionId,
-                sessionName = sessionName,
-                terminalType = terminalType,
-                elapsedSeconds = elapsedSeconds,
-                elapsedMinutes = elapsedSeconds.HasValue ? Math.Round(elapsedSeconds.Value / 60.0, 2) : (double?)null,
+                eventType = p.EventType,
+                tool = p.Tool,
+                message = p.Message,                 // Notification 本文（許可待ち/idle の判別用）
+                toolName = p.ToolName,               // PreToolUse の対象ツール名（AskUserQuestion 等）
+                sessionId = p.SessionId.ToString(),  // 常に生のセッション GUID
+                agentId = p.AgentId,                 // サブエージェント由来のときのみ値。振り分けは受信側
+                sessionName = p.SessionName,
+                terminalType = p.TerminalType,
+                elapsedSeconds = p.ElapsedSeconds,
+                elapsedMinutes = p.ElapsedSeconds.HasValue ? Math.Round(p.ElapsedSeconds.Value / 60.0, 2) : (double?)null,
                 timestamp = DateTime.UtcNow,
-                folderPath = folderPath
+                folderPath = p.FolderPath
             };
 
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            var json = JsonSerializer.Serialize(wire, JsonOptions);
             using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, eventType);
+            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, p.EventType);
 
             using var response = await httpClient.PostAsync(webhook.Url, content);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", eventType, webhook.Url);
+                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", p.EventType, webhook.Url);
             }
             else
             {
                 _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Url}", response.StatusCode, webhook.Url);
             }
+        }
+        catch (TaskCanceledException ex)
+        {
+            // HttpClient.Timeout（10秒）超過は TaskCanceledException で来る。原因切り分けのため個別ログにする。
+            _logger.LogWarning(ex, "Webhook送信タイムアウト（10秒超過）: {Url}", webhook.Url);
         }
         catch (Exception ex)
         {

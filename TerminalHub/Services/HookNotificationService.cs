@@ -108,23 +108,15 @@ public class HookNotificationService : IHookNotificationService
                 break;
 
             case HookEventType.PreCompact:
-                // compact 開始 = 作業中入り
-                session.IsCompacting = true;
-                _logger.LogInformation("PreCompact イベント処理（compact中入り）: Session={SessionName}", session.GetDisplayName());
+                await HandlePreCompactEventAsync(session, notification);
                 break;
 
             case HookEventType.PostCompact:
-                // compact 完了 = 作業可能に復帰
-                session.IsCompacting = false;
-                _logger.LogInformation("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
+                await HandlePostCompactEventAsync(session, notification);
                 break;
 
             case HookEventType.PreToolUse:
-                // AskUserQuestion のみに絞って登録しているため、ここに来る = ユーザーへの質問が出た（回答待ち）。
-                // ベル表示（非アクティブ時の気づき）は Root.razor 側で行う。ここはログのみ。
-                _logger.LogInformation(
-                    "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
-                    notification.ToolName, session.GetDisplayName());
+                await HandlePreToolUseEventAsync(session, notification);
                 break;
         }
 
@@ -149,22 +141,26 @@ public class HookNotificationService : IHookNotificationService
             elapsedSeconds = (int)(DateTime.Now - session.ProcessingStartTime.Value).TotalSeconds;
         }
 
-        // Webhook通知を送信
+        // Webhook通知を送信（本来の hook イベント名 "Stop" をそのまま eventType として送る。
+        // 「Stop = LED 消灯」等の解釈は受け側に委ねる）
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                "complete",
-                SessionWebhookKey(session.SessionId),
-                session.GetDisplayName(),
-                session.TerminalType.ToString(),
-                elapsedSeconds,
-                session.FolderPath);
-            _logger.LogInformation("処理完了通知を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                ElapsedSeconds = elapsedSeconds,
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName
+            });
+            _logger.LogInformation("Stop Webhook を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
                 session.GetDisplayName(), elapsedSeconds);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "処理完了通知の送信に失敗: Session={SessionName}", session.GetDisplayName());
+            _logger.LogWarning(ex, "Stop Webhook の送信に失敗: Session={SessionName}", session.GetDisplayName());
         }
 
         // 最終利用時刻を更新（ソート用）
@@ -189,8 +185,60 @@ public class HookNotificationService : IHookNotificationService
     }
 
     /// <summary>
+    /// PreCompact: compact 中フラグを立て、本来の hook イベント名 "PreCompact" を
+    /// そのまま Webhook で送る。LED の点灯（UserPromptSubmit と同じくスタート扱いにする等）は
+    /// 受け側で解釈する。TerminalHub 側では start/complete へのマッピングや状態制御はしない。
+    /// </summary>
+    private async Task HandlePreCompactEventAsync(SessionInfo session, HookNotification notification)
+    {
+        session.IsCompacting = true;
+        await SendSessionHookWebhookAsync(session, notification);
+        _logger.LogInformation("PreCompact イベント処理（compact中入り）: Session={SessionName}", session.GetDisplayName());
+    }
+
+    /// <summary>
+    /// PostCompact: compact 中フラグを倒し、本来の hook イベント名 "PostCompact" を
+    /// そのまま Webhook で送る。LED の消灯等の解釈は受け側に委ねる。
+    /// </summary>
+    private async Task HandlePostCompactEventAsync(SessionInfo session, HookNotification notification)
+    {
+        session.IsCompacting = false;
+        await SendSessionHookWebhookAsync(session, notification);
+        _logger.LogInformation("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
+    }
+
+    /// <summary>
+    /// hook イベント名（notification.Event）をそのまま eventType として、セッションキーで Webhook を送る。
+    /// start/complete へのマッピングをせず「本来のイベント」を流すための共通処理。
+    /// </summary>
+    private async Task SendSessionHookWebhookAsync(SessionInfo session, HookNotification notification)
+    {
+        try
+        {
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName,
+                Message = notification.Message,    // Notification 本文（あれば）
+                ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
+            });
+            _logger.LogInformation("Hook Webhook を送信: Event={Event}, Session={SessionName}",
+                notification.Event, session.GetDisplayName());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Hook Webhook の送信に失敗: Event={Event}, Session={SessionName}",
+                notification.Event, session.GetDisplayName());
+        }
+    }
+
+    /// <summary>
     /// SubagentStart: サブエージェントを agent_id で実行中リストに登録し、
-    /// agent_id をキーに "start" Webhook を送る（個別 LED で稼働可視化するため）。
+    /// agent_id をキーに本来の hook イベント名 "SubagentStart" を Webhook で送る（個別 LED 用）。
     /// </summary>
     private async Task HandleSubagentStartEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -207,12 +255,12 @@ public class HookNotificationService : IHookNotificationService
             "SubagentStart イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, session.RunningSubagentCount);
 
-        await SendSubagentWebhookAsync(session, notification, "start", null);
+        await SendSubagentWebhookAsync(session, notification, null);
     }
 
     /// <summary>
     /// SubagentStop: SubagentStart と同じ agent_id を実行中リストから除去し、
-    /// agent_id をキーに "complete" Webhook を送る（個別 LED を消灯させるため）。
+    /// agent_id をキーに本来の hook イベント名 "SubagentStop" を Webhook で送る（個別 LED を消灯）。
     /// </summary>
     private async Task HandleSubagentStopEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -226,15 +274,16 @@ public class HookNotificationService : IHookNotificationService
             "SubagentStop イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, Removed={Removed}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, removed, session.RunningSubagentCount);
 
-        await SendSubagentWebhookAsync(session, notification, "complete", null);
+        await SendSubagentWebhookAsync(session, notification, null);
     }
 
     /// <summary>
     /// サブエージェント用 Webhook を送信する。session_id の代わりに agent_id を渡すことで、
     /// 受信側（LED 等）が各サブエージェントを個別のキーとして扱えるようにする。
+    /// eventType は本来の hook イベント名（notification.Event）をそのまま送る。
     /// </summary>
     private async Task SendSubagentWebhookAsync(
-        SessionInfo session, HookNotification notification, string eventType, int? elapsedSeconds)
+        SessionInfo session, HookNotification notification, int? elapsedSeconds)
     {
         // agent_id が無いと個別キーにできないため送らない
         if (string.IsNullOrEmpty(notification.AgentId))
@@ -248,31 +297,30 @@ public class HookNotificationService : IHookNotificationService
 
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                eventType,
-                SubAgentWebhookKey(notification.AgentId),  // session_id の代わりに agent_id を SubAgent_ プレフィックス付きでキーにする
-                name,
-                session.TerminalType.ToString(),
-                elapsedSeconds,
-                session.FolderPath);
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,        // 親セッションの GUID（生）
+                SessionName = name,
+                TerminalType = session.TerminalType.ToString(),
+                ElapsedSeconds = elapsedSeconds,
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName,
+                AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
+            });
             _logger.LogInformation(
                 "サブエージェント Webhook 送信: Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
-                eventType, notification.AgentId, notification.AgentType);
+                notification.Event, notification.AgentId, notification.AgentType);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "サブエージェント Webhook 送信に失敗: Event={Event}, AgentId={AgentId}", eventType, notification.AgentId);
+            _logger.LogWarning(ex, "サブエージェント Webhook 送信に失敗: Event={Event}, AgentId={AgentId}", notification.Event, notification.AgentId);
         }
     }
 
-    // Webhook の sessionId フィールドに種別プレフィックスを付ける。
-    // 受信側（LED/MQTT）で生 GUID 同士が並ぶとセッションとサブエージェントの区別がつかないため、
-    // "Session_" / "SubAgent_" を前置して個別キーとして判別できるようにする。
-    private const string SessionKeyPrefix = "Session_";
-    private const string SubAgentKeyPrefix = "SubAgent_";
-
-    private static string SessionWebhookKey(Guid sessionId) => $"{SessionKeyPrefix}{sessionId}";
-    private static string SubAgentWebhookKey(string agentId) => $"{SubAgentKeyPrefix}{agentId}";
+    // Webhook の tool フィールドに入れる送信元 CLI 名。これらの hook はすべて Claude Code 由来。
+    // スペース無し（受信側で扱いやすいように）。
+    private const string ClaudeCodeToolName = "ClaudeCode";
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
@@ -298,31 +346,49 @@ public class HookNotificationService : IHookNotificationService
         session.ProcessingStartTime = DateTime.Now;
         // ProcessingStatus は OutputAnalyzer が実際のステータステキストを設定するため、ここでは設定しない
 
-        // Webhook通知を送信
+        // Webhook通知を送信（本来の hook イベント名 "UserPromptSubmit" をそのまま eventType として送る。
+        // 「UserPromptSubmit = LED 点灯」等の解釈は受け側に委ねる）
         try
         {
-            await _appSettingsService.SendWebhookAsync(
-                "start",
-                SessionWebhookKey(session.SessionId),
-                session.GetDisplayName(),
-                session.TerminalType.ToString(),
-                null,
-                session.FolderPath);
-            _logger.LogInformation("処理開始通知を送信: Session={SessionName}", session.GetDisplayName());
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
+            {
+                EventType = notification.Event,
+                SessionId = session.SessionId,
+                SessionName = session.GetDisplayName(),
+                TerminalType = session.TerminalType.ToString(),
+                FolderPath = session.FolderPath,
+                Tool = ClaudeCodeToolName
+            });
+            _logger.LogInformation("UserPromptSubmit Webhook を送信: Session={SessionName}", session.GetDisplayName());
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "処理開始通知の送信に失敗: Session={SessionName}", session.GetDisplayName());
+            _logger.LogWarning(ex, "UserPromptSubmit Webhook の送信に失敗: Session={SessionName}", session.GetDisplayName());
         }
     }
 
-    private Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
+    /// <summary>
+    /// Notification: 許可待ち(permission)・アイドル(idle)・認証成功 等で発火。本来の "Notification" を
+    /// message 付きで Webhook 送信する（受信側で message を見て許可待ち/idle を区別し、LED の色等を変えられる）。
+    /// </summary>
+    private async Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
     {
-        // Notification は許可待ち(permission_prompt)・アイドル(idle_prompt)・認証成功 等で発火。
-        // 【検証フェーズ】message に何が入るか（許可待ち判別できるか）を Hook ログ＋このログで確認する。
         _logger.LogInformation(
             "Notification イベント処理: Session={SessionName}, Message={Message}",
             session.GetDisplayName(), notification.Message);
-        return Task.CompletedTask;
+        await SendSessionHookWebhookAsync(session, notification);
+    }
+
+    /// <summary>
+    /// PreToolUse: AskUserQuestion のみに絞って登録しているため、発火 = ユーザーへの質問（回答待ち）。
+    /// 本来の "PreToolUse" を toolName 付きで Webhook 送信する（受信側で「質問待ち」として LED 色を変えられる）。
+    /// ベル表示（非アクティブ時の気づき）は Root.razor 側で行う。
+    /// </summary>
+    private async Task HandlePreToolUseEventAsync(SessionInfo session, HookNotification notification)
+    {
+        _logger.LogInformation(
+            "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
+            notification.ToolName, session.GetDisplayName());
+        await SendSessionHookWebhookAsync(session, notification);
     }
 }

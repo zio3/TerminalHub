@@ -1,9 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -11,20 +7,17 @@ namespace TerminalHub.Services
     public class NotificationService : INotificationService
     {
         private readonly IConfiguration _configuration;
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<NotificationService> _logger;
         private readonly IAppSettingsService _appSettingsService;
 
         public NotificationService(
             IConfiguration configuration,
-            IHttpClientFactory httpClientFactory,
             IJSRuntime jsRuntime,
             ILogger<NotificationService> logger,
             IAppSettingsService appSettingsService)
         {
             _configuration = configuration;
-            _httpClientFactory = httpClientFactory;
             _jsRuntime = jsRuntime;
             _logger = logger;
             _appSettingsService = appSettingsService;
@@ -51,10 +44,10 @@ namespace TerminalHub.Services
                 await SendBrowserNotificationAsync(session, elapsedSeconds);
             }
 
-            // WebHook通知
+            // WebHook通知（出力解析ベースの疑似 complete）
             if (webhookSettings.Enabled)
             {
-                await SendWebHookNotificationAsync(session, elapsedSeconds, webhookSettings);
+                await SendWebHookEventAsync(session, "complete", elapsedSeconds);
             }
         }
 
@@ -81,10 +74,6 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task SendWebHookNotificationAsync(SessionInfo session, int elapsedSeconds, WebhookSettings webhookSettings)
-        {
-            await SendWebHookEventAsync(session, "complete", elapsedSeconds, webhookSettings);
-        }
 
         public async Task<bool> RequestBrowserNotificationPermissionAsync()
         {
@@ -122,80 +111,27 @@ namespace TerminalHub.Services
                 return;
             }
 
-            await SendWebHookEventAsync(session, "start", null, webhookSettings);
+            await SendWebHookEventAsync(session, "start", null);
         }
 
-        private async Task SendWebHookEventAsync(SessionInfo session, string eventType, int? elapsedSeconds, WebhookSettings webhookSettings)
+        // 非 ClaudeCode セッション（Gemini/Codex/Terminal など）の Webhook 送信。
+        // ClaudeCode は Hook 経由（HookNotificationService）で送るため、ここは出力解析ベースの
+        // 疑似 start/complete を扱う。送信経路は AppSettingsService.SendWebhookAsync に統一し、
+        // ペイロード形式（フィールド名・生 GUID の sessionId・elapsedMinutes 付与など）を
+        // Hook 経由と揃える。eventType は従来どおり "start"/"complete" を維持し、
+        // tool は付けない（null。ClaudeCode の Hook 由来とだけ区別できれば十分なため）。
+        private async Task SendWebHookEventAsync(SessionInfo session, string eventType, int? elapsedSeconds)
         {
-            try
+            await _appSettingsService.SendWebhookAsync(new WebhookPayload
             {
-                // IHttpClientFactory から取得した HttpClient は Dispose 不要（ファクトリーが管理）
-                var httpClient = _httpClientFactory.CreateClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(10);
-
-                // ヘッダーを設定（重複時は上書きせず警告ログ）
-                if (webhookSettings.Headers != null)
-                {
-                    foreach (var header in webhookSettings.Headers)
-                    {
-                        if (header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue; // Content-Type は StringContent で設定されるためスキップ
-                        }
-
-                        if (httpClient.DefaultRequestHeaders.Contains(header.Key))
-                        {
-                            _logger.LogDebug("ヘッダー '{HeaderKey}' は既に存在するためスキップ", header.Key);
-                            continue;
-                        }
-
-                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
-                    }
-                }
-
-                // ペイロードを作成
-                var payload = new
-                {
-                    eventType = eventType,  // "start" or "complete"
-                    sessionId = session?.SessionId ?? Guid.Empty,
-                    sessionName = session?.GetDisplayName() ?? "不明なセッション",
-                    terminalType = session?.TerminalType.ToString() ?? "Unknown",
-                    elapsedSeconds = elapsedSeconds,
-                    elapsedMinutes = elapsedSeconds.HasValue ? Math.Round(elapsedSeconds.Value / 60.0, 2) : (double?)null,
-                    timestamp = DateTime.UtcNow,
-                    folderPath = session?.FolderPath ?? ""
-                };
-
-                var json = JsonSerializer.Serialize(payload);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                _logger.LogInformation($"WebHook送信中 ({eventType}): {webhookSettings.Url}");
-                _logger.LogDebug($"ペイロード: {json}");
-
-                using var response = await httpClient.PostAsync(webhookSettings.Url, content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var responseBody = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"WebHook呼び出しが失敗しました: {response.StatusCode}, Body: {responseBody}");
-                }
-                else
-                {
-                    _logger.LogInformation($"WebHook呼び出しが成功しました ({eventType}): {webhookSettings.Url}");
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError(ex, $"WebHook通知のネットワークエラー ({eventType})");
-            }
-            catch (TaskCanceledException ex)
-            {
-                _logger.LogError(ex, $"WebHook通知がタイムアウトしました ({eventType})");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"WebHook通知の送信に失敗しました ({eventType})");
-            }
+                EventType = eventType,                                    // "start" / "complete"
+                SessionId = session?.SessionId ?? Guid.Empty,
+                SessionName = session?.GetDisplayName() ?? "不明なセッション",
+                TerminalType = session?.TerminalType.ToString() ?? "Unknown",
+                ElapsedSeconds = elapsedSeconds,                          // start では null、complete で値
+                FolderPath = session?.FolderPath ?? "",
+                Tool = null,                                             // 非 ClaudeCode は tool を付けない
+            });
         }
     }
 }
