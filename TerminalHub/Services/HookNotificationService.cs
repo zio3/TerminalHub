@@ -329,6 +329,16 @@ public class HookNotificationService : IHookNotificationService
 
     private async Task HandleUserPromptSubmitEventAsync(SessionInfo session, HookNotification notification)
     {
+        // agent_id 付きの UserPromptSubmit はサブエージェントの内部プロンプト（Codex 特有。Claude では付かない）。
+        // メインセッションの「開始」ではないので、メインの処理開始リセット・start Webhook はしない（誤発火防止）。
+        if (!string.IsNullOrEmpty(notification.AgentId))
+        {
+            _logger.LogDebug(
+                "UserPromptSubmit（サブエージェント内部 agent_id={AgentId}）はメイン開始扱いしないでスキップ: Session={SessionName}",
+                notification.AgentId, session.GetDisplayName());
+            return;
+        }
+
         _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
 
         // 注意: ここでサブエージェント集合をクリアしてはいけない。
