@@ -213,6 +213,11 @@ public class AppSettingsService : IAppSettingsService
                 _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Url}", response.StatusCode, webhook.Url);
             }
         }
+        catch (TaskCanceledException ex)
+        {
+            // HttpClient.Timeout（10秒）超過は TaskCanceledException で来る。原因切り分けのため個別ログにする。
+            _logger.LogWarning(ex, "Webhook送信タイムアウト（10秒超過）: {Url}", webhook.Url);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Webhook送信エラー: {Url}", webhook.Url);
