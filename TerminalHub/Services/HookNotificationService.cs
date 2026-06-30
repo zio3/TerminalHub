@@ -242,6 +242,19 @@ public class HookNotificationService : IHookNotificationService
     /// </summary>
     private async Task HandleSubagentStartEventAsync(SessionInfo session, HookNotification notification)
     {
+        // agent_type が無い SubagentStart/Stop は「意図しない発火」としてスキップする。
+        // 本物のユーザー Task サブエージェントは agent_type が入る（Explore / general-purpose 等）。
+        // 一方 agent_type 空のものは SubagentStart を伴わず Stop だけ単発で飛ぶ等、Claude Code 内部処理
+        // （recap 生成等）由来とみられる挙動が実機で確認されたため、稼働中カウントも Webhook も行わない
+        // （個別 LED のノイズ・空振りを防ぐ）。診断用の Hook イベントログには引き続き記録される。
+        if (IsUnintendedSubagentEvent(notification))
+        {
+            _logger.LogDebug(
+                "SubagentStart（意図しない発火: agent_type無し）をスキップ: Session={SessionName}, AgentId={AgentId}",
+                session.GetDisplayName(), notification.AgentId);
+            return;
+        }
+
         if (!string.IsNullOrEmpty(notification.AgentId))
         {
             session.AddRunningSubagent(notification.AgentId, notification.AgentType);
@@ -259,11 +272,27 @@ public class HookNotificationService : IHookNotificationService
     }
 
     /// <summary>
+    /// agent_type を持たない Subagent 系イベントは「意図しない発火」（Claude Code 内部処理由来とみられる）。
+    /// 本物のユーザー Task サブエージェントは agent_type（Explore 等）が必ず入る、という実機観測に基づく判定。
+    /// </summary>
+    private static bool IsUnintendedSubagentEvent(HookNotification notification)
+        => string.IsNullOrEmpty(notification.AgentType);
+
+    /// <summary>
     /// SubagentStop: SubagentStart と同じ agent_id を実行中リストから除去し、
     /// agent_id をキーに本来の hook イベント名 "SubagentStop" を Webhook で送る（個別 LED を消灯）。
     /// </summary>
     private async Task HandleSubagentStopEventAsync(SessionInfo session, HookNotification notification)
     {
+        // agent_type 無しは「意図しない発火」としてスキップ（理由は SubagentStart 側コメント参照）。
+        if (IsUnintendedSubagentEvent(notification))
+        {
+            _logger.LogDebug(
+                "SubagentStop（意図しない発火: agent_type無し）をスキップ: Session={SessionName}, AgentId={AgentId}",
+                session.GetDisplayName(), notification.AgentId);
+            return;
+        }
+
         var removed = false;
         if (!string.IsNullOrEmpty(notification.AgentId))
         {
