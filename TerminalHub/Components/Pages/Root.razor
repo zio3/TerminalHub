@@ -559,6 +559,15 @@
                             createdSession.IsPinned = sessionInfo.IsPinned;
                             createdSession.PinPriority = sessionInfo.PinPriority;
 
+                            // セッション専用コマンドを復元。
+                            // CreateSessionAsync は空の SessionCommands で新規 SessionInfo を作るため、
+                            // ここでコピーし忘れると、アプリ再起動後に in-memory が空になり、
+                            // 直後の hook 由来の保存で DB からも消えてしまう（＝再起動で毎回消える不具合）。
+                            if (sessionInfo.SessionCommands != null && sessionInfo.SessionCommands.Count > 0)
+                            {
+                                createdSession.SessionCommands = sessionInfo.SessionCommands;
+                            }
+
                             await SessionManager.SaveSessionInfoAsync(createdSession);
                         }
 
