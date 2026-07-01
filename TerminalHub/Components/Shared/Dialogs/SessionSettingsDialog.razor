@@ -291,13 +291,34 @@
     private string errorMessage = "";
     private bool restartSession = true;
 
+    // ダイアログ表示状態・ロード済みセッションの追跡。
+    // OnParametersSetAsync は親（Root）の再描画のたびに呼ばれるため、開いている間の
+    // 再描画で LoadSessionInfo を再実行すると編集バッファ（editingSessionCommands 等）を
+    // 上書きしてしまう。稼働中セッションは hook で頻繁に再描画されるため、編集中の
+    // 専用コマンドが消え、空リストで保存 → hook 保存で DB からも消える不具合になっていた。
+    // そのため「開いた瞬間／対象セッションが変わった時」だけロードするようガードする。
+    private bool _wasVisible;
+    private Guid? _loadedSessionId;
+
     protected override async Task OnParametersSetAsync()
     {
         if (IsVisible && SessionId.HasValue)
         {
-            LoadSessionInfo();
-            await RefreshMemoExistsAsync();
+            // 開いた瞬間、または対象セッションが変わった時だけロード（再描画では上書きしない）
+            if (!_wasVisible || _loadedSessionId != SessionId)
+            {
+                LoadSessionInfo();
+                await RefreshMemoExistsAsync();
+                _loadedSessionId = SessionId;
+            }
         }
+        else if (!IsVisible)
+        {
+            // 閉じたら次回開いた時に確実に再ロードさせる
+            _loadedSessionId = null;
+        }
+
+        _wasVisible = IsVisible;
     }
 
     private async Task RefreshMemoExistsAsync()
