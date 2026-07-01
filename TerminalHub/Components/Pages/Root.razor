@@ -62,7 +62,8 @@
                        OnSettingsSaved="OnSessionSettingsSaved"
                        OnCancel="() => showSessionSettingsDialog = false"
                        OnCreateSubSession="HandleCreateSubSessionFromSettings"
-                       OnMemoRestored="HandleMemoRestoredFromSettings" />
+                       OnMemoRestored="HandleMemoRestoredFromSettings"
+                       OnSessionCommandsChanged="OnSessionCommandsChanged" />
 <ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
                         ArchivedSessions="@GetArchivedSessions()"
                         OnRestoreSession="RestoreArchivedSession"
@@ -2266,6 +2267,35 @@
         {
             await bottomPanel.ReloadMemosForCurrentSessionAsync();
         }
+    }
+
+    // 専用コマンドの即時保存: 設定ダイアログのサブダイアログで追加/編集/削除された都度呼ばれる。
+    // 本体ダイアログの「保存」を待たず、その場で当該セッションを DB へ永続化し、
+    // クイック送信バーの表示も更新する。
+    private async Task OnSessionCommandsChanged()
+    {
+        if (settingsSessionId.HasValue)
+        {
+            var session = SessionManager.GetSessionInfo(settingsSessionId.Value);
+            if (session != null)
+            {
+                // 即時保存は編集の都度 DB 書き込みが走るため、hook 由来の保存と競合して
+                // SQLITE_BUSY 等の例外が出る可能性がある。ここで握りつぶして Circuit 切断を防ぐ
+                // （in-memory の SessionCommands は反映済みなので、次の保存機会で DB へ再反映される）。
+                try
+                {
+                    await SaveSessionToStorageAsync(session);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "専用コマンドの即時保存に失敗: {SessionId}", session.SessionId);
+                }
+            }
+        }
+
+        // クイック送信バー等の表示を更新
+        sessions = SessionManager.GetAllSessions().ToList();
+        StateHasChanged();
     }
 
     private async Task OnSessionSettingsSaved()

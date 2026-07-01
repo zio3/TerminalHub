@@ -262,6 +262,8 @@
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public EventCallback<Guid> OnCreateSubSession { get; set; }
     [Parameter] public EventCallback OnMemoRestored { get; set; }
+    // 専用コマンドの即時保存通知（追加/編集/削除の都度、呼び出し元が DB へ永続化する）
+    [Parameter] public EventCallback OnSessionCommandsChanged { get; set; }
 
     private bool showMemoManagement = false;
     private bool anyMemoExists = false;
@@ -580,7 +582,7 @@
         commandEditDialogVisible = true;
     }
 
-    private void HandleSessionCommandSave(CustomCommand command)
+    private async Task HandleSessionCommandSave(CustomCommand command)
     {
         if (commandEditDialogIndex is int idx && idx >= 0 && idx < editingSessionCommands.Count)
         {
@@ -591,6 +593,7 @@
             editingSessionCommands.Add(command); // 新規：末尾に追加
         }
         // ダイアログ側が Close を呼び OnSessionCommandDialogVisibleChanged 経由で state クリア
+        await PersistSessionCommandsAsync(); // 即時保存
     }
 
     private void OnSessionCommandDialogVisibleChanged(bool visible)
@@ -604,12 +607,39 @@
         }
     }
 
-    private void RemoveSessionCommand(int index)
+    private async Task RemoveSessionCommand(int index)
     {
         if (index >= 0 && index < editingSessionCommands.Count)
         {
             editingSessionCommands.RemoveAt(index);
+            await PersistSessionCommandsAsync(); // 即時保存
         }
+    }
+
+    /// <summary>
+    /// 専用コマンドの編集内容を実セッション（sessionInfo）へ反映し、呼び出し元に永続化を依頼する。
+    /// サブダイアログでの追加/編集/削除を「その場で保存」するために使う（本体ダイアログの保存を待たない）。
+    /// </summary>
+    private async Task PersistSessionCommandsAsync()
+    {
+        if (sessionInfo == null)
+            return;
+
+        // editingSessionCommands をディープコピーして実セッションへ反映（以降の編集で相互に壊さないため）
+        sessionInfo.SessionCommands = editingSessionCommands
+            .Select(c => new CustomCommand
+            {
+                Title = c.Title,
+                CommandText = c.CommandText,
+                Type = c.Type,
+                KeyName = c.KeyName,
+                GroupName = c.GroupName,
+                SendMode = c.SendMode
+            })
+            .ToList();
+
+        // 呼び出し元（Root）が DB 永続化とクイック送信バーの更新を行う
+        await OnSessionCommandsChanged.InvokeAsync();
     }
 
     private static string GetTerminalTypeDisplayName(TerminalType type) => type switch
