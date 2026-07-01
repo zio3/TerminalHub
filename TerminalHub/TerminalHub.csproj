@@ -9,8 +9,11 @@
     <UserSecretsId>d24c2b6b-274a-45ae-9889-2950682fff62</UserSecretsId>
   </PropertyGroup>
 
-  <!-- プレビュー版（workflow_dispatch）ビルド時に CI から注入されるビルドメタデータ。
-       ローカル dotnet run / 正式リリース(vタグ)ビルドでは空のままなので埋め込まれない。 -->
+  <!-- CI から注入されるビルドメタデータ。
+       BuildChannel は CI ビルドでは常に release(vタグ) / preview(workflow_dispatch) が入る。
+       BuildPr / BuildCommit / BuildDate はプレビュー版ビルドのみ設定される。
+       ローカル dotnet run では全て未設定 → Condition が false になり埋め込まれない。
+       プレビュー版バッジの表示可否は BuildChannel=="preview" で判定する（VersionCheckService）。 -->
   <ItemGroup>
     <AssemblyMetadata Include="BuildChannel" Value="$(BuildChannel)" Condition="'$(BuildChannel)' != ''" />
     <AssemblyMetadata Include="BuildPr" Value="$(BuildPr)" Condition="'$(BuildPr)' != ''" />
