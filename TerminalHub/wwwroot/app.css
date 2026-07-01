@@ -11,7 +11,9 @@
    日本語フォントが無い環境では local() が空振りして Consolas にフォールバックする。 */
 @font-face {
     font-family: 'TermMix';
-    src: local('Consolas');
+    /* 主フォント: Cascadia Mono（MS 純正のターミナル向け等幅・リガチャ無し）。
+       未導入環境では Consolas にフォールバック。 */
+    src: local('Cascadia Mono'), local('Consolas');
 }
 @font-face {
     font-family: 'TermMix';
