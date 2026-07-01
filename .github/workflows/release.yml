@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # マージコミットからPR番号を辿るため履歴を全取得
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -39,6 +41,20 @@ jobs:
             BASE=$(grep -oP '(?<=<Version>)[^<]+' TerminalHub/TerminalHub.csproj | head -1)
             echo "VERSION=${BASE}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Compute preview build metadata
+        id: build_meta
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: |
+          # 直近の「Merge pull request #NN」からPR番号を抽出（無ければ空）
+          PR=$(git log --grep='Merge pull request #' -1 --pretty=%s | grep -oP '#\K[0-9]+' || true)
+          SHA=$(git rev-parse --short HEAD)
+          DATE=$(date -u +%Y-%m-%d)
+          echo "PR=${PR}" >> $GITHUB_OUTPUT
+          echo "SHA=${SHA}" >> $GITHUB_OUTPUT
+          echo "DATE=${DATE}" >> $GITHUB_OUTPUT
+          echo "プレビュー版メタデータ: PR=#${PR:-?} SHA=${SHA} DATE=${DATE}"
 
       - name: Update version in installer script
         if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
@@ -68,7 +84,21 @@ jobs:
           $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -NoNewline
 
       - name: Publish application
-        run: dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:Version=${{ steps.get_version.outputs.VERSION }}
+        shell: bash
+        run: |
+          # vタグ = 正式リリース版（チャンネル release、プレビュー情報は埋め込まない）
+          # それ以外 = プレビュー版（PR番号/SHA/日時を AssemblyMetadata に注入）
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            CHANNEL="release"
+          else
+            CHANNEL="preview"
+          fi
+          dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish \
+            /p:Version=${{ steps.get_version.outputs.VERSION }} \
+            /p:BuildChannel=${CHANNEL} \
+            /p:BuildPr=${{ steps.build_meta.outputs.PR }} \
+            /p:BuildCommit=${{ steps.build_meta.outputs.SHA }} \
+            /p:BuildDate=${{ steps.build_meta.outputs.DATE }}
 
       - name: Install Inno Setup
         if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true

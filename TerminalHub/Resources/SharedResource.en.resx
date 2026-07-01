@@ -96,6 +96,8 @@
   <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>A new version &lt;strong&gt;v{0}&lt;/strong&gt; is available</value></data>
   <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>Check on GitHub</value></data>
   <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>You're on the latest version</value></data>
+  <data name="Settings.General.Version.PreviewLabel" xml:space="preserve"><value>Preview</value></data>
+  <data name="Settings.General.Version.PreviewHint" xml:space="preserve"><value>Local pre-release build. Includes changes up to the PR number / commit shown. Click to open the commit on GitHub.</value></data>
   <data name="Settings.General.Community.Header" xml:space="preserve"><value>Community</value></data>
   <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Join the Discord server</value></data>
   <data name="Settings.General.Community.Help" xml:space="preserve"><value>Bug reports, feature requests, and questions are welcome there.</value></data>
