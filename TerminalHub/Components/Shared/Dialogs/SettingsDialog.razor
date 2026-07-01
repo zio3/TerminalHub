@@ -203,9 +203,20 @@
 
                                 <div class="mb-4">
                                     <h6 class="mb-2">@L["Settings.General.Version.Header"]</h6>
-                                    <div class="d-flex align-items-center mb-2">
+                                    <div class="d-flex align-items-center mb-2 flex-wrap">
                                         <span class="me-2">@L["Settings.General.Version.Current"]</span>
                                         <span class="badge bg-secondary">v@(currentVersion)</span>
+                                        @if (previewBuild != null)
+                                        {
+                                            <span class="badge bg-warning text-dark ms-2" title="@L["Settings.General.Version.PreviewHint"]">
+                                                <i class="bi bi-cone-striped me-1"></i>@L["Settings.General.Version.PreviewLabel"]
+                                            </span>
+                                            <a href="@previewBuild.CommitUrl" target="_blank" class="ms-2 small text-decoration-none"
+                                               title="@L["Settings.General.Version.PreviewHint"]">
+                                                @previewBuild.DisplayText
+                                                <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                            </a>
+                                        }
                                     </div>
 
                                     @if (isCheckingVersion)
@@ -1162,6 +1173,7 @@
 
     // バージョンチェック関連
     private string currentVersion = "";
+    private PreviewBuildInfo? previewBuild = null;
     private VersionCheckResult? versionCheckResult = null;
     private bool isCheckingVersion = false;
     private string? versionCheckError = null;
@@ -1337,6 +1349,7 @@
 
             // バージョン情報を取得
             currentVersion = VersionCheckService.CurrentVersion;
+            previewBuild = VersionCheckService.PreviewBuild;
 
             // 設定画面を開いた時にバージョンチェック実行
             _ = CheckForUpdatesAsync();

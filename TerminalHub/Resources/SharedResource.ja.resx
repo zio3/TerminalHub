@@ -96,6 +96,8 @@
   <data name="Settings.General.Version.NewAvailableHtml" xml:space="preserve"><value>新しいバージョン &lt;strong&gt;v{0}&lt;/strong&gt; があります</value></data>
   <data name="Settings.General.Version.CheckOnGitHub" xml:space="preserve"><value>GitHubで確認</value></data>
   <data name="Settings.General.Version.UpToDate" xml:space="preserve"><value>最新バージョンです</value></data>
+  <data name="Settings.General.Version.PreviewLabel" xml:space="preserve"><value>プレビュー版</value></data>
+  <data name="Settings.General.Version.PreviewHint" xml:space="preserve"><value>先行テスト用のローカルビルドです。表示のPR番号／コミットまでの変更が含まれます。クリックでGitHubのコミットを開きます。</value></data>
   <data name="Settings.General.Community.Header" xml:space="preserve"><value>コミュニティ</value></data>
   <data name="Settings.General.Community.JoinDiscord" xml:space="preserve"><value>Discord サーバーに参加</value></data>
   <data name="Settings.General.Community.Help" xml:space="preserve"><value>バグ報告、機能リクエスト、質問などはこちらで受け付けています。</value></data>

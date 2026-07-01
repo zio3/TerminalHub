@@ -9,6 +9,18 @@
     <UserSecretsId>d24c2b6b-274a-45ae-9889-2950682fff62</UserSecretsId>
   </PropertyGroup>
 
+  <!-- CI から注入されるビルドメタデータ。
+       BuildChannel は CI ビルドでは常に release(vタグ) / preview(workflow_dispatch) が入る。
+       BuildPr / BuildCommit / BuildDate はプレビュー版ビルドのみ設定される。
+       ローカル dotnet run では全て未設定 → Condition が false になり埋め込まれない。
+       プレビュー版バッジの表示可否は BuildChannel=="preview" で判定する（VersionCheckService）。 -->
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildChannel" Value="$(BuildChannel)" Condition="'$(BuildChannel)' != ''" />
+    <AssemblyMetadata Include="BuildPr" Value="$(BuildPr)" Condition="'$(BuildPr)' != ''" />
+    <AssemblyMetadata Include="BuildCommit" Value="$(BuildCommit)" Condition="'$(BuildCommit)' != ''" />
+    <AssemblyMetadata Include="BuildDate" Value="$(BuildDate)" Condition="'$(BuildDate)' != ''" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
     <!-- CVE-2025-6965 (GHSA-2m69-gcr7-jv3q) を回避するため、SQLitePCLRaw を 3.x にオーバーライド -->

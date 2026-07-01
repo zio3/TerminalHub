@@ -26,6 +26,44 @@ public class VersionCheckResult
 }
 
 /// <summary>
+/// プレビュー版（CI の workflow_dispatch）ビルドに埋め込まれる追加情報。
+/// 正式リリース版・ローカル dotnet run では null。
+/// </summary>
+public class PreviewBuildInfo
+{
+    /// <summary>適用済み最新PR番号（例: "88"）。取得できない場合は null</summary>
+    public string? PrNumber { get; set; }
+
+    /// <summary>ビルド元コミットの短縮SHA（例: "e83b47f"）</summary>
+    public string? Commit { get; set; }
+
+    /// <summary>ビルド日時（UTC, "yyyy-MM-dd"）</summary>
+    public string? Date { get; set; }
+
+    /// <summary>コミットSHAへのGitHubリンク（SHAが無い場合はリポジトリトップ）</summary>
+    public string CommitUrl => string.IsNullOrWhiteSpace(Commit)
+        ? "https://github.com/zio3/TerminalHub"
+        : $"https://github.com/zio3/TerminalHub/commit/{Commit}";
+
+    /// <summary>バッジ等に表示する整形済みテキスト（例: "PR #88 / e83b47f (2026-07-02)"）</summary>
+    public string DisplayText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(PrNumber)) parts.Add($"PR #{PrNumber}");
+            if (!string.IsNullOrWhiteSpace(Commit)) parts.Add(Commit!);
+            var main = string.Join(" / ", parts);
+            if (!string.IsNullOrWhiteSpace(Date))
+            {
+                main = string.IsNullOrEmpty(main) ? Date! : $"{main} ({Date})";
+            }
+            return main;
+        }
+    }
+}
+
+/// <summary>
 /// GitHub Releases API レスポンス
 /// </summary>
 internal class GitHubRelease
@@ -49,6 +87,12 @@ public interface IVersionCheckService
     /// 現在のアプリケーションバージョン
     /// </summary>
     string CurrentVersion { get; }
+
+    /// <summary>
+    /// プレビュー版ビルドの追加情報（PR番号 / コミットSHA / ビルド日時）。
+    /// 正式リリース版・ローカルビルドでは null。
+    /// </summary>
+    PreviewBuildInfo? PreviewBuild { get; }
 
     /// <summary>
     /// GitHubで新しいバージョンがあるかチェック
@@ -91,6 +135,39 @@ public class VersionCheckService : IVersionCheckService
             }
 
             return version;
+        }
+    }
+
+    public PreviewBuildInfo? PreviewBuild
+    {
+        get
+        {
+            var metadata = Assembly.GetExecutingAssembly()
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Where(a => !string.IsNullOrEmpty(a.Key))
+                .GroupBy(a => a.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase);
+
+            // "preview" チャンネルのビルドのときだけ表示（正式版・ローカルビルドは null）
+            if (!metadata.TryGetValue("BuildChannel", out var channel) ||
+                !string.Equals(channel, "preview", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            metadata.TryGetValue("BuildPr", out var pr);
+            metadata.TryGetValue("BuildCommit", out var commit);
+            metadata.TryGetValue("BuildDate", out var date);
+
+            var info = new PreviewBuildInfo
+            {
+                PrNumber = string.IsNullOrWhiteSpace(pr) ? null : pr,
+                Commit = string.IsNullOrWhiteSpace(commit) ? null : commit,
+                Date = string.IsNullOrWhiteSpace(date) ? null : date,
+            };
+
+            // 表示できる中身が何もなければ null（チャンネルだけ preview で他が空のケース）
+            return string.IsNullOrEmpty(info.DisplayText) ? null : info;
         }
     }
 
