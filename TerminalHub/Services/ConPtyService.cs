@@ -242,22 +242,28 @@ namespace TerminalHub.Services
             // XTerm互換のための環境変数を設定
             var envBlock = CreateEnvironmentBlock();
             
-            var result = CreateProcess(
-                null,
-                cmdline,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                false,
-                ConPtyTerminalConstants.ExtendedStartupinfoPresent | CREATE_UNICODE_ENVIRONMENT,
-                envBlock,
-                workingDirectory,
-                ref startupInfo,
-                out processInfo);
-                
-            // 環境変数ブロックを解放
-            if (envBlock != IntPtr.Zero)
-                Marshal.FreeHGlobal(envBlock);
-                
+            bool result;
+            try
+            {
+                result = CreateProcess(
+                    null,
+                    cmdline,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    false,
+                    ConPtyTerminalConstants.ExtendedStartupinfoPresent | CREATE_UNICODE_ENVIRONMENT,
+                    envBlock,
+                    workingDirectory,
+                    ref startupInfo,
+                    out processInfo);
+            }
+            finally
+            {
+                // 環境変数ブロックを確実に解放（例外時のリークも防ぐ）
+                if (envBlock != IntPtr.Zero)
+                    Marshal.FreeHGlobal(envBlock);
+            }
+
             if (!result)
             {
                 var error = Marshal.GetLastWin32Error();

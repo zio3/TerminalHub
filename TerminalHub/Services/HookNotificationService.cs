@@ -170,7 +170,15 @@ public class HookNotificationService : IHookNotificationService
         // 最終利用時刻を更新（ソート用）
         _logger.LogInformation("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
         session.LastAccessedAt = DateTime.Now;
-        try { await _sessionRepository.SaveSessionAsync(session); } catch { }
+        try
+        {
+            await _sessionRepository.SaveSessionAsync(session);
+        }
+        catch (Exception ex)
+        {
+            // 保存失敗を黙殺すると並び順(LastAccessedAt)や状態復元の不具合を追えなくなるため、警告として残す
+            _logger.LogWarning(ex, "Stop イベント後のセッション保存に失敗: {SessionName}", session.GetDisplayName());
+        }
 
         // 処理状態を完全にリセット（SessionTimeoutと同じ項目をクリア）
         _logger.LogInformation(
