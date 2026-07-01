@@ -366,10 +366,10 @@ namespace TerminalHub.Services
                         INSERT OR REPLACE INTO Sessions
                         (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                          IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                         IsPinned, PinPriority)
+                         IsPinned, PinPriority, SessionCommands)
                         VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                                 @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                                @isPinned, @pinPriority)",
+                                @isPinned, @pinPriority, @sessionCommands)",
                         ("@sessionId", session.SessionId.ToString()),
                         ("@displayName", session.DisplayName),
                         ("@folderPath", session.FolderPath),
@@ -383,7 +383,9 @@ namespace TerminalHub.Services
                         ("@archivedAt", session.ArchivedAt?.ToString("o")),
                         ("@parentSessionId", session.ParentSessionId?.ToString()),
                         ("@isPinned", session.IsPinned ? 1 : 0),
-                        ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value));
+                        ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value),
+                        // localStorage 移行時も専用コマンドを取りこぼさない（列漏れで消えるのを防ぐ）
+                        ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)));
 
                     // オプションを保存
                     await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
