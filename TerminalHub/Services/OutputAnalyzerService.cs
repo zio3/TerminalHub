@@ -222,7 +222,10 @@ namespace TerminalHub.Services
                     // 最終利用時刻を更新（ソート用）
                     _logger.LogInformation("[LastAccessedAt更新] きっかけ: OutputAnalyzerService(処理完了検出), セッション: {SessionName}", session.GetDisplayName());
                     session.LastAccessedAt = DateTime.Now;
-                    try { _ = _sessionRepository.SaveSessionAsync(session); } catch { }
+                    // fire-and-forget だが、失敗を黙殺せず faulted 時に警告を残す（診断のため）
+                    _ = _sessionRepository.SaveSessionAsync(session).ContinueWith(
+                        t => _logger.LogWarning(t.Exception, "処理完了時のセッション保存に失敗: {SessionName}", session.GetDisplayName()),
+                        TaskContinuationOptions.OnlyOnFaulted);
 
                     // セッション情報をクリア
                     session.ProcessingStartTime = null;
