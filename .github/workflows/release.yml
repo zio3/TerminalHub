@@ -84,20 +84,16 @@ jobs:
           $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -NoNewline
 
       - name: Publish application
-        shell: bash
+        shell: pwsh
         run: |
-          # vタグ = 正式リリース版（チャンネル release、プレビュー情報は埋め込まない）
-          # それ以外 = プレビュー版（PR番号/SHA/日時を AssemblyMetadata に注入）
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            CHANNEL="release"
-          else
-            CHANNEL="preview"
-          fi
-          dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish \
-            /p:Version=${{ steps.get_version.outputs.VERSION }} \
-            /p:BuildChannel=${CHANNEL} \
-            /p:BuildPr=${{ steps.build_meta.outputs.PR }} \
-            /p:BuildCommit=${{ steps.build_meta.outputs.SHA }} \
+          # vタグ = 正式リリース版（channel=release）/ それ以外 = プレビュー版（channel=preview）
+          # ※ Git Bash だと MSYS のパス変換で "/p:" の先頭スラッシュが剥がれて MSBuild が失敗するため pwsh を使う
+          $channel = if ($env:GITHUB_REF -like 'refs/tags/v*') { 'release' } else { 'preview' }
+          dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish `
+            /p:Version=${{ steps.get_version.outputs.VERSION }} `
+            /p:BuildChannel=$channel `
+            /p:BuildPr=${{ steps.build_meta.outputs.PR }} `
+            /p:BuildCommit=${{ steps.build_meta.outputs.SHA }} `
             /p:BuildDate=${{ steps.build_meta.outputs.DATE }}
 
       - name: Install Inno Setup
