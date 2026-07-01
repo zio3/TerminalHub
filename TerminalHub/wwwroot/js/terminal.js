@@ -361,7 +361,10 @@ window.terminalFunctions = {
         const term = new Terminal({
             cursorBlink: true,
             fontSize: terminalFontSize,
-            fontFamily: 'Consolas, monospace',
+            // 合成フォント 'TermMix'（app.css の @font-face 参照）。ASCII・罫線は Consolas のまま、
+            // 囲み数字（①②③ 等）の範囲だけ等幅日本語フォントへ差し替えて読みやすくする。
+            // 末尾はフォント未解決時の保険（Consolas → monospace）。
+            fontFamily: "TermMix, 'Cascadia Mono', Consolas, monospace",
             scrollback: 10000,
             scrollOnInput: true,
             scrollOnOutput: true,
