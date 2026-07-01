@@ -2270,7 +2270,17 @@
             var session = SessionManager.GetSessionInfo(settingsSessionId.Value);
             if (session != null)
             {
-                await SaveSessionToStorageAsync(session);
+                // 即時保存は編集の都度 DB 書き込みが走るため、hook 由来の保存と競合して
+                // SQLITE_BUSY 等の例外が出る可能性がある。ここで握りつぶして Circuit 切断を防ぐ
+                // （in-memory の SessionCommands は反映済みなので、次の保存機会で DB へ再反映される）。
+                try
+                {
+                    await SaveSessionToStorageAsync(session);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "専用コマンドの即時保存に失敗: {SessionId}", session.SessionId);
+                }
             }
         }
 
