@@ -62,7 +62,8 @@
                        OnSettingsSaved="OnSessionSettingsSaved"
                        OnCancel="() => showSessionSettingsDialog = false"
                        OnCreateSubSession="HandleCreateSubSessionFromSettings"
-                       OnMemoRestored="HandleMemoRestoredFromSettings" />
+                       OnMemoRestored="HandleMemoRestoredFromSettings"
+                       OnSessionCommandsChanged="OnSessionCommandsChanged" />
 <ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
                         ArchivedSessions="@GetArchivedSessions()"
                         OnRestoreSession="RestoreArchivedSession"
@@ -2257,6 +2258,25 @@
         {
             await bottomPanel.ReloadMemosForCurrentSessionAsync();
         }
+    }
+
+    // 専用コマンドの即時保存: 設定ダイアログのサブダイアログで追加/編集/削除された都度呼ばれる。
+    // 本体ダイアログの「保存」を待たず、その場で当該セッションを DB へ永続化し、
+    // クイック送信バーの表示も更新する。
+    private async Task OnSessionCommandsChanged()
+    {
+        if (settingsSessionId.HasValue)
+        {
+            var session = SessionManager.GetSessionInfo(settingsSessionId.Value);
+            if (session != null)
+            {
+                await SaveSessionToStorageAsync(session);
+            }
+        }
+
+        // クイック送信バー等の表示を更新
+        sessions = SessionManager.GetAllSessions().ToList();
+        StateHasChanged();
     }
 
     private async Task OnSessionSettingsSaved()
