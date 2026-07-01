@@ -2,6 +2,31 @@
    TerminalHub Design System
    =========================================== */
 
+/* --- ターミナル用合成フォント 'TermMix' ---
+   ASCII・記号・罫線は従来どおり Consolas を使い、囲み数字（①②③ 等）の範囲だけ
+   等幅日本語フォントへ差し替えて大きく読みやすく描く。
+   font-family は「グリフを持つ最初のフォント」を使うため、Consolas を先頭に置くだけだと
+   Consolas が囲み数字グリフ（小さい）を持っているので日本語フォントが参照されない。
+   そこで unicode-range で囲み数字の範囲のみ後勝ちで日本語フォントに上書きする。
+   日本語フォントが無い環境では local() が空振りして Consolas にフォールバックする。 */
+@font-face {
+    font-family: 'TermMix';
+    src: local('Consolas');
+}
+@font-face {
+    font-family: 'TermMix';
+    /* 全角四角デザイン（BIZ UDGothic 等）は半角セルからはみ出して隣にかぶるため、
+       グリフ幅が細めの UI/シンボル系フォントを優先して overflow を軽減する。
+       特に ⑫ のような2桁囲み数字のかぶり対策。 */
+    src: local('Segoe UI Symbol'), local('Yu Gothic UI'), local('Meiryo UI'), local('BIZ UDGothic');
+    /* 半角セルからのはみ出し（特に ⑫ 等2桁）を size-adjust で縮めることも可能だが、
+       「小さくて読みにくいより、多少かぶっても大きく」を優先して等倍（100%）のままにする。
+       はみ出しが気になる場合は size-adjust: 85% 等を付ければ抑えられる。 */
+    /* U+2460-24FF: Enclosed Alphanumerics（①②③ ⑫ ⓪ ⑴ ⒈ ⓐ）
+       U+3200-32FF: Enclosed CJK Letters and Months（㉑〜 ㊙ ㈱ 等） */
+    unicode-range: U+2460-24FF, U+3200-32FF;
+}
+
 /* --- カスタムカラーパレット（ライトテーマ） --- */
 :root {
     /* アクセントカラー */
