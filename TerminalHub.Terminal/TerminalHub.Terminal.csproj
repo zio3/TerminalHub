@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ターミナル状態モデル（VTエミュレータ）用の純粋クラスライブラリ。
+       WinForms / ConPTY / Web に依存させず、ヘッドレスで高速にテストできるようにする。
+       将来ここに VTパーサ・グリッド・ANSIシリアライザを実装する（B2 自作エミュレータ）。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TerminalHub.Terminal</RootNamespace>
+  </PropertyGroup>
+
+</Project>

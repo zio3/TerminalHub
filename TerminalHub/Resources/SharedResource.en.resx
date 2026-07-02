@@ -233,6 +233,8 @@
   <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>Developer tools</value></data>
   <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>Enable developer tools</value></data>
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs appear in the input panel.</value></data>
+  <data name="Settings.Special.CaptureRawStream.Enable" xml:space="preserve"><value>Capture raw stream (developer)</value></data>
+  <data name="Settings.Special.CaptureRawStream.Help" xml:space="preserve"><value>Records raw terminal output to %LOCALAPPDATA%\TerminalHub\captures\ (for VT emulator verification). Turn it back off after reproducing.</value></data>
   <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>Log files</value></data>
   <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>Open log folder</value></data>
   <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>

@@ -29,6 +29,7 @@
 @inject IHookNotificationService HookNotificationService
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
+@inject IRawStreamCaptureService RawStreamCapture
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -1087,6 +1088,12 @@
 
             var isActive = activeSessionId == sessionId;
 
+            // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
+            if (RawStreamCapture.Enabled)
+            {
+                RawStreamCapture.Capture(sessionId, data);
+            }
+
             // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
             sessionInfo.AppendToTerminalBuffer(data);
 
@@ -1517,27 +1524,13 @@
                     return;
                 }
 
-                // ConPTYの現在サイズと比較して差異をログ出力
-                var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (selectedSession?.ConPtySession != null)
-                {
-                    var prevCols = selectedSession.ConPtySession.Cols;
-                    var prevRows = selectedSession.ConPtySession.Rows;
-                    if (prevCols != cols || prevRows != rows)
-                    {
-                        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
-                            prevCols, prevRows, cols, rows, shortId);
-                    }
-                }
-
-                // ConPtyにリサイズを通知
-                activeSession.Resize(cols, rows);
-
-                // ConPtySessionもリサイズを通知
-                if (selectedSession?.ConPtySession != null)
-                {
-                    selectedSession.ConPtySession.Resize(cols, rows);
-                }
+                // ConPTY リサイズは【即時】適用する（デバウンス禁止）。
+                // Claude Code はストリーミング中、更新のたびに全画面を ESC[H から再描画する。
+                // フレームはサイズが一致していれば上書きで無害だが、「xterm の行数 < CLI が信じる行数」の
+                // 期間はフレーム下端があふれ、上端行がフレームごとにスクロールバックへ漏れて多重化する
+                // （実キャプチャで確認: デバウンスするとドラッグ中ずっと不一致が続き、漏れが蓄積した）。
+                // ミスマッチ時間を最小化するため即時適用。同サイズは ConPtySession.Resize 側でガード済み。
+                ApplyConPtyResize(guid, cols, rows, shortId);
             }
             else if (guid != activeSessionId)
             {
@@ -1547,6 +1540,108 @@
                         cols, rows, source, shortId);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// ConPTY へのリサイズを即時適用する。
+    /// Claude Code 等の TUI はリサイズ(WINCH)や更新のたびに ESC[H アンカーで全画面を再描画するため、
+    /// サイズさえ一致していれば再描画は上書きで無害。逆にサイズ不一致の期間があると
+    /// フレーム下端があふれて上端行がスクロールバックへ漏れるため、不一致時間の最小化が最重要。
+    /// </summary>
+    private void ApplyConPtyResize(Guid guid, int cols, int rows, string shortId)
+    {
+        if (activeSession == null)
+        {
+            return;
+        }
+
+        // 同サイズなら何もしない（ConPtySession.Resize 側にもガードあり）
+        if (activeSession.Cols == cols && activeSession.Rows == rows)
+        {
+            return;
+        }
+
+        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
+            activeSession.Cols, activeSession.Rows, cols, rows, shortId);
+
+        var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
+
+        bool rowsGrew = rows > activeSession.Rows;
+
+        // 状態バッファ（エミュレータ方式）のグリッドサイズも同時に追随させる。
+        // グリッドと ConPTY の行数が常に一致していれば、TUI の全画面再描画フレームは
+        // グリッド上でも正確に上書きとして畳まれ、スクロールバックは汚れない
+        selectedSession?.ResizeTerminalBuffer(cols, rows);
+
+        // ConPtyにリサイズを通知（activeSession と selectedSession.ConPtySession は同一インスタンス。
+        // 以前は両方に Resize を呼んでいたため ResizePseudoConsole が2回走り多重化の原因になっていた）
+        activeSession.Resize(cols, rows);
+
+        // 行数「増加」時は xterm をエミュレータ状態から再同期する（デバウンス付き）。
+        // conhost は行数増加でスクロール履歴から行を引き戻してビューポートに含め、TUI の
+        // 再描画フレームにもその行が現れるが、xterm.js はスクロールバックから同じ行を
+        // 取り除かないため、境界の行がスクロールバックとビューポートに二重に残る
+        // （従来からの「リサイズで二重化」の正体）。エミュレータのグリッドは conhost と
+        // 同じ引き戻し規則で管理しているので、その確定状態で xterm を作り直せば解消する。
+        if (rowsGrew)
+        {
+            _ = ScheduleEmulatorResyncAsync(guid);
+        }
+    }
+
+    // 行数増加後の xterm 再同期のデバウンス制御（ドラッグ完了後に1回だけ実行）
+    private CancellationTokenSource? _emulatorResyncCts;
+    private const int EmulatorResyncDebounceMs = 400;
+
+    /// <summary>
+    /// xterm をフルリセット（RIS: 画面＋スクロールバック消去）し、エミュレータの確定状態を
+    /// 書き戻して再同期する。リセットと再生を1回の書き込みに連結し、順序を原子的に保証する。
+    /// </summary>
+    private async Task ScheduleEmulatorResyncAsync(Guid guid)
+    {
+        var previousCts = _emulatorResyncCts;
+        previousCts?.Cancel();
+        previousCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _emulatorResyncCts = cts;
+
+        try
+        {
+            await Task.Delay(EmulatorResyncDebounceMs, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // より新しい再同期要求に置き換えられた
+        }
+
+        if (cts.IsCancellationRequested || _skipConPtyResize || guid != activeSessionId || activeTerminal == null)
+        {
+            return;
+        }
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        if (session == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var replay = session.GetTerminalBuffer();
+            // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット
+            await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc" + replay);
+            Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字 session={SessionId}",
+                replay.Length, guid.ToString().Substring(0, 8));
+        }
+        catch (JSDisconnectedException)
+        {
+            // 回線切断時は何もしない
+        }
+        catch (Exception ex)
+        {
+            // fire-and-forget 呼び出しのため、未観測例外にしない（circuit 破棄後の ObjectDisposedException 等）
+            Logger.LogDebug(ex, "[Resize] エミュレータ再同期をスキップ: session={SessionId}", guid);
         }
     }
 
@@ -2377,10 +2472,11 @@
                 ConPtyConnection.SubscribeToSession(sessionId, newSession);
                                 // セッションを起動
                 newSession.Start();
-                newSession.Resize(
-                    Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols),
-                    Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows)
-                );
+                var defaultCols = Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var defaultRows = Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                // 状態バッファ → ConPTY の順（ITerminalStateBuffer.Resize の規約どおり）
+                sessionInfo.ResizeTerminalBuffer(defaultCols, defaultRows);
+                newSession.Resize(defaultCols, defaultRows);
                 
                 // セッション一覧を更新（最新のConPtySession参照を含む）
                 sessions = SessionManager.GetAllSessions().ToList();
@@ -2478,6 +2574,11 @@
 
     public async ValueTask DisposeAsync()
     {
+        // 保留中のエミュレータ再同期をキャンセル
+        _emulatorResyncCts?.Cancel();
+        _emulatorResyncCts?.Dispose();
+        _emulatorResyncCts = null;
+
         // ConPtyConnectionServiceのイベントハンドラーを削除
         if (_dataReceivedHandler != null)
         {
