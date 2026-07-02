@@ -168,6 +168,15 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool UsesEmulatedTerminalBuffer => _terminalBuffer is TerminalHub.Terminal.EmulatedStateBuffer;
 
+        /// <summary>
+        /// ConPTY リサイズ直後の再送待ちフラグ。true の間に届いた次の出力チャンクの先頭に
+        /// 画面消去(ESC[2J ESC[H)を前置してから xterm/状態バッファへ流す（ProcessReceivedData が消費）。
+        /// C# から別書き込みで消去するとレースで再送が先に届くことがあるため、
+        /// 消去と再送を同一チャンクに連結して順序を原子的に保証する。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public volatile bool PendingResizeRepaint;
+
         public string GetTerminalBuffer()
         {
             return _terminalBuffer.SerializeForReplay();

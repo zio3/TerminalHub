@@ -1088,14 +1088,24 @@
 
             var isActive = activeSessionId == sessionId;
 
-            // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
-            sessionInfo.AppendToTerminalBuffer(data);
-
             // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
+            // ※ 下の画面消去前置より先に行い、ConPTY の生出力のみを記録する
             if (RawStreamCapture.Enabled)
             {
                 RawStreamCapture.Capture(sessionId, data);
             }
+
+            // ConPTY リサイズ直後の再送（CRLFスクロール型）には画面消去を前置する。
+            // 同一チャンクに連結することで「消去→再送」の順序を原子的に保証し、
+            // 消去が間に合わず再送が旧画面を押し出す（スクロールバック多重化）レースを防ぐ
+            if (sessionInfo.PendingResizeRepaint)
+            {
+                sessionInfo.PendingResizeRepaint = false;
+                data = "\x1b[2J\x1b[H" + data;
+            }
+
+            // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
+            sessionInfo.AppendToTerminalBuffer(data);
 
             // Claude Codeの場合、"No conversation found to continue"エラーをチェック
             // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
@@ -1587,19 +1597,13 @@
 
         // エミュレータ方式: 「画面を捨てて再送で埋め直す」
         //   1. 状態バッファの画面を破棄（スクロールバックは保持。行数増減分の調整も内部で行う）
-        //   2. ライブ xterm の画面も消去（ESC[2J はスクロールバックに残らない）
+        //   2. 再送待ちフラグを立てる → 次に届く出力チャンクの先頭に画面消去(2J)が前置される
+        //      （ProcessReceivedData で同一チャンクに連結し、消去→再送の順序を原子的に保証）
         //   3. その後 ConPTY をリサイズ（1回だけ）→ 再送が空画面を埋め直す
         selectedSession?.ResizeTerminalBuffer(cols, rows);
-        if (selectedSession?.UsesEmulatedTerminalBuffer == true && activeTerminal != null)
+        if (selectedSession?.UsesEmulatedTerminalBuffer == true)
         {
-            try
-            {
-                await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1b[2J\x1b[H");
-            }
-            catch (JSDisconnectedException)
-            {
-                return; // 回線切断時は適用しない
-            }
+            selectedSession.PendingResizeRepaint = true;
         }
 
         // ConPtyにリサイズを通知（activeSession と selectedSession.ConPtySession は同一インスタンス。
