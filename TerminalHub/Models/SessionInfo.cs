@@ -19,7 +19,9 @@ namespace TerminalHub.Models
         TextInput,
         CommandPrompt,
         PowerShell,
-        Memo
+        Memo,
+        /// <summary>ゲームパッド（D-pad）: カーソル/Tab/Esc/Enter をアクティブセッションへ生キー送信</summary>
+        Gamepad
     }
 
     public class BottomPanelTabInfo

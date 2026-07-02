@@ -539,7 +539,6 @@
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>履歴</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
-  <data name="TextInput.Dpad.Toggle" xml:space="preserve"><value>カーソルパッド（矢印 / Esc / Enter）</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
 
   <!-- BottomPanels: MemoPanel -->
@@ -550,12 +549,14 @@
   <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>コマンドプロンプトを追加</value></data>
   <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>PowerShell を追加</value></data>
   <data name="BottomPanel.AddMemo" xml:space="preserve"><value>メモを追加</value></data>
+  <data name="BottomPanel.AddGamepad" xml:space="preserve"><value>ゲームパッドを追加</value></data>
   <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>テキスト入力</value></data>
   <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>テキスト入力({0})</value></data>
   <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>コマンドプロンプト({0})</value></data>
   <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell({0})</value></data>
   <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>タブ({0})</value></data>
   <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>メモ({0})</value></data>
+  <data name="BottomPanel.Tab.Gamepad" xml:space="preserve"><value>ゲームパッド</value></data>
 
   <!-- Root page -->
   <data name="Root.NoSessionSelected" xml:space="preserve"><value>左側からセッションを選択してください</value></data>

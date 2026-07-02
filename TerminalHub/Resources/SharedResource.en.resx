@@ -539,7 +539,6 @@
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>History</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>Voice input (hold to record)</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>Send</value></data>
-  <data name="TextInput.Dpad.Toggle" xml:space="preserve"><value>Cursor pad (arrows / Esc / Enter)</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>Mode switch ({0})</value></data>
 
   <!-- BottomPanels: MemoPanel -->
@@ -550,12 +549,14 @@
   <data name="BottomPanel.AddCommandPrompt" xml:space="preserve"><value>Add Command Prompt</value></data>
   <data name="BottomPanel.AddPowerShell" xml:space="preserve"><value>Add PowerShell</value></data>
   <data name="BottomPanel.AddMemo" xml:space="preserve"><value>Add Memo</value></data>
+  <data name="BottomPanel.AddGamepad" xml:space="preserve"><value>Add Gamepad</value></data>
   <data name="BottomPanel.Tab.TextInputDefault" xml:space="preserve"><value>Text input</value></data>
   <data name="BottomPanel.Tab.TextInputFormat" xml:space="preserve"><value>Text input ({0})</value></data>
   <data name="BottomPanel.Tab.CommandPromptFormat" xml:space="preserve"><value>Command Prompt ({0})</value></data>
   <data name="BottomPanel.Tab.PowerShellFormat" xml:space="preserve"><value>PowerShell ({0})</value></data>
   <data name="BottomPanel.Tab.GenericFormat" xml:space="preserve"><value>Tab ({0})</value></data>
   <data name="BottomPanel.Tab.MemoFormat" xml:space="preserve"><value>Memo ({0})</value></data>
+  <data name="BottomPanel.Tab.Gamepad" xml:space="preserve"><value>Gamepad</value></data>
 
   <!-- Root page -->
   <data name="Root.NoSessionSelected" xml:space="preserve"><value>Select a session from the left sidebar</value></data>
