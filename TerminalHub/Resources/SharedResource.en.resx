@@ -537,6 +537,7 @@
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>History</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>Voice input (hold to record)</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>Send</value></data>
+  <data name="TextInput.Dpad.Toggle" xml:space="preserve"><value>Cursor pad (arrows / Esc / Enter)</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>Mode switch ({0})</value></data>
 
   <!-- BottomPanels: MemoPanel -->
