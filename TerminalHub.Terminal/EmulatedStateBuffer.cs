@@ -12,6 +12,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
     private readonly TerminalGrid _grid;
     private readonly VtParser _parser;
     private readonly object _lock = new();
+    private bool _hasData;
 
     public EmulatedStateBuffer(int cols = 120, int rows = 30)
     {
@@ -30,6 +31,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         }
         lock (_lock)
         {
+            _hasData = true;
             _parser.Feed(data);
         }
     }
@@ -47,6 +49,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         lock (_lock)
         {
             _grid.Reset();
+            _hasData = false;
         }
     }
 
@@ -64,7 +67,12 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         {
             lock (_lock)
             {
-                // 目安: スクロールバック行数 × 列数 ＋ 画面分
+                // 何も受信していなければ 0（UI のダウンロードボタン無効化判定に使われる）。
+                // 受信済みなら保持量の目安（スクロールバック行数 × 列数 ＋ 画面分）を返す
+                if (!_hasData)
+                {
+                    return 0;
+                }
                 return (_grid.Scrollback.Count + _grid.Screen.Count) * _grid.Cols;
             }
         }
