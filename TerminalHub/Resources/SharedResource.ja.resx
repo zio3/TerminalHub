@@ -539,6 +539,7 @@
   <data name="TextInput.KeyHints.History" xml:space="preserve"><value>履歴</value></data>
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
+  <data name="TextInput.Dpad.Toggle" xml:space="preserve"><value>カーソルパッド（矢印 / Esc / Enter）</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
 
   <!-- BottomPanels: MemoPanel -->
