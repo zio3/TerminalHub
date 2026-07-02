@@ -71,8 +71,8 @@
             </li>
             <li>
                 <button class="dropdown-item" type="button"
-                   @onclick="AddGamepadTab">
-                    <i class="bi bi-controller me-2"></i>@L["BottomPanel.AddGamepad"]
+                   @onclick="AddCursorPadTab">
+                    <i class="bi bi-controller me-2"></i>@L["BottomPanel.AddCursorPad"]
                 </button>
             </li>
         </ul>
@@ -115,9 +115,9 @@
                        Body="@GetMemoBody(memoId)"
                        BodyChanged="@(body => OnMemoBodyChanged(memoId, body))" />
         }
-        else if (tab.Type == BottomPanelTabType.Gamepad)
+        else if (tab.Type == BottomPanelTabType.CursorPad)
         {
-            <GamepadPanel OnSendCustomKey="OnSendCustomKey" />
+            <CursorPadPanel OnSendCustomKey="OnSendCustomKey" />
         }
     </div>
 }
@@ -266,10 +266,10 @@
         StateHasChanged();
     }
 
-    private void AddGamepadTab()
+    private void AddCursorPadTab()
     {
-        // ゲームパッドは複数あっても意味がないので、既存タブがあればそれを選択するだけ
-        var existing = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.Gamepad);
+        // カーソルパッドは複数あっても意味がないので、既存タブがあればそれを選択するだけ
+        var existing = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.CursorPad);
         if (existing != null)
         {
             ActiveTabId = existing.Id;
@@ -280,8 +280,8 @@
         var newTab = new BottomPanelTabInfo
         {
             Id = Guid.NewGuid().ToString(),
-            Type = BottomPanelTabType.Gamepad,
-            DisplayName = L["BottomPanel.Tab.Gamepad"],
+            Type = BottomPanelTabType.CursorPad,
+            DisplayName = L["BottomPanel.Tab.CursorPad"],
             IsDefault = false
         };
         Tabs.Add(newTab);
@@ -377,7 +377,7 @@
             BottomPanelTabType.TextInput => "bi-chat-left-text",
             BottomPanelTabType.PowerShell => "bi-terminal-fill",
             BottomPanelTabType.Memo => "bi-journal-text",
-            BottomPanelTabType.Gamepad => "bi-controller",
+            BottomPanelTabType.CursorPad => "bi-controller",
             _ => "bi-terminal"
         };
     }

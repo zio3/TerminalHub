@@ -713,9 +713,9 @@ h1:focus {
     }
 }
 
-/* ===== ゲームパッド（D-pad）タブ =====
+/* ===== カーソルパッド（D-pad）タブ =====
    左＝十字カーソル（3×3 グリッド、中央は空）、右＝[Tab][Esc][Enter]。
-   ＋メニューから追加する独立タブ（GamepadPanel.razor）として表示する。
+   ＋メニューから追加する独立タブ（CursorPadPanel.razor）として表示する。
    各ボタンは btn/btn-secondary/btn-primary を併用してテーマ色に追従させる。 */
 .dpad-bar {
     display: flex;
@@ -726,7 +726,7 @@ h1:focus {
 
 /* タブ内表示用: 中央寄せ＋左右ブロックの間隔を広めに。
    幅が足りない端末（縦持ちスマホ等）では折り返して縦積みになる */
-.gamepad-panel-bar {
+.cursor-pad-bar {
     justify-content: center;
     gap: 1.5rem 2.5rem;
     flex-wrap: wrap;
