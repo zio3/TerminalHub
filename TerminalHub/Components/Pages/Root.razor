@@ -1524,39 +1524,11 @@
                     return;
                 }
 
-                // ConPTYの現在サイズと比較して差異をログ出力
-                var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
-                if (selectedSession?.ConPtySession != null)
-                {
-                    var prevCols = selectedSession.ConPtySession.Cols;
-                    var prevRows = selectedSession.ConPtySession.Rows;
-                    if (prevCols != cols || prevRows != rows)
-                    {
-                        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
-                            prevCols, prevRows, cols, rows, shortId);
-                    }
-                }
-
-                // ConPTY はリサイズ直後にビューポート全体を「通常のスクロール出力」として再送してくるため、
-                // そのままだとライブ画面もスクロールバックも直前の画面分が二重化する。
-                // エミュレータ方式では「画面を捨てて再送で埋め直す」方針を取る:
-                //   1. 状態バッファの画面を破棄（スクロールバックは保持）— 必ず ConPTY Resize より先に
-                //   2. ライブ xterm の画面も消去（ESC[2J はスクロールバックに残らない）
-                //   3. その後 ConPTY をリサイズ → 再送が空画面を埋め直す
-                selectedSession?.ResizeTerminalBuffer(cols, rows);
-                if (selectedSession?.UsesEmulatedTerminalBuffer == true && activeTerminal != null)
-                {
-                    await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1b[2J\x1b[H");
-                }
-
-                // ConPtyにリサイズを通知
-                activeSession.Resize(cols, rows);
-
-                // ConPtySessionもリサイズを通知
-                if (selectedSession?.ConPtySession != null)
-                {
-                    selectedSession.ConPtySession.Resize(cols, rows);
-                }
+                // ConPTY リサイズはデバウンスして「ドラッグ完了後に1回」だけ適用する。
+                // ConPTY はリサイズごとにビューポート全体を「通常のスクロール出力」として再送してくるため、
+                // ドラッグ中に20回発火すると再送も20回になり、再送同士が押し出し合って
+                // ライブ画面・スクロールバックの両方が多重化する（実キャプチャで確認済み）。
+                await DebouncedConPtyResizeAsync(guid, cols, rows, shortId);
             }
             else if (guid != activeSessionId)
             {
@@ -1566,6 +1538,78 @@
                         cols, rows, source, shortId);
                 }
             }
+        }
+    }
+
+    // ConPTY リサイズのデバウンス制御（連続リサイズ中は最後の1回だけ適用）
+    private CancellationTokenSource? _conPtyResizeDebounceCts;
+    private const int ConPtyResizeDebounceMs = 250;
+
+    /// <summary>
+    /// ConPTY へのリサイズ適用をデバウンスする。ドラッグ等で連続発火した場合、
+    /// 最後のイベントから一定時間待ってから1回だけ適用する（ConPTY の再送を1回に抑える）。
+    /// エミュレータ方式では適用直前に「状態バッファの画面破棄＋ライブ xterm の画面消去」を行い、
+    /// 直後の再送で埋め直させる（スクロールバックは保持されるため二重化しない）。
+    /// </summary>
+    private async Task DebouncedConPtyResizeAsync(Guid guid, int cols, int rows, string shortId)
+    {
+        _conPtyResizeDebounceCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _conPtyResizeDebounceCts = cts;
+
+        try
+        {
+            await Task.Delay(ConPtyResizeDebounceMs, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // より新しいリサイズイベントに置き換えられた
+        }
+
+        // 待機中に状況が変わっていたら適用しない
+        if (cts.IsCancellationRequested || _skipConPtyResize || guid != activeSessionId || activeSession == null)
+        {
+            return;
+        }
+
+        var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
+
+        // ConPTYの現在サイズと比較して差異をログ出力
+        if (selectedSession?.ConPtySession != null)
+        {
+            var prevCols = selectedSession.ConPtySession.Cols;
+            var prevRows = selectedSession.ConPtySession.Rows;
+            if (prevCols != cols || prevRows != rows)
+            {
+                Logger.LogInformation("[Resize] ConPTY適用(debounced): {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
+                    prevCols, prevRows, cols, rows, shortId);
+            }
+        }
+
+        // エミュレータ方式: 「画面を捨てて再送で埋め直す」
+        //   1. 状態バッファの画面を破棄（スクロールバックは保持。行数増減分の調整も内部で行う）
+        //   2. ライブ xterm の画面も消去（ESC[2J はスクロールバックに残らない）
+        //   3. その後 ConPTY をリサイズ → 再送が空画面を埋め直す
+        selectedSession?.ResizeTerminalBuffer(cols, rows);
+        if (selectedSession?.UsesEmulatedTerminalBuffer == true && activeTerminal != null)
+        {
+            try
+            {
+                await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1b[2J\x1b[H");
+            }
+            catch (JSDisconnectedException)
+            {
+                return; // 回線切断時は適用しない
+            }
+        }
+
+        // ConPtyにリサイズを通知
+        activeSession.Resize(cols, rows);
+
+        // ConPtySessionもリサイズを通知
+        if (selectedSession?.ConPtySession != null)
+        {
+            selectedSession.ConPtySession.Resize(cols, rows);
         }
     }
 

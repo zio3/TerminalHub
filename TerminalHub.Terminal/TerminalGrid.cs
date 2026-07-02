@@ -477,6 +477,44 @@ public sealed class TerminalGrid
             return;
         }
 
+        if (!IsAltScreen)
+        {
+            if (rows > Rows)
+            {
+                // 行数増加: ConPTY は履歴から (増分) 行を引き戻して再送に含める
+                // （実キャプチャで確認: 64→71行のとき境界上の行が再送に再登場する）。
+                // 二重化しないよう、その分をスクロールバック末尾から取り除く。
+                int pull = Math.Min(rows - Rows, _scrollback.Count);
+                if (pull > 0)
+                {
+                    _scrollback.RemoveRange(_scrollback.Count - pull, pull);
+                }
+            }
+            else if (rows < Rows)
+            {
+                // 行数減少: 画面内容が新サイズに収まらない場合、ConPTY は上端行を履歴へ
+                // 押し出し、再送は新ビューポート分のみ。押し出される行はここで退避する。
+                int lastContentRow = -1;
+                for (int r = _screen.Count - 1; r >= 0; r--)
+                {
+                    if (RowHasContent(_screen[r]))
+                    {
+                        lastContentRow = r;
+                        break;
+                    }
+                }
+                int overflow = Math.Max(0, (lastContentRow + 1) - rows);
+                for (int r = 0; r < overflow; r++)
+                {
+                    _scrollback.Add(_screen[r]);
+                    if (_scrollback.Count > MaxScrollback)
+                    {
+                        _scrollback.RemoveAt(0);
+                    }
+                }
+            }
+        }
+
         Cols = cols;
         Rows = rows;
         _screen = CreateBlankScreen(rows, cols);
@@ -493,6 +531,18 @@ public sealed class TerminalGrid
         _savedRow = 0;
         _savedCol = 0;
         _pendingWrap = false;
+    }
+
+    private static bool RowHasContent(Cell[] row)
+    {
+        for (int c = 0; c < row.Length; c++)
+        {
+            if (row[c].Text != null)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- リセット ----

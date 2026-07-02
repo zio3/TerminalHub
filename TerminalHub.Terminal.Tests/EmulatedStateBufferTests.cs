@@ -128,20 +128,57 @@ public class EmulatedStateBufferTests
         Assert.Equal(1, CountOccurrences(replay, "V3"));
     }
 
-    /// <summary>Resize してもスクロールバック（画面から流れ出た過去行）は保持される。</summary>
+    /// <summary>
+    /// 行数増加時、ConPTY は履歴から増分行を引き戻して再送に含める（実キャプチャで確認済み）。
+    /// エミュレータはその分をスクロールバック末尾から抜くので、再送を受けても二重化しない。
+    /// </summary>
     [Fact]
-    public void Resize_preserves_scrollback()
+    public void Resize_grow_pulls_back_scrollback_and_resend_does_not_duplicate()
     {
         var buf = Create(cols: 40, rows: 3);
         buf.Append("H1\r\nH2\r\nH3\r\nH4\r\nH5"); // H1,H2 はスクロールバックへ
-        buf.Resize(60, 5);
-        buf.Append("H3\r\nH4\r\nH5"); // ConPTY 再送（ビューポート分のみ）
+        buf.Resize(60, 5);                        // 3→5行: H1,H2 が再送に含まれる前提で引き戻し
+        buf.Append("H1\r\nH2\r\nH3\r\nH4\r\nH5"); // ConPTY 再送（新ビューポート5行分）
 
         var replay = buf.SerializeForReplay();
-        Assert.Equal(1, CountOccurrences(replay, "H1")); // 過去行は残る
-        Assert.Equal(1, CountOccurrences(replay, "H2"));
-        Assert.Equal(1, CountOccurrences(replay, "H3")); // 再送分も1回だけ
-        Assert.Equal(1, CountOccurrences(replay, "H5"));
+        foreach (var line in new[] { "H1", "H2", "H3", "H4", "H5" })
+        {
+            Assert.Equal(1, CountOccurrences(replay, line));
+        }
+    }
+
+    /// <summary>
+    /// 行数減少時、収まらない上端行はスクロールバックへ退避され（ConPTY 側も履歴へ押し出す）、
+    /// 再送は新ビューポート分のみ。全行が1回ずつ残る。
+    /// </summary>
+    [Fact]
+    public void Resize_shrink_archives_overflow_rows()
+    {
+        var buf = Create(cols: 40, rows: 5);
+        buf.Append("L1\r\nL2\r\nL3\r\nL4\r\nL5"); // 画面満杯
+        buf.Resize(40, 3);                        // 5→3行: L1,L2 を退避
+        buf.Append("L3\r\nL4\r\nL5");             // ConPTY 再送（新ビューポート3行分）
+
+        var replay = buf.SerializeForReplay();
+        foreach (var line in new[] { "L1", "L2", "L3", "L4", "L5" })
+        {
+            Assert.Equal(1, CountOccurrences(replay, line));
+        }
+    }
+
+    /// <summary>行数減少でも画面内容が新サイズに収まるなら何も退避しない（空行ノイズを作らない）。</summary>
+    [Fact]
+    public void Resize_shrink_with_fitting_content_archives_nothing()
+    {
+        var buf = Create(cols: 40, rows: 5);
+        buf.Append("only1\r\nonly2"); // 2行だけ
+        buf.Resize(40, 3);
+        buf.Append("only1\r\nonly2"); // 再送
+
+        var replay = buf.SerializeForReplay();
+        Assert.Equal(1, CountOccurrences(replay, "only1"));
+        Assert.Equal(1, CountOccurrences(replay, "only2"));
+        Assert.Empty(buf.Grid.Scrollback);
     }
 
     /// <summary>同一サイズの Resize は何もしない（画面は破棄されない）。</summary>
