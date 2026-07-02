@@ -155,9 +155,28 @@ namespace TerminalHub.Models
         private readonly TerminalHub.Terminal.ITerminalStateBuffer _terminalBuffer
             = TerminalHub.Terminal.TerminalStateBufferFactory.Create();
 
-        public void AppendToTerminalBuffer(string data)
+        /// <summary>
+        /// 出力チャンクをバッファへ取り込む。進行中のリプレイキャプチャに取り込まれた場合 true を返し、
+        /// そのとき呼び出し側は xterm へ直接書き込んではならない（テール書き込みで届くため二重になる）。
+        /// </summary>
+        public bool AppendToTerminalBuffer(string data)
         {
-            _terminalBuffer.Append(data);
+            return _terminalBuffer.Append(data);
+        }
+
+        /// <summary>
+        /// リプレイをアトミックに開始する（スナップショット生成＋以降のライブ出力のテール記録開始）。
+        /// 書き込み完了後は必ず <see cref="EndTerminalBufferReplay"/> を呼ぶこと。
+        /// </summary>
+        public TerminalHub.Terminal.ReplaySnapshot BeginTerminalBufferReplay()
+        {
+            return _terminalBuffer.BeginReplay();
+        }
+
+        /// <summary>テール記録を終了し、スナップショット以降に届いた出力を順序どおり返す。</summary>
+        public string EndTerminalBufferReplay(TerminalHub.Terminal.ReplaySnapshot snapshot)
+        {
+            return _terminalBuffer.EndReplay(snapshot);
         }
 
         /// <summary>端末サイズ変更をバッファへ通知する。</summary>

@@ -15,6 +15,7 @@ public sealed class RawStreamStateBuffer : ITerminalStateBuffer
 {
     private readonly StringBuilder _buffer = new();
     private readonly object _lock = new();
+    private readonly List<ReplaySnapshot> _activeReplays = new();
     private readonly int _maxSize;
 
     /// <summary>既定の上限サイズ（文字数）。従来の SessionInfo 実装と同じ 2MB 相当。</summary>
@@ -25,11 +26,11 @@ public sealed class RawStreamStateBuffer : ITerminalStateBuffer
         _maxSize = maxSize;
     }
 
-    public void Append(string data)
+    public bool Append(string data)
     {
         if (string.IsNullOrEmpty(data))
         {
-            return;
+            return false;
         }
 
         lock (_lock)
@@ -48,6 +49,35 @@ public sealed class RawStreamStateBuffer : ITerminalStateBuffer
                 }
             }
             _buffer.Append(data);
+
+            if (_activeReplays.Count == 0)
+            {
+                return false;
+            }
+            foreach (var replay in _activeReplays)
+            {
+                replay.Tail.Append(data);
+            }
+            return true;
+        }
+    }
+
+    public ReplaySnapshot BeginReplay()
+    {
+        lock (_lock)
+        {
+            var snapshot = new ReplaySnapshot(_buffer.ToString());
+            _activeReplays.Add(snapshot);
+            return snapshot;
+        }
+    }
+
+    public string EndReplay(ReplaySnapshot snapshot)
+    {
+        lock (_lock)
+        {
+            _activeReplays.Remove(snapshot);
+            return snapshot.Tail.ToString();
         }
     }
 
