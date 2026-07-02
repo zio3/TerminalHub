@@ -1600,7 +1600,9 @@
     /// </summary>
     private async Task ScheduleEmulatorResyncAsync(Guid guid)
     {
-        _emulatorResyncCts?.Cancel();
+        var previousCts = _emulatorResyncCts;
+        previousCts?.Cancel();
+        previousCts?.Dispose();
         var cts = new CancellationTokenSource();
         _emulatorResyncCts = cts;
 
@@ -1635,6 +1637,11 @@
         catch (JSDisconnectedException)
         {
             // 回線切断時は何もしない
+        }
+        catch (Exception ex)
+        {
+            // fire-and-forget 呼び出しのため、未観測例外にしない（circuit 破棄後の ObjectDisposedException 等）
+            Logger.LogDebug(ex, "[Resize] エミュレータ再同期をスキップ: session={SessionId}", guid);
         }
     }
 
@@ -2467,8 +2474,9 @@
                 newSession.Start();
                 var defaultCols = Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var defaultRows = Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
-                newSession.Resize(defaultCols, defaultRows);
+                // 状態バッファ → ConPTY の順（ITerminalStateBuffer.Resize の規約どおり）
                 sessionInfo.ResizeTerminalBuffer(defaultCols, defaultRows);
+                newSession.Resize(defaultCols, defaultRows);
                 
                 // セッション一覧を更新（最新のConPtySession参照を含む）
                 sessions = SessionManager.GetAllSessions().ToList();
@@ -2566,6 +2574,11 @@
 
     public async ValueTask DisposeAsync()
     {
+        // 保留中のエミュレータ再同期をキャンセル
+        _emulatorResyncCts?.Cancel();
+        _emulatorResyncCts?.Dispose();
+        _emulatorResyncCts = null;
+
         // ConPtyConnectionServiceのイベントハンドラーを削除
         if (_dataReceivedHandler != null)
         {

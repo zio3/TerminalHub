@@ -266,6 +266,18 @@ public class EmulatedStateBufferTests
         Assert.Contains("colored", replay);
     }
 
+    /// <summary>コロン形式（ITU/サブパラメータ区切り）の truecolor もフラット化して解釈できる。</summary>
+    [Fact]
+    public void Colon_form_truecolor_is_preserved_in_replay()
+    {
+        var buf = Create();
+        buf.Append("\x1b[38:2:153:99:51mcolored\x1b[m plain");
+
+        var replay = buf.SerializeForReplay();
+        Assert.Contains("38;2;153;99;51", replay); // シリアライズはセミコロン形式で出る
+        Assert.Contains("colored", replay);
+    }
+
     // ---- カーソル / 消去 ----
 
     [Fact]

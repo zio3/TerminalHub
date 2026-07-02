@@ -442,8 +442,10 @@ public sealed class VtParser
                 value = Math.Min(value * 10 + (c - '0'), 65535);
                 has = true;
             }
-            else if (c == ';')
+            else if (c == ';' || c == ':')
             {
+                // ':' はコロン形式のサブパラメータ区切り（SGR 38:2:R:G:B 等）。
+                // フラット化して ';' と同様に扱う（区切らず桁連結すると巨大値になり SGR が壊れる）
                 result.Add(has ? value : 0);
                 value = 0;
                 has = false;

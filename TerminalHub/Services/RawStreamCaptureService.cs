@@ -17,6 +17,10 @@ namespace TerminalHub.Services
         bool Enabled { get; }
         void SetEnabled(bool enabled);
         void Capture(Guid sessionId, string data);
+
+        /// <summary>セッション破棄時に該当セッションのキャプチャライターを閉じる（ハンドルリーク防止）。</summary>
+        void CloseSession(Guid sessionId);
+
         string CapturesFolder { get; }
     }
 
@@ -68,7 +72,18 @@ namespace TerminalHub.Services
 
             try
             {
-                var writer = _writers.GetOrAdd(sessionId, CreateWriter);
+                StreamWriter writer;
+                lock (_lock)
+                {
+                    // SetEnabled(false) と競合した場合に CloseAllWriters 後へライターが
+                    // 復活登録される（閉じられないハンドルが残る）のを防ぐため、
+                    // 有効判定と GetOrAdd をロック内で行う
+                    if (!_enabled)
+                    {
+                        return;
+                    }
+                    writer = _writers.GetOrAdd(sessionId, CreateWriter);
+                }
                 lock (writer)
                 {
                     writer.Write(data);
@@ -78,6 +93,26 @@ namespace TerminalHub.Services
             {
                 // キャプチャは診断目的。失敗しても本処理を止めない
                 _logger.LogWarning(ex, "生ストリームキャプチャの書き込みに失敗: {SessionId}", sessionId);
+            }
+        }
+
+        public void CloseSession(Guid sessionId)
+        {
+            if (_writers.TryRemove(sessionId, out var writer))
+            {
+                try
+                {
+                    lock (writer)
+                    {
+                        writer.Flush();
+                        writer.Dispose();
+                    }
+                    _logger.LogInformation("キャプチャライターを閉じました（セッション破棄）: {SessionId}", sessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "キャプチャライターのクローズに失敗: {SessionId}", sessionId);
+                }
             }
         }
 
