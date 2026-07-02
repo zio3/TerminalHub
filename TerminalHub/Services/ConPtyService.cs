@@ -508,6 +508,14 @@ namespace TerminalHub.Services
         {
             if (_hPC != IntPtr.Zero)
             {
+                // 同サイズなら何もしない。ConPTY は ResizePseudoConsole のたびに
+                // ビューポート全体を「通常のスクロール出力」として再送してくるため、
+                // 無駄な呼び出しは画面・スクロールバック多重化の原因になる
+                if (Cols == cols && Rows == rows)
+                {
+                    return;
+                }
+
                 Cols = cols;
                 Rows = rows;
                 var size = new COORD { X = (short)cols, Y = (short)rows };

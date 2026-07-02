@@ -1574,22 +1574,21 @@
 
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
 
-        // ConPTYの現在サイズと比較して差異をログ出力
-        if (selectedSession?.ConPtySession != null)
+        // ConPTY のサイズが変わらないなら何もしない。
+        // ConPTY は同サイズでは再送しない（ConPtySession.Resize 側もガード済み）ため、
+        // ここで画面破棄・消去をすると再送で埋め直されず空画面になってしまう
+        if (activeSession.Cols == cols && activeSession.Rows == rows)
         {
-            var prevCols = selectedSession.ConPtySession.Cols;
-            var prevRows = selectedSession.ConPtySession.Rows;
-            if (prevCols != cols || prevRows != rows)
-            {
-                Logger.LogInformation("[Resize] ConPTY適用(debounced): {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
-                    prevCols, prevRows, cols, rows, shortId);
-            }
+            return;
         }
+
+        Logger.LogInformation("[Resize] ConPTY適用(debounced): {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
+            activeSession.Cols, activeSession.Rows, cols, rows, shortId);
 
         // エミュレータ方式: 「画面を捨てて再送で埋め直す」
         //   1. 状態バッファの画面を破棄（スクロールバックは保持。行数増減分の調整も内部で行う）
         //   2. ライブ xterm の画面も消去（ESC[2J はスクロールバックに残らない）
-        //   3. その後 ConPTY をリサイズ → 再送が空画面を埋め直す
+        //   3. その後 ConPTY をリサイズ（1回だけ）→ 再送が空画面を埋め直す
         selectedSession?.ResizeTerminalBuffer(cols, rows);
         if (selectedSession?.UsesEmulatedTerminalBuffer == true && activeTerminal != null)
         {
@@ -1603,14 +1602,10 @@
             }
         }
 
-        // ConPtyにリサイズを通知
+        // ConPtyにリサイズを通知（activeSession と selectedSession.ConPtySession は同一インスタンス。
+        // 以前は両方に Resize を呼んでいたため ResizePseudoConsole が2回走り、
+        // 2回目の再送が1回目の再送内容をスクロールバックへ押し出して多重化していた）
         activeSession.Resize(cols, rows);
-
-        // ConPtySessionもリサイズを通知
-        if (selectedSession?.ConPtySession != null)
-        {
-            selectedSession.ConPtySession.Resize(cols, rows);
-        }
     }
 
     /// <summary>
