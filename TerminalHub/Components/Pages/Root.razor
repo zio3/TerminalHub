@@ -1078,7 +1078,7 @@
         activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, terminalDotNetRef, terminalFontSize);
     }
 
-    private async Task ProcessReceivedData(Guid sessionId, string data)
+    private async Task ProcessReceivedData(Guid sessionId, string data, bool capturedByReplay)
     {
         try
         {
@@ -1097,16 +1097,12 @@
 
             var isActive = activeSessionId == sessionId;
 
-            // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
-            if (RawStreamCapture.Enabled)
-            {
-                RawStreamCapture.Capture(sessionId, data);
-            }
-
-            // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
-            // true が返った場合は進行中のリプレイキャプチャに取り込まれており、
+            // 状態バッファへの追記と生ストリームキャプチャは SessionManager のサーバー側タップで
+            // （チャンクごとに1回だけ）実施済み。ここ（Circuit ごとのハンドラ）で行うと、
+            // 複数ブラウザ接続や切断後も残存する Circuit の数だけ多重に Append され、
+            // リプレイ時に行の重複・表示ズレが起きる。
+            // capturedByReplay=true のチャンクは進行中のリプレイキャプチャに取り込まれており、
             // リプレイのテール書き込みで届くため直接書き込みしてはならない（二重表示になる）
-            var capturedByReplay = sessionInfo.AppendToTerminalBuffer(data);
 
             // Claude Codeの場合、"No conversation found to continue"エラーをチェック
             // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
@@ -2573,7 +2569,7 @@
         {
             try
             {
-                await ProcessReceivedData(args.SessionId, args.Data);
+                await ProcessReceivedData(args.SessionId, args.Data, args.CapturedByReplay);
             }
             catch (Exception ex)
             {

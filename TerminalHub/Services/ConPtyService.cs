@@ -24,7 +24,14 @@ namespace TerminalHub.Services
     public class DataReceivedEventArgs : EventArgs
     {
         public string Data { get; }
-        
+
+        /// <summary>
+        /// SessionManager のサーバー側タップ（最初の購読者）がバッファへ Append した結果、
+        /// 進行中のリプレイキャプチャに取り込まれたかどうか。true のとき Circuit 側は
+        /// このチャンクを xterm へ直接書き込んではならない（リプレイのテールで届くため二重になる）。
+        /// </summary>
+        public bool CapturedByReplay { get; set; }
+
         public DataReceivedEventArgs(string data)
         {
             Data = data;
