@@ -18,9 +18,9 @@ public class Dup4DiagnosticTests
         _output = output;
     }
 
-    private static string? TryLoad()
+    private static string? TryLoad(string fixture)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "local", "dup4-20260703-080615.raw");
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "local", fixture);
         return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
     }
 
@@ -55,11 +55,13 @@ public class Dup4DiagnosticTests
     }
 
     [SkippableTheory]
-    [InlineData(160, 40)]
-    public void Old_order_live_chunk_before_replay_corrupts_but_fixed_order_does_not(int cols, int rows)
+    [InlineData("dup4-20260703-080615.raw", 160, 40)]
+    [InlineData("dup5-20260703-081708.raw", 160, 40)]
+    [InlineData("dup5-20260703-081708.raw", 160, 67)]
+    public void Old_order_live_chunk_before_replay_corrupts_but_fixed_order_does_not(string fixture, int cols, int rows)
     {
-        var stream = TryLoad();
-        Skip.If(stream == null, "ローカルキャプチャ dup4 が無いためスキップ");
+        var stream = TryLoad(fixture);
+        Skip.If(stream == null, $"ローカルキャプチャ {fixture} が無いためスキップ");
 
         // 実際の事象は「切替後は差分描画しか来ない」ため壊れたまま自己修復されない。
         // それを再現するため、切替ポイントを末尾付近の複数箇所で試す
