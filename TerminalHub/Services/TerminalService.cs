@@ -135,6 +135,26 @@ namespace TerminalHub.Services
             }
         }
 
+        private sealed class TerminalSizeDto
+        {
+            public int Cols { get; set; }
+            public int Rows { get; set; }
+        }
+
+        public async Task<(int Cols, int Rows)?> GetTerminalSizeAsync(IJSObjectReference terminal)
+        {
+            try
+            {
+                var size = await terminal.InvokeAsync<TerminalSizeDto>("getSize");
+                return (size.Cols, size.Rows);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[GetTerminalSize] サイズ取得エラー（無視）");
+                return null;
+            }
+        }
+
         public async Task ScrollToBottomAsync(Guid sessionId)
         {
             try

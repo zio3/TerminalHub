@@ -989,6 +989,24 @@
                 // 過去バッファの誤検出を防ぐため、接続時刻を記録
                 selectedSession.LastConnectionTime = DateTime.Now;
 
+                // リプレイ前にエミュレータ/ConPTY を xterm の実サイズへ同期する。
+                // 切替中はリサイズ通知を skip しているため、別セッション閲覧中にパネル開閉や
+                // ウィンドウ変更があるとサイズがずれたままになる。エミュレータの行数が xterm より
+                // 大きい状態でリプレイすると、超過分が xterm のスクロールバックへ押し出されて
+                // 「古い画面が上に残る」重複が恒久化する。
+                // ConPTY のリサイズで conhost が新サイズの画面を再描画し、それはリプレイの
+                // テール（またはそれ以降のライブ出力）として正しい順序で届く。
+                var xtermSize = await TerminalService.GetTerminalSizeAsync(activeTerminal);
+                if (xtermSize is { Cols: >= 20, Rows: >= 10 } size && activeSession != null &&
+                    (activeSession.Cols != size.Cols || activeSession.Rows != size.Rows))
+                {
+                    Logger.LogInformation("[SelectSession] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
+                        activeSession.Cols, activeSession.Rows, size.Cols, size.Rows);
+                    // 必ずエミュレータ → ConPTY の順（再送データより先に画面を空にするため）
+                    selectedSession.ResizeTerminalBuffer(size.Cols, size.Rows);
+                    activeSession.Resize(size.Cols, size.Rows);
+                }
+
                 // スナップショット生成と同時にライブ出力のテール記録を開始し、
                 // スナップショット→テールの順で書き込むことで取りこぼし・順序逆転を防ぐ
                 await _terminalWriteLock.WaitAsync();
