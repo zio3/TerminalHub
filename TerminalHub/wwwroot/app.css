@@ -713,6 +713,57 @@ h1:focus {
     }
 }
 
+/* ===== モバイル用ゲームパッド（D-pad） =====
+   左＝十字カーソル（3×3 グリッド、中央は空）、右＝[Esc][Enter]（外側が Enter）。
+   表示/非表示は Blazor 側の d-md-none と showDpad で制御するため、ここはレイアウトのみ。
+   各ボタンは btn/btn-secondary/btn-primary を併用してテーマ色に追従させる。 */
+.dpad-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dpad-cross {
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+    gap: 4px;
+}
+
+.dpad-btn {
+    padding: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+}
+
+.dpad-btn:active {
+    transform: scale(0.92);
+}
+
+.dpad-up    { grid-column: 2; grid-row: 1; }
+.dpad-left  { grid-column: 1; grid-row: 2; }
+.dpad-right { grid-column: 3; grid-row: 2; }
+.dpad-down  { grid-column: 2; grid-row: 3; }
+
+.dpad-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.dpad-action {
+    min-width: 60px;
+    height: 44px;
+    font-size: 1.05rem;
+}
+
+.dpad-action:active {
+    transform: scale(0.95);
+}
+
 /* ===========================================
    スモールモバイル対応 (480px以下)
    =========================================== */

@@ -100,7 +100,7 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null, IRawStreamCaptureService? rawStreamCapture = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
@@ -110,7 +110,10 @@ namespace TerminalHub.Services
             _appSettingsService = appSettingsService;
             _server = server;
             _codexHookService = codexHookService;
+            _rawStreamCapture = rawStreamCapture;
         }
+
+        private readonly IRawStreamCaptureService? _rawStreamCapture;
 
         /// <summary>
         /// サーバーのベース URL を取得する（スキーム + ホスト + ポート）
@@ -347,6 +350,8 @@ namespace TerminalHub.Services
 
             if (removed)
             {
+                // 生ストリームキャプチャのライターも閉じる（ハンドルリーク防止）
+                _rawStreamCapture?.CloseSession(sessionId);
                 NotifySessionsChanged();
             }
 
@@ -989,6 +994,8 @@ namespace TerminalHub.Services
                 _sessions[sessionId] = newSession;
                 sessionInfo.ConPtySession = newSession;
                 newSession.Start();
+                // 状態バッファのグリッドも ConPTY と同サイズに揃える（寸法不一致による折返し乱れを防ぐ）
+                sessionInfo.ResizeTerminalBuffer(cols, rows);
                 newSession.Resize(cols, rows);
 
                 _logger.LogInformation("セッション再起動成功: {SessionId}, タイプ: {Type}", sessionId, sessionInfo.TerminalType);

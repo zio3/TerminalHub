@@ -71,6 +71,10 @@ public class SessionDisplaySettings
 public class DevToolsSettings
 {
     public bool Enabled { get; set; }
+
+    /// <summary>ConPTY 生出力ストリームをファイルへ記録する（VTエミュレータ検証用フィクスチャ採取）。既定 false。</summary>
+    public bool CaptureRawStream { get; set; }
+
 }
 
 /// <summary>

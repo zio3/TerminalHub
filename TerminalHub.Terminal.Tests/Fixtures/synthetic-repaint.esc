@@ -1,0 +1,1 @@
+line1\r\nline2\r\nline3\r\n\e[H\e[2Jline1\r\nline2\r\nline3\r\n
