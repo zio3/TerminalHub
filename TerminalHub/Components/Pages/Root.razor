@@ -1568,6 +1568,8 @@
 
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
 
+        bool rowsGrew = rows > activeSession.Rows;
+
         // 状態バッファ（エミュレータ方式）のグリッドサイズも同時に追随させる。
         // グリッドと ConPTY の行数が常に一致していれば、TUI の全画面再描画フレームは
         // グリッド上でも正確に上書きとして畳まれ、スクロールバックは汚れない
@@ -1576,6 +1578,65 @@
         // ConPtyにリサイズを通知（activeSession と selectedSession.ConPtySession は同一インスタンス。
         // 以前は両方に Resize を呼んでいたため ResizePseudoConsole が2回走り多重化の原因になっていた）
         activeSession.Resize(cols, rows);
+
+        // 行数「増加」時は xterm をエミュレータ状態から再同期する（デバウンス付き）。
+        // conhost は行数増加でスクロール履歴から行を引き戻してビューポートに含め、TUI の
+        // 再描画フレームにもその行が現れるが、xterm.js はスクロールバックから同じ行を
+        // 取り除かないため、境界の行がスクロールバックとビューポートに二重に残る
+        // （従来からの「リサイズで二重化」の正体）。エミュレータのグリッドは conhost と
+        // 同じ引き戻し規則で管理しているので、その確定状態で xterm を作り直せば解消する。
+        if (rowsGrew && selectedSession?.UsesEmulatedTerminalBuffer == true)
+        {
+            _ = ScheduleEmulatorResyncAsync(guid);
+        }
+    }
+
+    // 行数増加後の xterm 再同期のデバウンス制御（ドラッグ完了後に1回だけ実行）
+    private CancellationTokenSource? _emulatorResyncCts;
+    private const int EmulatorResyncDebounceMs = 400;
+
+    /// <summary>
+    /// xterm をフルリセット（RIS: 画面＋スクロールバック消去）し、エミュレータの確定状態を
+    /// 書き戻して再同期する。リセットと再生を1回の書き込みに連結し、順序を原子的に保証する。
+    /// </summary>
+    private async Task ScheduleEmulatorResyncAsync(Guid guid)
+    {
+        _emulatorResyncCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _emulatorResyncCts = cts;
+
+        try
+        {
+            await Task.Delay(EmulatorResyncDebounceMs, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // より新しい再同期要求に置き換えられた
+        }
+
+        if (cts.IsCancellationRequested || _skipConPtyResize || guid != activeSessionId || activeTerminal == null)
+        {
+            return;
+        }
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        if (session == null || !session.UsesEmulatedTerminalBuffer)
+        {
+            return;
+        }
+
+        try
+        {
+            var replay = session.GetTerminalBuffer();
+            // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット
+            await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc" + replay);
+            Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字 session={SessionId}",
+                replay.Length, guid.ToString().Substring(0, 8));
+        }
+        catch (JSDisconnectedException)
+        {
+            // 回線切断時は何もしない
+        }
     }
 
     /// <summary>
