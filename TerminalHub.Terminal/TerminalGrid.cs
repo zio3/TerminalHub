@@ -459,10 +459,15 @@ public sealed class TerminalGrid
     // ---- リサイズ ----
 
     /// <summary>
-    /// グリッドサイズを変更する（リフローなしの単純クロップ/パディング）。
-    /// 呼び出し直後に ConPTY が新サイズで repaint を送る前提のため、画面内容の厳密な保持はしない。
-    /// 行数縮小時、はみ出す上端行はスクロールバックへ退避する（alt-screen 中は破棄）。
+    /// グリッドサイズを変更する。**現在の画面内容は破棄し**、カーソルをホームへ戻す（スクロールバックは保持）。
     /// </summary>
+    /// <remarks>
+    /// ConPTY はリサイズ直後にビューポート全体を「通常のスクロール出力」（CUP を伴わない LF 連打）として
+    /// 再送してくるため、正規の新規出力と区別できない。画面をクロップ/パディングで保持すると、
+    /// 再送分で旧画面がスクロールバックへ押し出され二重化する。そこで「画面を捨てて再送で埋め直す」
+    /// 前提に倒す（実キャプチャ 820e9404 で再送形式を確認済み: CUP=0 / LF スクロール型 × リサイズ回数分）。
+    /// スクロールバック行は列数が変わってもそのまま保持する（シリアライズは行内容のみ出力するため無害）。
+    /// </remarks>
     public void Resize(int cols, int rows)
     {
         cols = Math.Max(1, cols);
@@ -472,76 +477,22 @@ public sealed class TerminalGrid
             return;
         }
 
-        // 列: 各行をクロップ/パディング
-        if (cols != Cols)
-        {
-            ResizeRowsWidth(_screen, cols);
-            if (_mainScreenStash != null)
-            {
-                ResizeRowsWidth(_mainScreenStash, cols);
-            }
-            for (int i = 0; i < _scrollback.Count; i++)
-            {
-                _scrollback[i] = ResizeRow(_scrollback[i], cols);
-            }
-        }
-
-        // 行: 縮小なら上端をスクロールバックへ、拡大なら下に空白行を追加
-        while (_screen.Count > rows)
-        {
-            var top = _screen[0];
-            _screen.RemoveAt(0);
-            if (!IsAltScreen)
-            {
-                _scrollback.Add(top);
-                if (_scrollback.Count > MaxScrollback)
-                {
-                    _scrollback.RemoveAt(0);
-                }
-            }
-            CursorRow = Math.Max(0, CursorRow - 1);
-        }
-        while (_screen.Count < rows)
-        {
-            _screen.Add(CreateBlankRow(cols));
-        }
-
         Cols = cols;
         Rows = rows;
-        CursorRow = Math.Clamp(CursorRow, 0, Rows - 1);
-        CursorCol = Math.Clamp(CursorCol, 0, Cols - 1);
-        _savedRow = Math.Clamp(_savedRow, 0, Rows - 1);
-        _savedCol = Math.Clamp(_savedCol, 0, Cols - 1);
+        _screen = CreateBlankScreen(rows, cols);
+        if (IsAltScreen)
+        {
+            // alt-screen 中の場合、メイン側スタッシュも新サイズの空画面にする
+            // （復帰時も ConPTY が repaint する前提。旧サイズのまま残すと行数不整合になる）
+            _mainScreenStash = CreateBlankScreen(rows, cols);
+            _mainCursorRowStash = 0;
+            _mainCursorColStash = 0;
+        }
+        CursorRow = 0;
+        CursorCol = 0;
+        _savedRow = 0;
+        _savedCol = 0;
         _pendingWrap = false;
-    }
-
-    private static void ResizeRowsWidth(List<Cell[]> screen, int cols)
-    {
-        for (int i = 0; i < screen.Count; i++)
-        {
-            screen[i] = ResizeRow(screen[i], cols);
-        }
-    }
-
-    private static Cell[] ResizeRow(Cell[] row, int cols)
-    {
-        if (row.Length == cols)
-        {
-            return row;
-        }
-        var next = new Cell[cols];
-        int copy = Math.Min(row.Length, cols);
-        Array.Copy(row, next, copy);
-        // クロップ境界が全角ペアの途中なら先頭セルを空白化（片割れ防止）
-        if (copy > 0 && next[copy - 1].Width == 2)
-        {
-            next[copy - 1] = Cell.Blank;
-        }
-        for (int c = copy; c < cols; c++)
-        {
-            next[c] = Cell.Blank;
-        }
-        return next;
     }
 
     // ---- リセット ----

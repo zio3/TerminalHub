@@ -24,8 +24,10 @@ public interface ITerminalStateBuffer
     void Clear();
 
     /// <summary>
-    /// 端末サイズの変更を通知する。エミュレータ方式はグリッドを追随させる（直後に ConPTY が repaint を送る前提）。
-    /// 生ストリーム方式では何もしない。
+    /// 端末サイズの変更を通知する。エミュレータ方式は**現在の画面内容を破棄**して新サイズの空画面にする
+    /// （スクロールバックは保持。ConPTY がリサイズ直後にビューポート全体を再送してくる前提で、
+    /// 再送分による二重化を防ぐ）。生ストリーム方式では何もしない。
+    /// 必ず ConPtySession.Resize の**前**に呼ぶこと（再送データより先に画面を空にするため）。
     /// </summary>
     void Resize(int cols, int rows);
 

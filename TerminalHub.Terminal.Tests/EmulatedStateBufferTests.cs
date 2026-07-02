@@ -109,6 +109,52 @@ public class EmulatedStateBufferTests
         Assert.DoesNotContain("counter 8", replay);
     }
 
+    // ---- リサイズ（ConPTY 再送の吸収） ----
+
+    /// <summary>
+    /// ConPTY はリサイズ直後にビューポートを「通常のスクロール出力」として再送する。
+    /// Resize は画面を破棄する意味論なので、再送を受けても内容は1回だけ残る（二重化しない）。
+    /// </summary>
+    [Fact]
+    public void Resize_then_conpty_resend_does_not_duplicate()
+    {
+        var buf = Create(cols: 40, rows: 5);
+        buf.Append("V1\r\nV2\r\nV3");   // 画面上の内容
+        buf.Resize(50, 6);              // リサイズ → 画面破棄
+        buf.Append("V1\r\nV2\r\nV3");   // ConPTY の再送
+
+        var replay = buf.SerializeForReplay();
+        Assert.Equal(1, CountOccurrences(replay, "V1"));
+        Assert.Equal(1, CountOccurrences(replay, "V3"));
+    }
+
+    /// <summary>Resize してもスクロールバック（画面から流れ出た過去行）は保持される。</summary>
+    [Fact]
+    public void Resize_preserves_scrollback()
+    {
+        var buf = Create(cols: 40, rows: 3);
+        buf.Append("H1\r\nH2\r\nH3\r\nH4\r\nH5"); // H1,H2 はスクロールバックへ
+        buf.Resize(60, 5);
+        buf.Append("H3\r\nH4\r\nH5"); // ConPTY 再送（ビューポート分のみ）
+
+        var replay = buf.SerializeForReplay();
+        Assert.Equal(1, CountOccurrences(replay, "H1")); // 過去行は残る
+        Assert.Equal(1, CountOccurrences(replay, "H2"));
+        Assert.Equal(1, CountOccurrences(replay, "H3")); // 再送分も1回だけ
+        Assert.Equal(1, CountOccurrences(replay, "H5"));
+    }
+
+    /// <summary>同一サイズの Resize は何もしない（画面は破棄されない）。</summary>
+    [Fact]
+    public void Resize_to_same_size_is_noop()
+    {
+        var buf = Create(cols: 40, rows: 5);
+        buf.Append("keep me");
+        buf.Resize(40, 5);
+
+        Assert.Contains("keep me", buf.SerializeForReplay());
+    }
+
     // ---- チャンク境界 ----
 
     [Fact]

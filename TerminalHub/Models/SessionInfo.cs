@@ -164,6 +164,10 @@ namespace TerminalHub.Models
             _terminalBuffer.Resize(cols, rows);
         }
 
+        /// <summary>状態バッファがVTエミュレータ方式かどうか（リサイズ時のライブ画面消去の要否判定に使う）。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool UsesEmulatedTerminalBuffer => _terminalBuffer is TerminalHub.Terminal.EmulatedStateBuffer;
+
         public string GetTerminalBuffer()
         {
             return _terminalBuffer.SerializeForReplay();

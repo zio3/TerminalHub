@@ -1480,7 +1480,7 @@
     }
 
     [JSInvokable]
-    public void OnTerminalSizeChanged(string sessionId, int cols, int rows,
+    public async Task OnTerminalSizeChanged(string sessionId, int cols, int rows,
         string source = "", string detail = "", string dupSource = "")
     {
         // ログ用の短縮セッションID（source/detail/dupSourceは診断ログ専用、二重通知抑制はJS側で完結）
@@ -1537,6 +1537,18 @@
                     }
                 }
 
+                // ConPTY はリサイズ直後にビューポート全体を「通常のスクロール出力」として再送してくるため、
+                // そのままだとライブ画面もスクロールバックも直前の画面分が二重化する。
+                // エミュレータ方式では「画面を捨てて再送で埋め直す」方針を取る:
+                //   1. 状態バッファの画面を破棄（スクロールバックは保持）— 必ず ConPTY Resize より先に
+                //   2. ライブ xterm の画面も消去（ESC[2J はスクロールバックに残らない）
+                //   3. その後 ConPTY をリサイズ → 再送が空画面を埋め直す
+                selectedSession?.ResizeTerminalBuffer(cols, rows);
+                if (selectedSession?.UsesEmulatedTerminalBuffer == true && activeTerminal != null)
+                {
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1b[2J\x1b[H");
+                }
+
                 // ConPtyにリサイズを通知
                 activeSession.Resize(cols, rows);
 
@@ -1545,9 +1557,6 @@
                 {
                     selectedSession.ConPtySession.Resize(cols, rows);
                 }
-
-                // 状態バッファ（エミュレータ方式）にもサイズを追随させる（この後 ConPTY が repaint を送ってくる）
-                selectedSession?.ResizeTerminalBuffer(cols, rows);
             }
             else if (guid != activeSessionId)
             {
