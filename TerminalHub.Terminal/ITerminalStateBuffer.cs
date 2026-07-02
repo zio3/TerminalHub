@@ -4,10 +4,9 @@ namespace TerminalHub.Terminal;
 /// セッションのターミナル状態を保持し、復元用の出力（xterm へ流し込む文字列）を生成する抽象。
 /// </summary>
 /// <remarks>
-/// 現状の実装は生ストリームをそのまま貯める <see cref="RawStreamStateBuffer"/>（既存挙動）。
-/// 将来はここに VTエミュレータ実装（グリッド保持＋ANSIシリアライズ）を差し込み、
-/// リサイズ/再読込時の repaint 追記によるスクロールバック二重化を根治する。
-/// フィーチャーフラグで両実装を並存させ、問題があれば即座に生ストリーム方式へ戻せるようにする。
+/// 本番実装は <see cref="EmulatedStateBuffer"/>（VTエミュレータ: グリッド保持＋ANSIシリアライズ）のみ。
+/// repaint を上書きとして畳むことで、リサイズ/再読込時のスクロールバック二重化を根治する。
+/// 旧来の生ストリーム方式 <see cref="RawStreamStateBuffer"/> はテスト用ベースラインとしてのみ残置。
 /// </remarks>
 public interface ITerminalStateBuffer
 {

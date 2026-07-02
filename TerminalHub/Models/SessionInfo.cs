@@ -147,8 +147,8 @@ namespace TerminalHub.Models
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
         // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）。
-        // 実体は TerminalHub.Terminal 側の状態モデルに委譲し、方式は TerminalStateBufferFactory の
-        // フラグで決まる（既定=生ストリーム / 実験フラグON=VTエミュレータ）。
+        // 実体は TerminalHub.Terminal 側のVTエミュレータ（EmulatedStateBuffer）に委譲する。
+        // repaint を上書きとして畳むため、復元時にスクロールバックが二重化しない。
         [System.Text.Json.Serialization.JsonIgnore]
         private readonly TerminalHub.Terminal.ITerminalStateBuffer _terminalBuffer
             = TerminalHub.Terminal.TerminalStateBufferFactory.Create();

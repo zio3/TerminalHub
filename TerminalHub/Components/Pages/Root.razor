@@ -1089,7 +1089,6 @@
             var isActive = activeSessionId == sessionId;
 
             // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
-            // ※ 下の画面消去前置より先に行い、ConPTY の生出力のみを記録する
             if (RawStreamCapture.Enabled)
             {
                 RawStreamCapture.Capture(sessionId, data);
