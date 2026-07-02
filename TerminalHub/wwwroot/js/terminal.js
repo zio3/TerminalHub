@@ -3,6 +3,14 @@
 // ネイティブスクロールが「ページ全体のスクロール」になってしまう退行への対処。
 // 指を離した後は簡易な慣性スクロール（減衰付き）を行う。
 function attachTouchScroll(term, element) {
+    // 再アタッチ対応: コンテナ div はセッション切替やターミナル再作成のたびに使い回されるが、
+    // createMultiSessionTerminal は毎回呼ばれる。前回のリスナーを外さずに追加すると
+    // リスナーが積み重なり（スクロール量が訪問回数分だけ多重化）、古いクロージャが
+    // 破棄済みの term を参照し続けて例外を吐く。必ず前回分を外してから付け直す。
+    if (typeof element._touchScrollDetach === 'function') {
+        element._touchScrollDetach();
+    }
+
     let lastY = null;       // 直前のタッチ Y 座標（null = 追跡していない）
     let residual = 0;       // 1セル未満の移動量の積み残し（px）
     let velocity = 0;       // 慣性用の速度（px/フレーム換算）
@@ -34,32 +42,37 @@ function attachTouchScroll(term, element) {
         }
     };
 
-    element.addEventListener('touchstart', (e) => {
+    const onTouchStart = (e) => {
         if (e.touches.length !== 1) { lastY = null; return; }
         stopMomentum();
         lastY = e.touches[0].clientY;
         residual = 0;
         velocity = 0;
         lastMoveTime = e.timeStamp;
-    }, { passive: true });
+    };
 
     // preventDefault でページ全体へのスクロール伝播を止めるため passive: false
-    element.addEventListener('touchmove', (e) => {
+    const onTouchMove = (e) => {
         if (lastY === null || e.touches.length !== 1) return;
         const y = e.touches[0].clientY;
         const dy = y - lastY;
         lastY = y;
 
-        scrollByPixels(dy);
+        try {
+            scrollByPixels(dy);
+        } catch {
+            lastY = null; // ターミナル破棄後は追跡を止める
+            return;
+        }
 
         const dt = Math.max(1, e.timeStamp - lastMoveTime);
         velocity = dy / dt * 16; // 16ms(1フレーム)あたりの px に正規化
         lastMoveTime = e.timeStamp;
 
         e.preventDefault();
-    }, { passive: false });
+    };
 
-    element.addEventListener('touchend', () => {
+    const onTouchEnd = () => {
         if (lastY === null) return;
         lastY = null;
 
@@ -78,11 +91,26 @@ function attachTouchScroll(term, element) {
             momentumId = requestAnimationFrame(step);
         };
         momentumId = requestAnimationFrame(step);
-    }, { passive: true });
+    };
 
-    element.addEventListener('touchcancel', () => {
+    const onTouchCancel = () => {
         lastY = null;
-    }, { passive: true });
+    };
+
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', onTouchEnd, { passive: true });
+    element.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+    // デタッチ関数を要素に保持（次回の attach と cleanupTerminal から呼ばれる）
+    element._touchScrollDetach = () => {
+        stopMomentum();
+        element.removeEventListener('touchstart', onTouchStart);
+        element.removeEventListener('touchmove', onTouchMove);
+        element.removeEventListener('touchend', onTouchEnd);
+        element.removeEventListener('touchcancel', onTouchCancel);
+        element._touchScrollDetach = null;
+    };
 }
 
 // デバウンス関数
@@ -960,6 +988,10 @@ window.terminalFunctions = {
         // ターミナルdiv内をクリア - より安全なDOM操作を使用
         const terminalDiv = document.getElementById(`terminal-${sessionId}`);
         if (terminalDiv) {
+            // タッチスクロールのリスナーを外す（破棄済み term への参照を残さない）
+            if (typeof terminalDiv._touchScrollDetach === 'function') {
+                terminalDiv._touchScrollDetach();
+            }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
             }
