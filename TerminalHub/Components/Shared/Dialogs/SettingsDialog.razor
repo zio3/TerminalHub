@@ -15,6 +15,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IVersionCheckService VersionCheckService
 @inject MqttService MqttService
+@inject IRawStreamCaptureService RawStreamCapture
 @implements IDisposable
 
 @if (IsVisible)
@@ -916,6 +917,17 @@
                                         <i class="bi bi-info-circle me-1"></i>
                                         @L["Settings.Special.DevTools.Help"]
                                     </p>
+
+                                    <div class="form-check form-switch mt-3">
+                                        <input class="form-check-input" type="checkbox" @bind="captureRawStreamEnabled" id="captureRawStreamSwitch">
+                                        <label class="form-check-label" for="captureRawStreamSwitch">
+                                            @L["Settings.Special.CaptureRawStream.Enable"]
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        @L["Settings.Special.CaptureRawStream.Help"]
+                                    </p>
                                 </div>
 
                                 <hr />
@@ -1180,6 +1192,7 @@
 
     // 開発ツール関連
     private bool devToolsEnabled = false;
+    private bool captureRawStreamEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
     // localize 済みの初期メッセージは OnInitialized で設定する (この時点では L インジェクト未完了のため)
@@ -1312,6 +1325,9 @@
 
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
+            captureRawStreamEnabled = settings.DevTools.CaptureRawStream;
+            // 起動後に設定画面を開いた時点で、永続値をキャプチャサービスへ反映（シングルトン同期）
+            RawStreamCapture.SetEnabled(captureRawStreamEnabled);
 
             // 一般設定
             defaultFolderPath = settings.General.DefaultFolderPath;
@@ -1538,7 +1554,8 @@
                 },
                 DevTools = new DevToolsSettings
                 {
-                    Enabled = devToolsEnabled
+                    Enabled = devToolsEnabled,
+                    CaptureRawStream = captureRawStreamEnabled
                 },
                 General = new GeneralSettings
                 {
@@ -1586,6 +1603,9 @@
                 }
             };
             AppSettingsService.SaveSettings(settings);
+
+            // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
+            RawStreamCapture.SetEnabled(captureRawStreamEnabled);
 
             // セッションソートモードの変更を通知
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);

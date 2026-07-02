@@ -29,6 +29,7 @@
 @inject IHookNotificationService HookNotificationService
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
+@inject IRawStreamCaptureService RawStreamCapture
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -1089,6 +1090,12 @@
 
             // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
             sessionInfo.AppendToTerminalBuffer(data);
+
+            // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
+            if (RawStreamCapture.Enabled)
+            {
+                RawStreamCapture.Capture(sessionId, data);
+            }
 
             // Claude Codeの場合、"No conversation found to continue"エラーをチェック
             // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ

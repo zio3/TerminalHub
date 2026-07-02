@@ -144,6 +144,9 @@ builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
 // VersionCheckServiceを登録
 builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
+// 生ストリームキャプチャ（VTエミュレータ検証フィクスチャ採取用のデバッグサービス）
+builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
+
 
 var app = builder.Build();
 

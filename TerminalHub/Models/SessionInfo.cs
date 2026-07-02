@@ -146,65 +146,29 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
-        // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）
+        // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）。
+        // 実体は TerminalHub.Terminal 側の状態モデルに委譲する（既定は生ストリーム方式 = 従来挙動）。
+        // 将来 VTエミュレータ実装をフラグで差し替えられるよう、ここはシーム経由にしてある。
         [System.Text.Json.Serialization.JsonIgnore]
-        private StringBuilder? _terminalBuffer;
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        private readonly object _terminalBufferLock = new();
-
-        private const int MaxTerminalBufferSize = 2 * 1024 * 1024; // 2MB上限
+        private readonly TerminalHub.Terminal.ITerminalStateBuffer _terminalBuffer
+            = new TerminalHub.Terminal.RawStreamStateBuffer();
 
         public void AppendToTerminalBuffer(string data)
         {
-            lock (_terminalBufferLock)
-            {
-                _terminalBuffer ??= new StringBuilder();
-
-                // 上限チェック
-                if (_terminalBuffer.Length + data.Length > MaxTerminalBufferSize)
-                {
-                    // 古いデータを削除して新しいデータを追加
-                    var overflow = _terminalBuffer.Length + data.Length - MaxTerminalBufferSize;
-                    if (overflow < _terminalBuffer.Length)
-                    {
-                        _terminalBuffer.Remove(0, (int)overflow);
-                    }
-                    else
-                    {
-                        _terminalBuffer.Clear();
-                    }
-                }
-                _terminalBuffer.Append(data);
-            }
+            _terminalBuffer.Append(data);
         }
 
         public string GetTerminalBuffer()
         {
-            lock (_terminalBufferLock)
-            {
-                return _terminalBuffer?.ToString() ?? string.Empty;
-            }
+            return _terminalBuffer.SerializeForReplay();
         }
 
         public void ClearTerminalBuffer()
         {
-            lock (_terminalBufferLock)
-            {
-                _terminalBuffer?.Clear();
-            }
+            _terminalBuffer.Clear();
         }
 
-        public int TerminalBufferSize
-        {
-            get
-            {
-                lock (_terminalBufferLock)
-                {
-                    return _terminalBuffer?.Length ?? 0;
-                }
-            }
-        }
+        public int TerminalBufferSize => _terminalBuffer.Size;
 
         // ステータス変更履歴（診断用、Queue で O(1) eviction）
         [System.Text.Json.Serialization.JsonIgnore]
