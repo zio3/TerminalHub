@@ -150,11 +150,10 @@ builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>
 
 var app = builder.Build();
 
-// ターミナル状態バッファのフィーチャーフラグを永続設定から反映
+// ターミナル状態バッファ（VTエミュレータ）の初期グリッドサイズを設定
 // （SessionInfo 作成時に TerminalStateBufferFactory.Create() が参照する）
 {
     var appSettings = app.Services.GetRequiredService<IAppSettingsService>().GetSettings();
-    TerminalHub.Terminal.TerminalStateBufferFactory.UseEmulator = appSettings.DevTools.UseTerminalEmulator;
     TerminalHub.Terminal.TerminalStateBufferFactory.DefaultCols =
         app.Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalHub.Constants.TerminalConstants.DefaultCols);
     TerminalHub.Terminal.TerminalStateBufferFactory.DefaultRows =

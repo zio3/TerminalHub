@@ -75,12 +75,6 @@ public class DevToolsSettings
     /// <summary>ConPTY 生出力ストリームをファイルへ記録する（VTエミュレータ検証用フィクスチャ採取）。既定 false。</summary>
     public bool CaptureRawStream { get; set; }
 
-    /// <summary>
-    /// スクロールバック保持にVTエミュレータ方式を使う（実験的機能）。既定 false（従来の生ストリーム方式）。
-    /// 有効化すると repaint が畳まれ、リサイズ/再読込でのスクロールバック二重化が解消される。
-    /// 変更は新規作成セッションから適用（確実に切り替えるにはアプリ再起動）。
-    /// </summary>
-    public bool UseTerminalEmulator { get; set; }
 }
 
 /// <summary>

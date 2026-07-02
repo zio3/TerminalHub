@@ -158,15 +158,11 @@ namespace TerminalHub.Models
             _terminalBuffer.Append(data);
         }
 
-        /// <summary>端末サイズ変更をバッファへ通知する（エミュレータ方式のみ意味を持つ）。</summary>
+        /// <summary>端末サイズ変更をバッファへ通知する。</summary>
         public void ResizeTerminalBuffer(int cols, int rows)
         {
             _terminalBuffer.Resize(cols, rows);
         }
-
-        /// <summary>状態バッファがVTエミュレータ方式かどうか（リサイズ時のライブ画面消去の要否判定に使う）。</summary>
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool UsesEmulatedTerminalBuffer => _terminalBuffer is TerminalHub.Terminal.EmulatedStateBuffer;
 
 
         public string GetTerminalBuffer()

@@ -235,8 +235,6 @@
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>有効にすると、診断・バッファ・通知テストのタブが表示されます。</value></data>
   <data name="Settings.Special.CaptureRawStream.Enable" xml:space="preserve"><value>生ストリームをキャプチャ（開発用）</value></data>
   <data name="Settings.Special.CaptureRawStream.Help" xml:space="preserve"><value>ターミナルの生出力を %LOCALAPPDATA%\TerminalHub\captures\ に記録します（VTエミュレータ検証用）。再現操作の後は必ずOFFに戻してください。</value></data>
-  <data name="Settings.Special.TerminalEmulator.Enable" xml:space="preserve"><value>ターミナルエミュレータ方式（実験的）</value></data>
-  <data name="Settings.Special.TerminalEmulator.Help" xml:space="preserve"><value>スクロールバックの保持をVTエミュレータ方式に切り替えます。リサイズ・再読込時のスクロールバック二重化が解消されます。変更は新規作成セッションから適用されます（確実に切り替えるにはアプリを再起動）。</value></data>
   <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>ログファイル</value></data>
   <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>ログフォルダを開く</value></data>
   <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>アプリケーションのログファイルが保存されているフォルダを開きます。</value></data>

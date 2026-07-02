@@ -917,28 +917,6 @@
                                         <i class="bi bi-info-circle me-1"></i>
                                         @L["Settings.Special.DevTools.Help"]
                                     </p>
-
-                                    <div class="form-check form-switch mt-3">
-                                        <input class="form-check-input" type="checkbox" @bind="captureRawStreamEnabled" id="captureRawStreamSwitch">
-                                        <label class="form-check-label" for="captureRawStreamSwitch">
-                                            @L["Settings.Special.CaptureRawStream.Enable"]
-                                        </label>
-                                    </div>
-                                    <p class="text-muted small mt-2 mb-0">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        @L["Settings.Special.CaptureRawStream.Help"]
-                                    </p>
-
-                                    <div class="form-check form-switch mt-3">
-                                        <input class="form-check-input" type="checkbox" @bind="useTerminalEmulator" id="useTerminalEmulatorSwitch">
-                                        <label class="form-check-label" for="useTerminalEmulatorSwitch">
-                                            @L["Settings.Special.TerminalEmulator.Enable"]
-                                        </label>
-                                    </div>
-                                    <p class="text-muted small mt-2 mb-0">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        @L["Settings.Special.TerminalEmulator.Help"]
-                                    </p>
                                 </div>
 
                                 <hr />
@@ -1072,6 +1050,22 @@
                                 <div class="mb-3">
                                     <small class="text-muted">@bufferResult</small>
                                 </div>
+
+                                <hr />
+
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" checked="@captureRawStreamEnabled"
+                                               @onchange="OnCaptureRawStreamToggled" id="captureRawStreamSwitch">
+                                        <label class="form-check-label" for="captureRawStreamSwitch">
+                                            @L["Settings.Special.CaptureRawStream.Enable"]
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        @L["Settings.Special.CaptureRawStream.Help"]
+                                    </p>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "devNotify")
@@ -1204,7 +1198,6 @@
     // 開発ツール関連
     private bool devToolsEnabled = false;
     private bool captureRawStreamEnabled = false;
-    private bool useTerminalEmulator = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
     // localize 済みの初期メッセージは OnInitialized で設定する (この時点では L インジェクト未完了のため)
@@ -1338,7 +1331,6 @@
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
             captureRawStreamEnabled = settings.DevTools.CaptureRawStream;
-            useTerminalEmulator = settings.DevTools.UseTerminalEmulator;
 
             // 一般設定
             defaultFolderPath = settings.General.DefaultFolderPath;
@@ -1566,8 +1558,7 @@
                 DevTools = new DevToolsSettings
                 {
                     Enabled = devToolsEnabled,
-                    CaptureRawStream = captureRawStreamEnabled,
-                    UseTerminalEmulator = useTerminalEmulator
+                    CaptureRawStream = captureRawStreamEnabled
                 },
                 General = new GeneralSettings
                 {
@@ -1618,9 +1609,6 @@
 
             // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
             RawStreamCapture.SetEnabled(captureRawStreamEnabled);
-
-            // ターミナルエミュレータ方式のフラグを反映（新規作成セッションから適用）
-            TerminalHub.Terminal.TerminalStateBufferFactory.UseEmulator = useTerminalEmulator;
 
             // セッションソートモードの変更を通知
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
@@ -2452,6 +2440,20 @@
             sanitized = sanitized.Replace(c, '_');
         }
         return sanitized;
+    }
+
+    /// <summary>
+    /// 生ストリームキャプチャのトグル（バッファタブ）。即時反映＋即時永続化する
+    /// （デバッグ用途のため、親ダイアログの「保存」を待たずに効かせる）。
+    /// </summary>
+    private void OnCaptureRawStreamToggled(ChangeEventArgs e)
+    {
+        captureRawStreamEnabled = e.Value is bool b && b;
+        RawStreamCapture.SetEnabled(captureRawStreamEnabled);
+
+        var settings = AppSettingsService.GetSettings();
+        settings.DevTools.CaptureRawStream = captureRawStreamEnabled;
+        AppSettingsService.SaveSettings(settings);
     }
 
     private async Task TestBrowserNotification()

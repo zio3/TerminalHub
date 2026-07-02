@@ -1585,7 +1585,7 @@
         // 取り除かないため、境界の行がスクロールバックとビューポートに二重に残る
         // （従来からの「リサイズで二重化」の正体）。エミュレータのグリッドは conhost と
         // 同じ引き戻し規則で管理しているので、その確定状態で xterm を作り直せば解消する。
-        if (rowsGrew && selectedSession?.UsesEmulatedTerminalBuffer == true)
+        if (rowsGrew)
         {
             _ = ScheduleEmulatorResyncAsync(guid);
         }
@@ -1620,7 +1620,7 @@
         }
 
         var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-        if (session == null || !session.UsesEmulatedTerminalBuffer)
+        if (session == null)
         {
             return;
         }
