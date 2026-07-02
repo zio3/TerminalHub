@@ -392,3 +392,6 @@ publish/
 
 # Application logs
 logs/
+
+# 実環境キャプチャ（セッション表示内容を含むため、どのブランチでもコミットしない）
+TerminalHub.Terminal.Tests/Fixtures/local/*.raw

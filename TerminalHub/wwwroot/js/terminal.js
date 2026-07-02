@@ -1,3 +1,118 @@
+// モバイル用タッチスクロール: touchmove を xterm の scrollLines に変換する。
+// xterm.js 6 でビューポートが刷新され、タッチイベントが canvas に食われて
+// ネイティブスクロールが「ページ全体のスクロール」になってしまう退行への対処。
+// 指を離した後は簡易な慣性スクロール（減衰付き）を行う。
+function attachTouchScroll(term, element) {
+    // 再アタッチ対応: コンテナ div はセッション切替やターミナル再作成のたびに使い回されるが、
+    // createMultiSessionTerminal は毎回呼ばれる。前回のリスナーを外さずに追加すると
+    // リスナーが積み重なり（スクロール量が訪問回数分だけ多重化）、古いクロージャが
+    // 破棄済みの term を参照し続けて例外を吐く。必ず前回分を外してから付け直す。
+    if (typeof element._touchScrollDetach === 'function') {
+        element._touchScrollDetach();
+    }
+
+    let lastY = null;       // 直前のタッチ Y 座標（null = 追跡していない）
+    let residual = 0;       // 1セル未満の移動量の積み残し（px）
+    let velocity = 0;       // 慣性用の速度（px/フレーム換算）
+    let lastMoveTime = 0;
+    let momentumId = null;  // 慣性スクロールの requestAnimationFrame ID
+
+    // 描画セルの実高さ（px）。内部APIが取れない場合は要素高さ÷行数で近似
+    const cellHeight = () => {
+        const cell = term._core?._renderService?.dimensions?.css?.cell;
+        return (cell && cell.height > 0) ? cell.height : Math.max(1, element.clientHeight / term.rows);
+    };
+
+    const stopMomentum = () => {
+        if (momentumId !== null) {
+            cancelAnimationFrame(momentumId);
+            momentumId = null;
+        }
+    };
+
+    // 積み残し付きで px をスクロール行数に変換して適用
+    const scrollByPixels = (dy) => {
+        const ch = cellHeight();
+        residual += dy;
+        const lines = Math.trunc(residual / ch);
+        if (lines !== 0) {
+            residual -= lines * ch;
+            // 指を下へ動かす(dy>0) = 過去（スクロールバック側）を見る = scrollLines は負方向
+            term.scrollLines(-lines);
+        }
+    };
+
+    const onTouchStart = (e) => {
+        if (e.touches.length !== 1) { lastY = null; return; }
+        stopMomentum();
+        lastY = e.touches[0].clientY;
+        residual = 0;
+        velocity = 0;
+        lastMoveTime = e.timeStamp;
+    };
+
+    // preventDefault でページ全体へのスクロール伝播を止めるため passive: false
+    const onTouchMove = (e) => {
+        if (lastY === null || e.touches.length !== 1) return;
+        const y = e.touches[0].clientY;
+        const dy = y - lastY;
+        lastY = y;
+
+        try {
+            scrollByPixels(dy);
+        } catch {
+            lastY = null; // ターミナル破棄後は追跡を止める
+            return;
+        }
+
+        const dt = Math.max(1, e.timeStamp - lastMoveTime);
+        velocity = dy / dt * 16; // 16ms(1フレーム)あたりの px に正規化
+        lastMoveTime = e.timeStamp;
+
+        e.preventDefault();
+    };
+
+    const onTouchEnd = () => {
+        if (lastY === null) return;
+        lastY = null;
+
+        // 慣性スクロール（フリック後の減速）
+        let v = velocity;
+        residual = 0;
+        const step = () => {
+            v *= 0.95; // 減衰率
+            if (Math.abs(v) < 0.5) { momentumId = null; return; }
+            try {
+                scrollByPixels(v);
+            } catch {
+                momentumId = null; // ターミナル破棄後は停止
+                return;
+            }
+            momentumId = requestAnimationFrame(step);
+        };
+        momentumId = requestAnimationFrame(step);
+    };
+
+    const onTouchCancel = () => {
+        lastY = null;
+    };
+
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', onTouchEnd, { passive: true });
+    element.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+    // デタッチ関数を要素に保持（次回の attach と cleanupTerminal から呼ばれる）
+    element._touchScrollDetach = () => {
+        stopMomentum();
+        element.removeEventListener('touchstart', onTouchStart);
+        element.removeEventListener('touchmove', onTouchMove);
+        element.removeEventListener('touchend', onTouchEnd);
+        element.removeEventListener('touchcancel', onTouchCancel);
+        element._touchScrollDetach = null;
+    };
+}
+
 // デバウンス関数
 function debounce(func, wait) {
     let timeout;
@@ -367,7 +482,10 @@ window.terminalFunctions = {
             fontFamily: "TermMix, 'Cascadia Mono', Consolas, monospace",
             scrollback: 10000,
             scrollOnInput: true,
-            scrollOnOutput: true,
+            // scrollOnOutput は false にする。true だと出力のたびに最下部へ強制スクロールされ、
+            // Claude Code のように毎秒複数回再描画する CLI では、履歴を遡って読むことができなくなる
+            // （特にモバイル）。false でも最下部に居るときは新規出力に自動追従する（xterm 標準挙動）。
+            scrollOnOutput: false,
             theme: {
                 background: '#1e1e1e',
                 foreground: '#d4d4d4',
@@ -410,6 +528,13 @@ window.terminalFunctions = {
             }
             
             term.open(element);
+
+            // ===== モバイル用タッチスクロール =====
+            // xterm.js 6 でビューポート実装が刷新され（オーバーレイスクロールバー化）、
+            // タッチが canvas に食われてネイティブのタッチスクロールが効かなくなった
+            // （v5 までは動作していた退行）。指の移動量を scrollLines に変換して自前で処理する。
+            // 併せて app.css の .xterm { touch-action: none } でページ全体へのスクロール伝播を抑止。
+            attachTouchScroll(term, element);
 
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
@@ -863,6 +988,10 @@ window.terminalFunctions = {
         // ターミナルdiv内をクリア - より安全なDOM操作を使用
         const terminalDiv = document.getElementById(`terminal-${sessionId}`);
         if (terminalDiv) {
+            // タッチスクロールのリスナーを外す（破棄済み term への参照を残さない）
+            if (typeof terminalDiv._touchScrollDetach === 'function') {
+                terminalDiv._touchScrollDetach();
+            }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
             }
