@@ -150,6 +150,20 @@ builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>
 
 var app = builder.Build();
 
+// ターミナル状態バッファのフィーチャーフラグを永続設定から反映
+// （SessionInfo 作成時に TerminalStateBufferFactory.Create() が参照する）
+{
+    var appSettings = app.Services.GetRequiredService<IAppSettingsService>().GetSettings();
+    TerminalHub.Terminal.TerminalStateBufferFactory.UseEmulator = appSettings.DevTools.UseTerminalEmulator;
+    TerminalHub.Terminal.TerminalStateBufferFactory.DefaultCols =
+        app.Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalHub.Constants.TerminalConstants.DefaultCols);
+    TerminalHub.Terminal.TerminalStateBufferFactory.DefaultRows =
+        app.Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalHub.Constants.TerminalConstants.DefaultRows);
+
+    // 生ストリームキャプチャの永続設定も起動時に反映（設定画面を開くまで効かない、を避ける）
+    app.Services.GetRequiredService<IRawStreamCaptureService>().SetEnabled(appSettings.DevTools.CaptureRawStream);
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

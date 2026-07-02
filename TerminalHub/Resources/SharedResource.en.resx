@@ -235,6 +235,8 @@
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>When enabled, the Diagnostics, Buffer, and Notification Test tabs appear in the input panel.</value></data>
   <data name="Settings.Special.CaptureRawStream.Enable" xml:space="preserve"><value>Capture raw stream (developer)</value></data>
   <data name="Settings.Special.CaptureRawStream.Help" xml:space="preserve"><value>Records raw terminal output to %LOCALAPPDATA%\TerminalHub\captures\ (for VT emulator verification). Turn it back off after reproducing.</value></data>
+  <data name="Settings.Special.TerminalEmulator.Enable" xml:space="preserve"><value>Terminal emulator mode (experimental)</value></data>
+  <data name="Settings.Special.TerminalEmulator.Help" xml:space="preserve"><value>Switches scrollback retention to a VT emulator. Eliminates scrollback duplication on resize/reload. Applies to newly created sessions (restart the app to switch completely).</value></data>
   <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>Log files</value></data>
   <data name="Settings.Special.Logs.OpenFolder" xml:space="preserve"><value>Open log folder</value></data>
   <data name="Settings.Special.Logs.Help" xml:space="preserve"><value>Opens the folder where application log files are stored.</value></data>

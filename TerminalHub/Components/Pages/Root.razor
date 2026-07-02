@@ -1545,6 +1545,9 @@
                 {
                     selectedSession.ConPtySession.Resize(cols, rows);
                 }
+
+                // 状態バッファ（エミュレータ方式）にもサイズを追随させる（この後 ConPTY が repaint を送ってくる）
+                selectedSession?.ResizeTerminalBuffer(cols, rows);
             }
             else if (guid != activeSessionId)
             {
@@ -2384,10 +2387,10 @@
                 ConPtyConnection.SubscribeToSession(sessionId, newSession);
                                 // セッションを起動
                 newSession.Start();
-                newSession.Resize(
-                    Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols),
-                    Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows)
-                );
+                var defaultCols = Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+                var defaultRows = Configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                newSession.Resize(defaultCols, defaultRows);
+                sessionInfo.ResizeTerminalBuffer(defaultCols, defaultRows);
                 
                 // セッション一覧を更新（最新のConPtySession参照を含む）
                 sessions = SessionManager.GetAllSessions().ToList();

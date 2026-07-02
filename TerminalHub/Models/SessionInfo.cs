@@ -147,15 +147,21 @@ namespace TerminalHub.Models
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
         // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）。
-        // 実体は TerminalHub.Terminal 側の状態モデルに委譲する（既定は生ストリーム方式 = 従来挙動）。
-        // 将来 VTエミュレータ実装をフラグで差し替えられるよう、ここはシーム経由にしてある。
+        // 実体は TerminalHub.Terminal 側の状態モデルに委譲し、方式は TerminalStateBufferFactory の
+        // フラグで決まる（既定=生ストリーム / 実験フラグON=VTエミュレータ）。
         [System.Text.Json.Serialization.JsonIgnore]
         private readonly TerminalHub.Terminal.ITerminalStateBuffer _terminalBuffer
-            = new TerminalHub.Terminal.RawStreamStateBuffer();
+            = TerminalHub.Terminal.TerminalStateBufferFactory.Create();
 
         public void AppendToTerminalBuffer(string data)
         {
             _terminalBuffer.Append(data);
+        }
+
+        /// <summary>端末サイズ変更をバッファへ通知する（エミュレータ方式のみ意味を持つ）。</summary>
+        public void ResizeTerminalBuffer(int cols, int rows)
+        {
+            _terminalBuffer.Resize(cols, rows);
         }
 
         public string GetTerminalBuffer()

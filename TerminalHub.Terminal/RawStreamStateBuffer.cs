@@ -67,6 +67,11 @@ public sealed class RawStreamStateBuffer : ITerminalStateBuffer
         }
     }
 
+    public void Resize(int cols, int rows)
+    {
+        // 生ストリーム方式はサイズの概念を持たない（何もしない）
+    }
+
     public int Size
     {
         get

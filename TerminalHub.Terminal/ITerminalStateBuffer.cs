@@ -23,6 +23,12 @@ public interface ITerminalStateBuffer
     /// <summary>保持状態を破棄する。</summary>
     void Clear();
 
+    /// <summary>
+    /// 端末サイズの変更を通知する。エミュレータ方式はグリッドを追随させる（直後に ConPTY が repaint を送る前提）。
+    /// 生ストリーム方式では何もしない。
+    /// </summary>
+    void Resize(int cols, int rows);
+
     /// <summary>現在保持しているデータ量の目安（文字数）。診断・UI 表示用。</summary>
     int Size { get; }
 }

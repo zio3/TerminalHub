@@ -456,6 +456,94 @@ public sealed class TerminalGrid
         IsAltScreen = false;
     }
 
+    // ---- リサイズ ----
+
+    /// <summary>
+    /// グリッドサイズを変更する（リフローなしの単純クロップ/パディング）。
+    /// 呼び出し直後に ConPTY が新サイズで repaint を送る前提のため、画面内容の厳密な保持はしない。
+    /// 行数縮小時、はみ出す上端行はスクロールバックへ退避する（alt-screen 中は破棄）。
+    /// </summary>
+    public void Resize(int cols, int rows)
+    {
+        cols = Math.Max(1, cols);
+        rows = Math.Max(1, rows);
+        if (cols == Cols && rows == Rows)
+        {
+            return;
+        }
+
+        // 列: 各行をクロップ/パディング
+        if (cols != Cols)
+        {
+            ResizeRowsWidth(_screen, cols);
+            if (_mainScreenStash != null)
+            {
+                ResizeRowsWidth(_mainScreenStash, cols);
+            }
+            for (int i = 0; i < _scrollback.Count; i++)
+            {
+                _scrollback[i] = ResizeRow(_scrollback[i], cols);
+            }
+        }
+
+        // 行: 縮小なら上端をスクロールバックへ、拡大なら下に空白行を追加
+        while (_screen.Count > rows)
+        {
+            var top = _screen[0];
+            _screen.RemoveAt(0);
+            if (!IsAltScreen)
+            {
+                _scrollback.Add(top);
+                if (_scrollback.Count > MaxScrollback)
+                {
+                    _scrollback.RemoveAt(0);
+                }
+            }
+            CursorRow = Math.Max(0, CursorRow - 1);
+        }
+        while (_screen.Count < rows)
+        {
+            _screen.Add(CreateBlankRow(cols));
+        }
+
+        Cols = cols;
+        Rows = rows;
+        CursorRow = Math.Clamp(CursorRow, 0, Rows - 1);
+        CursorCol = Math.Clamp(CursorCol, 0, Cols - 1);
+        _savedRow = Math.Clamp(_savedRow, 0, Rows - 1);
+        _savedCol = Math.Clamp(_savedCol, 0, Cols - 1);
+        _pendingWrap = false;
+    }
+
+    private static void ResizeRowsWidth(List<Cell[]> screen, int cols)
+    {
+        for (int i = 0; i < screen.Count; i++)
+        {
+            screen[i] = ResizeRow(screen[i], cols);
+        }
+    }
+
+    private static Cell[] ResizeRow(Cell[] row, int cols)
+    {
+        if (row.Length == cols)
+        {
+            return row;
+        }
+        var next = new Cell[cols];
+        int copy = Math.Min(row.Length, cols);
+        Array.Copy(row, next, copy);
+        // クロップ境界が全角ペアの途中なら先頭セルを空白化（片割れ防止）
+        if (copy > 0 && next[copy - 1].Width == 2)
+        {
+            next[copy - 1] = Cell.Blank;
+        }
+        for (int c = copy; c < cols; c++)
+        {
+            next[c] = Cell.Blank;
+        }
+        return next;
+    }
+
     // ---- リセット ----
 
     /// <summary>フルリセット（RIS）。スクロールバックも破棄する。</summary>

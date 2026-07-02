@@ -50,6 +50,14 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         }
     }
 
+    public void Resize(int cols, int rows)
+    {
+        lock (_lock)
+        {
+            _grid.Resize(cols, rows);
+        }
+    }
+
     public int Size
     {
         get
