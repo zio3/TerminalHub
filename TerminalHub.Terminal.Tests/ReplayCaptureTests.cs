@@ -97,6 +97,53 @@ public class ReplayCaptureTests
     }
 
     [Fact]
+    public void Pending_escape_fragment_at_snapshot_is_seeded_into_tail()
+    {
+        // チャンク境界がエスケープシーケンスの途中で切れた状態で BeginReplay した場合、
+        // 未確定の前半をテールへ種付けし、後続チャンクと合わせて完全なシーケンスとして届くこと
+        var buffer = new EmulatedStateBuffer(80, 24);
+        buffer.Append("abc\x1b[3"); // CSI 途中で分断
+        var snapshot = buffer.BeginReplay();
+        buffer.Append("1mred");     // 続き（合わせて ESC[31m red）
+        var tail = buffer.EndReplay(snapshot);
+
+        var restored = new EmulatedStateBuffer(80, 24);
+        restored.Append(snapshot.Content);
+        restored.Append(tail);
+
+        var truth = new EmulatedStateBuffer(80, 24);
+        truth.Append("abc\x1b[31mred");
+
+        Assert.Equal(truth.SerializeForReplay(), restored.SerializeForReplay());
+    }
+
+    [Fact]
+    public void Pending_high_surrogate_at_snapshot_is_seeded_into_tail()
+    {
+        // サロゲートペアの前半でチャンクが切れた状態で BeginReplay した場合も同様
+        var emoji = "😀"; // U+1F600（サロゲートペア）
+        var buffer = new EmulatedStateBuffer(80, 24);
+        buffer.Append("x" + emoji[0]); // 前半のみ
+        var snapshot = buffer.BeginReplay();
+        buffer.Append(emoji[1].ToString() + "y"); // 後半＋続き
+        var tail = buffer.EndReplay(snapshot);
+
+        // スナップショット側は孤立サロゲートを含まない（JS interop の JSON 化で化けるため）
+        Assert.DoesNotContain(emoji[0], snapshot.Content);
+        // テール先頭で前半＋後半が揃う
+        Assert.StartsWith(emoji, tail);
+
+        var restored = new EmulatedStateBuffer(80, 24);
+        restored.Append(snapshot.Content);
+        restored.Append(tail);
+
+        var truth = new EmulatedStateBuffer(80, 24);
+        truth.Append("x" + emoji + "y");
+
+        Assert.Equal(truth.SerializeForReplay(), restored.SerializeForReplay());
+    }
+
+    [Fact]
     public void RawStream_capture_has_same_semantics()
     {
         var buffer = new RawStreamStateBuffer();

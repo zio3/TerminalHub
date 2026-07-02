@@ -60,6 +60,12 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         lock (_lock)
         {
             var snapshot = new ReplaySnapshot(_hasData ? AnsiSerializer.Serialize(_grid) : string.Empty);
+            // チャンク境界で分断された未確定シーケンス（途中で切れたエスケープ/サロゲート前半）を
+            // テールの先頭に種付けする。この続きは以降のライブ出力として届くため、
+            // これが無いと xterm 側でシーケンスの後半だけが届きゴミ文字として表示される。
+            // （スナップショット側でなくテール側に付けるのは、孤立サロゲートが
+            // 単独の書き込み末尾になると JSON 化で化けるのを避けるため）
+            snapshot.Tail.Append(_parser.Pending);
             _activeReplays.Add(snapshot);
             return snapshot;
         }

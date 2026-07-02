@@ -24,6 +24,7 @@ public sealed class VtParser
     private readonly TerminalGrid _grid;
     private State _state = State.Ground;
     private readonly StringBuilder _csiParams = new();
+    private readonly StringBuilder _pendingRaw = new();
     private char _pendingHighSurrogate;
 
     public VtParser(TerminalGrid grid)
@@ -31,11 +32,30 @@ public sealed class VtParser
         _grid = grid;
     }
 
+    /// <summary>
+    /// チャンク境界で分断されて未確定のまま保持している入力の生文字列
+    /// （途中で切れたエスケープシーケンス、またはサロゲートペアの前半）。
+    /// リプレイのスナップショット生成時、この続きがテールとして届くため、
+    /// これをテールの先頭に付けないと xterm 側で断片がゴミ文字として表示される。
+    /// </summary>
+    public string Pending
+    {
+        get
+        {
+            if (_state != State.Ground)
+            {
+                return _pendingRaw.ToString();
+            }
+            return _pendingHighSurrogate != '\0' ? _pendingHighSurrogate.ToString() : string.Empty;
+        }
+    }
+
     /// <summary>出力チャンクを解釈してグリッドへ適用する。</summary>
     public void Feed(string data)
     {
         foreach (char ch in data)
         {
+            var wasGround = _state == State.Ground;
             switch (_state)
             {
                 case State.Ground:
@@ -74,6 +94,24 @@ public sealed class VtParser
                 case State.DcsEsc:
                     _state = ch == '\\' ? State.Ground : State.Dcs;
                     break;
+            }
+
+            // 未確定シーケンスの生文字列を追跡（Pending 用）。
+            // シーケンス中の文字を蓄積し、Ground に戻ったら破棄する
+            if (_state == State.Ground)
+            {
+                if (!wasGround)
+                {
+                    _pendingRaw.Clear();
+                }
+            }
+            else
+            {
+                if (wasGround)
+                {
+                    _pendingRaw.Clear();
+                }
+                _pendingRaw.Append(ch);
             }
         }
     }
