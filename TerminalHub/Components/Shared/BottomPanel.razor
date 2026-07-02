@@ -69,6 +69,12 @@
                     <i class="bi bi-journal-text me-2"></i>@L["BottomPanel.AddMemo"]
                 </button>
             </li>
+            <li>
+                <button class="dropdown-item" type="button"
+                   @onclick="AddCursorPadTab">
+                    <i class="bi bi-controller me-2"></i>@L["BottomPanel.AddCursorPad"]
+                </button>
+            </li>
         </ul>
     </li>
 </ul>
@@ -108,6 +114,10 @@
             <MemoPanel MemoId="@memoId"
                        Body="@GetMemoBody(memoId)"
                        BodyChanged="@(body => OnMemoBodyChanged(memoId, body))" />
+        }
+        else if (tab.Type == BottomPanelTabType.CursorPad)
+        {
+            <CursorPadPanel OnSendCustomKey="OnSendCustomKey" />
         }
     </div>
 }
@@ -256,6 +266,29 @@
         StateHasChanged();
     }
 
+    private void AddCursorPadTab()
+    {
+        // カーソルパッドは複数あっても意味がないので、既存タブがあればそれを選択するだけ
+        var existing = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.CursorPad);
+        if (existing != null)
+        {
+            ActiveTabId = existing.Id;
+            StateHasChanged();
+            return;
+        }
+
+        var newTab = new BottomPanelTabInfo
+        {
+            Id = Guid.NewGuid().ToString(),
+            Type = BottomPanelTabType.CursorPad,
+            DisplayName = L["BottomPanel.Tab.CursorPad"],
+            IsDefault = false
+        };
+        Tabs.Add(newTab);
+        ActiveTabId = newTab.Id;
+        StateHasChanged();
+    }
+
     private async Task AddMemoTab()
     {
         if (!CurrentSessionId.HasValue) return;
@@ -344,6 +377,7 @@
             BottomPanelTabType.TextInput => "bi-chat-left-text",
             BottomPanelTabType.PowerShell => "bi-terminal-fill",
             BottomPanelTabType.Memo => "bi-journal-text",
+            BottomPanelTabType.CursorPad => "bi-controller",
             _ => "bi-terminal"
         };
     }

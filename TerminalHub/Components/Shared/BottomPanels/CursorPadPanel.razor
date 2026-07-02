@@ -1,0 +1,31 @@
+@using Microsoft.Extensions.Localization
+
+@* カーソルパッドタブ: カーソル移動 / Esc / Enter をアクティブセッションの ConPTY へ生キー送信する。
+   ＋メニューから必要なときだけ追加して使う（テキスト入力欄と場所を食い合わないよう独立タブ）。
+   各キーは KeySequence 名（"ArrowUp" 等）を渡すだけで、親（Root.SendCustomKey）が
+   KeySequencePresets 経由で生エスケープシーケンスを WriteAsync する。 *@
+
+<div class="p-3 h-100 d-flex align-items-center justify-content-center">
+    <div class="dpad-bar cursor-pad-bar">
+        <div class="dpad-cross">
+            <button type="button" class="btn btn-secondary dpad-btn dpad-up" @onclick='() => SendKey("ArrowUp")' aria-label="↑"><i class="bi bi-caret-up-fill"></i></button>
+            <button type="button" class="btn btn-secondary dpad-btn dpad-left" @onclick='() => SendKey("ArrowLeft")' aria-label="←"><i class="bi bi-caret-left-fill"></i></button>
+            <button type="button" class="btn btn-secondary dpad-btn dpad-right" @onclick='() => SendKey("ArrowRight")' aria-label="→"><i class="bi bi-caret-right-fill"></i></button>
+            <button type="button" class="btn btn-secondary dpad-btn dpad-down" @onclick='() => SendKey("ArrowDown")' aria-label="↓"><i class="bi bi-caret-down-fill"></i></button>
+        </div>
+        <div class="dpad-actions">
+            <button type="button" class="btn btn-secondary dpad-action" @onclick='() => SendKey("Tab")'>Tab</button>
+            <button type="button" class="btn btn-secondary dpad-action" @onclick='() => SendKey("Escape")'>Esc</button>
+            <button type="button" class="btn btn-primary dpad-action" @onclick='() => SendKey("Enter")' aria-label="Enter"><i class="bi bi-arrow-return-left"></i></button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnSendCustomKey { get; set; }
+
+    private async Task SendKey(string keyName)
+    {
+        await OnSendCustomKey.InvokeAsync(keyName);
+    }
+}
