@@ -72,8 +72,12 @@ public class EmulatedStateBufferTests
     // ---- 根治の受け入れ基準: repaint が二重化しない ----
 
     /// <summary>
-    /// 生ストリーム方式では "line3" が2回残った合成 repaint フィクスチャが、
-    /// エミュレータ方式では畳まれて1回だけになる（＝スクロールバック二重化の根治）。
+    /// 合成 repaint フィクスチャ（ESC[H ESC[2J → 同一内容を再描画）の挙動。
+    /// ED2 は Windows Terminal / xterm.js(scrollOnEraseInDisplay) 準拠で
+    /// 「消去前の画面をスクロールバックへ退避」するため、退避1回＋画面1回の計2回が正しい。
+    /// （無限に増えないこと＝2回で止まることが受け入れ基準。
+    ///   ESC[2J を使わない Claude Code 型 repaint の畳み込みは
+    ///   Home_and_erase_repaint_frames_leave_single_copy が担保する）
     /// </summary>
     [Fact]
     public void Repaint_is_collapsed_not_duplicated()
@@ -83,8 +87,8 @@ public class EmulatedStateBufferTests
         buf.Append(stream);
 
         var replay = buf.SerializeForReplay();
-        Assert.Equal(1, CountOccurrences(replay, "line3"));
-        Assert.Equal(1, CountOccurrences(replay, "line1"));
+        Assert.Equal(2, CountOccurrences(replay, "line3"));
+        Assert.Equal(2, CountOccurrences(replay, "line1"));
     }
 
     /// <summary>

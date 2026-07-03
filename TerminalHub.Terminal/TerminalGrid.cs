@@ -189,7 +189,7 @@ public sealed class TerminalGrid
         _pendingWrap = false;
         if (CursorRow >= Rows - 1)
         {
-            ScrollUp(1);
+            ScrollUpArchiving(1);
         }
         else
         {
@@ -277,6 +277,33 @@ public sealed class TerminalGrid
                 }
                 break;
             case 2:
+                // Windows Terminal 準拠: ED2 は「消去」ではなく「現在の画面内容をスクロールバックへ
+                // 退避して、新しい空のページにする」（adaptDispatch の _EraseAll と同じ設計）。
+                // 退避するのは最終コンテンツ行まで（末尾の空白行は退避しない）。
+                // カーソルの行・列位置は新ページ内で維持される。alt-screen 中は退避せず空白化のみ。
+                if (!IsAltScreen)
+                {
+                    int lastContent = -1;
+                    for (int r = _screen.Count - 1; r >= 0; r--)
+                    {
+                        if (RowHasContent(_screen[r]))
+                        {
+                            lastContent = r;
+                            break;
+                        }
+                    }
+                    for (int r = 0; r <= lastContent; r++)
+                    {
+                        // 行配列の所有権をスクロールバックへ移し、画面側は新しい行に差し替える
+                        // （FillRowBlank で退避済みの行まで消してしまわないように）
+                        _scrollback.Add(_screen[r]);
+                        _screen[r] = CreateBlankRow(Cols);
+                        if (_scrollback.Count > MaxScrollback)
+                        {
+                            _scrollback.RemoveAt(0);
+                        }
+                    }
+                }
                 for (int r = 0; r < Rows; r++)
                 {
                     FillRowBlank(r);
@@ -393,8 +420,17 @@ public sealed class TerminalGrid
 
     // ---- スクロール ----
 
-    /// <summary>画面を n 行上へスクロール（上端行はスクロールバックへ、alt-screen 中は破棄）。</summary>
-    public void ScrollUp(int n)
+    /// <summary>
+    /// SU（CSI S）: 画面を n 行上へスクロールし、スクロールアウトした行は**破棄**する。
+    /// Windows Terminal 準拠（adaptDispatch の _ScrollMovement はスクロールバックへ退避しない）。
+    /// スクロールバックへ入るのは「最下行での改行」（<see cref="LineFeed"/>）と ED2 のみ。
+    /// </summary>
+    public void ScrollUp(int n) => ScrollUpCore(n, archiveToScrollback: false);
+
+    /// <summary>最下行での改行によるスクロール。上端行をスクロールバックへ退避する（alt-screen 中は破棄）。</summary>
+    internal void ScrollUpArchiving(int n) => ScrollUpCore(n, archiveToScrollback: true);
+
+    private void ScrollUpCore(int n, bool archiveToScrollback)
     {
         n = Math.Clamp(n, 1, Rows);
         for (int i = 0; i < n; i++)
@@ -402,7 +438,7 @@ public sealed class TerminalGrid
             var top = _screen[0];
             _screen.RemoveAt(0);
             _screen.Add(CreateBlankRow(Cols));
-            if (!IsAltScreen)
+            if (archiveToScrollback && !IsAltScreen)
             {
                 _scrollback.Add(top);
                 if (_scrollback.Count > MaxScrollback)
