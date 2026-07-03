@@ -16,6 +16,8 @@ namespace TerminalHub.Services
         Task SetAsync<T>(string key, T value);
         Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates);
         Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync();
+        Task<LocalDisplaySettings?> LoadDisplaySettingsAsync();
+        Task SaveDisplaySettingsAsync(LocalDisplaySettings settings);
     }
 
     public class LocalStorageService : ILocalStorageService
@@ -26,6 +28,7 @@ namespace TerminalHub.Services
         private const string SessionsKey = "terminalHub_sessions";
         private const string ActiveSessionKey = "terminalHub_activeSession";
         private const string ExpandedStatesKey = "terminalHub_expandedStates";
+        private const string DisplaySettingsKey = "terminalHub_displaySettings";
 
         public LocalStorageService(IJSRuntime jsRuntime, ILogger<LocalStorageService> logger)
         {
@@ -194,6 +197,16 @@ namespace TerminalHub.Services
                 _logger.LogError(ex, "Error saving {Key} to localStorage", key);
             }
         }
+
+        /// <summary>
+        /// デバイス別表示設定を読み込む。未保存 (キー無し) の場合は null を返し、
+        /// 呼び出し側で app-settings.json の値をシードする。
+        /// </summary>
+        public Task<LocalDisplaySettings?> LoadDisplaySettingsAsync()
+            => GetAsync<LocalDisplaySettings>(DisplaySettingsKey);
+
+        public Task SaveDisplaySettingsAsync(LocalDisplaySettings settings)
+            => SetAsync(DisplaySettingsKey, settings);
 
         public async Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates)
         {

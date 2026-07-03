@@ -486,13 +486,22 @@
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
-                sessionListScale = appSettings.General.SessionListScale;
-                terminalFontSize = appSettings.General.TerminalFontSize;
-                terminalHeightPercent = appSettings.General.TerminalHeightPercent;
-                sidebarWidthPercent = appSettings.General.SidebarWidthPercent;
+                // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
+                // PC とモバイルで別々のフォントサイズ等を持てるようにするため。
+                var localDisplay = await LocalStorageService.LoadDisplaySettingsAsync();
+                sessionListScale = localDisplay?.SessionListScale ?? appSettings.General.SessionListScale;
+                terminalFontSize = localDisplay?.TerminalFontSize ?? appSettings.General.TerminalFontSize;
+                terminalHeightPercent = localDisplay?.TerminalHeightPercent ?? appSettings.General.TerminalHeightPercent;
+                sidebarWidthPercent = localDisplay?.SidebarWidthPercent ?? appSettings.General.SidebarWidthPercent;
+                if (localDisplay == null)
+                {
+                    // 初回アクセス: 現在のサーバー側設定をこのデバイスの初期値として保存
+                    await SaveDisplaySettingsToLocalStorageAsync();
+                }
 
                 // テーマは App.razor でサーバーレンダー時に <html data-bs-theme> に
                 // 埋め込み済みのため、ここでは JS での再適用は行わない（フラッシュ防止）。
+                // テーマのみ全デバイス共通 (app-settings) のまま。
             }
             catch
             {
@@ -762,45 +771,63 @@
     }
 
     [JSInvokable]
-    public Task OnSplitterDragEnd(int percent)
+    public async Task OnSplitterDragEnd(int percent)
     {
         terminalHeightPercent = percent;
         StateHasChanged();
 
-        // 設定に保存
-        try
-        {
-            var appSettings = AppSettingsService.GetSettings();
-            appSettings.General.TerminalHeightPercent = percent;
-            AppSettingsService.SaveSettings(appSettings);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "スプリッター位置の保存に失敗");
-        }
-
-        return Task.CompletedTask;
+        // ドラッグはデバイス固有の操作なので LocalStorage のみに保存
+        // (app-settings 側は新デバイスのシード値としてダイアログ保存時のみ更新)
+        await UpdateLocalDisplaySettingAsync(s => s.TerminalHeightPercent = percent);
     }
 
     [JSInvokable]
-    public Task OnSidebarSplitterDragEnd(int percent)
+    public async Task OnSidebarSplitterDragEnd(int percent)
     {
         sidebarWidthPercent = percent;
         StateHasChanged();
 
-        // 設定に保存
+        await UpdateLocalDisplaySettingAsync(s => s.SidebarWidthPercent = percent);
+    }
+
+    /// <summary>
+    /// 現在の表示系4項目をデバイス別設定として LocalStorage に保存する（初回シード用）。
+    /// </summary>
+    private async Task SaveDisplaySettingsToLocalStorageAsync()
+    {
         try
         {
-            var appSettings = AppSettingsService.GetSettings();
-            appSettings.General.SidebarWidthPercent = percent;
-            AppSettingsService.SaveSettings(appSettings);
+            await LocalStorageService.SaveDisplaySettingsAsync(new LocalDisplaySettings
+            {
+                SessionListScale = sessionListScale,
+                TerminalFontSize = terminalFontSize,
+                TerminalHeightPercent = terminalHeightPercent,
+                SidebarWidthPercent = sidebarWidthPercent,
+            });
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "サイドバー幅の保存に失敗");
+            Logger.LogWarning(ex, "表示設定のLocalStorage保存に失敗");
         }
+    }
 
-        return Task.CompletedTask;
+    /// <summary>
+    /// LocalStorage のデバイス別表示設定のうち指定項目のみを更新する。
+    /// 全項目書き込みだと設定ダイアログでプレビュー中（未保存）の値まで
+    /// 永続化してしまうため、スプリッター操作は自分の項目だけを書く。
+    /// </summary>
+    private async Task UpdateLocalDisplaySettingAsync(Action<LocalDisplaySettings> mutate)
+    {
+        try
+        {
+            var settings = await LocalStorageService.LoadDisplaySettingsAsync() ?? new LocalDisplaySettings();
+            mutate(settings);
+            await LocalStorageService.SaveDisplaySettingsAsync(settings);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "表示設定のLocalStorage保存に失敗");
+        }
     }
 
     private async Task HandleTextInputSend(string text)

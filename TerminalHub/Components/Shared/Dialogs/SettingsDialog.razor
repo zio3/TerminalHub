@@ -1335,11 +1335,14 @@
             // 一般設定
             defaultFolderPath = settings.General.DefaultFolderPath;
             favoriteFolders = new List<string>(settings.General.FavoriteFolders);
-            sessionListScale = settings.General.SessionListScale;
-            terminalFontSize = settings.General.TerminalFontSize;
-            terminalHeightPercent = settings.General.TerminalHeightPercent;
-            sidebarWidthPercent = settings.General.SidebarWidthPercent;
             theme = settings.General.Theme;
+
+            // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings の値)
+            var localDisplay = await LocalStorageService.LoadDisplaySettingsAsync();
+            sessionListScale = localDisplay?.SessionListScale ?? settings.General.SessionListScale;
+            terminalFontSize = localDisplay?.TerminalFontSize ?? settings.General.TerminalFontSize;
+            terminalHeightPercent = localDisplay?.TerminalHeightPercent ?? settings.General.TerminalHeightPercent;
+            sidebarWidthPercent = localDisplay?.SidebarWidthPercent ?? settings.General.SidebarWidthPercent;
 
             // カスタムコマンド
             editingCommands = settings.Commands.CommandsByTerminalType
@@ -1606,6 +1609,16 @@
                 }
             };
             AppSettingsService.SaveSettings(settings);
+
+            // 表示系4項目はデバイス別設定として LocalStorage にも保存する
+            // (app-settings 側の値は新デバイス初回アクセス時のシードとして機能する)
+            await LocalStorageService.SaveDisplaySettingsAsync(new LocalDisplaySettings
+            {
+                SessionListScale = sessionListScale,
+                TerminalFontSize = terminalFontSize,
+                TerminalHeightPercent = terminalHeightPercent,
+                SidebarWidthPercent = sidebarWidthPercent,
+            });
 
             // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
             RawStreamCapture.SetEnabled(captureRawStreamEnabled);
