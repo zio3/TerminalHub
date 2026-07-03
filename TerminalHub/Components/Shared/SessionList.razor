@@ -1,6 +1,7 @@
 @using System.IO
 @using TerminalHub.Models
 @using TerminalHub.Constants
+@using TerminalHub.Components.Shared.Dialogs
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<SharedResource> L
 
@@ -117,7 +118,11 @@
                             }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
-                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" title="@(session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value)">
+                                @* クリックで変更ファイル一覧ダイアログを表示（stopPropagation でセッション選択を抑止） *@
+                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" style="cursor: pointer;"
+                                      title="@($"{(session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value)} - {L["SessionList.Badge.GitBranchClickHint"].Value}")"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => OpenGitChanges(session)">
                                     <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
                                     @if (session.HasUncommittedChanges)
                                     {
@@ -218,6 +223,13 @@
     </div>
 </div>
 
+@* Git バッジクリックで開く変更ファイル一覧ダイアログ *@
+<GitChangesDialog IsVisible="@(gitChangesSession != null)"
+                  FolderPath="@gitChangesSession?.FolderPath"
+                  BranchName="@gitChangesSession?.GitBranch"
+                  OnClose="() => gitChangesSession = null"
+                  OnChangesLoaded="HandleGitChangesLoaded" />
+
 @code {
     [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
     [Parameter] public Guid? ActiveSessionId { get; set; }
@@ -231,6 +243,24 @@
     [Parameter] public int WidthPercent { get; set; } = 25;
 
     private string filterText = string.Empty;
+
+    // Git バッジクリックで変更ファイル一覧を表示する対象セッション (null=非表示)
+    private SessionInfo? gitChangesSession;
+
+    private void OpenGitChanges(SessionInfo session)
+    {
+        gitChangesSession = session;
+    }
+
+    private void HandleGitChangesLoaded(bool hasChanges)
+    {
+        // 取得結果でバッジの赤丸を最新化する
+        if (gitChangesSession != null && gitChangesSession.HasUncommittedChanges != hasChanges)
+        {
+            gitChangesSession.HasUncommittedChanges = hasChanges;
+            StateHasChanged();
+        }
+    }
 
     [Parameter] public EventCallback OnAddSession { get; set; }
     [Parameter] public EventCallback<Guid> OnSessionSelect { get; set; }

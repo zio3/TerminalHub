@@ -62,6 +62,31 @@ namespace TerminalHub.Services
         /// <param name="worktreePath">検証するWorktreeのパス</param>
         /// <returns>Worktree情報、無効な場合はnull</returns>
         Task<WorktreeInfo?> ValidateWorktreeAsync(string worktreePath);
+
+        /// <summary>
+        /// 未コミットの変更ファイル一覧を取得（git status --porcelain）
+        /// </summary>
+        /// <param name="path">リポジトリのパス</param>
+        /// <returns>変更ファイルのリスト。取得失敗時は null（変更なしの空リストと区別する）</returns>
+        Task<List<GitChangedFile>?> GetChangedFilesAsync(string path);
+    }
+
+    /// <summary>
+    /// git status --porcelain の1行に対応する変更ファイル情報
+    /// </summary>
+    public class GitChangedFile
+    {
+        /// <summary>ステージ側の状態 (porcelain の X 列。' '=変更なし, M/A/D/R/C/U, ?=未追跡)</summary>
+        public char IndexStatus { get; set; }
+        /// <summary>作業ツリー側の状態 (porcelain の Y 列)</summary>
+        public char WorkTreeStatus { get; set; }
+        public string FilePath { get; set; } = string.Empty;
+        /// <summary>リネーム/コピー時の元パス</summary>
+        public string? OldFilePath { get; set; }
+
+        public bool IsUntracked => IndexStatus == '?' && WorkTreeStatus == '?';
+        /// <summary>ステージ済みの変更を含むか</summary>
+        public bool IsStaged => !IsUntracked && IndexStatus != ' ';
     }
 
     public class GitInfo

@@ -1,0 +1,171 @@
+@using TerminalHub.Models
+@using TerminalHub.Services
+@using Microsoft.Extensions.Localization
+@inject IGitService GitService
+@inject IStringLocalizer<SharedResource> L
+@inject ILogger<GitChangesDialog> Logger
+
+@* Git バッジクリックで開く、未コミット変更ファイル一覧ダイアログ。
+   開くたびに git status を取り直すので常に最新の状態を表示する。 *@
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-truncate">
+                    <i class="bi bi-git me-2"></i>@L["GitChanges.Title"]
+                    @if (!string.IsNullOrEmpty(BranchName))
+                    {
+                        <span class="badge bg-success ms-2">@BranchName</span>
+                    }
+                </h5>
+                <button type="button" class="btn-close" @onclick="HandleClose"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2 text-truncate" title="@FolderPath">
+                    <i class="bi bi-folder me-1"></i>@FolderPath
+                </div>
+                @if (isLoading)
+                {
+                    <div class="text-center py-4">
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>@L["GitChanges.Loading"]
+                    </div>
+                }
+                else if (loadFailed)
+                {
+                    <div class="alert alert-warning py-2 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>@L["GitChanges.LoadError"]
+                    </div>
+                }
+                else if (changedFiles.Count == 0)
+                {
+                    <div class="alert alert-success py-2 mb-0">
+                        <i class="bi bi-check-circle me-1"></i>@L["GitChanges.NoChanges"]
+                    </div>
+                }
+                else
+                {
+                    <div class="small text-muted mb-2">
+                        @string.Format(L["GitChanges.CountFormat"], changedFiles.Count)
+                    </div>
+                    <div class="list-group list-group-flush border rounded" style="max-height: 55vh; overflow-y: auto;">
+                        @foreach (var file in changedFiles)
+                        {
+                            <div class="list-group-item py-1 px-2 d-flex align-items-center gap-2">
+                                <span class="badge @GetStatusBadgeClass(file)" style="min-width: 4.5rem;">@GetStatusLabel(file)</span>
+                                <span class="font-monospace small text-break">
+                                    @if (file.OldFilePath != null)
+                                    {
+                                        <span class="text-muted">@file.OldFilePath →</span>
+                                    }
+                                    @file.FilePath
+                                    @if (file.IsStaged && !file.IsUntracked)
+                                    {
+                                        <i class="bi bi-check2 text-success ms-1" title="@L["GitChanges.Staged"]"></i>
+                                    }
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" @onclick="ReloadAsync" disabled="@isLoading">
+                    <i class="bi bi-arrow-clockwise me-1"></i>@L["GitChanges.Refresh"]
+                </button>
+                <button type="button" class="btn btn-secondary" @onclick="HandleClose">@L["Common.Close"]</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string? FolderPath { get; set; }
+    [Parameter] public string? BranchName { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>取得結果の「変更あり/なし」を親に通知（バッジの赤丸を最新化するため）</summary>
+    [Parameter] public EventCallback<bool> OnChangesLoaded { get; set; }
+
+    private List<GitChangedFile> changedFiles = new();
+    private bool isLoading = false;
+    private bool loadFailed = false;
+    private string? _loadedPath;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && !string.IsNullOrEmpty(FolderPath) && _loadedPath != FolderPath)
+        {
+            // ダイアログが開かれた時（または対象が変わった時）のみ取得する
+            _loadedPath = FolderPath;
+            await ReloadAsync();
+        }
+        else if (!IsVisible)
+        {
+            _loadedPath = null;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (string.IsNullOrEmpty(FolderPath)) return;
+
+        isLoading = true;
+        loadFailed = false;
+        StateHasChanged();
+        try
+        {
+            var files = await GitService.GetChangedFilesAsync(FolderPath);
+            if (files == null)
+            {
+                loadFailed = true;
+                changedFiles = new();
+            }
+            else
+            {
+                changedFiles = files;
+                await OnChangesLoaded.InvokeAsync(files.Count > 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[GitChangesDialog] 変更ファイル取得失敗: {Path}", FolderPath);
+            loadFailed = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleClose()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    // 表示は「作業ツリー側の状態」を優先し、ステージ済みのみの場合はステージ側を使う
+    private static char EffectiveStatus(GitChangedFile file)
+        => file.IsUntracked ? '?' : (file.WorkTreeStatus != ' ' ? file.WorkTreeStatus : file.IndexStatus);
+
+    private string GetStatusLabel(GitChangedFile file) => EffectiveStatus(file) switch
+    {
+        '?' => L["GitChanges.Status.Untracked"],
+        'M' => L["GitChanges.Status.Modified"],
+        'A' => L["GitChanges.Status.Added"],
+        'D' => L["GitChanges.Status.Deleted"],
+        'R' => L["GitChanges.Status.Renamed"],
+        'C' => L["GitChanges.Status.Copied"],
+        'U' => L["GitChanges.Status.Conflicted"],
+        var c => c.ToString()
+    };
+
+    private static string GetStatusBadgeClass(GitChangedFile file) => EffectiveStatus(file) switch
+    {
+        '?' => "bg-secondary",
+        'M' => "bg-warning text-dark",
+        'A' => "bg-success",
+        'D' => "bg-danger",
+        'R' or 'C' => "bg-info text-dark",
+        'U' => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

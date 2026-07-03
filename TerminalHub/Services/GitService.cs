@@ -348,6 +348,63 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<List<GitChangedFile>?> GetChangedFilesAsync(string path)
+        {
+            try
+            {
+                if (!await IsGitRepositoryAsync(path))
+                    return null;
+
+                // core.quotepath=false: 日本語等の非ASCIIパスが \346... 形式にエスケープされるのを防ぐ
+                var result = await ExecuteGitCommandAsync(path, "-c core.quotepath=false status --porcelain");
+                if (!result.Success)
+                    return null;
+
+                var files = new List<GitChangedFile>();
+                foreach (var line in (result.Output ?? "").Split('\n'))
+                {
+                    // porcelain v1 形式: "XY パス" (X=ステージ側, Y=作業ツリー側)
+                    var trimmed = line.TrimEnd('\r');
+                    if (trimmed.Length < 4)
+                        continue;
+
+                    var entry = new GitChangedFile
+                    {
+                        IndexStatus = trimmed[0],
+                        WorkTreeStatus = trimmed[1],
+                    };
+
+                    var pathPart = trimmed.Substring(3);
+                    // リネーム/コピーは "元パス -> 新パス" 形式
+                    var arrowIndex = pathPart.IndexOf(" -> ", StringComparison.Ordinal);
+                    if (arrowIndex >= 0 && (entry.IndexStatus is 'R' or 'C'))
+                    {
+                        entry.OldFilePath = Unquote(pathPart.Substring(0, arrowIndex));
+                        entry.FilePath = Unquote(pathPart.Substring(arrowIndex + 4));
+                    }
+                    else
+                    {
+                        entry.FilePath = Unquote(pathPart);
+                    }
+
+                    files.Add(entry);
+                }
+
+                return files;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "変更ファイル一覧の取得でエラーが発生しました: {Path}", path);
+                return null;
+            }
+
+            // スペース等を含むパスは "..." で囲まれるため外す
+            static string Unquote(string s)
+                => s.Length >= 2 && s.StartsWith('"') && s.EndsWith('"')
+                    ? s.Substring(1, s.Length - 2).Replace("\\\"", "\"").Replace("\\\\", "\\")
+                    : s;
+        }
+
         private async Task<(bool Success, string? Output, string? Error)> ExecuteGitCommandAsync(string workingDirectory, string arguments)
         {
             try
