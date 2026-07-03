@@ -109,12 +109,19 @@
     {
         if (string.IsNullOrEmpty(FolderPath)) return;
 
+        // 応答待ちの間にダイアログが閉じられて別セッションで開き直された場合、
+        // 遅れて返ってきた古い応答が新しい表示や赤丸通知を汚染しないよう、
+        // リクエスト時のパスを控えておき、応答時に対象が変わっていたら破棄する。
+        var requestPath = FolderPath;
         isLoading = true;
         loadFailed = false;
         StateHasChanged();
         try
         {
-            var files = await GitService.GetChangedFilesAsync(FolderPath);
+            var files = await GitService.GetChangedFilesAsync(requestPath);
+            if (!IsVisible || requestPath != FolderPath)
+                return; // 古い応答: 破棄（isLoading は現行リクエスト側が管理する）
+
             if (files == null)
             {
                 loadFailed = true;
@@ -128,12 +135,18 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "[GitChangesDialog] 変更ファイル取得失敗: {Path}", FolderPath);
-            loadFailed = true;
+            Logger.LogError(ex, "[GitChangesDialog] 変更ファイル取得失敗: {Path}", requestPath);
+            if (IsVisible && requestPath == FolderPath)
+            {
+                loadFailed = true;
+            }
         }
         finally
         {
-            isLoading = false;
+            if (requestPath == FolderPath)
+            {
+                isLoading = false;
+            }
         }
     }
 
