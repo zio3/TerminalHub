@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.0.0-preview.1" />
     <!-- CVE-2025-6965 (GHSA-2m69-gcr7-jv3q) を回避するため、SQLitePCLRaw を 3.x にオーバーライド -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="MQTTnet" Version="5.1.0.1559" />
