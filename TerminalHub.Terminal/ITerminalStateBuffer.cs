@@ -10,14 +10,29 @@ namespace TerminalHub.Terminal;
 /// </remarks>
 public interface ITerminalStateBuffer
 {
-    /// <summary>ConPTY から届いた（UTF-8 デコード済みの）出力チャンクを取り込む。</summary>
-    void Append(string data);
+    /// <summary>
+    /// ConPTY から届いた（UTF-8 デコード済みの）出力チャンクを取り込む。
+    /// 進行中のリプレイキャプチャ（<see cref="BeginReplay"/>〜<see cref="EndReplay"/>）がある場合は
+    /// テールにも記録し <c>true</c> を返す。<c>true</c> のとき呼び出し側はこのチャンクを
+    /// xterm へ直接書き込んではならない（<see cref="EndReplay"/> のテール書き込みで届くため二重になる）。
+    /// </summary>
+    bool Append(string data);
 
     /// <summary>
     /// セッション切替/リサイズ/再接続時に、新しい xterm へ書き戻すための出力を生成する。
     /// 生ストリーム方式では貯めた生データそのまま。エミュレータ方式では確定状態を最小 ANSI にシリアライズしたもの。
     /// </summary>
     string SerializeForReplay();
+
+    /// <summary>
+    /// リプレイをアトミックに開始する。スナップショット生成と同時に以降の <see cref="Append"/> の
+    /// テール記録を開始するため、「スナップショット取得〜書き込み完了」の間に届いたライブ出力が
+    /// 消失・順序逆転しない。書き込み完了後は必ず <see cref="EndReplay"/> を呼ぶこと。
+    /// </summary>
+    ReplaySnapshot BeginReplay();
+
+    /// <summary>テール記録を終了し、スナップショット以降に届いた出力を順序どおり返す。</summary>
+    string EndReplay(ReplaySnapshot snapshot);
 
     /// <summary>保持状態を破棄する。</summary>
     void Clear();

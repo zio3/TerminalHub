@@ -231,6 +231,14 @@
     // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
     private bool _skipConPtyResize = false;
 
+    // xterm への書き込み直列化用。ライブ出力とリプレイ（切替復元/リサイズ再同期）が
+    // 交錯すると行の重複・1行ズレが発生するため、書き込みを1本に直列化する
+    private readonly SemaphoreSlim _terminalWriteLock = new(1, 1);
+
+    // 復元処理中のセッションID。復元中に届いたライブ出力は直接書き込みせずスキップする
+    // （スナップショットに含まれているか、リプレイキャプチャのテールとして後で書き込まれるため）
+    private Guid? _restoringSessionId;
+
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
 
@@ -959,6 +967,9 @@
         // showTerminal/InitializeTerminal内のfitAddon.fit()が過渡的なサイズでConPTYに通知するのを防ぐ
         // 最終的なリサイズはResizeTerminalAsyncで正しいサイズを適用する
         _skipConPtyResize = true;
+        // 復元完了までライブ出力の直接書き込みを止める（新しい空のxtermへリプレイより先に
+        // ライブチャンクが書かれると、以降のCUP絶対座標描画が全部ズレて重複表示になるため）
+        _restoringSessionId = sessionId;
         try
         {
             // ターミナルdivが存在するか確認し、表示する
@@ -978,40 +989,55 @@
                 // 過去バッファの誤検出を防ぐため、接続時刻を記録
                 selectedSession.LastConnectionTime = DateTime.Now;
 
-                // バッファ内容をターミナルに書き込み
-                var bufferContent = selectedSession.GetTerminalBuffer();
-                if (!string.IsNullOrEmpty(bufferContent))
+                // リプレイ前にエミュレータ/ConPTY を xterm の実サイズへ同期する。
+                // 切替中はリサイズ通知を skip しているため、別セッション閲覧中にパネル開閉や
+                // ウィンドウ変更があるとサイズがずれたままになる。エミュレータの行数が xterm より
+                // 大きい状態でリプレイすると、超過分が xterm のスクロールバックへ押し出されて
+                // 「古い画面が上に残る」重複が恒久化する。
+                // ConPTY のリサイズで conhost が新サイズの画面を再描画し、それはリプレイの
+                // テール（またはそれ以降のライブ出力）として正しい順序で届く。
+                var xtermSize = await TerminalService.GetTerminalSizeAsync(activeTerminal);
+                if (xtermSize is { Cols: >= 20, Rows: >= 10 } size && activeSession != null &&
+                    (activeSession.Cols != size.Cols || activeSession.Rows != size.Rows))
                 {
-                    // デバッグ: バッファ内容を解析
-                    Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}バイト",
-                        sessionId, bufferContent.Length);
+                    Logger.LogInformation("[SelectSession] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
+                        activeSession.Cols, activeSession.Rows, size.Cols, size.Rows);
+                    // 必ずエミュレータ → ConPTY の順（再送データより先に画面を空にするため）
+                    selectedSession.ResizeTerminalBuffer(size.Cols, size.Rows);
+                    activeSession.Resize(size.Cols, size.Rows);
+                }
 
-                    // 危険なエスケープシーケンスをチェック（巨大な行/列番号）
-                    var cursorMovePattern = new System.Text.RegularExpressions.Regex(@"\x1b\[(\d+);?(\d*)H");
-                    var matches = cursorMovePattern.Matches(bufferContent);
-                    foreach (System.Text.RegularExpressions.Match match in matches)
+                // スナップショット生成と同時にライブ出力のテール記録を開始し、
+                // スナップショット→テールの順で書き込むことで取りこぼし・順序逆転を防ぐ
+                await _terminalWriteLock.WaitAsync();
+                try
+                {
+                    var replaySnapshot = selectedSession.BeginTerminalBufferReplay();
+                    string replayTail;
+                    try
                     {
-                        if (int.TryParse(match.Groups[1].Value, out int row) && row > 1000)
+                        if (!string.IsNullOrEmpty(replaySnapshot.Content))
                         {
-                            Logger.LogWarning("[SelectSession] 危険なカーソル移動検出: Row={Row}, Match={Match}",
-                                row, match.Value);
+                            Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
+                                sessionId, replaySnapshot.Content.Length);
+                            await TerminalService.WriteToTerminalAsync(activeTerminal, replaySnapshot.Content);
+                            Logger.LogInformation("[SelectSession] バッファ書き込み完了");
                         }
                     }
-
-                    // バッファの先頭と末尾をログ出力（エスケープシーケンスを可視化）
-                    var preview = bufferContent.Length > 500 ? bufferContent.Substring(0, 500) : bufferContent;
-                    var previewEscaped = preview.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
-                    Logger.LogDebug("[SelectSession] バッファ先頭500文字: {Preview}", previewEscaped);
-
-                    if (bufferContent.Length > 500)
+                    finally
                     {
-                        var tail = bufferContent.Substring(bufferContent.Length - 500);
-                        var tailEscaped = tail.Replace("\x1b", "\\e").Replace("\r", "\\r").Replace("\n", "\\n");
-                        Logger.LogDebug("[SelectSession] バッファ末尾500文字: {Tail}", tailEscaped);
+                        replayTail = selectedSession.EndTerminalBufferReplay(replaySnapshot);
                     }
 
-                    await TerminalService.WriteToTerminalAsync(activeTerminal, bufferContent);
-                    Logger.LogInformation("[SelectSession] バッファ書き込み完了");
+                    if (!string.IsNullOrEmpty(replayTail))
+                    {
+                        await TerminalService.WriteToTerminalAsync(activeTerminal, replayTail);
+                    }
+                    _restoringSessionId = null;
+                }
+                finally
+                {
+                    _terminalWriteLock.Release();
                 }
 
                 await Task.Delay(50);
@@ -1028,6 +1054,7 @@
         finally
         {
             _skipConPtyResize = false;
+            _restoringSessionId = null;
         }
 
         // ConPtySessionをConPtyConnectionServiceに登録
@@ -1069,7 +1096,7 @@
         activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, terminalDotNetRef, terminalFontSize);
     }
 
-    private async Task ProcessReceivedData(Guid sessionId, string data)
+    private async Task ProcessReceivedData(Guid sessionId, string data, bool capturedByReplay)
     {
         try
         {
@@ -1088,14 +1115,12 @@
 
             var isActive = activeSessionId == sessionId;
 
-            // 生ストリームキャプチャ（デバッグ有効時のみ。VTエミュレータ検証フィクスチャ採取用）
-            if (RawStreamCapture.Enabled)
-            {
-                RawStreamCapture.Capture(sessionId, data);
-            }
-
-            // スクロールバック保持用バッファに追記（常時有効、セッション切替時の画面復元とバッファダンプに使用）
-            sessionInfo.AppendToTerminalBuffer(data);
+            // 状態バッファへの追記と生ストリームキャプチャは SessionManager のサーバー側タップで
+            // （チャンクごとに1回だけ）実施済み。ここ（Circuit ごとのハンドラ）で行うと、
+            // 複数ブラウザ接続や切断後も残存する Circuit の数だけ多重に Append され、
+            // リプレイ時に行の重複・表示ズレが起きる。
+            // capturedByReplay=true のチャンクは進行中のリプレイキャプチャに取り込まれており、
+            // リプレイのテール書き込みで届くため直接書き込みしてはならない（二重表示になる）
 
             // Claude Codeの場合、"No conversation found to continue"エラーをチェック
             // ただし、処理中（Claude が出力中）の場合は誤検出を防ぐためスキップ
@@ -1168,7 +1193,23 @@
             // アクティブセッションの場合は直接ターミナルに出力
             if (isActive && activeTerminal != null)
             {
-                await TerminalService.WriteToTerminalAsync(activeTerminal, data);
+                if (!capturedByReplay)
+                {
+                    // リプレイ（切替復元/リサイズ再同期）と交錯しないよう書き込みを直列化する
+                    await _terminalWriteLock.WaitAsync();
+                    try
+                    {
+                        // 復元開始前に届いたチャンクはスナップショットに含まれているため書き込まない
+                        if (_restoringSessionId != sessionId)
+                        {
+                            await TerminalService.WriteToTerminalAsync(activeTerminal, data);
+                        }
+                    }
+                    finally
+                    {
+                        _terminalWriteLock.Release();
+                    }
+                }
 
                 // 接続直後（バッファ復元直後）は出力解析をスキップ
                 if (!sessionInfo.IsRecentConnection)
@@ -1628,11 +1669,33 @@
 
         try
         {
-            var replay = session.GetTerminalBuffer();
-            // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット
-            await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc" + replay);
-            Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字 session={SessionId}",
-                replay.Length, guid.ToString().Substring(0, 8));
+            // ライブ出力と交錯すると1行ズレ・重複が起きるため、書き込みロック下で
+            // スナップショット→テールの順に書き込む（スナップショット以降のライブ出力はテールで届く）
+            await _terminalWriteLock.WaitAsync();
+            try
+            {
+                var snapshot = session.BeginTerminalBufferReplay();
+                string tail;
+                try
+                {
+                    // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc" + snapshot.Content);
+                }
+                finally
+                {
+                    tail = session.EndTerminalBufferReplay(snapshot);
+                }
+                if (!string.IsNullOrEmpty(tail))
+                {
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, tail);
+                }
+                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 session={SessionId}",
+                    snapshot.Content.Length, tail.Length, guid.ToString().Substring(0, 8));
+            }
+            finally
+            {
+                _terminalWriteLock.Release();
+            }
         }
         catch (JSDisconnectedException)
         {
@@ -2524,7 +2587,7 @@
         {
             try
             {
-                await ProcessReceivedData(args.SessionId, args.Data);
+                await ProcessReceivedData(args.SessionId, args.Data, args.CapturedByReplay);
             }
             catch (Exception ex)
             {

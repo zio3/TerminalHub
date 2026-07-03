@@ -44,7 +44,10 @@ namespace TerminalHub.Services
             {
                 try
                 {
-                    DataReceived?.Invoke(this, new ConPtyDataReceivedEventArgs(sessionId, args.Data));
+                    DataReceived?.Invoke(this, new ConPtyDataReceivedEventArgs(sessionId, args.Data)
+                    {
+                        CapturedByReplay = args.CapturedByReplay
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -157,6 +160,12 @@ namespace TerminalHub.Services
     {
         public Guid SessionId { get; }
         public string Data { get; }
+
+        /// <summary>
+        /// サーバー側タップがバッファへ Append した際、進行中のリプレイキャプチャに
+        /// 取り込まれたかどうか。true のとき xterm へ直接書き込んではならない。
+        /// </summary>
+        public bool CapturedByReplay { get; init; }
 
         public ConPtyDataReceivedEventArgs(Guid sessionId, string data)
         {

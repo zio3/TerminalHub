@@ -116,6 +116,34 @@ namespace TerminalHub.Services
         private readonly IRawStreamCaptureService? _rawStreamCapture;
 
         /// <summary>
+        /// ConPTY 出力へのサーバー側シングルタップを取り付ける。
+        /// 状態バッファへの Append と生ストリームキャプチャは、ここで（チャンクごとに1回だけ）行う。
+        /// Circuit（ブラウザ接続）側で行うと、複数接続や切断後も残存する Circuit の数だけ
+        /// 同じチャンクが多重に Append され、リプレイ時に行の重複・表示ズレが起きる。
+        /// ConPtySession 生成直後（Circuit の購読より先）に登録するため、マルチキャストの
+        /// 呼び出し順により Circuit のハンドラより先に実行され、args.CapturedByReplay を
+        /// Circuit 側が参照できる。
+        /// </summary>
+        private void AttachServerSideBufferTap(SessionInfo sessionInfo, ConPtySession session)
+        {
+            session.DataReceived += (sender, args) =>
+            {
+                try
+                {
+                    if (_rawStreamCapture?.Enabled == true)
+                    {
+                        _rawStreamCapture.Capture(sessionInfo.SessionId, args.Data);
+                    }
+                    args.CapturedByReplay = sessionInfo.AppendToTerminalBuffer(args.Data);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "状態バッファへの取り込みに失敗: SessionId={SessionId}", sessionInfo.SessionId);
+                }
+            };
+        }
+
+        /// <summary>
         /// サーバーのベース URL を取得する（スキーム + ホスト + ポート）
         /// 複数アドレスがある場合は HTTP を優先する（Claude Code hook は自己署名 HTTPS 証明書を扱えないケースがあるため）
         /// 0.0.0.0 等のワイルドカードホストは localhost に置換する（LAN バインド対策）
@@ -429,6 +457,7 @@ namespace TerminalHub.Services
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行
                 lock (_lockObject)
@@ -937,6 +966,7 @@ namespace TerminalHub.Services
 
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                AttachServerSideBufferTap(sessionInfo, newSession);
                 _sessions[sessionId] = newSession;
                 sessionInfo.ConPtySession = newSession;
 
@@ -991,6 +1021,7 @@ namespace TerminalHub.Services
 
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                AttachServerSideBufferTap(sessionInfo, newSession);
                 _sessions[sessionId] = newSession;
                 sessionInfo.ConPtySession = newSession;
                 newSession.Start();

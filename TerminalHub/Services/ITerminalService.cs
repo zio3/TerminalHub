@@ -36,6 +36,11 @@ namespace TerminalHub.Services
         Task ResizeTerminalAsync(IJSObjectReference terminal);
 
         /// <summary>
+        /// xterm の現在のサイズ（cols/rows）を取得する。取得できない場合は null。
+        /// </summary>
+        Task<(int Cols, int Rows)?> GetTerminalSizeAsync(IJSObjectReference terminal);
+
+        /// <summary>
         /// ターミナルを最下部にスクロールする
         /// </summary>
         Task ScrollToBottomAsync(Guid sessionId);

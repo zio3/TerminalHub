@@ -486,6 +486,10 @@ window.terminalFunctions = {
             // Claude Code のように毎秒複数回再描画する CLI では、履歴を遡って読むことができなくなる
             // （特にモバイル）。false でも最下部に居るときは新規出力に自動追従する（xterm 標準挙動）。
             scrollOnOutput: false,
+            // ED2（CSI 2J 全画面消去）で画面内容をスクロールバックへ退避する（Windows Terminal と同じ挙動）。
+            // クリアしても履歴を遡れるようになる。サーバー側のVTエミュレータ（TerminalGrid.EraseInDisplay）
+            // も同じ意味論で実装しており、ライブ表示とセッション切替時のリプレイが一致する。
+            scrollOnEraseInDisplay: true,
             theme: {
                 background: '#1e1e1e',
                 foreground: '#d4d4d4',

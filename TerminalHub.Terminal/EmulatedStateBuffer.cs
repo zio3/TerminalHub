@@ -12,6 +12,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
     private readonly TerminalGrid _grid;
     private readonly VtParser _parser;
     private readonly object _lock = new();
+    private readonly List<ReplaySnapshot> _activeReplays = new();
     private bool _hasData;
 
     public EmulatedStateBuffer(int cols = 120, int rows = 30)
@@ -23,16 +24,26 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
     /// <summary>内部グリッド（テスト・診断用）。ロック外で触らないこと。</summary>
     public TerminalGrid Grid => _grid;
 
-    public void Append(string data)
+    public bool Append(string data)
     {
         if (string.IsNullOrEmpty(data))
         {
-            return;
+            return false;
         }
         lock (_lock)
         {
             _hasData = true;
             _parser.Feed(data);
+
+            if (_activeReplays.Count == 0)
+            {
+                return false;
+            }
+            foreach (var replay in _activeReplays)
+            {
+                replay.Tail.Append(data);
+            }
+            return true;
         }
     }
 
@@ -41,6 +52,31 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         lock (_lock)
         {
             return AnsiSerializer.Serialize(_grid);
+        }
+    }
+
+    public ReplaySnapshot BeginReplay()
+    {
+        lock (_lock)
+        {
+            var snapshot = new ReplaySnapshot(_hasData ? AnsiSerializer.Serialize(_grid) : string.Empty);
+            // チャンク境界で分断された未確定シーケンス（途中で切れたエスケープ/サロゲート前半）を
+            // テールの先頭に種付けする。この続きは以降のライブ出力として届くため、
+            // これが無いと xterm 側でシーケンスの後半だけが届きゴミ文字として表示される。
+            // （スナップショット側でなくテール側に付けるのは、孤立サロゲートが
+            // 単独の書き込み末尾になると JSON 化で化けるのを避けるため）
+            snapshot.Tail.Append(_parser.Pending);
+            _activeReplays.Add(snapshot);
+            return snapshot;
+        }
+    }
+
+    public string EndReplay(ReplaySnapshot snapshot)
+    {
+        lock (_lock)
+        {
+            _activeReplays.Remove(snapshot);
+            return snapshot.Tail.ToString();
         }
     }
 
