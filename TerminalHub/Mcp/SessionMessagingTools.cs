@@ -37,7 +37,8 @@ namespace TerminalHub.Mcp
         [McpServerTool(Name = "list_sessions")]
         [Description(
             "TerminalHub が管理中の(アーカイブでない)セッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
-            "任意のフィルタ引数で絞り込める。各項目の status は idle(受信可) か processing(処理中=送ると入力が化ける)。")]
+            "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
+            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -64,12 +65,20 @@ namespace TerminalHub.Mcp
                     folder.IndexOf(folderContains, StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
+                // 送信可否で状態を導出（呼び出し側が「送れるか」を一目で判断できるように）。
+                //   not_ready          = ConPTY 未接続。まず起動が必要（送信不可）。
+                //   waiting_user_input = ユーザーの許可/選択待ち（送信不可・待ち解消後に再試行）。
+                //   ready              = 受付中。idle でも busy でも送れる（busy は相手CLIのキューに積まれる）。
+                var status = s.ConPtySession == null ? "not_ready"
+                    : s.IsWaitingForUserInput ? "waiting_user_input"
+                    : "ready";
+
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
                     name,
                     s.TerminalType.ToString(),
                     folder,
-                    s.ProcessingStartTime.HasValue ? "processing" : "idle"));
+                    status));
             }
             return result;
         }
@@ -78,7 +87,9 @@ namespace TerminalHub.Mcp
         [Description(
             "指定した既存セッションのターミナルにメッセージを1件送る(投げっぱなし・応答は待たない)。" +
             "target はセッションGUIDか表示名(完全一致)。submit=true なら末尾でEnterを送り即実行させる。" +
-            "相手が処理中(processing)のときは送らず success=false を返すので、呼び出し側で待って再試行すること。" +
+            "相手がユーザーの許可/選択待ち(waiting)のときは送らず success=false を返す(承認プロンプトを誤確定させないため。待ち解消後に再試行)。" +
+            "単なる作業中(busy)は送信可(AI CLI がプロンプトをキューに積む)。" +
+            "宛先が未起動のときも success=false(自動起動しない・ユーザーに起動を依頼し、自動リトライはしない)。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。")]
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
@@ -101,20 +112,31 @@ namespace TerminalHub.Mcp
             if (info == null)
                 return new SendResult(false, $"宛先セッションが見つかりません: {target}");
 
-            // 処理中なら送らない(送ると入力が化ける)。呼び出し側でリトライ判断させる。
-            if (info.ProcessingStartTime.HasValue)
+            // 入力待ち(許可/選択待ち)なら送らない。ここで送ると submit の Enter が
+            // 許可プロンプトの確定に化けて意図しない承認をしてしまうため。呼び出し側でリトライ判断させる。
+            // 単なる作業中(busy)は送信を許可する(AI CLI がプロンプトをキューに積むため)。
+            if (info.IsWaitingForUserInput)
                 return new SendResult(false,
-                    $"宛先が処理中(processing)のため送信しませんでした。idle になってから再試行してください: {info.GetDisplayName()}");
+                    $"宛先がユーザーの許可/選択待ち(status=waiting_user_input)のため送信しませんでした。" +
+                    $"ここで送ると承認プロンプトを誤って確定させる恐れがあります。" +
+                    $"待ちが解消(status=ready)してから再試行してください: {info.GetDisplayName()}");
 
             var conpty = info.ConPtySession;
             if (conpty == null)
-                return new SendResult(false, $"宛先セッションが未起動です(ConPTY 未接続): {info.GetDisplayName()}");
+                return new SendResult(false,
+                    $"宛先セッションが未起動です(status=not_ready / ConPTY 未接続)。これは自動起動できません。" +
+                    $"ユーザーに「TerminalHub で『{info.GetDisplayName()}』を開いて起動してください」と依頼し、" +
+                    $"status=ready になったのを確認してから再送してください。自動でリトライしないこと。");
 
             // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
             // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
             await conpty.WriteAsync(message);
             if (submit)
             {
+                // テキスト送信後、Enter 送信前に待機する。
+                // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
+                // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
+                await Task.Delay(200);
                 await conpty.WriteAsync("\r");
             }
 
