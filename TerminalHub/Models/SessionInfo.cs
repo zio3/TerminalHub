@@ -97,11 +97,20 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWaitingForUserInput => IsWaitingForPermission || IsWaitingForSelection;
 
+        /// <summary>
+        /// hook(PermissionRequest/PreToolUse/Notification)が最後に入力待ちを立てた時刻。
+        /// OutputAnalyzer が「処理中検出」で待ちを解除する際、直前に hook が立てた待ちを
+        /// 古いスピナー出力チャンクの遅延解析で誤クリアするレースを避けるためのクールダウン判定に使う。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastWaitingHookSetTime { get; set; }
+
         /// <summary>入力待ち状態（許可・選択の両方）を解除する。</summary>
         public void ClearWaitingForUserInput()
         {
             IsWaitingForPermission = false;
             IsWaitingForSelection = false;
+            LastWaitingHookSetTime = null;
         }
 
         /// <summary>

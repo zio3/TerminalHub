@@ -443,12 +443,18 @@ public class HookNotificationService : IHookNotificationService
             "Notification イベント処理: Session={SessionName}, Message={Message}",
             session.GetDisplayName(), notification.Message);
 
-        // message に "permission" を含めば許可待ち（それ以外は idle 通知）。
-        // 許可待ちのときだけ「許可待ち」フラグを立てる（send_to_session の送信ガード / UI アイコン用）。
+        // message に "permission" を含めば許可待ち、それ以外は idle/認証成功 等の非permission通知。
+        // 許可待ちフラグは立て下げを対称にする（idle 通知で解除しないと stuck するため）。
         if (!string.IsNullOrEmpty(notification.Message) &&
             notification.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
         {
             session.IsWaitingForPermission = true;
+            session.LastWaitingHookSetTime = DateTime.Now;
+        }
+        else
+        {
+            // 非permission通知＝許可待ちではない。許可待ちフラグを解除する（選択待ちは PreToolUse 管理なので触らない）。
+            session.IsWaitingForPermission = false;
         }
 
         await SendSessionHookWebhookAsync(session, notification);
@@ -467,6 +473,7 @@ public class HookNotificationService : IHookNotificationService
 
         // 発火 = ユーザーへの質問（選択待ち）。選択待ちフラグを立てる（send_to_session の送信ガード / UI アイコン用）。
         session.IsWaitingForSelection = true;
+        session.LastWaitingHookSetTime = DateTime.Now;
 
         await SendSessionHookWebhookAsync(session, notification);
     }
@@ -484,6 +491,7 @@ public class HookNotificationService : IHookNotificationService
 
         // ツール実行の承認待ち。許可待ちフラグを立てる（send_to_session の送信ガード / UI アイコン用）。
         session.IsWaitingForPermission = true;
+        session.LastWaitingHookSetTime = DateTime.Now;
 
         await SendSessionHookWebhookAsync(session, notification);
     }
