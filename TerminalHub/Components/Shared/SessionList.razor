@@ -270,7 +270,12 @@
         isGitChangesLoading = true;
         try
         {
-            var files = await GitService.GetChangedFilesAsync(session.FolderPath);
+            // 応答が返るまでにセッションが削除されたり対象パスが変わった場合、
+            // 古い応答で赤丸やダイアログを汚染しないよう破棄する（GitChangesDialog.ReloadAsync と同じ方針）
+            var requestPath = session.FolderPath;
+            var files = await GitService.GetChangedFilesAsync(requestPath);
+            if (requestPath != session.FolderPath || !Sessions.Contains(session))
+                return;
             if (files == null)
             {
                 await OnShowErrorToast.InvokeAsync(L["SessionList.Toast.GitStatusError"]);

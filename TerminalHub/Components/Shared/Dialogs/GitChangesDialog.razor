@@ -8,7 +8,8 @@
 @inject IJSRuntime JSRuntime
 
 @* Git バッジクリックで開く、未コミット変更ファイル一覧ダイアログ。
-   開くたびに git status を取り直すので常に最新の状態を表示する。 *@
+   開いたとき InitialFiles（親がクリック時に取得済みの結果）があればそれを初期表示し、
+   無ければ git status を取得する。更新ボタンでは常に取り直す。 *@
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -108,6 +109,7 @@
         {
             // ダイアログが開かれた時（または対象が変わった時）のみ取得する
             _loadedPath = FolderPath;
+            pathsCopied = false; // 前回対象の「コピーしました」表示を持ち越さない
             if (InitialFiles != null)
             {
                 // 親がクリック時に取得済みなら再取得しない
