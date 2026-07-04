@@ -95,6 +95,13 @@
                                 <i class="bi bi-wrench me-1"></i>@L["Settings.Tab.Special"]
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "experimental" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "experimental")">
+                                <i class="bi bi-flask me-1"></i>試験機能
+                            </button>
+                        </li>
                         @if (devToolsEnabled)
                         {
                             <li class="nav-item" role="presentation">
@@ -890,52 +897,6 @@
                                 <hr />
 
                                 <div class="mb-4">
-                                    <h6 class="mb-2">@L["Settings.Special.VoiceInput.Header"]</h6>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" @bind="voiceInputEnabled" id="voiceInputSwitch">
-                                        <label class="form-check-label" for="voiceInputSwitch">
-                                            @L["Settings.Special.VoiceInput.Enable"]
-                                        </label>
-                                    </div>
-                                    <p class="text-muted small mt-2 mb-0">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        @L["Settings.Special.VoiceInput.Help"]
-                                    </p>
-                                </div>
-
-                                <hr />
-
-                                @* 試験機能: 各CLIの設定フォルダへ terminalhub MCP を自動登録する（既定OFF） *@
-                                <div class="mb-4">
-                                    <h6 class="mb-2">
-                                        <span class="badge bg-warning text-dark me-1">試験機能</span>
-                                        MCP自動登録
-                                    </h6>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
-                                        <label class="form-check-label" for="autoRegisterMcpSwitch">
-                                            対応CLIのフォルダに TerminalHub のローカル MCP を自動登録する
-                                        </label>
-                                    </div>
-                                    <p class="text-muted small mt-2 mb-0">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に、その作業フォルダへ
-                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を追記します。
-                                        起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
-                                    </p>
-                                    <ul class="text-muted small mt-1 mb-0">
-                                        <li>Claude Code → <code>&lt;folder&gt;/.mcp.json</code> の <code>mcpServers.terminalhub</code></li>
-                                        <li>Codex → <code>&lt;folder&gt;/.codex/config.toml</code> の <code>[mcp_servers.terminalhub]</code></li>
-                                    </ul>
-                                    <p class="text-muted small mt-1 mb-0">
-                                        既存の設定はそのまま残し、<code>terminalhub</code> エントリのみを管理します。
-                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。
-                                    </p>
-                                </div>
-
-                                <hr />
-
-                                <div class="mb-4">
                                     <h6 class="mb-2">@L["Settings.Special.DevTools.Header"]</h6>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="devToolsEnabled" id="devToolsSwitch">
@@ -959,6 +920,73 @@
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
                                         @L["Settings.Special.Logs.Help"]
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "experimental")
+                        {
+                            <div class="tab-pane fade show active">
+                                <p class="text-muted small mb-3">
+                                    <i class="bi bi-flask me-1"></i>
+                                    実験的な機能です。音声入力とカーソルパッド自動切替は<strong>このデバイスのみ</strong>（LocalStorage 保存）で、PC とモバイルで別々に設定できます。
+                                </p>
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">@L["Settings.Special.VoiceInput.Header"]</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="voiceInputEnabled" id="voiceInputSwitch">
+                                        <label class="form-check-label" for="voiceInputSwitch">
+                                            @L["Settings.Special.VoiceInput.Enable"]
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        @L["Settings.Special.VoiceInput.Help"]（このデバイスのみ。例: PC は ON、モバイルは OS の音声入力を使うので OFF）
+                                    </p>
+                                </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">入力待ちでカーソルパッドへ自動切替</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="autoSwitchCursorPadEnabled" id="autoSwitchCursorPadSwitch">
+                                        <label class="form-check-label" for="autoSwitchCursorPadSwitch">
+                                            セッションが入力待ちになったら下部パネルをカーソルパッドに切り替える
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        許可待ち/選択待ちのプロンプトが出た瞬間に、そのセッションに<strong>カーソルパッドタブが既にある場合だけ</strong>そこへ自動で切り替えます（無ければ何もしません）。
+                                        ↑↓←→/Enter でそのまま応答でき、タッチ操作のモバイルで便利です。このデバイスのみ。
+                                    </p>
+                                </div>
+
+                                <hr />
+
+                                @* 各CLIの設定フォルダへ terminalhub MCP を自動登録する（既定OFF・全デバイス共通） *@
+                                <div class="mb-4">
+                                    <h6 class="mb-2">MCP自動登録</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
+                                        <label class="form-check-label" for="autoRegisterMcpSwitch">
+                                            対応CLIのフォルダに TerminalHub のローカル MCP を自動登録する
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に、その作業フォルダへ
+                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を追記します。
+                                        起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
+                                    </p>
+                                    <ul class="text-muted small mt-1 mb-0">
+                                        <li>Claude Code → <code>&lt;folder&gt;/.mcp.json</code> の <code>mcpServers.terminalhub</code></li>
+                                        <li>Codex → <code>&lt;folder&gt;/.codex/config.toml</code> の <code>[mcp_servers.terminalhub]</code></li>
+                                    </ul>
+                                    <p class="text-muted small mt-1 mb-0">
+                                        既存の設定はそのまま残し、<code>terminalhub</code> エントリのみを管理します。
+                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。全デバイス共通の設定です。
                                     </p>
                                 </div>
                             </div>
@@ -1228,6 +1256,7 @@
     // 開発ツール関連
     private bool devToolsEnabled = false;
     private bool autoRegisterMcpEnabled = false;
+    private bool autoSwitchCursorPadEnabled = false;
     private bool captureRawStreamEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
@@ -1248,6 +1277,7 @@
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
     [Parameter] public EventCallback<int> OnSidebarWidthPercentChanged { get; set; }
     [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnAutoSwitchCursorPadChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
@@ -1346,7 +1376,10 @@
                 "altM" or "shiftTab" or "none" => settings.Special.ClaudeModeSwitchKey,
                 _ => "none"
             };
-            voiceInputEnabled = settings.Special.VoiceInputEnabled;
+            // 音声入力・カーソルパッド自動切替はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
+            var localExperimental = await LocalStorageService.LoadExperimentalSettingsAsync();
+            voiceInputEnabled = localExperimental?.VoiceInputEnabled ?? settings.Special.VoiceInputEnabled;
+            autoSwitchCursorPadEnabled = localExperimental?.AutoSwitchToCursorPadOnWait ?? false;
 
             // セッション表示設定
             // 未知の SortMode 値は lastAccessed にフォールバック（UI ラジオの未選択状態を防ぐ）
@@ -1656,6 +1689,14 @@
                 SidebarWidthPercent = sidebarWidthPercent,
             });
 
+            // 音声入力・カーソルパッド自動切替もデバイス別設定として LocalStorage に保存する
+            // (app-settings 側の VoiceInputEnabled は新デバイス初回アクセス時のシードとして機能する)
+            await LocalStorageService.SaveExperimentalSettingsAsync(new LocalExperimentalSettings
+            {
+                VoiceInputEnabled = voiceInputEnabled,
+                AutoSwitchToCursorPadOnWait = autoSwitchCursorPadEnabled,
+            });
+
             // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
             RawStreamCapture.SetEnabled(captureRawStreamEnabled);
 
@@ -1682,6 +1723,9 @@
 
             // 音声入力設定の変更を通知
             await OnVoiceInputEnabledChanged.InvokeAsync(voiceInputEnabled);
+
+            // カーソルパッド自動切替設定の変更を通知
+            await OnAutoSwitchCursorPadChanged.InvokeAsync(autoSwitchCursorPadEnabled);
 
             // テーマの変更を通知
             await OnThemeChanged.InvokeAsync(theme);
