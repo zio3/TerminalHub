@@ -518,6 +518,8 @@
   <data name="GitChanges.LoadError" xml:space="preserve"><value>Failed to get changed files</value></data>
   <data name="GitChanges.CountFormat" xml:space="preserve"><value>{0} changed file(s)</value></data>
   <data name="GitChanges.Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="GitChanges.CopyPaths" xml:space="preserve"><value>Copy paths</value></data>
+  <data name="GitChanges.Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="GitChanges.Staged" xml:space="preserve"><value>Staged</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>Untracked</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>Modified</value></data>

@@ -518,6 +518,8 @@
   <data name="GitChanges.LoadError" xml:space="preserve"><value>変更ファイル一覧の取得に失敗しました</value></data>
   <data name="GitChanges.CountFormat" xml:space="preserve"><value>{0} 件の変更</value></data>
   <data name="GitChanges.Refresh" xml:space="preserve"><value>更新</value></data>
+  <data name="GitChanges.CopyPaths" xml:space="preserve"><value>パスをコピー</value></data>
+  <data name="GitChanges.Copied" xml:space="preserve"><value>コピーしました</value></data>
   <data name="GitChanges.Staged" xml:space="preserve"><value>ステージ済み</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>未追跡</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>変更</value></data>

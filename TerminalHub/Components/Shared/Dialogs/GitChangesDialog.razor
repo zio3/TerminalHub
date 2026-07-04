@@ -1,9 +1,11 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
+@using Microsoft.JSInterop
 @inject IGitService GitService
 @inject IStringLocalizer<SharedResource> L
 @inject ILogger<GitChangesDialog> Logger
+@inject IJSRuntime JSRuntime
 
 @* Git バッジクリックで開く、未コミット変更ファイル一覧ダイアログ。
    開くたびに git status を取り直すので常に最新の状態を表示する。 *@
@@ -69,6 +71,13 @@
                 }
             </div>
             <div class="modal-footer">
+                @if (changedFiles.Count > 0 && !isLoading && !loadFailed)
+                {
+                    @* 変更ファイルの相対パス一覧（改行区切り）をクリップボードへ。AIへの貼り付け等を想定 *@
+                    <button type="button" class="btn btn-outline-secondary me-auto" @onclick="CopyPathsAsync">
+                        <i class="bi @(pathsCopied ? "bi-check2" : "bi-clipboard") me-1"></i>@(pathsCopied ? L["GitChanges.Copied"] : L["GitChanges.CopyPaths"])
+                    </button>
+                }
                 <button type="button" class="btn btn-outline-secondary" @onclick="ReloadAsync" disabled="@isLoading">
                     <i class="bi bi-arrow-clockwise me-1"></i>@L["GitChanges.Refresh"]
                 </button>
@@ -164,6 +173,29 @@
     private async Task HandleClose()
     {
         await OnClose.InvokeAsync();
+    }
+
+    // 「コピーしました」表示用（数秒で元に戻す）
+    private bool pathsCopied = false;
+
+    private async Task CopyPathsAsync()
+    {
+        if (changedFiles.Count == 0) return;
+        try
+        {
+            // リネーム/コピーは新パス側を使う（git status の相対パスをそのまま改行区切りで）
+            var text = string.Join("\n", changedFiles.Select(f => f.FilePath));
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            pathsCopied = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            pathsCopied = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[GitChangesDialog] パスのコピーに失敗");
+        }
     }
 
     // 表示は「作業ツリー側の状態」を優先し、ステージ済みのみの場合はステージ側を使う
