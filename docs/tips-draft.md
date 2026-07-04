@@ -80,7 +80,7 @@ Discord などでの「Tips 投稿」用ネタ候補。週1〜隔週ペースで
 ### Claude Code / Codex 連携の深化
 
 39. **Claude Code hook でサブエージェント/compact/許可待ちを追跡** — 「今なにしてるか」がセッション一覧で見える（PR #73）
-40. **通知アイコンが状態で変わる** — 停止=ベル / 許可待ち=盾 / 選択待ち=ラジオ。何を求められているか一目で分かる（PR #77）
+40. **通知アイコンが状態で変わる** — 停止=ベル / 許可待ち=八角形＋？（`bi-question-octagon`）/ 選択待ち=番号リスト（`bi-list-ol`）。何を求められているか一目で分かる（PR #77。アイコンは後続PRで現行の形に更新済み）
 41. **Codex CLI も lifecycle hook 対応** — `TerminalHub.exe --notify` ブリッジ経由で Claude Code と同等の状態追跡・Webhook 通知（PR #82）
 42. **Webhook は本来の hook イベント名で送信** — `UserPromptSubmit`/`Stop`/`SubagentStart` 等をそのまま転送。LED 連携などの受信側で自由に解釈できる
 
