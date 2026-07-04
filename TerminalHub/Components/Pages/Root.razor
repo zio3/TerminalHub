@@ -273,6 +273,23 @@
     }
 
     /// <summary>
+    /// Notification（曖昧な発火源）由来のベルを立てる。
+    /// Notification は AskUserQuestion の裏でも飛ぶことがあり、その message が "permission" を含むと
+    /// Confirm と誤判定されうる。既に精密イベント(PreToolUse=Select / PermissionRequest=Confirm)で
+    /// 要操作ベルが立っている場合は上書きしない（三択待ちが「許可待ち」へ化けるのを防ぐ）。
+    /// </summary>
+    private void SetNotificationBellFromNotification(Guid sessionId, SessionBellKind kind)
+    {
+        if (_notificationPendingSessions.TryGetValue(sessionId, out var existing)
+            && existing != SessionBellKind.Stopped)
+        {
+            // 既に要操作ベル(Select/Confirm)が立っている → 曖昧な Notification では上書きしない
+            return;
+        }
+        SetNotificationBell(sessionId, kind);
+    }
+
+    /// <summary>
     /// Notification イベントの message から通知ベル種別を判別する。
     /// Notification は許可待ち(permission)・アイドル(idle)・認証成功 等で発火するため、
     /// 一律 Confirm（盾＝許可待ち）にすると idle/認証まで「許可待ち」と誤表示してしまう。
@@ -2286,7 +2303,7 @@
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
                 session.LastProcessingUpdateTime = null;
-                session.IsWaitingForUserInput = false;
+                session.ClearWaitingForUserInput();
 
                 // 非アクティブセッションの場合は通知マークを表示
                 if (activeSessionId != sessionId)
@@ -2355,7 +2372,7 @@
                 session.ProcessingStartTime = null;
                 session.ProcessingElapsedSeconds = null;
                 session.LastProcessingUpdateTime = null;
-                session.IsWaitingForUserInput = false;
+                session.ClearWaitingForUserInput();
 
                 // 非アクティブセッションの場合は通知マークを表示（インスタンスごとの通知リストに追加）
                 if (activeSessionId != notification.SessionId)
@@ -2414,16 +2431,26 @@
                 //                         idle/認証成功等は停止（ベル）にして「許可待ち」を誤表示しない。
                 if (activeSessionId != notification.SessionId)
                 {
-                    var bellKind = eventType switch
-                    {
-                        HookEventType.PreToolUse => SessionBellKind.Select,
-                        HookEventType.PermissionRequest => SessionBellKind.Confirm,
-                        _ => ClassifyNotificationBell(notification.Message)
-                    };
                     Logger.LogInformation(
-                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), 種別: {Kind}, Message={Message}, セッション: {SessionName}",
-                        eventType, bellKind, notification.Message, session.GetDisplayName());
-                    SetNotificationBell(notification.SessionId, bellKind);
+                        "[通知マーク ON] きっかけ: OnHookNotification({Event}), Message={Message}, セッション: {SessionName}",
+                        eventType, notification.Message, session.GetDisplayName());
+
+                    // PreToolUse=選択 / PermissionRequest=許可 は「何を待っているか」が確定する精密な発火源。
+                    // 一方 Notification は曖昧（許可待ち/idle/認証成功が混在）。精密イベントを Notification が
+                    // 上書きして三択が「許可待ち」に化けないよう、Notification 由来はガード付きで立てる。
+                    switch (eventType)
+                    {
+                        case HookEventType.PreToolUse:
+                            SetNotificationBell(notification.SessionId, SessionBellKind.Select);
+                            break;
+                        case HookEventType.PermissionRequest:
+                            SetNotificationBell(notification.SessionId, SessionBellKind.Confirm);
+                            break;
+                        default:
+                            SetNotificationBellFromNotification(
+                                notification.SessionId, ClassifyNotificationBell(notification.Message));
+                            break;
+                    }
                     StateHasChanged();
                 }
                 break;

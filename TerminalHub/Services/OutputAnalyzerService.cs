@@ -65,8 +65,19 @@ namespace TerminalHub.Services
                     }
                     else if (result.IsProcessing)
                     {
-                        // ユーザー入力待ち状態をセッションに設定
-                        sessionInfo.IsWaitingForUserInput = result.IsWaitingForUser;
+                        // 出力解析で「処理中(esc to interrupt 等)」を検出＝ユーザープロンプト待ちではない状態。
+                        if (result.IsWaitingForUser)
+                        {
+                            // 出力解析ベースで入力待ちを検出（Gemini 等）。種別まではわからないので選択待ち扱い。
+                            sessionInfo.IsWaitingForSelection = true;
+                        }
+                        else
+                        {
+                            // 処理中＝プロンプト待ちではないので、hook(PermissionRequest/PreToolUse)が立てた
+                            // 許可/選択待ちも含めて解除する。Codex は承認後の作業中に waiting が残り続けて
+                            // send_to_session が誤ブロックされるのを防ぐ（Codexは Stop まで waiting が下がらないため）。
+                            sessionInfo.ClearWaitingForUserInput();
+                        }
 
                         // ステータステキストを決定
                         var statusText = result.ProcessingText ?? result.StatusText;
@@ -231,7 +242,7 @@ namespace TerminalHub.Services
                     session.ProcessingStartTime = null;
                     session.ProcessingElapsedSeconds = null;
                     session.LastProcessingUpdateTime = null;
-                    session.IsWaitingForUserInput = false;
+                    session.ClearWaitingForUserInput();
 
                     // セッションのタイマーを停止（ISessionTimerServiceに委譲）
                     StopSessionTimer(session.SessionId);

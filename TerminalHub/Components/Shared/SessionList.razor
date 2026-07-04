@@ -146,15 +146,9 @@
                         @if (session.ProcessingElapsedSeconds.HasValue || !string.IsNullOrEmpty(session.ProcessingStatus))
                         {
                             <div>
-                                <small class="@(session.IsWaitingForUserInput ? "text-warning" : "text-primary")">
-                                    @if (session.IsWaitingForUserInput)
-                                    {
-                                        <i class="bi bi-person-fill-exclamation me-1"></i>
-                                    }
-                                    else
-                                    {
-                                        <i class="bi bi-clock-fill me-1"></i>
-                                    }
+                                @* ステータス行は常に時計＋通常色。入力待ちの種別は通知ベル側で区別する。 *@
+                                <small class="text-primary">
+                                    <i class="bi bi-clock-fill me-1"></i>
                                     @if (!string.IsNullOrEmpty(session.ProcessingStatus))
                                     {
                                         <span>@session.ProcessingStatus</span>
@@ -485,8 +479,8 @@
     /// </summary>
     private string BellIcon(SessionBellKind kind) => kind switch
     {
-        SessionBellKind.Confirm => "bi-shield-exclamation",   // 許可待ち
-        SessionBellKind.Select => "bi-ui-radios",             // 質問（選択）
+        SessionBellKind.Confirm => "bi-question-octagon",     // 許可待ち（停止標識風の八角形＋？）
+        SessionBellKind.Select => "bi-list-ol",               // 質問（選択）
         _ => "bi-bell-fill"                                    // 停止
     };
 

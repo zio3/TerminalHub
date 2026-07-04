@@ -193,7 +193,7 @@ public class HookNotificationService : IHookNotificationService
         session.ProcessingStatus = null;
         session.ProcessingElapsedSeconds = null;
         session.LastProcessingUpdateTime = null;
-        session.IsWaitingForUserInput = false;
+        session.ClearWaitingForUserInput();
 
         // compact 中フラグを倒す保険。auto-compact がブロック/中断され PostCompact が
         // 飛ばないケースがあり（公式仕様上、PreCompact がブロックされると PostCompact は来ない）、
@@ -409,6 +409,9 @@ public class HookNotificationService : IHookNotificationService
         session.ProcessingStartTime = DateTime.Now;
         // ProcessingStatus は OutputAnalyzer が実際のステータステキストを設定するため、ここでは設定しない
 
+        // 新しいプロンプトが送られた＝直前の許可/選択待ちは解消。入力待ちフラグを下ろす。
+        session.ClearWaitingForUserInput();
+
         // Webhook通知を送信（本来の hook イベント名 "UserPromptSubmit" をそのまま eventType として送る。
         // 「UserPromptSubmit = LED 点灯」等の解釈は受け側に委ねる）
         try
@@ -439,6 +442,15 @@ public class HookNotificationService : IHookNotificationService
         _logger.LogInformation(
             "Notification イベント処理: Session={SessionName}, Message={Message}",
             session.GetDisplayName(), notification.Message);
+
+        // message に "permission" を含めば許可待ち（それ以外は idle 通知）。
+        // 許可待ちのときだけ「許可待ち」フラグを立てる（send_to_session の送信ガード / UI アイコン用）。
+        if (!string.IsNullOrEmpty(notification.Message) &&
+            notification.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+        {
+            session.IsWaitingForPermission = true;
+        }
+
         await SendSessionHookWebhookAsync(session, notification);
     }
 
@@ -452,6 +464,10 @@ public class HookNotificationService : IHookNotificationService
         _logger.LogInformation(
             "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
+
+        // 発火 = ユーザーへの質問（選択待ち）。選択待ちフラグを立てる（send_to_session の送信ガード / UI アイコン用）。
+        session.IsWaitingForSelection = true;
+
         await SendSessionHookWebhookAsync(session, notification);
     }
 
@@ -465,6 +481,10 @@ public class HookNotificationService : IHookNotificationService
         _logger.LogInformation(
             "PermissionRequest イベント処理（ツール={ToolName}、承認待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
+
+        // ツール実行の承認待ち。許可待ちフラグを立てる（send_to_session の送信ガード / UI アイコン用）。
+        session.IsWaitingForPermission = true;
+
         await SendSessionHookWebhookAsync(session, notification);
     }
 }
