@@ -127,6 +127,9 @@ builder.Services.AddSingleton<IAppSettingsService, AppSettingsService>();
 // FolderPickerServiceを登録
 builder.Services.AddSingleton<IFolderPickerService, FolderPickerService>();
 
+// エクスプローラー起動（前面化付き）を登録
+builder.Services.AddSingleton<IExplorerLauncherService, ExplorerLauncherService>();
+
 // リモート起動サービスを登録
 builder.Services.AddSingleton<IRemoteLaunchService, RemoteLaunchService>();
 builder.Services.AddSingleton<MqttService>();

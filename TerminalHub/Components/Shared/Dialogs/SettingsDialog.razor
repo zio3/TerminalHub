@@ -11,6 +11,7 @@
 @inject ILocalStorageService LocalStorageService
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
+@inject IExplorerLauncherService ExplorerLauncher
 @inject ISessionManager SessionManager
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IVersionCheckService VersionCheckService
@@ -1542,11 +1543,8 @@
             {
                 Directory.CreateDirectory(logPath);
             }
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = logPath,
-                UseShellExecute = true,
-            });
+            // ブラウザの裏に隠れないよう、開いたウィンドウを前面化するサービス経由で開く
+            ExplorerLauncher.OpenFolder(logPath);
         }
         catch (Exception ex)
         {
