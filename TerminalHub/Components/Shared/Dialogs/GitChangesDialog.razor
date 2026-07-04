@@ -1,12 +1,15 @@
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
+@using Microsoft.JSInterop
 @inject IGitService GitService
 @inject IStringLocalizer<SharedResource> L
 @inject ILogger<GitChangesDialog> Logger
+@inject IJSRuntime JSRuntime
 
 @* Git バッジクリックで開く、未コミット変更ファイル一覧ダイアログ。
-   開くたびに git status を取り直すので常に最新の状態を表示する。 *@
+   開いたとき InitialFiles（親がクリック時に取得済みの結果）があればそれを初期表示し、
+   無ければ git status を取得する。更新ボタンでは常に取り直す。 *@
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -69,6 +72,13 @@
                 }
             </div>
             <div class="modal-footer">
+                @if (changedFiles.Count > 0 && !isLoading && !loadFailed)
+                {
+                    @* 変更ファイルの相対パス一覧（改行区切り）をクリップボードへ。AIへの貼り付け等を想定 *@
+                    <button type="button" class="btn btn-outline-secondary me-auto" @onclick="CopyPathsAsync">
+                        <i class="bi @(pathsCopied ? "bi-check2" : "bi-clipboard") me-1"></i>@(pathsCopied ? L["GitChanges.Copied"] : L["GitChanges.CopyPaths"])
+                    </button>
+                }
                 <button type="button" class="btn btn-outline-secondary" @onclick="ReloadAsync" disabled="@isLoading">
                     <i class="bi bi-arrow-clockwise me-1"></i>@L["GitChanges.Refresh"]
                 </button>
@@ -85,6 +95,8 @@
     [Parameter] public EventCallback OnClose { get; set; }
     /// <summary>取得結果の「変更あり/なし」を親に通知（バッジの赤丸を最新化するため）</summary>
     [Parameter] public EventCallback<bool> OnChangesLoaded { get; set; }
+    /// <summary>親がクリック時に取得済みの変更一覧。指定があれば開いた直後の再取得を省略する（更新ボタンでは取り直す）</summary>
+    [Parameter] public List<GitChangedFile>? InitialFiles { get; set; }
 
     private List<GitChangedFile> changedFiles = new();
     private bool isLoading = false;
@@ -97,7 +109,17 @@
         {
             // ダイアログが開かれた時（または対象が変わった時）のみ取得する
             _loadedPath = FolderPath;
-            await ReloadAsync();
+            pathsCopied = false; // 前回対象の「コピーしました」表示を持ち越さない
+            if (InitialFiles != null)
+            {
+                // 親がクリック時に取得済みなら再取得しない
+                changedFiles = InitialFiles;
+                loadFailed = false;
+            }
+            else
+            {
+                await ReloadAsync();
+            }
         }
         else if (!IsVisible)
         {
@@ -153,6 +175,29 @@
     private async Task HandleClose()
     {
         await OnClose.InvokeAsync();
+    }
+
+    // 「コピーしました」表示用（数秒で元に戻す）
+    private bool pathsCopied = false;
+
+    private async Task CopyPathsAsync()
+    {
+        if (changedFiles.Count == 0) return;
+        try
+        {
+            // リネーム/コピーは新パス側を使う（git status の相対パスをそのまま改行区切りで）
+            var text = string.Join("\n", changedFiles.Select(f => f.FilePath));
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            pathsCopied = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            pathsCopied = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[GitChangesDialog] パスのコピーに失敗");
+        }
     }
 
     // 表示は「作業ツリー側の状態」を優先し、ステージ済みのみの場合はステージ側を使う
