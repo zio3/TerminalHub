@@ -40,6 +40,9 @@ npm run clean         # ビルド成果物をクリーン
 ### リリース手順
 `/release` スキルを使用する。バージョン更新、コミット、タグ付け、リリースノート作成、Discordお知らせ投稿までを一括実行する。
 
+### 機能紹介記事（Tips）の執筆
+`/write-tips` スキルを使用する。Notion への記事作成（結論先行・AI伴走プロンプト型）から Discord #tips への紹介投稿までを一括実行する。ネタ元は `docs/tips-draft.md`。
+
 ### クリーン
 ```bash
 dotnet clean
