@@ -65,8 +65,31 @@ namespace TerminalHub.Services
                     }
                     else if (result.IsProcessing)
                     {
-                        // ユーザー入力待ち状態をセッションに設定
-                        sessionInfo.IsWaitingForUserInput = result.IsWaitingForUser;
+                        // 出力解析で「処理中(esc to interrupt 等)」を検出＝ユーザープロンプト待ちではない状態。
+                        if (result.IsWaitingForUser)
+                        {
+                            // 出力解析ベースで入力待ちを検出（Gemini 等）。種別まではわからないので選択待ち扱い。
+                            sessionInfo.IsWaitingForSelection = true;
+                        }
+                        else
+                        {
+                            // 処理中＝プロンプト待ちではないので、hook(PermissionRequest/PreToolUse)が立てた
+                            // 許可/選択待ちも含めて解除する。Codex は承認後の作業中に waiting が残り続けて
+                            // send_to_session が誤ブロックされるのを防ぐ（Codexは Stop まで waiting が下がらないため）。
+                            //
+                            // ただし hook が直前(クールダウン内)に待ちを立てた場合は解除しない。
+                            // プロンプト表示直前の古いスピナー出力チャンクが遅れて解析され、開いている
+                            // プロンプトの待ちを誤クリアする（→ send_to_session が誤送信）レースを避けるため。
+                            var withinHookCooldown =
+                                IsHookDriven(sessionInfo.TerminalType) &&
+                                sessionInfo.LastWaitingHookSetTime.HasValue &&
+                                (DateTime.Now - sessionInfo.LastWaitingHookSetTime.Value).TotalSeconds < WaitingHookCooldownSeconds;
+
+                            if (!withinHookCooldown)
+                            {
+                                sessionInfo.ClearWaitingForUserInput();
+                            }
+                        }
 
                         // ステータステキストを決定
                         var statusText = result.ProcessingText ?? result.StatusText;
@@ -98,6 +121,11 @@ namespace TerminalHub.Services
 
         // Stop イベント後、この秒数間は OutputAnalyzer からのステータス更新をスキップ
         private const double StopEventCooldownSeconds = 3.0;
+
+        // hook が入力待ちを立てた後、この秒数間は OutputAnalyzer の「処理中検出」による待ち解除をスキップ。
+        // プロンプト表示直前の古いスピナー出力チャンクが遅れて解析されて誤クリアするレースを避ける。
+        // 承認後の作業中に waiting が残る over-stay の解除は、ユーザー操作を挟む＝この窓より後になるので影響しない。
+        private const double WaitingHookCooldownSeconds = 1.5;
 
         private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?>? updateStatus, string? matchedText = null, bool skipNotification = false)
         {
@@ -231,7 +259,7 @@ namespace TerminalHub.Services
                     session.ProcessingStartTime = null;
                     session.ProcessingElapsedSeconds = null;
                     session.LastProcessingUpdateTime = null;
-                    session.IsWaitingForUserInput = false;
+                    session.ClearWaitingForUserInput();
 
                     // セッションのタイマーを停止（ISessionTimerServiceに委譲）
                     StopSessionTimer(session.SessionId);

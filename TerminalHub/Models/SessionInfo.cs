@@ -82,8 +82,36 @@ namespace TerminalHub.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public DateTime? LastProcessingUpdateTime { get; set; }
 
+        /// <summary>ユーザーの許可/承認待ち（Claude Notification permission / Codex PermissionRequest）。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool IsWaitingForUserInput { get; set; }
+        public bool IsWaitingForPermission { get; set; }
+
+        /// <summary>ユーザーへの質問/選択待ち（AskUserQuestion / request_user_input）。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsWaitingForSelection { get; set; }
+
+        /// <summary>
+        /// 許可待ち・選択待ちのいずれか＝ユーザー入力待ちの合成フラグ。
+        /// send_to_session の送信ガード等、種別を問わない粗い判定に使う。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsWaitingForUserInput => IsWaitingForPermission || IsWaitingForSelection;
+
+        /// <summary>
+        /// hook(PermissionRequest/PreToolUse/Notification)が最後に入力待ちを立てた時刻。
+        /// OutputAnalyzer が「処理中検出」で待ちを解除する際、直前に hook が立てた待ちを
+        /// 古いスピナー出力チャンクの遅延解析で誤クリアするレースを避けるためのクールダウン判定に使う。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastWaitingHookSetTime { get; set; }
+
+        /// <summary>入力待ち状態（許可・選択の両方）を解除する。</summary>
+        public void ClearWaitingForUserInput()
+        {
+            IsWaitingForPermission = false;
+            IsWaitingForSelection = false;
+            LastWaitingHookSetTime = null;
+        }
 
         /// <summary>
         /// コンテキスト compact 実行中（PreCompact ～ PostCompact の間）。
@@ -144,6 +172,9 @@ namespace TerminalHub.Models
 
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HookConfigured { get; set; } // Claude Code hook 設定済みかどうか
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool McpConfigured { get; set; } // MCP 自動登録 設定済みかどうか（プロセス内のみ・再起動でリセット→ポート追従）
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態

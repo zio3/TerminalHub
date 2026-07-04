@@ -141,11 +141,22 @@ builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 // CodexHookServiceを登録（Codex CLI の lifecycle hook 設定）
 builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
 
+// McpConfigServiceを登録（試験機能: 各CLIへ terminalhub MCP を自動登録）
+builder.Services.AddSingleton<IMcpConfigService, McpConfigService>();
+
 // VersionCheckServiceを登録
 builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
 // 生ストリームキャプチャ（VTエミュレータ検証フィクスチャ採取用のデバッグサービス）
 builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
+
+// MCP サーバー（セッション間メッセージング）。
+// TerminalHub 本体プロセスに HTTP MCP を同居させ、list_sessions / send_to_session を公開する。
+// SessionManager(Singleton) に直結するため HTTP トランスポート一択（stdio だと別プロセスで共有状態に届かない）。
+builder.Services
+    .AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
 
 
 var app = builder.Build();
@@ -265,6 +276,9 @@ app.MapPost("/api/hook/codex/{sessionId:guid}",
     await hookService.HandleHookNotificationAsync(notification);
     return Results.NoContent();
 });
+
+// MCP エンドポイント（/mcp）。Claude Code 等の MCP クライアントがここへ接続する。
+app.MapMcp("/mcp");
 
 app.Run();
 return 0;

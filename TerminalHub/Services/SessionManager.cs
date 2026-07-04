@@ -90,6 +90,7 @@ namespace TerminalHub.Services
         private readonly IGitService _gitService;
         private readonly IClaudeHookService? _claudeHookService;
         private readonly ICodexHookService? _codexHookService;
+        private readonly IMcpConfigService? _mcpConfigService;
         private readonly IAppSettingsService? _appSettingsService;
         private readonly IServer? _server;
         private Guid? _activeSessionId;
@@ -100,7 +101,7 @@ namespace TerminalHub.Services
         /// </summary>
         public event EventHandler? OnSessionsChanged;
 
-        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null, IRawStreamCaptureService? rawStreamCapture = null)
+        public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null, IRawStreamCaptureService? rawStreamCapture = null, IMcpConfigService? mcpConfigService = null)
         {
             _conPtyService = conPtyService;
             _logger = logger;
@@ -111,6 +112,7 @@ namespace TerminalHub.Services
             _server = server;
             _codexHookService = codexHookService;
             _rawStreamCapture = rawStreamCapture;
+            _mcpConfigService = mcpConfigService;
         }
 
         private readonly IRawStreamCaptureService? _rawStreamCapture;
@@ -448,6 +450,7 @@ namespace TerminalHub.Services
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
+                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -917,6 +920,44 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// 試験機能: セッション生成/再起動時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub の
+        /// ローカル MCP サーバー(terminalhub)を自動登録する。設定 Experimental.AutoRegisterMcp が ON の
+        /// ときのみ実行（既定OFF）。Hook セットアップと対称。失敗してもセッション処理は続行する。
+        /// </summary>
+        private async Task SetupMcpConfigIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
+        {
+            if (_mcpConfigService == null || _appSettingsService == null)
+                return;
+
+            // Claude Code / Codex のみサポート。
+            if (sessionInfo.TerminalType != TerminalType.ClaudeCode &&
+                sessionInfo.TerminalType != TerminalType.CodexCLI)
+                return;
+
+            if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
+                return;
+
+            // Hook と同じく、プロセス内では初回のみ書く。McpConfigured は [JsonIgnore] で
+            // TerminalHub 再起動時に false へ戻るため、ポートが変わっても再起動後の初回で追従する。
+            if (!isResetup && sessionInfo.McpConfigured)
+                return;
+
+            try
+            {
+                var baseUrl = GetServerBaseUrl();
+                await _mcpConfigService.SetupAsync(sessionInfo.FolderPath, sessionInfo.TerminalType, baseUrl);
+                sessionInfo.McpConfigured = true;
+                var action = isResetup ? "再登録" : "登録";
+                _logger.LogInformation("MCP自動{Action}: SessionId={SessionId}, Type={Type}, BaseUrl={BaseUrl}",
+                    action, sessionInfo.SessionId, sessionInfo.TerminalType, baseUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "MCP自動登録に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
+            }
+        }
+
+        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
@@ -951,13 +992,14 @@ namespace TerminalHub.Services
                 sessionInfo.ProcessingStartTime = null;
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
-                sessionInfo.IsWaitingForUserInput = false;
+                sessionInfo.ClearWaitingForUserInput();
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -999,7 +1041,7 @@ namespace TerminalHub.Services
                 sessionInfo.ProcessingStartTime = null;
                 sessionInfo.ProcessingElapsedSeconds = null;
                 sessionInfo.LastProcessingUpdateTime = null;
-                sessionInfo.IsWaitingForUserInput = false;
+                sessionInfo.ClearWaitingForUserInput();
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
@@ -1013,6 +1055,7 @@ namespace TerminalHub.Services
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
