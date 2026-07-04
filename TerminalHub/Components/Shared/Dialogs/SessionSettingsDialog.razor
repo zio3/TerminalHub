@@ -9,6 +9,7 @@
 @inject ILogger<SessionSettingsDialog> Logger
 @inject ISessionMemoRepository MemoRepository
 @inject IStringLocalizer<SharedResource> L
+@inject IExplorerLauncherService ExplorerLauncher
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -530,21 +531,8 @@
 
     private void OpenFolder(string path)
     {
-        try
-        {
-            if (Directory.Exists(path))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = path.Replace('/', '\\'),
-                    UseShellExecute = true,
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "フォルダを開けませんでした: {Path}", path);
-        }
+        // ブラウザの裏に隠れないよう、開いたウィンドウを前面化するサービス経由で開く
+        ExplorerLauncher.OpenFolder(path);
     }
 
     private async Task HandleCreateSubSession()
