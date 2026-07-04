@@ -480,6 +480,14 @@
                                             <span class="text-muted small">（@L["Settings.Sessions.Display.ShowGitInfoSub"]）</span>
                                         </label>
                                     </div>
+                                    @* Git情報表示のサブオプション（本体がOFFなら無効化） *@
+                                    <div class="form-check ms-4">
+                                        <input class="form-check-input" type="checkbox" @bind="gitChangesOnBadgeClick" id="gitChangesOnBadgeClick" disabled="@(!showGitInfo)">
+                                        <label class="form-check-label" for="gitChangesOnBadgeClick">
+                                            @L["Settings.Sessions.Display.GitChangesOnBadgeClick"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.Display.GitChangesOnBadgeClickSub"]）</span>
+                                        </label>
+                                    </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
                                         @L["Settings.Sessions.Display.Help"]
@@ -1234,6 +1242,7 @@
     private string sessionSortMode = "lastAccessed";
     private bool showTerminalType = false;
     private bool showGitInfo = false;
+    private bool gitChangesOnBadgeClick = false;
     private bool hideInputPanel = false;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
@@ -1271,7 +1280,7 @@
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "lastAccessed";
     [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
-    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo, bool hideInputPanel)> OnSessionDisplaySettingsChanged { get; set; }
+    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool hideInputPanel)> OnSessionDisplaySettingsChanged { get; set; }
     [Parameter] public EventCallback<double> OnSessionListScaleChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalFontSizeChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
@@ -1390,6 +1399,7 @@
             };
             showTerminalType = settings.Sessions.ShowTerminalType;
             showGitInfo = settings.Sessions.ShowGitInfo;
+            gitChangesOnBadgeClick = settings.Sessions.GitChangesOnBadgeClick;
             hideInputPanel = settings.Sessions.HideInputPanel;
 
             // 開発ツール設定
@@ -1621,6 +1631,7 @@
                     SortMode = sessionSortMode,
                     ShowTerminalType = showTerminalType,
                     ShowGitInfo = showGitInfo,
+                    GitChangesOnBadgeClick = gitChangesOnBadgeClick,
                     HideInputPanel = hideInputPanel
                 },
                 DevTools = new DevToolsSettings
@@ -1704,7 +1715,7 @@
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
 
             // セッション表示設定の変更を通知
-            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo, hideInputPanel));
+            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo, gitChangesOnBadgeClick, hideInputPanel));
 
             // モード切替キーの変更を通知
             await OnClaudeModeSwitchKeyChanged.InvokeAsync(claudeModeSwitchKey);

@@ -2,8 +2,10 @@
 @using TerminalHub.Models
 @using TerminalHub.Constants
 @using TerminalHub.Components.Shared.Dialogs
+@using TerminalHub.Services
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<SharedResource> L
+@inject IGitService GitService
 
 <style>
     @@keyframes bell-ring {
@@ -118,11 +120,13 @@
                             }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
-                                @* クリックで変更ファイル一覧ダイアログを表示（stopPropagation でセッション選択を抑止） *@
-                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1" style="cursor: pointer;"
-                                      title="@($"{(session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value)} - {L["SessionList.Badge.GitBranchClickHint"].Value}")"
-                                      @onclick:stopPropagation="true"
-                                      @onclick="() => OpenGitChanges(session)">
+                                @* オプション有効時のみクリックで変更ファイル一覧を表示（stopPropagation でセッション選択を抑止）。
+                                   変更 0 件のときはダイアログを開かずトーストで知らせる。 *@
+                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1"
+                                      style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
+                                      title="@GetGitBadgeTitle(session)"
+                                      @onclick:stopPropagation="GitChangesOnBadgeClick"
+                                      @onclick="async () => await OpenGitChangesAsync(session)">
                                     <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
                                     @if (session.HasUncommittedChanges)
                                     {
@@ -217,10 +221,11 @@
     </div>
 </div>
 
-@* Git バッジクリックで開く変更ファイル一覧ダイアログ *@
+@* Git バッジクリックで開く変更ファイル一覧ダイアログ（クリック時に取得済みの結果を初期表示に使う） *@
 <GitChangesDialog IsVisible="@(gitChangesSession != null)"
                   FolderPath="@gitChangesSession?.FolderPath"
                   BranchName="@gitChangesSession?.GitBranch"
+                  InitialFiles="@gitChangesFiles"
                   OnClose="() => gitChangesSession = null"
                   OnChangesLoaded="HandleGitChangesLoaded" />
 
@@ -235,15 +240,61 @@
     [Parameter] public bool IsMobileOpen { get; set; } = false;
     [Parameter] public double Scale { get; set; } = 1.0;
     [Parameter] public int WidthPercent { get; set; } = 25;
+    /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（設定のサブオプション）</summary>
+    [Parameter] public bool GitChangesOnBadgeClick { get; set; }
+    [Parameter] public EventCallback<string> OnShowInfoToast { get; set; }
+    [Parameter] public EventCallback<string> OnShowErrorToast { get; set; }
 
     private string filterText = string.Empty;
 
     // Git バッジクリックで変更ファイル一覧を表示する対象セッション (null=非表示)
     private SessionInfo? gitChangesSession;
+    // クリック時に取得した変更一覧（ダイアログの初期表示用。二重の git status を避ける）
+    private List<GitChangedFile>? gitChangesFiles;
+    // 多重クリックによる並行取得を防ぐ
+    private bool isGitChangesLoading;
 
-    private void OpenGitChanges(SessionInfo session)
+    private string GetGitBadgeTitle(SessionInfo session)
     {
-        gitChangesSession = session;
+        var kind = session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value;
+        return GitChangesOnBadgeClick
+            ? $"{kind} - {L["SessionList.Badge.GitBranchClickHint"].Value}"
+            : kind;
+    }
+
+    private async Task OpenGitChangesAsync(SessionInfo session)
+    {
+        if (!GitChangesOnBadgeClick || string.IsNullOrEmpty(session.FolderPath) || isGitChangesLoading)
+            return;
+
+        isGitChangesLoading = true;
+        try
+        {
+            var files = await GitService.GetChangedFilesAsync(session.FolderPath);
+            if (files == null)
+            {
+                await OnShowErrorToast.InvokeAsync(L["SessionList.Toast.GitStatusError"]);
+                return;
+            }
+
+            // 取得結果でバッジの赤丸を最新化する
+            session.HasUncommittedChanges = files.Count > 0;
+
+            if (files.Count == 0)
+            {
+                // 変更なしはダイアログを開かずトーストで知らせる
+                await OnShowInfoToast.InvokeAsync(string.Format(L["SessionList.Toast.NoGitChangesFormat"], session.GitBranch));
+            }
+            else
+            {
+                gitChangesFiles = files;
+                gitChangesSession = session;
+            }
+        }
+        finally
+        {
+            isGitChangesLoading = false;
+        }
     }
 
     private void HandleGitChangesLoaded(bool hasChanges)

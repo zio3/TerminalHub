@@ -151,6 +151,8 @@
   <data name="Settings.Sessions.Display.ShowTerminalTypeSub" xml:space="preserve"><value>Claude/Gemini/Codexバッジ</value></data>
   <data name="Settings.Sessions.Display.ShowGitInfo" xml:space="preserve"><value>Git情報を表示</value></data>
   <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>ブランチ名バッジ</value></data>
+  <data name="Settings.Sessions.Display.GitChangesOnBadgeClick" xml:space="preserve"><value>Gitの変更状態をバッジクリックで表示</value></data>
+  <data name="Settings.Sessions.Display.GitChangesOnBadgeClickSub" xml:space="preserve"><value>変更ファイル一覧を表示。変更なしはトースト通知</value></data>
   <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>セッション一覧に表示する追加情報を選択できます。</value></data>
   <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>入力パネル設定</value></data>
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>入力パネルを非表示</value></data>
@@ -508,6 +510,8 @@
   <data name="SessionList.Badge.GitBranch" xml:space="preserve"><value>Git ブランチ</value></data>
   <data name="SessionList.Badge.UncommittedChanges" xml:space="preserve"><value>未コミットの変更があります</value></data>
   <data name="SessionList.Badge.GitBranchClickHint" xml:space="preserve"><value>クリックで変更ファイル一覧を表示</value></data>
+  <data name="SessionList.Toast.NoGitChangesFormat" xml:space="preserve"><value>{0}: 未コミットの変更はありません</value></data>
+  <data name="SessionList.Toast.GitStatusError" xml:space="preserve"><value>Gitの変更状態を取得できませんでした</value></data>
   <data name="GitChanges.Title" xml:space="preserve"><value>Git 変更ファイル</value></data>
   <data name="GitChanges.Loading" xml:space="preserve"><value>読み込み中…</value></data>
   <data name="GitChanges.NoChanges" xml:space="preserve"><value>未コミットの変更はありません</value></data>

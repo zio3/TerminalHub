@@ -85,6 +85,8 @@
     [Parameter] public EventCallback OnClose { get; set; }
     /// <summary>取得結果の「変更あり/なし」を親に通知（バッジの赤丸を最新化するため）</summary>
     [Parameter] public EventCallback<bool> OnChangesLoaded { get; set; }
+    /// <summary>親がクリック時に取得済みの変更一覧。指定があれば開いた直後の再取得を省略する（更新ボタンでは取り直す）</summary>
+    [Parameter] public List<GitChangedFile>? InitialFiles { get; set; }
 
     private List<GitChangedFile> changedFiles = new();
     private bool isLoading = false;
@@ -97,7 +99,16 @@
         {
             // ダイアログが開かれた時（または対象が変わった時）のみ取得する
             _loadedPath = FolderPath;
-            await ReloadAsync();
+            if (InitialFiles != null)
+            {
+                // 親がクリック時に取得済みなら再取得しない
+                changedFiles = InitialFiles;
+                loadFailed = false;
+            }
+            else
+            {
+                await ReloadAsync();
+            }
         }
         else if (!IsVisible)
         {

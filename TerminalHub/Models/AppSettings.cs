@@ -76,6 +76,8 @@ public class SessionDisplaySettings
     public string SortMode { get; set; } = "lastAccessed";
     public bool ShowTerminalType { get; set; }
     public bool ShowGitInfo { get; set; }
+    /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（ShowGitInfo が有効な場合のみ意味を持つ）。既定 false。</summary>
+    public bool GitChangesOnBadgeClick { get; set; }
     public bool HideInputPanel { get; set; }
 }
 
