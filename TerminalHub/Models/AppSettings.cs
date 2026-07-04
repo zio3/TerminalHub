@@ -15,6 +15,20 @@ public class AppSettings
     public CustomCommandSettings Commands { get; set; } = new();
     public CustomCliOptionsSettings CliOptions { get; set; } = new();
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
+    public ExperimentalSettings Experimental { get; set; } = new();
+}
+
+/// <summary>
+/// 試験機能設定。TerminalHub が各CLIの設定ファイルへ書き込む等の実験的挙動を、既定OFFで束ねる。
+/// </summary>
+public class ExperimentalSettings
+{
+    /// <summary>
+    /// セッション生成時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub のローカル MCP サーバー
+    /// (terminalhub) を自動登録する。ONにすると Claude=.mcp.json / Codex=.codex/config.toml に
+    /// terminalhub エントリを追記し、起動しただけで list_sessions / send_to_session が使える。既定OFF。
+    /// </summary>
+    public bool AutoRegisterMcp { get; set; } = false;
 }
 
 /// <summary>

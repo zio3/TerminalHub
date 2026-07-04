@@ -141,6 +141,9 @@ builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 // CodexHookServiceを登録（Codex CLI の lifecycle hook 設定）
 builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
 
+// McpConfigServiceを登録（試験機能: 各CLIへ terminalhub MCP を自動登録）
+builder.Services.AddSingleton<IMcpConfigService, McpConfigService>();
+
 // VersionCheckServiceを登録
 builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
