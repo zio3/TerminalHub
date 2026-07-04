@@ -370,6 +370,21 @@
         }
     }
 
+    /// <summary>
+    /// 既存のカーソルパッドタブがあればそこへ切り替える（試験機能: 入力待ちで自動切替から呼ばれる）。
+    /// 既に選択済み、またはカーソルパッドタブが無い場合は何もしない（新規タブは作らない）。戻り値は切り替えたか。
+    /// </summary>
+    public async Task<bool> ActivateCursorPadIfExistsAsync()
+    {
+        var cursorPad = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.CursorPad);
+        if (cursorPad == null || ActiveTabId == cursorPad.Id)
+        {
+            return false;
+        }
+        await SelectTab(cursorPad.Id);
+        return true;
+    }
+
     private string GetTabIcon(BottomPanelTabType type)
     {
         return type switch

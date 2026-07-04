@@ -49,6 +49,7 @@
                 OnTerminalHeightPercentChanged="HandleTerminalHeightPercentChanged"
                 OnSidebarWidthPercentChanged="HandleSidebarWidthPercentChanged"
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
+                OnAutoSwitchCursorPadChanged="HandleAutoSwitchCursorPadChanged"
                 OnThemeChanged="HandleThemeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog"
                          ParentSessionName="@subSessionParentSessionName"
@@ -498,7 +499,10 @@
                     "altM" or "shiftTab" or "none" => appSettings.Special.ClaudeModeSwitchKey,
                     _ => "none"
                 };
-                voiceInputEnabled = appSettings.Special.VoiceInputEnabled;
+                // 音声入力・カーソルパッド自動切替はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
+                var localExperimental = await LocalStorageService.LoadExperimentalSettingsAsync();
+                voiceInputEnabled = localExperimental?.VoiceInputEnabled ?? appSettings.Special.VoiceInputEnabled;
+                autoSwitchCursorPadEnabled = localExperimental?.AutoSwitchToCursorPadOnWait ?? false;
                 sessionSortMode = appSettings.Sessions.SortMode;
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
@@ -742,6 +746,11 @@
     {
         voiceInputEnabled = enabled;
         StateHasChanged();
+    }
+
+    private void HandleAutoSwitchCursorPadChanged(bool enabled)
+    {
+        autoSwitchCursorPadEnabled = enabled;
     }
 
     private async Task HandleThemeChanged(string newTheme)
@@ -1976,6 +1985,7 @@
 
     private string claudeModeSwitchKey = "altM";
     private bool voiceInputEnabled = false;
+    private bool autoSwitchCursorPadEnabled = false; // 試験機能: 入力待ちでカーソルパッドへ自動切替(デバイス別)
 
     private async Task SendCustomKey(string keyName)
     {
@@ -2453,9 +2463,26 @@
                     }
                     StateHasChanged();
                 }
+                else if (autoSwitchCursorPadEnabled && bottomPanel != null
+                         && IsUserInputWaitEvent(eventType, notification.Message))
+                {
+                    // 試験機能: アクティブ(表示中)セッションが入力待ちになったら、既存のカーソルパッドタブが
+                    // あればそこへ自動切替する（無ければ何もしない）。↑↓←→/Enter でそのまま応答できる。
+                    await bottomPanel.ActivateCursorPadIfExistsAsync();
+                }
                 break;
         }
     }
+
+    /// <summary>
+    /// この hook イベントが「ユーザーの入力受付中(許可/選択待ち)」を意味するか。
+    /// PreToolUse=選択待ち / PermissionRequest=許可待ち / Notification は message に "permission" を含むときのみ。
+    /// </summary>
+    private static bool IsUserInputWaitEvent(HookEventType? eventType, string? message)
+        => eventType == HookEventType.PreToolUse
+        || eventType == HookEventType.PermissionRequest
+        || (eventType == HookEventType.Notification
+            && ClassifyNotificationBell(message) == SessionBellKind.Confirm);
 
     private void ShowSessionSettingsDialog(Guid sessionId)
     {

@@ -18,6 +18,8 @@ namespace TerminalHub.Services
         Task<Dictionary<Guid, bool>> LoadSessionExpandedStatesAsync();
         Task<LocalDisplaySettings?> LoadDisplaySettingsAsync();
         Task SaveDisplaySettingsAsync(LocalDisplaySettings settings);
+        Task<LocalExperimentalSettings?> LoadExperimentalSettingsAsync();
+        Task SaveExperimentalSettingsAsync(LocalExperimentalSettings settings);
     }
 
     public class LocalStorageService : ILocalStorageService
@@ -29,6 +31,7 @@ namespace TerminalHub.Services
         private const string ActiveSessionKey = "terminalHub_activeSession";
         private const string ExpandedStatesKey = "terminalHub_expandedStates";
         private const string DisplaySettingsKey = "terminalHub_displaySettings";
+        private const string ExperimentalSettingsKey = "terminalHub_experimentalSettings";
 
         public LocalStorageService(IJSRuntime jsRuntime, ILogger<LocalStorageService> logger)
         {
@@ -207,6 +210,12 @@ namespace TerminalHub.Services
 
         public Task SaveDisplaySettingsAsync(LocalDisplaySettings settings)
             => SetAsync(DisplaySettingsKey, settings);
+
+        public Task<LocalExperimentalSettings?> LoadExperimentalSettingsAsync()
+            => GetAsync<LocalExperimentalSettings>(ExperimentalSettingsKey);
+
+        public Task SaveExperimentalSettingsAsync(LocalExperimentalSettings settings)
+            => SetAsync(ExperimentalSettingsKey, settings);
 
         public async Task SaveSessionExpandedStatesAsync(Dictionary<Guid, bool> expandedStates)
         {
