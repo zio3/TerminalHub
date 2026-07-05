@@ -349,7 +349,7 @@ window.terminalHubHelpers = {
                 const rect = container.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 let percent = Math.round((x / rect.width) * 100);
-                percent = Math.max(15, Math.min(40, percent));
+                percent = Math.max(15, Math.min(70, percent)); // 上限はモバイルで広く使いたい要望に合わせ70%
 
                 const sidebar = container.querySelector('.session-list-sidebar');
                 if (sidebar) sidebar.style.width = percent + '%';

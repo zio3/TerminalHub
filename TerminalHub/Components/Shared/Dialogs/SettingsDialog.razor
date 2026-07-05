@@ -325,7 +325,7 @@
                                     <label class="form-label">@L["Settings.Display.SidebarWidth.Label"]</label>
                                     <div class="d-flex align-items-center gap-3">
                                         <input type="range" class="form-range flex-grow-1"
-                                               min="15" max="40" step="1"
+                                               min="15" max="70" step="1"
                                                value="@sidebarWidthPercent"
                                                @oninput="OnSidebarWidthPercentSliderInput" />
                                         <span class="badge bg-secondary" style="min-width: 60px;">@(sidebarWidthPercent)%</span>
@@ -346,6 +346,18 @@
                                     </div>
                                     <small class="text-muted">
                                         @L["Settings.Display.TerminalHeightRatio.Help"]
+                                    </small>
+                                </div>
+
+                                <div class="mb-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="terminalLinkCopyMode" id="terminalLinkCopyMode">
+                                        <label class="form-check-label" for="terminalLinkCopyMode">
+                                            <i class="bi bi-clipboard me-1"></i>@L["Settings.Display.TerminalLinkCopyMode.Label"]
+                                        </label>
+                                    </div>
+                                    <small class="text-muted">
+                                        @L["Settings.Display.TerminalLinkCopyMode.Help"]
                                     </small>
                                 </div>
                             </div>
@@ -1245,6 +1257,7 @@
     private bool showGitInfo = false;
     private bool gitChangesOnBadgeClick = false;
     private bool hideInputPanel = false;
+    private bool terminalLinkCopyMode = false;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
     private List<string> favoriteFolders = new();
@@ -1419,6 +1432,8 @@
             terminalFontSize = localDisplay?.TerminalFontSize ?? settings.General.TerminalFontSize;
             terminalHeightPercent = localDisplay?.TerminalHeightPercent ?? settings.General.TerminalHeightPercent;
             sidebarWidthPercent = localDisplay?.SidebarWidthPercent ?? settings.General.SidebarWidthPercent;
+            // ターミナル内URLのコピー動作モードはこのデバイス専用（app-settings のシード無し）
+            terminalLinkCopyMode = localDisplay?.TerminalLinkCopyMode ?? false;
 
             // カスタムコマンド
             editingCommands = settings.Commands.CommandsByTerminalType
@@ -1696,7 +1711,11 @@
                 TerminalFontSize = terminalFontSize,
                 TerminalHeightPercent = terminalHeightPercent,
                 SidebarWidthPercent = sidebarWidthPercent,
+                TerminalLinkCopyMode = terminalLinkCopyMode,
             });
+
+            // ターミナル内URLのコピー動作モードを即時反映（再読み込み不要にする）
+            await JSRuntime.InvokeVoidAsync("setTerminalLinkCopyMode", terminalLinkCopyMode);
 
             // 音声入力・カーソルパッド自動切替もデバイス別設定として LocalStorage に保存する
             // (app-settings 側の VoiceInputEnabled は新デバイス初回アクセス時のシードとして機能する)
