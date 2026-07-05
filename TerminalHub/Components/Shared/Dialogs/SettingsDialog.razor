@@ -103,6 +103,17 @@
                                 <i class="bi bi-flask me-1"></i>試験機能
                             </button>
                         </li>
+                        @* ローカルMCP タブ: MCP自動登録(AutoRegisterMcp)が有効なときだけ表示する *@
+                        @if (autoRegisterMcpEnabled)
+                        {
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @(activeTab == "localMcp" ? "active" : "")"
+                                        type="button"
+                                        @onclick="@(() => activeTab = "localMcp")">
+                                    <i class="bi bi-plugin me-1"></i>ローカルMCP
+                                </button>
+                            </li>
+                        }
                         @if (devToolsEnabled)
                         {
                             <li class="nav-item" role="presentation">
@@ -1012,6 +1023,35 @@
                                 </div>
                             </div>
                         }
+                        else if (activeTab == "localMcp")
+                        {
+                            <div class="tab-pane fade show active">
+                                <p class="text-muted small mb-3">
+                                    <i class="bi bi-plugin me-1"></i>
+                                    TerminalHub のローカル MCP サーバーが、接続してきた CLI（Claude Code / Codex）へ配布する
+                                    <strong>instructions（取扱説明・運用ルール）</strong>です。ツールの使い方や、あなた独自の運用ルールを
+                                    ここに書いておくと、各セッションが MCP に繋いだ時点で自動的に受け取ります。全デバイス共通の設定です。
+                                </p>
+
+                                <div class="mb-2 d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">配布する instructions</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ResetMcpInstructions">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>既定に戻す
+                                    </button>
+                                </div>
+                                <textarea class="form-control font-monospace" style="font-size: 0.8rem;" rows="16"
+                                          @bind="mcpInstructions" placeholder="（空にすると組み込みの既定テンプレが配布されます）"></textarea>
+                                <p class="text-muted small mt-2 mb-0">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    自由に書き換え・追記・削除できます。<strong>壊しても「既定に戻す」で復旧</strong>できます（自己責任）。
+                                    空欄のまま保存すると既定テンプレに戻ります。
+                                </p>
+                                <p class="text-muted small mt-1 mb-0">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    反映は各セッションが次に MCP へ接続したときです。確実に反映したい場合は TerminalHub を再起動してください。
+                                </p>
+                            </div>
+                        }
                         else if (activeTab == "devDiagnose")
                         {
                             <div class="tab-pane fade show active">
@@ -1280,6 +1320,8 @@
     private bool devToolsEnabled = false;
     private bool autoRegisterMcpEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
+    // ローカルMCP タブ: 配布する instructions（空欄=既定テンプレを配布）
+    private string mcpInstructions = "";
     private bool captureRawStreamEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
@@ -1419,6 +1461,10 @@
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
             autoRegisterMcpEnabled = settings.Experimental.AutoRegisterMcp;
+            // 未設定(null/空)なら既定テンプレを表示する（textarea は WYSIWYG）
+            mcpInstructions = string.IsNullOrWhiteSpace(settings.Experimental.McpInstructions)
+                ? TerminalHub.Mcp.McpInstructionDefaults.Template
+                : settings.Experimental.McpInstructions;
             captureRawStreamEnabled = settings.DevTools.CaptureRawStream;
 
             // 一般設定
@@ -1579,6 +1625,12 @@
         }
     }
 
+    // ローカルMCP: instructions を既定テンプレへ戻す（保存はダイアログの保存時）
+    private void ResetMcpInstructions()
+    {
+        mcpInstructions = TerminalHub.Mcp.McpInstructionDefaults.Template;
+    }
+
     private async Task SaveSettings()
     {
         try
@@ -1654,7 +1706,13 @@
                 },
                 Experimental = new ExperimentalSettings
                 {
-                    AutoRegisterMcp = autoRegisterMcpEnabled
+                    AutoRegisterMcp = autoRegisterMcpEnabled,
+                    // 既定テンプレそのまま(未編集) or 空なら null 保存し、将来の既定更新に追従させる。
+                    // 書き換えられていればその内容を保存する。
+                    McpInstructions =
+                        (string.IsNullOrWhiteSpace(mcpInstructions) || mcpInstructions == TerminalHub.Mcp.McpInstructionDefaults.Template)
+                            ? null
+                            : mcpInstructions
                 },
                 General = new GeneralSettings
                 {

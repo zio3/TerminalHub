@@ -161,6 +161,20 @@ builder.Services
     .WithHttpTransport()
     .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
 
+// MCP サーバーが配布する instructions（取扱説明・運用ルール）を設定から流し込む。
+// 設定ファイルの内容は AppSettingsService がファイル更新時に読み直すため、ここで GetSettings() を
+// 参照しておくと編集が反映されやすい（確実な反映が要るときは TerminalHub 再起動）。
+// 未設定(null/空)なら組み込みの既定テンプレを使う。
+builder.Services
+    .AddOptions<ModelContextProtocol.Server.McpServerOptions>()
+    .Configure<IAppSettingsService>((options, appSettings) =>
+    {
+        var text = appSettings.GetSettings().Experimental.McpInstructions;
+        options.ServerInstructions = string.IsNullOrWhiteSpace(text)
+            ? TerminalHub.Mcp.McpInstructionDefaults.Template
+            : text;
+    });
+
 
 var app = builder.Build();
 
