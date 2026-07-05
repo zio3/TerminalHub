@@ -125,17 +125,16 @@
                                    変更 0 件のときはダイアログを開かずトーストで知らせる。 *@
                                 <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1"
                                       title="@GetGitBadgeTitle(session)">
-                                    <span style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
+                                    <span class="me-1" style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
                                           @onclick:stopPropagation="GitChangesOnBadgeClick"
                                           @onclick="async () => await OpenGitChangesAsync(session)">
-                                        @* 赤丸（未コミット変更）を先頭に配置 *@
+                                        @* Gitアイコンを先頭に固定（左端がブレない）、赤丸（未コミット変更）をその後ろに配置 *@
+                                        <i class="bi bi-git"></i>
                                         @if (session.HasUncommittedChanges)
                                         {
-                                            <i class="bi bi-circle-fill text-danger git-status-indicator me-1" title="@L["SessionList.Badge.UncommittedChanges"]"></i>
+                                            <i class="bi bi-circle-fill text-danger git-status-indicator ms-1" title="@L["SessionList.Badge.UncommittedChanges"]"></i>
                                         }
-                                        <i class="bi bi-git"></i>
-                                    </span>
-                                    <span class="ms-1">@session.GitBranch</span>
+                                    </span>@session.GitBranch
                                 </span>
                             }
                             @if (!string.IsNullOrEmpty(session.RemoteControlUrl))
