@@ -560,8 +560,7 @@ h1:focus {
     }
 
     /* モバイルサイドバートグルボタン
-       ターミナル出力に常時かぶるため半透明にして下が透けるようにする。
-       操作時（hover/active）は視認性のため不透明に戻す */
+       ターミナル出力に常時かぶるため半透明にして下が透けるようにする（操作時も維持） */
     .mobile-sidebar-toggle {
         display: flex;
         align-items: center;
@@ -579,18 +578,16 @@ h1:focus {
         font-size: 1.5rem;
         box-shadow: var(--th-shadow-md);
         cursor: pointer;
-        opacity: 0.5;
-        transition: background-color var(--th-transition-fast), opacity var(--th-transition-fast);
+        opacity: 0.6;
+        transition: background-color var(--th-transition-fast);
     }
 
     .mobile-sidebar-toggle:hover {
         background-color: var(--th-accent-hover);
-        opacity: 1;
     }
 
     .mobile-sidebar-toggle:active {
         transform: scale(0.95);
-        opacity: 1;
     }
 
     /* モバイルオーバーレイ */
