@@ -600,13 +600,15 @@ h1:focus {
         z-index: 999;
     }
 
-    /* サイドバー - モバイル用 */
+    /* サイドバー - モバイル用
+       幅はインラインの width(設定のサイドバー幅%)が優先される。
+       max-width で頭打ちにすると設定を広げても効かないため上限は設けない */
     .session-list-sidebar {
         position: fixed;
         top: 0;
         left: 0;
         width: 85%;
-        max-width: 320px;
+        max-width: none;
         height: 100%;
         z-index: 1000;
         transform: translateX(-100%);
