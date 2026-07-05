@@ -559,7 +559,8 @@ h1:focus {
         display: none;
     }
 
-    /* モバイルサイドバートグルボタン */
+    /* モバイルサイドバートグルボタン
+       ターミナル出力に常時かぶるため半透明にして下が透けるようにする（操作時も維持） */
     .mobile-sidebar-toggle {
         display: flex;
         align-items: center;
@@ -577,6 +578,7 @@ h1:focus {
         font-size: 1.5rem;
         box-shadow: var(--th-shadow-md);
         cursor: pointer;
+        opacity: 0.6;
         transition: background-color var(--th-transition-fast);
     }
 
