@@ -15,5 +15,12 @@ namespace TerminalHub.Models
         public int? TerminalFontSize { get; set; }
         public int? SidebarWidthPercent { get; set; }
         public int? TerminalHeightPercent { get; set; }
+
+        /// <summary>
+        /// ターミナル内URLのタップ/クリックで開かずにクリップボードへコピーする。
+        /// モバイル全画面(ホーム画面ショートカット等)では遷移すると戻れなくなるための逃げ道。
+        /// このデバイス専用設定で、app-settings 側のフォールバック値は持たない (null=false 扱い)。
+        /// </summary>
+        public bool? TerminalLinkCopyMode { get; set; }
     }
 }

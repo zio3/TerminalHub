@@ -519,6 +519,8 @@
                 terminalFontSize = localDisplay?.TerminalFontSize ?? appSettings.General.TerminalFontSize;
                 terminalHeightPercent = localDisplay?.TerminalHeightPercent ?? appSettings.General.TerminalHeightPercent;
                 sidebarWidthPercent = localDisplay?.SidebarWidthPercent ?? appSettings.General.SidebarWidthPercent;
+                // ターミナル内URLのコピー動作モード（このデバイス専用、シード無し）を JS 側へ反映
+                await JSRuntime.InvokeVoidAsync("setTerminalLinkCopyMode", localDisplay?.TerminalLinkCopyMode ?? false);
                 if (localDisplay == null)
                 {
                     // 初回アクセス: 現在のサーバー側設定をこのデバイスの初期値として保存

@@ -263,13 +263,60 @@ class FlowControlManager {
 // グローバルフロー制御マネージャー
 window.flowControlManager = new FlowControlManager();
 
+// ターミナル内リンクの動作モード（true = 開かずにURLをコピーする）。
+// モバイル全画面（ホーム画面ショートカット等）では遷移すると戻れなくなるため、
+// デバイス別設定として Blazor 側から setTerminalLinkCopyMode で反映される。
+let terminalLinkCopyMode = false;
+window.setTerminalLinkCopyMode = function (enabled) {
+    terminalLinkCopyMode = !!enabled;
+};
+
+// リンクのアクティベート処理（WebLinksAddon / フォールバック共通）
+function activateTerminalLink(uri) {
+    if (terminalLinkCopyMode) {
+        copyLinkToClipboard(uri);
+    } else {
+        window.open(uri, '_blank', 'noopener,noreferrer');
+    }
+}
+
+// URLをクリップボードにコピーして画面下部に通知を出す
+function copyLinkToClipboard(uri) {
+    const notify = (ok) => showLinkCopyNotice(uri, ok);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(uri).then(() => notify(true)).catch(() => notify(false));
+    } else {
+        notify(false);
+    }
+}
+
+// コピー結果の軽量トースト（Blazor を介さず JS だけで完結させる）
+function showLinkCopyNotice(uri, success) {
+    const existing = document.getElementById('terminal-link-copy-notice');
+    if (existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.id = 'terminal-link-copy-notice';
+    div.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+        'max-width:90vw;padding:8px 16px;border-radius:8px;z-index:3000;' +
+        'font-size:0.85rem;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4);' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+        (success ? 'background:#198754;' : 'background:#dc3545;');
+    div.textContent = success
+        ? `📋 URLをコピーしました: ${uri}`
+        : `URLをコピーできませんでした: ${uri}`;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+
 // URL検出の設定
 function setupUrlDetection(term) {
     // WebLinksAddonが利用可能か確認
     if (typeof WebLinksAddon !== 'undefined' && WebLinksAddon.WebLinksAddon) {
         try {
             // WebLinksAddonを作成（URLをクリック可能にする）
-            const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+            // 既定ハンドラは直接 window.open するため、コピー動作モードを差し込めるようカスタムハンドラを渡す
+            const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => activateTerminalLink(uri));
             term.loadAddon(webLinksAddon);
             console.log('[URL Detection] WebLinksAddon loaded successfully');
         } catch (error) {
@@ -322,7 +369,7 @@ function setupUrlDetectionFallback(term) {
                         text: match[0],
                         activate: (e, uri) => {
                             console.log('[URL Detection] Link activated:', uri);
-                            window.open(uri, '_blank');
+                            activateTerminalLink(uri);
                         }
                     };
                     links.push(link);
