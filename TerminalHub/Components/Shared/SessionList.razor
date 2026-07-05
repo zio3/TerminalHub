@@ -120,18 +120,21 @@
                             }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
-                                @* オプション有効時のみクリックで変更ファイル一覧を表示（stopPropagation でセッション選択を抑止）。
+                                @* クリック領域は赤丸＋Gitアイコンのみに限定（ブランチ名クリックでは履歴を開かない）。
+                                   オプション有効時のみクリックで変更ファイル一覧を表示（stopPropagation でセッション選択を抑止）。
                                    変更 0 件のときはダイアログを開かずトーストで知らせる。 *@
                                 <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1"
-                                      style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
-                                      title="@GetGitBadgeTitle(session)"
-                                      @onclick:stopPropagation="GitChangesOnBadgeClick"
-                                      @onclick="async () => await OpenGitChangesAsync(session)">
-                                    <i class="bi @(session.IsWorktree ? "bi-git" : "bi-git") me-1"></i>@session.GitBranch
-                                    @if (session.HasUncommittedChanges)
-                                    {
-                                        <i class="bi bi-circle-fill text-danger git-status-indicator" title="@L["SessionList.Badge.UncommittedChanges"]"></i>
-                                    }
+                                      title="@GetGitBadgeTitle(session)">
+                                    <span class="me-1" style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
+                                          @onclick:stopPropagation="GitChangesOnBadgeClick"
+                                          @onclick="async () => await OpenGitChangesAsync(session)">
+                                        @* Gitアイコンを先頭に固定（左端がブレない）、赤丸（未コミット変更）をその後ろに配置 *@
+                                        <i class="bi bi-git"></i>
+                                        @if (session.HasUncommittedChanges)
+                                        {
+                                            <i class="bi bi-circle-fill text-danger git-status-indicator ms-1" title="@L["SessionList.Badge.UncommittedChanges"]"></i>
+                                        }
+                                    </span>@session.GitBranch
                                 </span>
                             }
                             @if (!string.IsNullOrEmpty(session.RemoteControlUrl))
