@@ -1631,6 +1631,14 @@
         mcpInstructions = TerminalHub.Mcp.McpInstructionDefaults.Template;
     }
 
+    // 空 or 既定テンプレと同一なら true（＝ null 保存対象）。改行コード差を吸収して比較する。
+    private static bool IsDefaultOrEmptyMcpInstructions(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        static string Normalize(string s) => s.Replace("\r\n", "\n").Replace("\r", "\n");
+        return Normalize(text) == Normalize(TerminalHub.Mcp.McpInstructionDefaults.Template);
+    }
+
     private async Task SaveSettings()
     {
         try
@@ -1709,10 +1717,10 @@
                     AutoRegisterMcp = autoRegisterMcpEnabled,
                     // 既定テンプレそのまま(未編集) or 空なら null 保存し、将来の既定更新に追従させる。
                     // 書き換えられていればその内容を保存する。
-                    McpInstructions =
-                        (string.IsNullOrWhiteSpace(mcpInstructions) || mcpInstructions == TerminalHub.Mcp.McpInstructionDefaults.Template)
-                            ? null
-                            : mcpInstructions
+                    // 改行コード(CRLF/LF)差で誤って非 null 保存しないよう、EOL 正規化して比較する
+                    // (raw string literal の Template はチェックアウト環境で CRLF になりうる一方、
+                    //  textarea の値は LF に正規化されるため、素の == だと CRLF ビルドで常に不一致になる)。
+                    McpInstructions = IsDefaultOrEmptyMcpInstructions(mcpInstructions) ? null : mcpInstructions
                 },
                 General = new GeneralSettings
                 {
