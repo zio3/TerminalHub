@@ -113,7 +113,7 @@
   <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>Copy terminal URLs on tap (don't open)</value></data>
   <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>For fullscreen mobile shortcuts where you can't navigate back. Saved per device (browser).</value></data>
   <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
-  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Width of the session list (15%–40%). You can also drag the border.</value></data>
+  <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Width of the session list (15%–70%). You can also drag the border.</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Help" xml:space="preserve"><value>Height split between terminal and input panel (50:50–90:10). Drag the border to adjust.</value></data>
 
