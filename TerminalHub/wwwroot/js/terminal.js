@@ -280,8 +280,15 @@ function activateTerminalLink(uri) {
     }
 }
 
-// URLをクリップボードにコピーして画面下部に通知を出す
+// URLをクリップボードにコピーして通知を出す
 function copyLinkToClipboard(uri) {
+    // タップでターミナル(の隠しtextarea)にフォーカスが移り、モバイルでは
+    // ソフトウェアキーボードが開いてしまう。コピーモードでは入力する意図が
+    // 無いので、フォーカスを外してキーボードの出現を抑止する。
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+    }
+
     const notify = (ok) => showLinkCopyNotice(uri, ok);
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(uri).then(() => notify(true)).catch(() => notify(false));
@@ -291,13 +298,14 @@ function copyLinkToClipboard(uri) {
 }
 
 // コピー結果の軽量トースト（Blazor を介さず JS だけで完結させる）
+// キーボードや下部パネルに隠れないよう画面上部に表示する
 function showLinkCopyNotice(uri, success) {
     const existing = document.getElementById('terminal-link-copy-notice');
     if (existing) existing.remove();
 
     const div = document.createElement('div');
     div.id = 'terminal-link-copy-notice';
-    div.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+    div.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);' +
         'max-width:90vw;padding:8px 16px;border-radius:8px;z-index:3000;' +
         'font-size:0.85rem;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4);' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
