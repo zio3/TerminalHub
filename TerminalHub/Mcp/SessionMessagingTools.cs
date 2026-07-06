@@ -175,8 +175,9 @@ namespace TerminalHub.Mcp
 
             // 永続化(SQLite)。MCP は非Circuitコンテキストなので、Circuit 内の StorageService 経由ではなく
             // Singleton の ISessionRepository で直接 SQLite を更新する。
-            // 注意: ストレージが LocalStorage モードのときはサーバー側から書き込めないため、
-            // その場合はインメモリ更新＋UI反映のみ効き、リロード後の保持は効かないことがある(既定は SQLite)。
+            // 注意: ストレージが LocalStorage モード(真実の保存先がブラウザ側)のときは、この SQLite への
+            // UPDATE が対象行なしで空振りし反映されないため、インメモリ更新＋UI反映のみ効き、
+            // リロード後の保持は効かないことがある(既定は SQLite)。
             await sessionRepository.UpdateMemoAsync(info.SessionId, text);
 
             // インメモリの SessionInfo.Memo を更新し、開いている一覧を再描画させる。
