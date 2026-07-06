@@ -45,5 +45,21 @@ namespace TerminalHub.Services
                 : (isDevelopment ? "app-settings-dev.json" : "app-settings.json");
             return Path.Combine(UserDataRoot, fileName);
         }
+
+        /// <summary>
+        /// SQLite DB のフルパス。dev では "sessions-dev.db"、prod では "sessions.db"。
+        /// configOverride が指定されていればそちらを優先する (Database:FileName 等)。
+        ///
+        /// logs / app-settings と同じく IsDevelopment で既定を切り替えることで、
+        /// appsettings.Development.json (gitignore 対象) が無い環境 (別 worktree / 新規クローン) で
+        /// Development 実行しても本番 DB (sessions.db) を触らない。設定ファイルの有無に DB 安全性を依存させない。
+        /// </summary>
+        public static string GetDatabaseFilePath(bool isDevelopment, string? configOverride = null)
+        {
+            var fileName = !string.IsNullOrWhiteSpace(configOverride)
+                ? configOverride
+                : (isDevelopment ? "sessions-dev.db" : "sessions.db");
+            return Path.Combine(UserDataRoot, fileName);
+        }
     }
 }
