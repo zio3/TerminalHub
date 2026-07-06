@@ -23,6 +23,9 @@ public static class McpInstructionDefaults
         ## 自己識別
         あなた自身のセッション GUID は、環境変数 `TERMINALHUB_SESSION_ID` に入っている。
         自分自身を対象にしたいとき（例: 自分のメモ更新）は、この値を target に渡す。
+        ただし CLI によっては tool 実行シェルへ独自の環境変数を渡さない設定があり（例: Codex の
+        shell_environment_policy）、その場合 `TERMINALHUB_SESSION_ID` は空に見える。空だったときは、
+        `list_sessions` を自分の作業フォルダ・種別で絞り込み、一致する1件のセッション GUID を自分として使えばよい。
 
         ## ツール
         - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態）を取得する。宛先を探すのに使う。
@@ -36,6 +39,9 @@ public static class McpInstructionDefaults
         - 大きな仕様・設計・長文を渡すときは、本文をそのまま送らず、ファイルに書いて「そのパスだけ」を
           send_to_session で送ると軽くて確実（受け手にファイルを読ませる）。ただしこれは好みの問題なので、
           直接送りたければ直接送ってよい。
+        - 返信がほしいときは、本文に自分のセッションID（`TERMINALHUB_SESSION_ID`、取れなければ list_sessions で
+          特定した自分の GUID）を書いておくこと。サーバーは送信元を相手に伝えない（エンベロープなし）ので、
+          相手はそれを見て send_to_session で返信できる。「終わったらこの ID に一言返して」等と添えるとよい。
         - 送り先は必ず既存セッション。存在しない相手には送れない。
 
         ## 優先順位
