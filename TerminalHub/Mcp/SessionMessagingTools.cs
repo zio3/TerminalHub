@@ -7,15 +7,17 @@ namespace TerminalHub.Mcp
 {
     /// <summary>
     /// セッション間メッセージング用の MCP ツール群。
-    /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)と
-    /// メッセージ送信(send_to_session)だけを提供する最小構成。
+    /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)・
+    /// メッセージ送信(send_to_session)・メモ設定(set_memo)を提供する最小構成。
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
     /// - 集約なし: 結果待ち(wait)/読み取り(read)はしない。完了は TerminalHub 本体の LED/通知で人間が気づく。
-    /// - エンベロープ/自己識別なし: 本文だけ送る。送信元明示や応答要否は将来「呼び出し元フラグ」で足す。
+    /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID を注入しており、CLI/エージェントは
+    ///   それを読めば自分のセッション GUID が分かる。set_memo で自分自身を対象にできる。
     /// - サーバーは状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
+    /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
     [McpServerToolType]
     public class SessionMessagingTools
@@ -141,6 +143,46 @@ namespace TerminalHub.Mcp
             }
 
             return new SendResult(true, $"送信しました: {info.GetDisplayName()} (submit={submit})");
+        }
+
+        [McpServerTool(Name = "set_memo")]
+        [Description(
+            "指定した既存セッションのメモ(TerminalHub のセッション一覧に表示される短い注釈)を設定する。" +
+            "「今なにをしているか」等のステータスを書いておくと、一覧から一目で分かる。既存のメモは上書きされる(空文字でクリア)。" +
+            "自分自身のメモを更新するには、環境変数 TERMINALHUB_SESSION_ID の値を target に渡す。" +
+            "target はセッションGUIDか表示名(完全一致)。")]
+        public static async Task<SendResult> SetMemo(
+            ISessionManager sessionManager,
+            ISessionRepository sessionRepository,
+            [Description("対象。セッションGUID(自分自身なら環境変数 TERMINALHUB_SESSION_ID の値)、または表示名(完全一致・大文字小文字無視)。")]
+            string target,
+            [Description("設定するメモ本文。空文字にするとメモをクリアする。")]
+            string memo)
+        {
+            // 宛先解決: send_to_session と同じく GUID 優先 → 表示名の完全一致。
+            SessionInfo? info = null;
+            if (Guid.TryParse(target, out var guid))
+            {
+                info = sessionManager.GetSessionInfo(guid);
+            }
+            info ??= sessionManager.GetActiveSessions()
+                .FirstOrDefault(s => string.Equals(s.GetDisplayName(), target, StringComparison.OrdinalIgnoreCase));
+
+            if (info == null)
+                return new SendResult(false, $"対象セッションが見つかりません: {target}");
+
+            var text = memo ?? string.Empty;
+
+            // 永続化(SQLite)。MCP は非Circuitコンテキストなので、Circuit 内の StorageService 経由ではなく
+            // Singleton の ISessionRepository で直接 SQLite を更新する。
+            // 注意: ストレージが LocalStorage モードのときはサーバー側から書き込めないため、
+            // その場合はインメモリ更新＋UI反映のみ効き、リロード後の保持は効かないことがある(既定は SQLite)。
+            await sessionRepository.UpdateMemoAsync(info.SessionId, text);
+
+            // インメモリの SessionInfo.Memo を更新し、開いている一覧を再描画させる。
+            sessionManager.UpdateMemo(info.SessionId, text);
+
+            return new SendResult(true, $"メモを設定しました: {info.GetDisplayName()}");
         }
     }
 }

@@ -39,6 +39,13 @@ namespace TerminalHub.Services
         SessionInfo? GetSessionInfo(Guid sessionId);
 
         /// <summary>
+        /// セッションのメモ(一覧表示用の短い注釈)をインメモリで更新し、一覧の再描画を促す。
+        /// MCP 等の非Circuitコンテキストから呼ぶ用途。永続化は呼び出し側で別途行う。
+        /// 対象が見つかれば true。
+        /// </summary>
+        bool UpdateMemo(Guid sessionId, string memo);
+
+        /// <summary>
         /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
         /// </summary>
         void MarkSessionConnected(Guid sessionId);
@@ -459,7 +466,7 @@ namespace TerminalHub.Services
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
-                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行
@@ -521,6 +528,17 @@ namespace TerminalHub.Services
         public SessionInfo? GetSessionInfo(Guid sessionId)
         {
             return _sessionInfos.TryGetValue(sessionId, out var info) ? info : null;
+        }
+
+        public bool UpdateMemo(Guid sessionId, string memo)
+        {
+            if (!_sessionInfos.TryGetValue(sessionId, out var info))
+                return false;
+
+            info.Memo = memo ?? string.Empty;
+            // 開いている一覧を再描画させる（Root.razor が OnSessionsChanged を購読し StateHasChanged する）。
+            NotifySessionsChanged();
+            return true;
         }
 
         /// <summary>
@@ -1007,7 +1025,7 @@ namespace TerminalHub.Services
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
                 _sessions[sessionId] = newSession;
                 sessionInfo.ConPtySession = newSession;
@@ -1063,7 +1081,7 @@ namespace TerminalHub.Services
                 var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
 
                 // 新しいセッションを作成して起動
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
                 _sessions[sessionId] = newSession;
                 sessionInfo.ConPtySession = newSession;
