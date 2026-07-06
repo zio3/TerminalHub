@@ -1047,8 +1047,16 @@
                                     空欄のまま保存すると既定テンプレに戻ります。
                                 </p>
                                 <p class="text-muted small mt-1 mb-0">
-                                    <i class="bi bi-exclamation-triangle me-1"></i>
-                                    反映は各セッションが次に MCP へ接続したときです。確実に反映したい場合は TerminalHub を再起動してください。
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    保存後、各セッションが<strong>次に MCP へ接続し直したとき</strong>に反映されます（TerminalHub の再起動は不要）。
+                                    既に接続中のセッションに今すぐ反映したい場合は、その CLI 側で <code>/clear</code> 等で再接続してください。
+                                </p>
+                                <p class="text-muted small mt-1 mb-0">
+                                    <i class="bi bi-lightbulb me-1"></i>
+                                    ここに書くと各セッションの<strong>コンテキストに毎回載る</strong>ので、内容は
+                                    「MCP ツールの使い方・セッション間連携」といった<strong>全セッション共通の土台</strong>に絞るのがおすすめです。
+                                    反映が接続タイミング依存で読みにくいこともあり、プロジェクト固有で確実に効かせたい細かい運用ルールは、
+                                    各 CLI 自身の instructions（Claude Code の <code>CLAUDE.md</code>、Codex の <code>AGENTS.md</code> 等）に書いて併用する方が確実です。
                                 </p>
                             </div>
                         }

@@ -18,7 +18,7 @@ namespace TerminalHub.Services
     
     public interface IConPtyService
     {
-        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24);
+        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null);
     }
     
     public class DataReceivedEventArgs : EventArgs
@@ -47,9 +47,9 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24)
+        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null)
         {
-            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true)); // バッファリング有効
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true, sessionId)); // バッファリング有効
         }
     }
 
@@ -68,7 +68,11 @@ namespace TerminalHub.Services
         private Task? _readTask;
         private CancellationTokenSource? _readCancellationTokenSource;
         private bool _started = false;
-        
+
+        // このセッションの TerminalHub セッション GUID。子プロセスに環境変数 TERMINALHUB_SESSION_ID として
+        // 注入し、CLI/エージェントが「自分がどの TerminalHub セッションか」を自己識別できるようにする。
+        private readonly Guid? _sessionId;
+
         // 環境変数フラグ
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         
@@ -107,12 +111,13 @@ namespace TerminalHub.Services
         // プロセス終了イベント
         public event EventHandler? ProcessExited;
 
-        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = true)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = true, Guid? sessionId = null)
         {
             _logger = logger;
             Cols = cols;
             Rows = rows;
             _enableBuffering = enableBuffering;
+            _sessionId = sessionId;
             
             // バッファリング用タイマーの初期化（有効時のみ）
             if (_enableBuffering)
@@ -159,6 +164,15 @@ namespace TerminalHub.Services
                 ["COLORTERM"] = "truecolor",
                 ["HOME"] = userProfile, // Claude CLI等のNode.jsツールが使用
             };
+
+            // このセッションの TerminalHub セッション GUID を注入する。
+            // CLI/エージェントは環境変数 TERMINALHUB_SESSION_ID を読めば「自分がどのセッションか」を
+            // 自己識別でき、MCP の set_memo 等で自分自身を対象にできる（同一フォルダで複数セッションでも
+            // プロセス単位なので混線しない）。
+            if (_sessionId is Guid sid && sid != Guid.Empty)
+            {
+                envVars["TERMINALHUB_SESSION_ID"] = sid.ToString();
+            }
 
             // 既存の環境変数を取得してマージ
             var currentEnv = Environment.GetEnvironmentVariables();

@@ -159,27 +159,29 @@ builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
 
 // MCP サーバー（セッション間メッセージング）。
-// TerminalHub 本体プロセスに HTTP MCP を同居させ、list_sessions / send_to_session を公開する。
+// TerminalHub 本体プロセスに HTTP MCP を同居させ、list_sessions / send_to_session / set_memo を公開する。
 // SessionManager(Singleton) に直結するため HTTP トランスポート一択（stdio だと別プロセスで共有状態に届かない）。
+//
+// instructions（取扱説明・運用ルール）は ConfigureSessionOptions で「接続セッションごと」に設定から
+// 読み込む。これにより設定を編集しても TerminalHub を再起動せず、各セッションが次に MCP へ接続し直した
+// タイミング（例: CLI 側の /clear）で新しい instructions が反映される。
+// （IOptions<McpServerOptions>.Value はシングルトンで1回キャッシュされ再起動が要るが、
+//  ConfigureSessionOptions を設定すると SDK が接続ごとに options を生成し直すため動的反映になる）。
 builder.Services
     .AddMcpServer()
-    .WithHttpTransport()
-    .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
-
-// MCP サーバーが配布する instructions（取扱説明・運用ルール）を設定から流し込む。
-// 注意: McpServerOptions は IOptions 経由でシングルトンとしてキャッシュされるため、この Configure は
-// 初回解決時に一度だけ走る。つまり設定を編集しても反映には TerminalHub の再起動が必要
-// （ライブ反映が要るなら IOptionsSnapshot/Monitor 等での動的化が別途必要）。UI 側にもその旨を明記している。
-// 未設定(null/空)なら組み込みの既定テンプレを使う。
-builder.Services
-    .AddOptions<ModelContextProtocol.Server.McpServerOptions>()
-    .Configure<IAppSettingsService>((options, appSettings) =>
+    .WithHttpTransport(options =>
     {
-        var text = appSettings.GetSettings().Experimental.McpInstructions;
-        options.ServerInstructions = string.IsNullOrWhiteSpace(text)
-            ? TerminalHub.Mcp.McpInstructionDefaults.Template
-            : text;
-    });
+        options.ConfigureSessionOptions = (httpContext, serverOptions, cancellationToken) =>
+        {
+            var appSettings = httpContext.RequestServices.GetRequiredService<IAppSettingsService>();
+            var text = appSettings.GetSettings().Experimental.McpInstructions;
+            serverOptions.ServerInstructions = string.IsNullOrWhiteSpace(text)
+                ? TerminalHub.Mcp.McpInstructionDefaults.Template
+                : text;
+            return Task.CompletedTask;
+        };
+    })
+    .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
 
 
 var app = builder.Build();
