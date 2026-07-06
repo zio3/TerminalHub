@@ -29,6 +29,14 @@ public class ExperimentalSettings
     /// terminalhub エントリを追記し、起動しただけで list_sessions / send_to_session が使える。既定OFF。
     /// </summary>
     public bool AutoRegisterMcp { get; set; } = false;
+
+    /// <summary>
+    /// MCP サーバーが接続時にモデルへ配布する instructions（取扱説明・運用ルール）。
+    /// null または空なら組み込みの既定テンプレ(McpInstructionDefaults.Template)を使う。
+    /// ユーザーが書き換えたら、その内容をそのまま配布する（＝ユーザーが著者、TerminalHub は下書きを置くだけ）。
+    /// 全デバイス共通・グローバル設定。
+    /// </summary>
+    public string? McpInstructions { get; set; }
 }
 
 /// <summary>

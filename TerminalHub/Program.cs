@@ -161,6 +161,21 @@ builder.Services
     .WithHttpTransport()
     .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
 
+// MCP サーバーが配布する instructions（取扱説明・運用ルール）を設定から流し込む。
+// 注意: McpServerOptions は IOptions 経由でシングルトンとしてキャッシュされるため、この Configure は
+// 初回解決時に一度だけ走る。つまり設定を編集しても反映には TerminalHub の再起動が必要
+// （ライブ反映が要るなら IOptionsSnapshot/Monitor 等での動的化が別途必要）。UI 側にもその旨を明記している。
+// 未設定(null/空)なら組み込みの既定テンプレを使う。
+builder.Services
+    .AddOptions<ModelContextProtocol.Server.McpServerOptions>()
+    .Configure<IAppSettingsService>((options, appSettings) =>
+    {
+        var text = appSettings.GetSettings().Experimental.McpInstructions;
+        options.ServerInstructions = string.IsNullOrWhiteSpace(text)
+            ? TerminalHub.Mcp.McpInstructionDefaults.Template
+            : text;
+    });
+
 
 var app = builder.Build();
 
