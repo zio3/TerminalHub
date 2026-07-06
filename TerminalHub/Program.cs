@@ -76,10 +76,15 @@ builder.Services.AddSingleton<ISessionManager, SessionManager>();
 builder.Services.AddScoped<ILocalStorageService, LocalStorageService>();
 
 // SQLiteセッションストレージを登録
-var dbFileName = builder.Configuration.GetValue<string>("Database:FileName") ?? "sessions.db";
-var dbPath = Path.Combine(AppDataPaths.UserDataRoot, dbFileName);
+// DB パスは logs / app-settings と同様に IsDevelopment で既定を切り替える
+// (dev=sessions-dev.db / prod=sessions.db)。Database:FileName 設定があればそれを優先。
+// これにより appsettings.Development.json が無い環境 (別 worktree 等) の Development 実行でも
+// 本番 DB (sessions.db) を誤って触らない。
+var dbPath = AppDataPaths.GetDatabaseFilePath(
+    builder.Environment.IsDevelopment(),
+    builder.Configuration.GetValue<string>("Database:FileName"));
 builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
-Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FileName={dbFileName} / FullPath={dbPath}");
+Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();
