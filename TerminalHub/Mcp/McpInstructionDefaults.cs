@@ -48,9 +48,12 @@ public static class McpInstructionDefaults
         上記の「作法」は既定のおすすめに過ぎない。ユーザーからのその場の直接指示や、この下に追記された
         運用ルールがあれば、そちらを優先すること。
 
-        ## 適用範囲
-        ここに書くのは「TerminalHub の MCP ツールをどう使うか」の土台まで。プロジェクト固有の細かい
-        運用ルールは、各 CLI 自身の instructions（例: Claude Code の CLAUDE.md、Codex の AGENTS.md / 設定）に
-        書いて併用してよい。TerminalHub 側で全部を制御しようとせず、CLI ネイティブの仕組みと組み合わせること。
+        ## 適用範囲・使い分け
+        ここに書くのが適切なのは「TerminalHub の MCP ツールをどう使うか」「セッション間でどう連携するか」
+        といった、全セッション共通の土台。こういう内容はむしろここに書くとよい。
+        一方、これらの instructions が実際に効くのは各セッションが MCP に接続（/ 再接続）したタイミングで、
+        いつ反映されるかが少し分かりにくい。なので、プロジェクト固有で確実に効かせたい細かい運用ルールは、
+        各 CLI 自身の instructions（例: Claude Code の CLAUDE.md、Codex の AGENTS.md / 設定）に書く方が確実。
+        TerminalHub 側で全部を抱え込まず、CLI ネイティブの仕組みと使い分け・併用すること。
         """;
 }
