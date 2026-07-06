@@ -47,5 +47,10 @@ public static class McpInstructionDefaults
         ## 優先順位
         上記の「作法」は既定のおすすめに過ぎない。ユーザーからのその場の直接指示や、この下に追記された
         運用ルールがあれば、そちらを優先すること。
+
+        ## 適用範囲
+        ここに書くのは「TerminalHub の MCP ツールをどう使うか」の土台まで。プロジェクト固有の細かい
+        運用ルールは、各 CLI 自身の instructions（例: Claude Code の CLAUDE.md、Codex の AGENTS.md / 設定）に
+        書いて併用してよい。TerminalHub 側で全部を制御しようとせず、CLI ネイティブの仕組みと組み合わせること。
         """;
 }
