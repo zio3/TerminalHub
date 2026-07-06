@@ -258,6 +258,20 @@
     // 色は共通の赤で、SessionList 側がアイコンを出し分ける。
     private Dictionary<Guid, SessionBellKind> _notificationPendingSessions = new();
 
+    // このRootインスタンス(Circuit=ブラウザ接続)の識別子。ベルはインスタンスごとに独立管理のため、
+    // 診断履歴で「どのブラウザが付けた/消したか」を切り分けられるようにする。
+    private readonly string _bellInstanceId = Guid.NewGuid().ToString("N").Substring(0, 6);
+
+    /// <summary>
+    /// 通知ベルの変更（ON/OFF/抑止）をセッションの診断履歴に記録する。
+    /// 「消したはずの通知マークがまた付いている」の原因調査用（設定 > バッファタブからDL可能）。
+    /// </summary>
+    private void RecordBellHistory(Guid sessionId, string action, SessionBellKind? kind, string source)
+    {
+        sessions.FirstOrDefault(s => s.SessionId == sessionId)
+            ?.RecordBellChange(action, kind?.ToString(), source, _bellInstanceId);
+    }
+
     /// <summary>
     /// 通知ベルを優先度を考慮して立てる。
     /// 「確認(許可待ち)」「選択(質問)」＝ユーザー操作が必要 は「停止」より優先度が高い。
@@ -265,16 +279,18 @@
     /// 「質問待ち」が「停止」へ格下げされて見えてしまうため、Stopped は既存の
     /// Confirm/Select を上書きしない。Confirm/Select は常に上書きする（最新が勝つ）。
     /// </summary>
-    private void SetNotificationBell(Guid sessionId, SessionBellKind kind)
+    private void SetNotificationBell(Guid sessionId, SessionBellKind kind, string source)
     {
         if (kind == SessionBellKind.Stopped
             && _notificationPendingSessions.TryGetValue(sessionId, out var existing)
             && existing != SessionBellKind.Stopped)
         {
             // 既に Confirm/Select（要操作）が立っている → 格下げしない
+            RecordBellHistory(sessionId, "SUPPRESSED", kind, $"{source} → 既存{existing}を格下げしないため無視");
             return;
         }
         _notificationPendingSessions[sessionId] = kind;
+        RecordBellHistory(sessionId, "ON", kind, source);
     }
 
     /// <summary>
@@ -283,15 +299,16 @@
     /// Confirm と誤判定されうる。既に精密イベント(PreToolUse=Select / PermissionRequest=Confirm)で
     /// 要操作ベルが立っている場合は上書きしない（三択待ちが「許可待ち」へ化けるのを防ぐ）。
     /// </summary>
-    private void SetNotificationBellFromNotification(Guid sessionId, SessionBellKind kind)
+    private void SetNotificationBellFromNotification(Guid sessionId, SessionBellKind kind, string source)
     {
         if (_notificationPendingSessions.TryGetValue(sessionId, out var existing)
             && existing != SessionBellKind.Stopped)
         {
             // 既に要操作ベル(Select/Confirm)が立っている → 曖昧な Notification では上書きしない
+            RecordBellHistory(sessionId, "SUPPRESSED", kind, $"{source} → 既存{existing}を優先しNotificationでは上書きしない");
             return;
         }
-        SetNotificationBell(sessionId, kind);
+        SetNotificationBell(sessionId, kind, source);
     }
 
     /// <summary>
@@ -1016,6 +1033,7 @@
         if (_notificationPendingSessions.Remove(sessionId))
         {
             Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
+            RecordBellHistory(sessionId, "OFF", null, "SelectSession(セッション選択)");
         }
 
         // アクティブセッション変更を即座にUIに反映
@@ -2327,7 +2345,7 @@
                 if (activeSessionId != sessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
-                    SetNotificationBell(sessionId, SessionBellKind.Stopped);
+                    SetNotificationBell(sessionId, SessionBellKind.Stopped, "OnSessionTimeout(出力解析の完了検知/5秒タイムアウト)");
                 }
 
                 // 処理完了の通知（アクティブセッションでも通知する）
@@ -2396,7 +2414,7 @@
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
-                    SetNotificationBell(notification.SessionId, SessionBellKind.Stopped);
+                    SetNotificationBell(notification.SessionId, SessionBellKind.Stopped, "Hook Stop(処理完了)");
                 }
 
                 // タイマーを停止
@@ -2459,14 +2477,15 @@
                     switch (eventType)
                     {
                         case HookEventType.PreToolUse:
-                            SetNotificationBell(notification.SessionId, SessionBellKind.Select);
+                            SetNotificationBell(notification.SessionId, SessionBellKind.Select, "Hook PreToolUse(選択待ち)");
                             break;
                         case HookEventType.PermissionRequest:
-                            SetNotificationBell(notification.SessionId, SessionBellKind.Confirm);
+                            SetNotificationBell(notification.SessionId, SessionBellKind.Confirm, "Hook PermissionRequest(許可待ち)");
                             break;
                         default:
                             SetNotificationBellFromNotification(
-                                notification.SessionId, ClassifyNotificationBell(notification.Message));
+                                notification.SessionId, ClassifyNotificationBell(notification.Message),
+                                $"Hook Notification: {notification.Message}");
                             break;
                     }
                     StateHasChanged();
