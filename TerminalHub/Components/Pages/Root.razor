@@ -328,8 +328,8 @@
     /// <summary>
     /// Notification イベントの message から通知ベル種別を判別する。
     /// Notification は許可待ち(permission)・アイドル(idle)・認証成功 等で発火するため、
-    /// 一律 Confirm（盾＝許可待ち）にすると idle/認証まで「許可待ち」と誤表示してしまう。
-    /// message に "permission" を含むものだけ確認（盾）とし、それ以外は Stopped 扱いにする。
+    /// 一律 Confirm（許可待ち, bi-question-octagon）にすると idle/認証まで「許可待ち」と誤表示してしまう。
+    /// message に "permission" を含むものだけ Confirm とし、それ以外は Stopped 扱いにする。
     /// 例: 許可待ち="Claude needs your permission to use Bash" / idle="Claude is waiting for your input"。
     /// 注意: Stopped 判定の Notification は SetNotificationBellFromNotification でベル対象外（SUPPRESSED）に
     /// なるため、Claude Code 側の文言変更で permission 判定を外すと許可待ちが無通知になる。substring 判定が
@@ -2608,9 +2608,9 @@
                 // Notification / PreToolUse / PermissionRequest は「ユーザーの入力が必要」な状態。
                 // 非アクティブセッションならベル（通知マーク）を立てて、別セッションを見ている時でも気づけるように。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
-                //   - PreToolUse        → 選択（質問, bi-ui-radios）
-                //   - PermissionRequest → 確認（Codex の許可待ち, bi-shield-exclamation）
-                //   - Notification      → message で判別。許可待ち（permission を含む）のみ確認（盾）で点灯。
+                //   - PreToolUse        → 選択（質問, bi-list-ol）
+                //   - PermissionRequest → 確認（Codex の許可待ち, bi-question-octagon）
+                //   - Notification      → message で判別。許可待ち（permission を含む）のみ確認（bi-question-octagon）で点灯。
                 //                         idle/認証成功等はベルを立てない（Stop 時に通知済みの完了が
                 //                         60秒遅れで再点灯するのを防ぐ。SUPPRESSED として履歴には残る）。
                 if (activeSessionId != notification.SessionId)
