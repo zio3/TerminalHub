@@ -303,9 +303,18 @@
     /// Notification は AskUserQuestion の裏でも飛ぶことがあり、その message が "permission" を含むと
     /// Confirm と誤判定されうる。既に精密イベント(PreToolUse=Select / PermissionRequest=Confirm)で
     /// 要操作ベルが立っている場合は上書きしない（三択待ちが「許可待ち」へ化けるのを防ぐ）。
+    /// また idle 系（"Claude is waiting for your input"、Stop の60秒後に飛ぶリマインダー等）では
+    /// ベルを立てない。処理完了は Stop 時のベルで既に通知済みで、ユーザーが確認して消した後に
+    /// 同じ完了が60秒遅れで再点灯するノイズになるため（実地調査 2026-07-08）。
     /// </summary>
     private void SetNotificationBellFromNotification(Guid sessionId, SessionBellKind kind, string source)
     {
+        if (kind == SessionBellKind.Stopped)
+        {
+            // permission を含まない Notification（idle リマインダー等）はベル対象外
+            RecordBellHistory(sessionId, "SUPPRESSED", kind, $"{source} → idle系Notificationはベルを立てない");
+            return;
+        }
         if (_notificationPendingSessions.TryGetValue(sessionId, out var existing)
             && existing != SessionBellKind.Stopped)
         {
@@ -319,10 +328,12 @@
     /// <summary>
     /// Notification イベントの message から通知ベル種別を判別する。
     /// Notification は許可待ち(permission)・アイドル(idle)・認証成功 等で発火するため、
-    /// 一律 Confirm（盾＝許可待ち）にすると idle/認証まで「許可待ち」と誤表示してしまう。
-    /// message に "permission" を含むものだけ確認（盾）とし、それ以外は停止（ベル）扱いにする。
+    /// 一律 Confirm（許可待ち, bi-question-octagon）にすると idle/認証まで「許可待ち」と誤表示してしまう。
+    /// message に "permission" を含むものだけ Confirm とし、それ以外は Stopped 扱いにする。
     /// 例: 許可待ち="Claude needs your permission to use Bash" / idle="Claude is waiting for your input"。
-    /// （Claude Code 側の文言変更に弱い substring 判定だが、外れても Stopped に倒れるだけで害は小さい）
+    /// 注意: Stopped 判定の Notification は SetNotificationBellFromNotification でベル対象外（SUPPRESSED）に
+    /// なるため、Claude Code 側の文言変更で permission 判定を外すと許可待ちが無通知になる。substring 判定が
+    /// 外れていそうな挙動を見たら、診断の「ステータス/通知履歴 JSON」の SUPPRESSED 行で message を確認すること。
     /// </summary>
     private static SessionBellKind ClassifyNotificationBell(string? message)
     {
@@ -2597,10 +2608,11 @@
                 // Notification / PreToolUse / PermissionRequest は「ユーザーの入力が必要」な状態。
                 // 非アクティブセッションならベル（通知マーク）を立てて、別セッションを見ている時でも気づけるように。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
-                //   - PreToolUse        → 選択（質問, bi-ui-radios）
-                //   - PermissionRequest → 確認（Codex の許可待ち, bi-shield-exclamation）
-                //   - Notification      → message で判別。許可待ちのみ確認（盾）、
-                //                         idle/認証成功等は停止（ベル）にして「許可待ち」を誤表示しない。
+                //   - PreToolUse        → 選択（質問, bi-list-ol）
+                //   - PermissionRequest → 確認（Codex の許可待ち, bi-question-octagon）
+                //   - Notification      → message で判別。許可待ち（permission を含む）のみ確認（bi-question-octagon）で点灯。
+                //                         idle/認証成功等はベルを立てない（Stop 時に通知済みの完了が
+                //                         60秒遅れで再点灯するのを防ぐ。SUPPRESSED として履歴には残る）。
                 if (activeSessionId != notification.SessionId)
                 {
                     Logger.LogInformation(

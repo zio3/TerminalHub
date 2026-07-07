@@ -102,7 +102,7 @@
                             }
                             @if (NotificationPendingSessions.TryGetValue(session.SessionId, out var bellKind))
                             {
-                                @* 色は共通(赤)。停止=ベル / 確認=盾 / 選択=ラジオ でアイコンの形を変えて区別する *@
+                                @* 色は共通(赤)。停止=ベル / 確認=八角形＋？ / 選択=番号リスト でアイコンの形を変えて区別する *@
                                 <span class="text-danger me-1 session-bell" title="@BellTitle(bellKind)">
                                     <i class="bi @BellIcon(bellKind)"></i>
                                 </span>
