@@ -317,6 +317,20 @@ function showLinkCopyNotice(uri, success) {
     setTimeout(() => div.remove(), 3000);
 }
 
+// バッファ行のテキストを取得（各リンクプロバイダー共通）
+// ワイド文字（全角等）の2セル目は getChars() が空を返すためスペースで埋め、
+// 文字列インデックスとターミナル列番号を揃える
+function getBufferLineText(line) {
+    let lineText = '';
+    for (let i = 0; i < line.length; i++) {
+        const cell = line.getCell(i);
+        if (cell) {
+            lineText += cell.getChars() || ' ';
+        }
+    }
+    return lineText;
+}
+
 // ファイルパス検出の設定
 // Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
 // 検出は割り切り: 「/ または \ を含むトークン（末尾まで丸ごと）」と
@@ -344,13 +358,7 @@ function setupFilePathDetection(term, sessionId) {
                 return;
             }
 
-            let lineText = '';
-            for (let i = 0; i < line.length; i++) {
-                const cell = line.getCell(i);
-                if (cell) {
-                    lineText += cell.getChars() || ' ';
-                }
-            }
+            const lineText = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -360,6 +368,10 @@ function setupFilePathDetection(term, sessionId) {
 
                 // スラッシュだけの並び（罫線的な表記等）はリンク化しない
                 if (/^[\\/]+$/.test(text)) continue;
+
+                // コミットハッシュの範囲表記（68bf789..9931160 等、fetch/push 出力）は
+                // 拡張子パターンに誤マッチするためスキップし、ハッシュリンク側に任せる
+                if (/^[0-9a-f]{7,40}\.\.[0-9a-f]{7,40}$/i.test(text)) continue;
 
                 // URL は URL 検出（WebLinksAddon）側に任せる:
                 // マッチを含む空白区切りトークンに "://" があればスキップ
@@ -412,13 +424,7 @@ function setupCommitHashDetection(term, sessionId) {
                 return;
             }
 
-            let lineText = '';
-            for (let i = 0; i < line.length; i++) {
-                const cell = line.getCell(i);
-                if (cell) {
-                    lineText += cell.getChars() || ' ';
-                }
-            }
+            const lineText = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -517,14 +523,8 @@ function setupUrlDetectionFallback(term) {
                 }
                 
                 // 行のテキストを取得
-                let lineText = '';
-                for (let i = 0; i < line.length; i++) {
-                    const cell = line.getCell(i);
-                    if (cell) {
-                        lineText += cell.getChars() || ' ';
-                    }
-                }
-                
+                const lineText = getBufferLineText(line);
+
                 // URLを検出
                 const links = [];
                 let match;

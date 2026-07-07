@@ -413,43 +413,42 @@ namespace TerminalHub.Services
                 if (string.IsNullOrEmpty(hash) || !System.Text.RegularExpressions.Regex.IsMatch(hash, "^[0-9a-fA-F]{7,40}$"))
                     return null;
 
-                if (!await IsGitRepositoryAsync(path))
-                    return null;
-
-                // コミットに解決できるか検証しつつフルハッシュを得る（blob/tree 等は対象外）
+                // コミットに解決できるか検証しつつフルハッシュを得る（blob/tree 等は対象外）。
+                // 非リポジトリのフォルダでもここで失敗するため、事前のリポジトリ判定は不要
                 var resolve = await ExecuteGitCommandAsync(path, $"rev-parse --verify --quiet {hash}^{{commit}}");
                 var fullHash = resolve.Output?.Trim();
                 if (!resolve.Success || string.IsNullOrEmpty(fullHash))
                     return null;
 
-                // メタ情報: 1〜4行目 = フルハッシュ/親/作者+日時/件名、5行目以降 = 本文
-                var meta = await ExecuteGitCommandAsync(path,
-                    $"show -s --date=format:\"%Y-%m-%d %H:%M\" --format=\"%H%n%P%n%an / %ad%n%s%n%b\" {fullHash}");
-                if (!meta.Success || string.IsNullOrEmpty(meta.Output))
+                // メタ情報と変更ファイル一覧を1コマンドで取得。
+                // 本文(%b)は行数可変のため、format 末尾の %x00 (NUL) でメタ部と numstat 部を区切る
+                var result = await ExecuteGitCommandAsync(path,
+                    $"-c core.quotepath=false show --numstat --date=format:\"%Y-%m-%d %H:%M\" --format=\"%P%n%an%n%ad%n%s%n%b%x00\" {fullHash}");
+                if (!result.Success || string.IsNullOrEmpty(result.Output))
                     return null;
 
-                var lines = meta.Output.Replace("\r", "").Split('\n');
+                var sections = result.Output.Replace("\r", "").Split('\0', 2);
+
+                // メタ部: 1行目 = 親、2行目 = 作者、3行目 = 日時、4行目 = 件名、5行目以降 = 本文
+                var lines = sections[0].Split('\n');
                 if (lines.Length < 4)
                     return null;
 
-                var authorDate = lines[2].Split(" / ", 2);
                 var info = new GitCommitInfo
                 {
-                    FullHash = lines[0],
-                    IsMerge = lines[1].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
-                    Author = authorDate.Length == 2 ? authorDate[0] : lines[2],
-                    Date = authorDate.Length == 2 ? authorDate[1] : "",
+                    FullHash = fullHash,
+                    IsMerge = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
+                    Author = lines[1],
+                    Date = lines[2],
                     Subject = lines[3],
                     Body = string.Join('\n', lines.Skip(4)).Trim(),
                 };
 
-                // 変更ファイル一覧（追加/削除行数付き）。マージコミットは numstat が空になるが、そのまま扱う
-                var stat = await ExecuteGitCommandAsync(path, $"-c core.quotepath=false show --numstat --format= {fullHash}");
-                if (stat.Success && !string.IsNullOrEmpty(stat.Output))
+                // numstat 部: "追加\t削除\tパス"（バイナリは "-\t-\tパス"）。マージコミットは空になるが、そのまま扱う
+                if (sections.Length == 2)
                 {
-                    foreach (var line in stat.Output.Replace("\r", "").Split('\n'))
+                    foreach (var line in sections[1].Split('\n'))
                     {
-                        // numstat 形式: "追加\t削除\tパス"（バイナリは "-\t-\tパス"）
                         var parts = line.Split('\t', 3);
                         if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[2]))
                             continue;
