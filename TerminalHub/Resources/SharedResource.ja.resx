@@ -110,8 +110,8 @@
   <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>表示倍率（50%〜150%）。</value></data>
   <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>ターミナルフォントサイズ</value></data>
   <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>フォントサイズ（8px〜28px）。</value></data>
-  <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>ターミナル内URLをタップでコピーする（開かない）</value></data>
-  <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>モバイルの全画面表示など、リンク先から戻れない環境向け。この端末（ブラウザ）にのみ保存されます。</value></data>
+  <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>ターミナル内のURLやパスをタップでコピーする（開かない）</value></data>
+  <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>モバイルの全画面表示など、リンク先から戻れない環境向け。ファイル/フォルダのパスもコピーになります。この端末（ブラウザ）にのみ保存されます。</value></data>
   <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>サイドバー幅</value></data>
   <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>幅（15%〜70%）。境界線のドラッグでも変更可能。</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>ターミナル / 入力パネル比率</value></data>
