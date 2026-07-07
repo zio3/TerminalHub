@@ -79,6 +79,10 @@ namespace TerminalHub.Services
         // パフォーマンス最適化設定
         private bool _enableBuffering = true; // バッファリング有効
         private readonly SemaphoreSlim _outputSemaphore = new(1, 1);
+
+        // 書き込みの直列化用。UI・MCP(send_to_session)・RemoteLaunch など複数経路から
+        // 同時に WriteAsync が呼ばれると、256文字チャンク＋Delay の隙間で入力が混ざるため排他する
+        private readonly SemaphoreSlim _writeLock = new(1, 1);
         private System.Timers.Timer? _flushTimer;
         private readonly StringBuilder _outputBuffer = new();
         private const int FLUSH_INTERVAL_MS = 16; // 約60fps
@@ -349,14 +353,30 @@ namespace TerminalHub.Services
         /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
-            if (_writer != null && !_disposed)
+            if (_writer == null || _disposed)
+                return;
+
+            // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ
+            try
             {
+                await _writeLock.WaitAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                return; // 破棄済みなら何もしない
+            }
+
+            try
+            {
+                if (_writer == null || _disposed)
+                    return;
+
                 // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
                 const int CHUNK_SIZE = 256;
-                
+
                 for (int i = 0; i < input.Length; i += CHUNK_SIZE)
                 {
-                    var chunk = i + CHUNK_SIZE < input.Length 
+                    var chunk = i + CHUNK_SIZE < input.Length
                         ? input.Substring(i, CHUNK_SIZE)
                         : input.Substring(i);
 
@@ -367,6 +387,17 @@ namespace TerminalHub.Services
 
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
+            }
+            finally
+            {
+                try
+                {
+                    _writeLock.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 書き込み中に Dispose されたケース。解放不要
+                }
             }
         }
 
@@ -390,15 +421,16 @@ namespace TerminalHub.Services
                         {
                             var bufferedData = _outputBuffer.ToString();
                             _outputBuffer.Clear();
-                            
+
                             DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
                         }
                     }
                 }
                 finally
                 {
-                    if (!_disposed)
-                        _outputSemaphore.Release();
+                    // 取得したら必ず解放する。イベント処理中に Dispose された場合でも
+                    // Release しないと待機側が詰まる（破棄済みなら ObjectDisposedException を外側の catch で無視）
+                    _outputSemaphore.Release();
                 }
             }
             catch (ObjectDisposedException)
@@ -428,8 +460,8 @@ namespace TerminalHub.Services
                 }
                 finally
                 {
-                    if (!_disposed)
-                        _outputSemaphore.Release();
+                    // 取得したら必ず解放する（破棄済みなら ObjectDisposedException を外側の catch で無視）
+                    _outputSemaphore.Release();
                 }
             }
             catch (ObjectDisposedException)
@@ -637,6 +669,7 @@ namespace TerminalHub.Services
             
             // セマフォを破棄
             _outputSemaphore?.Dispose();
+            _writeLock?.Dispose();
 
             // プロセスを終了（bun など孫プロセスが残らないようプロセスツリーごと kill）
             if (_process != null && !_process.HasExited)
