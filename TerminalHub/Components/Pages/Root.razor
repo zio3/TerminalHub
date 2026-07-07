@@ -303,9 +303,18 @@
     /// Notification は AskUserQuestion の裏でも飛ぶことがあり、その message が "permission" を含むと
     /// Confirm と誤判定されうる。既に精密イベント(PreToolUse=Select / PermissionRequest=Confirm)で
     /// 要操作ベルが立っている場合は上書きしない（三択待ちが「許可待ち」へ化けるのを防ぐ）。
+    /// また idle 系（"Claude is waiting for your input"、Stop の60秒後に飛ぶリマインダー等）では
+    /// ベルを立てない。処理完了は Stop 時のベルで既に通知済みで、ユーザーが確認して消した後に
+    /// 同じ完了が60秒遅れで再点灯するノイズになるため（実地調査 2026-07-08）。
     /// </summary>
     private void SetNotificationBellFromNotification(Guid sessionId, SessionBellKind kind, string source)
     {
+        if (kind == SessionBellKind.Stopped)
+        {
+            // permission を含まない Notification（idle リマインダー等）はベル対象外
+            RecordBellHistory(sessionId, "SUPPRESSED", kind, $"{source} → idle系Notificationはベルを立てない");
+            return;
+        }
         if (_notificationPendingSessions.TryGetValue(sessionId, out var existing)
             && existing != SessionBellKind.Stopped)
         {
