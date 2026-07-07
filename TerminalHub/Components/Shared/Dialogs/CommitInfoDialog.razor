@@ -1,0 +1,129 @@
+@using TerminalHub.Services
+@using Microsoft.Extensions.Localization
+@using Microsoft.JSInterop
+@inject IStringLocalizer<SharedResource> L
+@inject ILogger<CommitInfoDialog> Logger
+@inject IJSRuntime JSRuntime
+
+@* ターミナル内のコミットハッシュクリックで開く、コミット情報ダイアログ。
+   diff 本文は表示しない（件名・作者・日時・変更ファイル一覧まで）。
+   取得は親（Root）がクリック時に行い、ここは表示のみを担当する。 *@
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-truncate">
+                    <i class="bi bi-git me-2"></i>@L["CommitInfo.Title"]
+                    @if (Info != null)
+                    {
+                        <span class="badge bg-secondary ms-2 font-monospace">@Info.ShortHash</span>
+                        @if (Info.IsMerge)
+                        {
+                            <span class="badge bg-info text-dark ms-1">@L["CommitInfo.MergeBadge"]</span>
+                        }
+                    }
+                </h5>
+                <button type="button" class="btn-close" @onclick="HandleClose"></button>
+            </div>
+            <div class="modal-body">
+                @if (Info != null)
+                {
+                    <div class="small text-muted mb-2 text-truncate" title="@FolderPath">
+                        <i class="bi bi-folder me-1"></i>@FolderPath
+                    </div>
+                    <div class="fw-bold text-break mb-1">@Info.Subject</div>
+                    @if (!string.IsNullOrEmpty(Info.Body))
+                    {
+                        <div class="small text-muted text-break mb-2" style="white-space: pre-wrap;">@Info.Body</div>
+                    }
+                    <div class="small text-muted mb-3">
+                        <i class="bi bi-person me-1"></i>@Info.Author
+                        <i class="bi bi-clock ms-3 me-1"></i>@Info.Date
+                    </div>
+                    @if (Info.Files.Count == 0)
+                    {
+                        <div class="alert alert-secondary py-2 mb-0">
+                            <i class="bi bi-info-circle me-1"></i>@(Info.IsMerge ? L["CommitInfo.NoFilesMerge"] : L["CommitInfo.NoFiles"])
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="small text-muted mb-2">
+                            @string.Format(L["CommitInfo.FileCountFormat"], Info.Files.Count)
+                        </div>
+                        <div class="list-group list-group-flush border rounded" style="max-height: 45vh; overflow-y: auto;">
+                            @foreach (var file in Info.Files)
+                            {
+                                <div class="list-group-item py-1 px-2 d-flex align-items-center gap-2">
+                                    <span class="font-monospace small text-nowrap" style="min-width: 6rem;">
+                                        @if (file.Added.HasValue || file.Deleted.HasValue)
+                                        {
+                                            <span class="text-success">+@(file.Added ?? 0)</span>
+                                            <span class="text-danger ms-1">-@(file.Deleted ?? 0)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">@L["CommitInfo.Binary"]</span>
+                                        }
+                                    </span>
+                                    <span class="font-monospace small text-break">@file.FilePath</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                @if (Info != null)
+                {
+                    @* フルハッシュをクリップボードへ。git コマンドや AI への貼り付けを想定 *@
+                    <button type="button" class="btn btn-outline-secondary me-auto" @onclick="CopyHashAsync">
+                        <i class="bi @(hashCopied ? "bi-check2" : "bi-clipboard") me-1"></i>@(hashCopied ? L["CommitInfo.Copied"] : L["CommitInfo.CopyHash"])
+                    </button>
+                }
+                <button type="button" class="btn btn-secondary" @onclick="HandleClose">@L["Common.Close"]</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string? FolderPath { get; set; }
+    [Parameter] public GitCommitInfo? Info { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // 「コピーしました」表示用（数秒で元に戻す）
+    private bool hashCopied = false;
+
+    protected override void OnParametersSet()
+    {
+        if (!IsVisible)
+        {
+            hashCopied = false;
+        }
+    }
+
+    private async Task HandleClose()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task CopyHashAsync()
+    {
+        if (Info == null) return;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", Info.FullHash);
+            hashCopied = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            hashCopied = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[CommitInfoDialog] ハッシュのコピーに失敗");
+        }
+    }
+}
