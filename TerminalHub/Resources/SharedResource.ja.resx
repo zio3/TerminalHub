@@ -595,6 +595,7 @@
   <!-- Root: Toast messages -->
   <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>セッション作成エラー: {0}</value></data>
   <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>セッション初期化エラー: {0}</value></data>
+  <data name="Root.Toast.PathNotFoundFormat" xml:space="preserve"><value>パスが見つかりません: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>ターミナルを破棄しました</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>ターミナル破棄エラー: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>ターミナルを再作成しました</value></data>

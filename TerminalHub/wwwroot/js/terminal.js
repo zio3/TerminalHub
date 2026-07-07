@@ -311,10 +311,89 @@ function showLinkCopyNotice(uri, success) {
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
         (success ? 'background:#198754;' : 'background:#dc3545;');
     div.textContent = success
-        ? `📋 URLをコピーしました: ${uri}`
-        : `URLをコピーできませんでした: ${uri}`;
+        ? `📋 コピーしました: ${uri}`
+        : `コピーできませんでした: ${uri}`;
     document.body.appendChild(div);
     setTimeout(() => div.remove(), 3000);
+}
+
+// ファイルパス検出の設定
+// Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
+// 検出は割り切り: 「拡張子付きファイル（拡張子は英字始まり、バージョン番号 1.0.65 等を除外）」と
+// 「/ または \ で終わるフォルダ表記」のみ。誤検出してもクリック時に「見つかりません」に落ちるだけ。
+// クリック時: コピー動作モード(terminalLinkCopyMode)ならコピー、通常は C# 側で
+// フォルダ=エクスプローラー / ファイル=既定アプリ で開く。
+function setupFilePathDetection(term, sessionId) {
+    if (typeof term.registerLinkProvider !== 'function') {
+        console.warn('[Path Detection] registerLinkProvider not available');
+        return;
+    }
+
+    // 空白・引用符・括弧・全角句読点は含めない。先頭にドライブレター(C:\)も許容。
+    const pathRegex = /(?:[A-Za-z]:[\\/])?[^\s"'`()\[\]{}<>|;,！？。、（）「」]+(?:\.[A-Za-z][A-Za-z0-9]{0,7}|[\\/])/g;
+
+    const linkProvider = {
+        provideLinks: (bufferLineNumber, callback) => {
+            const line = term.buffer.active.getLine(bufferLineNumber);
+            if (!line) {
+                callback(undefined);
+                return;
+            }
+
+            let lineText = '';
+            for (let i = 0; i < line.length; i++) {
+                const cell = line.getCell(i);
+                if (cell) {
+                    lineText += cell.getChars() || ' ';
+                }
+            }
+
+            const links = [];
+            let match;
+            pathRegex.lastIndex = 0;
+            while ((match = pathRegex.exec(lineText)) !== null) {
+                const text = match[0];
+
+                // URL は URL 検出（WebLinksAddon）側に任せる:
+                // マッチを含む空白区切りトークンに "://" があればスキップ
+                const before = lineText.slice(0, match.index);
+                const tokenStart = before.search(/\S+$/) === -1 ? match.index : before.search(/\S+$/);
+                const token = lineText.slice(tokenStart).split(/\s/)[0];
+                if (token.includes('://')) continue;
+
+                links.push({
+                    range: {
+                        start: { x: match.index + 1, y: bufferLineNumber + 1 },
+                        end: { x: match.index + text.length + 1, y: bufferLineNumber + 1 }
+                    },
+                    text: text,
+                    activate: (e, uri) => activateTerminalPath(sessionId, uri)
+                });
+            }
+
+            callback(links.length > 0 ? links : undefined);
+        }
+    };
+
+    try {
+        term.registerLinkProvider(linkProvider);
+    } catch (error) {
+        console.error('[Path Detection] Failed to register link provider:', error);
+    }
+}
+
+// パスリンクのアクティベート処理
+function activateTerminalPath(sessionId, path) {
+    if (terminalLinkCopyMode) {
+        // コピー動作モード: URL と同様に開かずコピーする（モバイル全画面向け）
+        copyLinkToClipboard(path);
+        return;
+    }
+    if (window.terminalHubDotNetRef) {
+        // C# 側でセッションのフォルダ基準に解決し、フォルダ=Explorer / ファイル=既定アプリ で開く
+        window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPathClick', sessionId, path)
+            .catch(err => console.error('[Path Detection] open failed:', err));
+    }
 }
 
 // URL検出の設定
@@ -701,6 +780,9 @@ window.terminalFunctions = {
             
             // URL検出機能を追加
             setupUrlDetection(term);
+
+            // ファイルパス検出機能を追加（フォルダ=Explorer/ファイル=既定アプリで開く）
+            setupFilePathDetection(term, sessionId);
 
             // Unicode11Addonをロード（ブロック文字の幅計算を改善）
             if (typeof Unicode11Addon !== 'undefined' && Unicode11Addon.Unicode11Addon) {

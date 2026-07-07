@@ -30,6 +30,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject IExplorerLauncherService ExplorerLauncher
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -723,6 +724,63 @@
         {
             await SelectSession(guid);
         }
+    }
+
+    /// <summary>
+    /// ターミナル内のファイル/フォルダ表記クリック時の処理（terminal.js のパス検出から呼ばれる）。
+    /// セッションの作業フォルダ基準で相対パスを解決し、フォルダはエクスプローラーで、
+    /// ファイルは既定のアプリで開く。見つからなければトーストで知らせる。
+    /// </summary>
+    [JSInvokable]
+    public Task OnTerminalPathClick(string sessionId, string path)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return Task.CompletedTask;
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(path))
+                return Task.CompletedTask;
+
+            var trimmed = path.Trim();
+            string fullPath;
+            try
+            {
+                fullPath = System.IO.Path.IsPathRooted(trimmed)
+                    ? System.IO.Path.GetFullPath(trimmed)
+                    : System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, trimmed));
+            }
+            catch
+            {
+                // 不正なパス文字等は黙って無視（誤検出クリックの可能性が高い）
+                return Task.CompletedTask;
+            }
+
+            if (Directory.Exists(fullPath))
+            {
+                ExplorerLauncher.OpenFolder(fullPath);
+            }
+            else if (File.Exists(fullPath))
+            {
+                // ファイルは既定のアプリで開く
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = fullPath,
+                    UseShellExecute = true,
+                });
+            }
+            else
+            {
+                toast?.ShowWarning(string.Format(L["Root.Toast.PathNotFoundFormat"], trimmed));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[PathClick] パスを開けませんでした: {Path}", path);
+        }
+        return Task.CompletedTask;
     }
 
     private async Task AddSession()
