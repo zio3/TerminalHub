@@ -23,8 +23,8 @@ Discord などでの「Tips 投稿」用ネタ候補。週1〜隔週ペースで
 
 ## 🟧 Git Worktree
 
-11. **セッションから Worktree を作れる** — 親ディレクトリの **兄弟** として作成（中ではなく横）
-12. **Worktree ごとに別 Claude Code を走らせる運用** — 同じリポジトリの別ブランチを並列で触れる
+11. **セッションから Worktree を作れる** — 親ディレクトリの **兄弟** として作成（中ではなく横） → ✅記事化済み: https://gilded-pruner-343.notion.site/Git-Worktree-39669d5bd86b81878526d087d707bc46
+12. **Worktree ごとに別 Claude Code を走らせる運用** — 同じリポジトリの別ブランチを並列で触れる → ✅記事化済み: https://gilded-pruner-343.notion.site/Git-Worktree-39669d5bd86b81878526d087d707bc46
 
 ## 🟨 タスクランナー / npm
 
@@ -87,8 +87,8 @@ Discord などでの「Tips 投稿」用ネタ候補。週1〜隔週ペースで
 ### Git / セッション運用
 
 43. **Git バッジをクリックで変更ファイル一覧** — 赤丸（未コミット変更）の中身をダイアログで確認。LLM に聞かなくていい（PR #97）→ ✅記事化済み: https://gilded-pruner-343.notion.site/39569d5bd86b8148a58af2d0653886fc
-44. **Worktree は「ブランチを後で選ぶ」もできる** — 作成時にブランチ未定でも OK（PR #66）
-    - **Git バッジの色で worktree を見分けられる**：通常リポジトリのブランチは緑、worktree は黄色のバッジになる。一覧を見るだけで「これは worktree のセッション」と一目で分かる
+44. **Worktree は「ブランチを後で選ぶ」もできる** — 作成時にブランチ未定でも OK（PR #66）→ ✅記事化済み: https://gilded-pruner-343.notion.site/Git-Worktree-39669d5bd86b81878526d087d707bc46
+    - **Git バッジの色で worktree を見分けられる**：通常リポジトリのブランチは緑、worktree は黄色のバッジになる。一覧を見るだけで「これは worktree のセッション」と一目で分かる → ✅記事化済み: 同上
 45. **セッション専用カスタムコマンド** — セッションごとによく使うコマンドをボタン登録（PR #79）
 
 ### MCP（試験機能）
