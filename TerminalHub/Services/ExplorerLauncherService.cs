@@ -10,8 +10,11 @@ namespace TerminalHub.Services;
 /// </summary>
 public interface IExplorerLauncherService
 {
-    /// <summary>エクスプローラーで指定フォルダを開き、ウィンドウを前面に出す。フォルダが無ければ何もしない。</summary>
-    void OpenFolder(string path);
+    /// <summary>
+    /// エクスプローラーで指定フォルダを開き、ウィンドウを前面に出す。フォルダが無ければ何もしない。
+    /// 戻り値は「explorer.exe の起動まで成功したか」。前面化の成否は含まない（非同期のベストエフォート）。
+    /// </summary>
+    bool OpenFolder(string path);
 }
 
 public class ExplorerLauncherService : IExplorerLauncherService
@@ -26,12 +29,12 @@ public class ExplorerLauncherService : IExplorerLauncherService
         _logger = logger;
     }
 
-    public void OpenFolder(string path)
+    public bool OpenFolder(string path)
     {
         try
         {
             if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
-                return;
+                return false;
 
             // 起動前のウィンドウ一覧を控えておき、後で「新しく増えたウィンドウ」を特定する
             var before = ForegroundWindowHelper.FindVisibleWindowsByClass(ExplorerWindowClass).ToHashSet();
@@ -68,10 +71,13 @@ public class ExplorerLauncherService : IExplorerLauncherService
                     _logger.LogWarning(ex, "[ExplorerLauncher] ウィンドウ前面化に失敗: {Path}", path);
                 }
             });
+
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[ExplorerLauncher] フォルダを開けませんでした: {Path}", path);
+            return false;
         }
     }
 }

@@ -733,7 +733,8 @@
     /// <summary>
     /// ターミナル内のファイル/フォルダ表記クリック時の処理（terminal.js のパス検出から呼ばれる）。
     /// セッションの作業フォルダ基準で相対パスを解決し、フォルダはエクスプローラーで、
-    /// ファイルは既定のアプリで開く。見つからなければトーストで知らせる。
+    /// ファイルは既定のアプリで開く。開けたら成功トースト（解決後のフルパス）、
+    /// 見つからなければ警告トーストで知らせる。
     /// </summary>
     [JSInvokable]
     public Task OnTerminalPathClick(string sessionId, string path)
@@ -768,7 +769,13 @@
 
                 if (Directory.Exists(fullPath))
                 {
-                    ExplorerLauncher.OpenFolder(fullPath);
+                    // 開いたウィンドウが前面に来ない・起動が遅い等で無反応に見えるため、
+                    // 成功も緑トーストで通知する（解決後のフルパスを出し、意図と違う場所に気づけるように）。
+                    // OpenFolder は例外を内部で握りつぶすため、戻り値でトーストをゲートし偽の成功表示を防ぐ
+                    if (ExplorerLauncher.OpenFolder(fullPath))
+                    {
+                        toast?.ShowSuccess(string.Format(L["Root.Toast.FolderOpenedFormat"], fullPath));
+                    }
                     return true;
                 }
                 if (File.Exists(fullPath))
@@ -779,6 +786,7 @@
                         FileName = fullPath,
                         UseShellExecute = true,
                     });
+                    toast?.ShowSuccess(string.Format(L["Root.Toast.FileOpenedFormat"], fullPath));
                     return true;
                 }
                 return false;
