@@ -390,6 +390,80 @@ function setupFilePathDetection(term, sessionId) {
     }
 }
 
+// コミットハッシュ検出の設定
+// ターミナル出力中の Git コミットハッシュ（7〜40桁の16進）をクリック可能にする。
+// クリックで C# 側がコミットを実在チェックし、コミット情報ダイアログを開く。
+// アプリ内ダイアログでページ遷移しないため、コピー動作モードでも同じ挙動とする。
+// 誤検出対策: 数字のみ/英字のみは除外（バージョン番号や英単語 "defaced" 等を拾わない）、
+// 前後が - . / \ _ に隣接するものは除外（GUID の断片やファイル名の一部を拾わない）。
+function setupCommitHashDetection(term, sessionId) {
+    if (typeof term.registerLinkProvider !== 'function') {
+        return;
+    }
+
+    const hashRegex = /\b[0-9a-f]{7,40}\b/g;
+
+    const linkProvider = {
+        provideLinks: (bufferLineNumber, callback) => {
+            // bufferLineNumber は 1 始まり、getLine() は 0 始まり
+            const line = term.buffer.active.getLine(bufferLineNumber - 1);
+            if (!line) {
+                callback(undefined);
+                return;
+            }
+
+            let lineText = '';
+            for (let i = 0; i < line.length; i++) {
+                const cell = line.getCell(i);
+                if (cell) {
+                    lineText += cell.getChars() || ' ';
+                }
+            }
+
+            const links = [];
+            let match;
+            hashRegex.lastIndex = 0;
+            while ((match = hashRegex.exec(lineText)) !== null) {
+                const text = match[0];
+
+                // 数字のみ（タイムスタンプ等）・英字のみ（英単語）は除外
+                if (!/[a-f]/.test(text) || !/[0-9]/.test(text)) continue;
+
+                // GUID の断片（f49cfab0-13ff-...）やファイル名・パスの一部を拾わない。
+                // ただし ".." は範囲表記（68bf789..9931160、push 出力等）なので両側とも許可する
+                const prev = lineText[match.index - 1];
+                const next = lineText[match.index + text.length];
+                const prevIsRange = prev === '.' && lineText[match.index - 2] === '.';
+                const nextIsRange = next === '.' && lineText[match.index + text.length + 1] === '.';
+                if (prev && /[-.\\/_]/.test(prev) && !prevIsRange) continue;
+                if (next && /[-.\\/_]/.test(next) && !nextIsRange) continue;
+
+                links.push({
+                    range: {
+                        start: { x: match.index + 1, y: bufferLineNumber },
+                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                    },
+                    text: text,
+                    activate: (e, uri) => {
+                        if (window.terminalHubDotNetRef) {
+                            window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalCommitHashClick', sessionId, uri)
+                                .catch(err => console.error('[Hash Detection] open failed:', err));
+                        }
+                    }
+                });
+            }
+
+            callback(links.length > 0 ? links : undefined);
+        }
+    };
+
+    try {
+        term.registerLinkProvider(linkProvider);
+    } catch (error) {
+        console.error('[Hash Detection] Failed to register link provider:', error);
+    }
+}
+
 // パスリンクのアクティベート処理
 function activateTerminalPath(sessionId, path) {
     if (terminalLinkCopyMode) {
@@ -792,6 +866,7 @@ window.terminalFunctions = {
 
             // ファイルパス検出機能を追加（フォルダ=Explorer/ファイル=既定アプリで開く）
             setupFilePathDetection(term, sessionId);
+            setupCommitHashDetection(term, sessionId);
 
             // Unicode11Addonをロード（ブロック文字の幅計算を改善）
             if (typeof Unicode11Addon !== 'undefined' && Unicode11Addon.Unicode11Addon) {

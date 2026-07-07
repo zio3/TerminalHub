@@ -405,6 +405,72 @@ namespace TerminalHub.Services
                     : s;
         }
 
+        public async Task<GitCommitInfo?> GetCommitInfoAsync(string path, string hash)
+        {
+            try
+            {
+                // 正規表現由来の入力だが、コマンド組み立てに使うため念のため形式を検証する
+                if (string.IsNullOrEmpty(hash) || !System.Text.RegularExpressions.Regex.IsMatch(hash, "^[0-9a-fA-F]{7,40}$"))
+                    return null;
+
+                if (!await IsGitRepositoryAsync(path))
+                    return null;
+
+                // コミットに解決できるか検証しつつフルハッシュを得る（blob/tree 等は対象外）
+                var resolve = await ExecuteGitCommandAsync(path, $"rev-parse --verify --quiet {hash}^{{commit}}");
+                var fullHash = resolve.Output?.Trim();
+                if (!resolve.Success || string.IsNullOrEmpty(fullHash))
+                    return null;
+
+                // メタ情報: 1〜4行目 = フルハッシュ/親/作者+日時/件名、5行目以降 = 本文
+                var meta = await ExecuteGitCommandAsync(path,
+                    $"show -s --date=format:\"%Y-%m-%d %H:%M\" --format=\"%H%n%P%n%an / %ad%n%s%n%b\" {fullHash}");
+                if (!meta.Success || string.IsNullOrEmpty(meta.Output))
+                    return null;
+
+                var lines = meta.Output.Replace("\r", "").Split('\n');
+                if (lines.Length < 4)
+                    return null;
+
+                var authorDate = lines[2].Split(" / ", 2);
+                var info = new GitCommitInfo
+                {
+                    FullHash = lines[0],
+                    IsMerge = lines[1].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
+                    Author = authorDate.Length == 2 ? authorDate[0] : lines[2],
+                    Date = authorDate.Length == 2 ? authorDate[1] : "",
+                    Subject = lines[3],
+                    Body = string.Join('\n', lines.Skip(4)).Trim(),
+                };
+
+                // 変更ファイル一覧（追加/削除行数付き）。マージコミットは numstat が空になるが、そのまま扱う
+                var stat = await ExecuteGitCommandAsync(path, $"-c core.quotepath=false show --numstat --format= {fullHash}");
+                if (stat.Success && !string.IsNullOrEmpty(stat.Output))
+                {
+                    foreach (var line in stat.Output.Replace("\r", "").Split('\n'))
+                    {
+                        // numstat 形式: "追加\t削除\tパス"（バイナリは "-\t-\tパス"）
+                        var parts = line.Split('\t', 3);
+                        if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[2]))
+                            continue;
+                        info.Files.Add(new GitCommitFileChange
+                        {
+                            Added = int.TryParse(parts[0], out var a) ? a : null,
+                            Deleted = int.TryParse(parts[1], out var d) ? d : null,
+                            FilePath = parts[2],
+                        });
+                    }
+                }
+
+                return info;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "コミット情報の取得でエラーが発生しました: {Path} {Hash}", path, hash);
+                return null;
+            }
+        }
+
         private async Task<(bool Success, string? Output, string? Error)> ExecuteGitCommandAsync(string workingDirectory, string arguments)
         {
             try

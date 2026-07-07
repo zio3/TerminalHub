@@ -69,6 +69,43 @@ namespace TerminalHub.Services
         /// <param name="path">リポジトリのパス</param>
         /// <returns>変更ファイルのリスト。取得失敗時は null（変更なしの空リストと区別する）</returns>
         Task<List<GitChangedFile>?> GetChangedFilesAsync(string path);
+
+        /// <summary>
+        /// コミットハッシュ（短縮形可）からコミット情報を取得
+        /// </summary>
+        /// <param name="path">リポジトリのパス</param>
+        /// <param name="hash">コミットハッシュ（7〜40桁の16進）</param>
+        /// <returns>コミット情報。ハッシュがコミットに解決できない場合は null</returns>
+        Task<GitCommitInfo?> GetCommitInfoAsync(string path, string hash);
+    }
+
+    /// <summary>
+    /// コミット情報ダイアログ用のコミット詳細（diff 本文は持たない）
+    /// </summary>
+    public class GitCommitInfo
+    {
+        public string FullHash { get; set; } = string.Empty;
+        public string ShortHash => FullHash.Length > 7 ? FullHash.Substring(0, 7) : FullHash;
+        public string Author { get; set; } = string.Empty;
+        public string Date { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
+        /// <summary>コミットメッセージ本文（subject 以降）。無ければ空</summary>
+        public string Body { get; set; } = string.Empty;
+        /// <summary>マージコミット（親が2つ以上）か</summary>
+        public bool IsMerge { get; set; }
+        public List<GitCommitFileChange> Files { get; set; } = new();
+    }
+
+    /// <summary>
+    /// git show --numstat の1行に対応する変更ファイル情報
+    /// </summary>
+    public class GitCommitFileChange
+    {
+        /// <summary>追加行数。バイナリファイルは null</summary>
+        public int? Added { get; set; }
+        /// <summary>削除行数。バイナリファイルは null</summary>
+        public int? Deleted { get; set; }
+        public string FilePath { get; set; } = string.Empty;
     }
 
     /// <summary>
