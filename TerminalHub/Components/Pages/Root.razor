@@ -73,6 +73,10 @@
                         OnDeleteSession="DeleteArchivedSession"
                         OnDeleteAllSessions="DeleteAllArchivedSessions"
                         OnClose="() => showArchivedSessionsDialog = false" />
+<CommitInfoDialog IsVisible="showCommitInfoDialog"
+                  FolderPath="@commitInfoFolderPath"
+                  Info="@commitInfo"
+                  OnClose="() => showCommitInfoDialog = false" />
 
 <div class="container-fluid main-container">
     <div class="d-flex h-100 main-layout">
@@ -803,6 +807,47 @@
             Logger.LogWarning(ex, "[PathClick] パスを開けませんでした: {Path}", path);
         }
         return Task.CompletedTask;
+    }
+
+    // コミット情報ダイアログ（ターミナル内のコミットハッシュクリックで開く）
+    private bool showCommitInfoDialog = false;
+    private string? commitInfoFolderPath;
+    private GitCommitInfo? commitInfo;
+
+    /// <summary>
+    /// ターミナル内のコミットハッシュがクリックされた時の処理（JavaScript から呼び出される）
+    /// セッションの作業フォルダでコミットに解決できればコミット情報ダイアログを開く
+    /// </summary>
+    [JSInvokable]
+    public async Task OnTerminalCommitHashClick(string sessionId, string hash)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return;
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(hash))
+                return;
+
+            var info = await GitService.GetCommitInfoAsync(basePath, hash.Trim());
+            if (info == null)
+            {
+                // 16進の英単語等の誤検出クリックはここに落ちる（無害）
+                toast?.ShowWarning(string.Format(L["Root.Toast.CommitNotFoundFormat"], hash.Trim()));
+                return;
+            }
+
+            commitInfo = info;
+            commitInfoFolderPath = basePath;
+            showCommitInfoDialog = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[CommitHashClick] コミット情報を取得できませんでした: {Hash}", hash);
+        }
     }
 
     private async Task AddSession()

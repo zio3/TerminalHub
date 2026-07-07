@@ -405,6 +405,71 @@ namespace TerminalHub.Services
                     : s;
         }
 
+        public async Task<GitCommitInfo?> GetCommitInfoAsync(string path, string hash)
+        {
+            try
+            {
+                // 正規表現由来の入力だが、コマンド組み立てに使うため念のため形式を検証する
+                if (string.IsNullOrEmpty(hash) || !System.Text.RegularExpressions.Regex.IsMatch(hash, "^[0-9a-fA-F]{7,40}$"))
+                    return null;
+
+                // コミットに解決できるか検証しつつフルハッシュを得る（blob/tree 等は対象外）。
+                // 非リポジトリのフォルダでもここで失敗するため、事前のリポジトリ判定は不要
+                var resolve = await ExecuteGitCommandAsync(path, $"rev-parse --verify --quiet {hash}^{{commit}}");
+                var fullHash = resolve.Output?.Trim();
+                if (!resolve.Success || string.IsNullOrEmpty(fullHash))
+                    return null;
+
+                // メタ情報と変更ファイル一覧を1コマンドで取得。
+                // 本文(%b)は行数可変のため、format 末尾の %x00 (NUL) でメタ部と numstat 部を区切る
+                var result = await ExecuteGitCommandAsync(path,
+                    $"-c core.quotepath=false show --numstat --date=format:\"%Y-%m-%d %H:%M\" --format=\"%P%n%an%n%ad%n%s%n%b%x00\" {fullHash}");
+                if (!result.Success || string.IsNullOrEmpty(result.Output))
+                    return null;
+
+                var sections = result.Output.Replace("\r", "").Split('\0', 2);
+
+                // メタ部: 1行目 = 親、2行目 = 作者、3行目 = 日時、4行目 = 件名、5行目以降 = 本文
+                var lines = sections[0].Split('\n');
+                if (lines.Length < 4)
+                    return null;
+
+                var info = new GitCommitInfo
+                {
+                    FullHash = fullHash,
+                    IsMerge = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
+                    Author = lines[1],
+                    Date = lines[2],
+                    Subject = lines[3],
+                    Body = string.Join('\n', lines.Skip(4)).Trim(),
+                };
+
+                // numstat 部: "追加\t削除\tパス"（バイナリは "-\t-\tパス"）。マージコミットは空になるが、そのまま扱う
+                if (sections.Length == 2)
+                {
+                    foreach (var line in sections[1].Split('\n'))
+                    {
+                        var parts = line.Split('\t', 3);
+                        if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[2]))
+                            continue;
+                        info.Files.Add(new GitCommitFileChange
+                        {
+                            Added = int.TryParse(parts[0], out var a) ? a : null,
+                            Deleted = int.TryParse(parts[1], out var d) ? d : null,
+                            FilePath = parts[2],
+                        });
+                    }
+                }
+
+                return info;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "コミット情報の取得でエラーが発生しました: {Path} {Hash}", path, hash);
+                return null;
+            }
+        }
+
         private async Task<(bool Success, string? Output, string? Error)> ExecuteGitCommandAsync(string workingDirectory, string arguments)
         {
             try

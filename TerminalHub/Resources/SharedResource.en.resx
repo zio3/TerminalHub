@@ -530,6 +530,14 @@
   <data name="GitChanges.Status.Renamed" xml:space="preserve"><value>Renamed</value></data>
   <data name="GitChanges.Status.Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="GitChanges.Status.Conflicted" xml:space="preserve"><value>Conflicted</value></data>
+  <data name="CommitInfo.Title" xml:space="preserve"><value>Commit Info</value></data>
+  <data name="CommitInfo.MergeBadge" xml:space="preserve"><value>Merge</value></data>
+  <data name="CommitInfo.FileCountFormat" xml:space="preserve"><value>Changed files: {0}</value></data>
+  <data name="CommitInfo.NoFiles" xml:space="preserve"><value>No changed files</value></data>
+  <data name="CommitInfo.NoFilesMerge" xml:space="preserve"><value>File list is not shown for merge commits</value></data>
+  <data name="CommitInfo.Binary" xml:space="preserve"><value>binary</value></data>
+  <data name="CommitInfo.CopyHash" xml:space="preserve"><value>Copy hash</value></data>
+  <data name="CommitInfo.Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>
   <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} children</value></data>
   <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>Session settings</value></data>
@@ -598,6 +606,7 @@
   <data name="Root.Toast.PathNotFoundFormat" xml:space="preserve"><value>Path not found: {0}</value></data>
   <data name="Root.Toast.FolderOpenedFormat" xml:space="preserve"><value>Opened folder: {0}</value></data>
   <data name="Root.Toast.FileOpenedFormat" xml:space="preserve"><value>Opened file: {0}</value></data>
+  <data name="Root.Toast.CommitNotFoundFormat" xml:space="preserve"><value>Commit not found: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>
