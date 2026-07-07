@@ -745,35 +745,49 @@
                 return Task.CompletedTask;
 
             var trimmed = path.Trim();
-            string fullPath;
-            try
+
+            // 候補パスを解決して実在すれば開く（フォルダ=エクスプローラー / ファイル=既定アプリ）
+            bool TryOpen(string candidate)
             {
-                fullPath = System.IO.Path.IsPathRooted(trimmed)
-                    ? System.IO.Path.GetFullPath(trimmed)
-                    : System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, trimmed));
-            }
-            catch
-            {
-                // 不正なパス文字等は黙って無視（誤検出クリックの可能性が高い）
-                return Task.CompletedTask;
+                string fullPath;
+                try
+                {
+                    fullPath = System.IO.Path.IsPathRooted(candidate)
+                        ? System.IO.Path.GetFullPath(candidate)
+                        : System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, candidate));
+                }
+                catch
+                {
+                    // 不正なパス文字等は開けない扱い（誤検出クリックの可能性が高い）
+                    return false;
+                }
+
+                if (Directory.Exists(fullPath))
+                {
+                    ExplorerLauncher.OpenFolder(fullPath);
+                    return true;
+                }
+                if (File.Exists(fullPath))
+                {
+                    // ファイルは既定のアプリで開く
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = fullPath,
+                        UseShellExecute = true,
+                    });
+                    return true;
+                }
+                return false;
             }
 
-            if (Directory.Exists(fullPath))
+            if (!TryOpen(trimmed))
             {
-                ExplorerLauncher.OpenFolder(fullPath);
-            }
-            else if (File.Exists(fullPath))
-            {
-                // ファイルは既定のアプリで開く
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                // Root.razor:123 のような行番号付き表記は末尾の :数字 を落として再試行
+                var withoutLineNumber = System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?::\d+)+$", "");
+                if (withoutLineNumber == trimmed || !TryOpen(withoutLineNumber))
                 {
-                    FileName = fullPath,
-                    UseShellExecute = true,
-                });
-            }
-            else
-            {
-                toast?.ShowWarning(string.Format(L["Root.Toast.PathNotFoundFormat"], trimmed));
+                    toast?.ShowWarning(string.Format(L["Root.Toast.PathNotFoundFormat"], trimmed));
+                }
             }
         }
         catch (Exception ex)

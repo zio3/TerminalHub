@@ -319,8 +319,10 @@ function showLinkCopyNotice(uri, success) {
 
 // ファイルパス検出の設定
 // Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
-// 検出は割り切り: 「拡張子付きファイル（拡張子は英字始まり、バージョン番号 1.0.65 等を除外）」と
-// 「/ または \ で終わるフォルダ表記」のみ。誤検出してもクリック時に「見つかりません」に落ちるだけ。
+// 検出は割り切り: 「/ または \ を含むトークン（末尾まで丸ごと）」と
+// 「拡張子付きファイル（拡張子は英字始まり、バージョン番号 1.0.65 等を除外）」。
+// ドットファイル単体（.gitignore 等）は検出対象外（許容）。
+// フォルダかファイルかは C# 側で実在チェックして判定する。誤検出してもクリック時に「見つかりません」に落ちるだけ。
 // クリック時: コピー動作モード(terminalLinkCopyMode)ならコピー、通常は C# 側で
 // フォルダ=エクスプローラー / ファイル=既定アプリ で開く。
 function setupFilePathDetection(term, sessionId) {
@@ -329,8 +331,9 @@ function setupFilePathDetection(term, sessionId) {
         return;
     }
 
-    // 空白・引用符・括弧・全角句読点は含めない。先頭にドライブレター(C:\)も許容。
-    const pathRegex = /(?:[A-Za-z]:[\\/])?[^\s"'`()\[\]{}<>|;,！？。、（）「」]+(?:\.[A-Za-z][A-Za-z0-9]{0,7}|[\\/])/g;
+    // 空白・引用符・括弧・全角句読点は含めない（: は C:\ のため許容）。
+    // 第1候補: スラッシュ/バックスラッシュを含むトークン全体、第2候補: 拡張子付きファイル名
+    const pathRegex = /[^\s"'`()\[\]{}<>|;,！？。、（）「」]*[\\/][^\s"'`()\[\]{}<>|;,！？。、（）「」]*|[^\s"'`()\[\]{}<>|;,！？。、（）「」]+\.[A-Za-z][A-Za-z0-9]{0,7}/g;
 
     const linkProvider = {
         provideLinks: (bufferLineNumber, callback) => {
@@ -354,6 +357,9 @@ function setupFilePathDetection(term, sessionId) {
             pathRegex.lastIndex = 0;
             while ((match = pathRegex.exec(lineText)) !== null) {
                 const text = match[0];
+
+                // スラッシュだけの並び（罫線的な表記等）はリンク化しない
+                if (/^[\\/]+$/.test(text)) continue;
 
                 // URL は URL 検出（WebLinksAddon）側に任せる:
                 // マッチを含む空白区切りトークンに "://" があればスキップ
