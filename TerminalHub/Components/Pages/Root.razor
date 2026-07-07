@@ -1421,6 +1421,11 @@
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);
 
+        // 通知ベルを掃除（残すと診断履歴上も宙に浮くため、削除時点でOFFを記録）
+        if (_notificationPendingSessions.Remove(sessionId))
+        {
+            RecordBellHistory(sessionId, "OFF", null, "RemoveSession(セッション削除)");
+        }
 
         // アクティブセッションの場合の追加処理
         if (sessionId == activeSessionId)
@@ -1485,6 +1490,12 @@
 
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);
+
+        // 通知ベルを掃除（残すとアーカイブ復帰時に古いベルが再表示されるため）
+        if (_notificationPendingSessions.Remove(sessionId))
+        {
+            RecordBellHistory(sessionId, "OFF", null, "ArchiveSession(アーカイブ)");
+        }
 
         // アクティブセッションの場合の追加処理
         if (sessionId == activeSessionId)

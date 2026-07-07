@@ -1150,7 +1150,7 @@
                                 {
                                     <div class="mb-3">
                                         <span class="badge bg-info me-2">@string.Format(L["Settings.DevBuffer.BufferFormat"], FormatBytes(selectedSession.TerminalBufferSize))</span>
-                                        <span class="badge bg-secondary me-2">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount)</span>
+                                        <span class="badge bg-secondary me-2">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount + selectedSession.BellChangeHistoryCount)</span>
                                         <span class="badge bg-secondary">@string.Format(L["Settings.DevBuffer.HookLogFormat"], selectedSession.HookEventLogCount)</span>
                                     </div>
                                 }
