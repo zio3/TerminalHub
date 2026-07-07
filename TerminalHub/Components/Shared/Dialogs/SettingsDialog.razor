@@ -1141,7 +1141,7 @@
                                         @foreach (var session in GetAvailableSessions())
                                         {
                                             var bufferSize = session.TerminalBufferSize > 0 ? $" ({FormatBytes(session.TerminalBufferSize)})" : $" {L["Settings.DevBuffer.Empty"]}";
-                                            <option value="@session.SessionId">@session.GetDisplayName()@bufferSize</option>
+                                            <option value="@session.SessionId">@GetBufferSessionLabel(session)@bufferSize</option>
                                         }
                                     </select>
                                 </div>
@@ -1150,7 +1150,7 @@
                                 {
                                     <div class="mb-3">
                                         <span class="badge bg-info me-2">@string.Format(L["Settings.DevBuffer.BufferFormat"], FormatBytes(selectedSession.TerminalBufferSize))</span>
-                                        <span class="badge bg-secondary me-2">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount)</span>
+                                        <span class="badge bg-secondary me-2">@string.Format(L["Settings.DevBuffer.StatusHistoryFormat"], selectedSession.StatusChangeHistoryCount + selectedSession.BellChangeHistoryCount)</span>
                                         <span class="badge bg-secondary">@string.Format(L["Settings.DevBuffer.HookLogFormat"], selectedSession.HookEventLogCount)</span>
                                     </div>
                                 }
@@ -1165,7 +1165,7 @@
                                         <i class="bi bi-file-text me-1"></i>@L["Settings.DevBuffer.DownloadBufferClean"]
                                     </button>
                                     <button class="btn btn-outline-info btn-sm me-2" @onclick="DownloadStatusHistory"
-                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || GetSelectedBufferSession()?.StatusChangeHistoryCount == 0)">
+                                            disabled="@(string.IsNullOrEmpty(selectedSessionForBuffer) || ((GetSelectedBufferSession()?.StatusChangeHistoryCount ?? 0) + (GetSelectedBufferSession()?.BellChangeHistoryCount ?? 0)) == 0)">
                                         <i class="bi bi-clock-history me-1"></i>@L["Settings.DevBuffer.DownloadStatusHistory"]
                                     </button>
                                     <button class="btn btn-outline-info btn-sm" @onclick="DownloadHookLog"
@@ -2474,6 +2474,24 @@
         return SessionManager.GetSessionInfo(sessionId);
     }
 
+    /// <summary>
+    /// バッファタブのセッション選択に表示するラベル。
+    /// サブセッションは名前だけだと区別しにくいため「親セッション名-サブセッション名」にする。
+    /// </summary>
+    private string GetBufferSessionLabel(SessionInfo session)
+    {
+        var name = session.GetDisplayName();
+        if (session.ParentSessionId.HasValue)
+        {
+            var parentName = SessionManager.GetSessionInfo(session.ParentSessionId.Value)?.GetDisplayName();
+            if (!string.IsNullOrEmpty(parentName))
+            {
+                return $"{parentName}-{name}";
+            }
+        }
+        return name;
+    }
+
 
     private async Task DownloadBuffer()
     {
@@ -2519,22 +2537,43 @@
         await WithSelectedBufferSession(sessionInfo =>
         {
             var history = sessionInfo.GetStatusChangeHistory();
-            if (history.Count == 0)
+            var bells = sessionInfo.GetBellChangeHistory();
+            if (history.Count == 0 && bells.Count == 0)
                 return Task.FromResult<(string?, string, string)?>(null);
+
+            // ステータス遷移と通知ベルの変更を1本の時系列に統合する。
+            // 「消したはずの通知マークが再点灯した」等の調査では両者の時間相関を見るため。
+            var merged = history
+                .Select(e => (e.Timestamp, Payload: (object)new
+                {
+                    Type = "status",
+                    Timestamp = e.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    Previous = e.PreviousStatus ?? "(idle)",
+                    Current = e.NewStatus ?? "(idle)",
+                    MatchedText = e.MatchedText
+                }))
+                .Concat(bells.Select(b => (b.Timestamp, Payload: (object)new
+                {
+                    Type = "bell",
+                    Timestamp = b.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    Action = b.Action,
+                    Kind = b.Kind,
+                    Source = b.Source,
+                    Instance = b.Instance
+                })))
+                .OrderBy(x => x.Timestamp)
+                .Select(x => x.Payload)
+                .ToList();
 
             var exportData = new
             {
                 SessionName = sessionInfo.GetDisplayName(),
                 SessionId = sessionInfo.SessionId,
                 ExportTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                TotalEntries = history.Count,
-                Entries = history.Select(e => new
-                {
-                    Timestamp = e.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"),
-                    Previous = e.PreviousStatus ?? "(idle)",
-                    Current = e.NewStatus ?? "(idle)",
-                    MatchedText = e.MatchedText
-                }).ToList()
+                TotalEntries = merged.Count,
+                StatusEntries = history.Count,
+                BellEntries = bells.Count,
+                Entries = merged
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions

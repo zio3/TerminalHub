@@ -283,6 +283,55 @@ namespace TerminalHub.Models
             }
         }
 
+        // 通知ベル（通知マーク）変更履歴（診断用）。
+        // ベル自体は Root(Circuit=ブラウザ接続) ごとに独立管理のため「別ブラウザでは残っている」ことがある。
+        // どのインスタンスが・何経由で 付けた/消した/抑止した かを記録し、意図しない再点灯の調査に使う。
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly Queue<NotificationBellEntry> _bellChangeHistory = new();
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        private readonly object _bellHistoryLock = new();
+
+        private const int MaxBellHistoryCount = 200;
+
+        public void RecordBellChange(string action, string? kind, string source, string instance)
+        {
+            lock (_bellHistoryLock)
+            {
+                if (_bellChangeHistory.Count >= MaxBellHistoryCount)
+                {
+                    _bellChangeHistory.Dequeue();
+                }
+                _bellChangeHistory.Enqueue(new NotificationBellEntry
+                {
+                    Timestamp = DateTime.Now,
+                    Action = action,
+                    Kind = kind,
+                    Source = source,
+                    Instance = instance
+                });
+            }
+        }
+
+        public List<NotificationBellEntry> GetBellChangeHistory()
+        {
+            lock (_bellHistoryLock)
+            {
+                return new List<NotificationBellEntry>(_bellChangeHistory);
+            }
+        }
+
+        public int BellChangeHistoryCount
+        {
+            get
+            {
+                lock (_bellHistoryLock)
+                {
+                    return _bellChangeHistory.Count;
+                }
+            }
+        }
+
         // ===== サブエージェント実行追跡 =====
         // Claude Code の SubagentStart / SubagentStop hook を agent_id で突き合わせて
         // 「今このセッションで何個のサブエージェントが走っているか」を保持する。
@@ -472,6 +521,22 @@ namespace TerminalHub.Models
         /// ステータス変更のトリガーとなった正規表現マッチテキスト（ANSIクリーン済み）
         /// </summary>
         public string? MatchedText { get; set; }
+    }
+
+    /// <summary>
+    /// 通知ベル（通知マーク）変更履歴のエントリ（診断用）。
+    /// </summary>
+    public class NotificationBellEntry
+    {
+        public DateTime Timestamp { get; set; }
+        /// <summary>ON（点灯）/ OFF（消灯）/ SUPPRESSED（上書き・点灯を抑止）</summary>
+        public string Action { get; set; } = "";
+        /// <summary>ベル種別（Stopped/Confirm/Select）。OFF のときは null</summary>
+        public string? Kind { get; set; }
+        /// <summary>何経由か（出力解析タイムアウト / Hook Stop / セッション選択 等）</summary>
+        public string Source { get; set; } = "";
+        /// <summary>Root インスタンス（Circuit=ブラウザ接続）の識別子。別ブラウザの残留を切り分ける</summary>
+        public string Instance { get; set; } = "";
     }
 
     /// <summary>
