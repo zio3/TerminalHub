@@ -30,6 +30,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject IExplorerLauncherService ExplorerLauncher
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -723,6 +724,77 @@
         {
             await SelectSession(guid);
         }
+    }
+
+    /// <summary>
+    /// ターミナル内のファイル/フォルダ表記クリック時の処理（terminal.js のパス検出から呼ばれる）。
+    /// セッションの作業フォルダ基準で相対パスを解決し、フォルダはエクスプローラーで、
+    /// ファイルは既定のアプリで開く。見つからなければトーストで知らせる。
+    /// </summary>
+    [JSInvokable]
+    public Task OnTerminalPathClick(string sessionId, string path)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return Task.CompletedTask;
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(path))
+                return Task.CompletedTask;
+
+            var trimmed = path.Trim();
+
+            // 候補パスを解決して実在すれば開く（フォルダ=エクスプローラー / ファイル=既定アプリ）
+            bool TryOpen(string candidate)
+            {
+                string fullPath;
+                try
+                {
+                    fullPath = System.IO.Path.IsPathRooted(candidate)
+                        ? System.IO.Path.GetFullPath(candidate)
+                        : System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, candidate));
+                }
+                catch
+                {
+                    // 不正なパス文字等は開けない扱い（誤検出クリックの可能性が高い）
+                    return false;
+                }
+
+                if (Directory.Exists(fullPath))
+                {
+                    ExplorerLauncher.OpenFolder(fullPath);
+                    return true;
+                }
+                if (File.Exists(fullPath))
+                {
+                    // ファイルは既定のアプリで開く
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = fullPath,
+                        UseShellExecute = true,
+                    });
+                    return true;
+                }
+                return false;
+            }
+
+            if (!TryOpen(trimmed))
+            {
+                // Root.razor:123 のような行番号付き表記は末尾の :数字 を落として再試行
+                var withoutLineNumber = System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?::\d+)+$", "");
+                if (withoutLineNumber == trimmed || !TryOpen(withoutLineNumber))
+                {
+                    toast?.ShowWarning(string.Format(L["Root.Toast.PathNotFoundFormat"], trimmed));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[PathClick] パスを開けませんでした: {Path}", path);
+        }
+        return Task.CompletedTask;
     }
 
     private async Task AddSession()

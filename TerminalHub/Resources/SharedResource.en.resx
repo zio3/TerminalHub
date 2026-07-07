@@ -110,8 +110,8 @@
   <data name="Settings.Display.SessionListScale.Help" xml:space="preserve"><value>Scale of the session list (50%–150%).</value></data>
   <data name="Settings.Display.TerminalFontSize.Label" xml:space="preserve"><value>Terminal font size</value></data>
   <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Size of terminal text (8px–28px).</value></data>
-  <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>Copy terminal URLs on tap (don't open)</value></data>
-  <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>For fullscreen mobile shortcuts where you can't navigate back. Saved per device (browser).</value></data>
+  <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>Copy terminal URLs and paths on tap (don't open)</value></data>
+  <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>For fullscreen mobile shortcuts where you can't navigate back. File/folder paths are copied too. Saved per device (browser).</value></data>
   <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
   <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Width of the session list (15%–70%). You can also drag the border.</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>
@@ -595,6 +595,7 @@
   <!-- Root: Toast messages -->
   <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>Session creation error: {0}</value></data>
   <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>Session initialization error: {0}</value></data>
+  <data name="Root.Toast.PathNotFoundFormat" xml:space="preserve"><value>Path not found: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>
