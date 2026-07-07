@@ -334,7 +334,8 @@ function setupFilePathDetection(term, sessionId) {
 
     const linkProvider = {
         provideLinks: (bufferLineNumber, callback) => {
-            const line = term.buffer.active.getLine(bufferLineNumber);
+            // bufferLineNumber は 1 始まり、getLine() は 0 始まり
+            const line = term.buffer.active.getLine(bufferLineNumber - 1);
             if (!line) {
                 callback(undefined);
                 return;
@@ -363,8 +364,8 @@ function setupFilePathDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber + 1 },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber + 1 }
+                        start: { x: match.index + 1, y: bufferLineNumber },
+                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
                     },
                     text: text,
                     activate: (e, uri) => activateTerminalPath(sessionId, uri)
@@ -377,6 +378,7 @@ function setupFilePathDetection(term, sessionId) {
 
     try {
         term.registerLinkProvider(linkProvider);
+        console.log('[Path Detection] link provider registered');
     } catch (error) {
         console.error('[Path Detection] Failed to register link provider:', error);
     }
@@ -427,7 +429,8 @@ function setupUrlDetectionFallback(term) {
     if (typeof term.registerLinkProvider === 'function') {
         const linkProvider = {
             provideLinks: (bufferLineNumber, callback) => {
-                const line = term.buffer.active.getLine(bufferLineNumber);
+                // bufferLineNumber は 1 始まり、getLine() は 0 始まり
+                const line = term.buffer.active.getLine(bufferLineNumber - 1);
                 if (!line) {
                     callback(undefined);
                     return;
@@ -450,8 +453,8 @@ function setupUrlDetectionFallback(term) {
                 while ((match = urlRegex.exec(lineText)) !== null) {
                     const link = {
                         range: {
-                            start: { x: match.index + 1, y: bufferLineNumber + 1 },
-                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber + 1 }
+                            start: { x: match.index + 1, y: bufferLineNumber },
+                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber }
                         },
                         text: match[0],
                         activate: (e, uri) => {
