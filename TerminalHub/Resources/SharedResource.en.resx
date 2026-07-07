@@ -596,6 +596,8 @@
   <data name="Root.Toast.SessionCreateErrorFormat" xml:space="preserve"><value>Session creation error: {0}</value></data>
   <data name="Root.Toast.SessionInitErrorFormat" xml:space="preserve"><value>Session initialization error: {0}</value></data>
   <data name="Root.Toast.PathNotFoundFormat" xml:space="preserve"><value>Path not found: {0}</value></data>
+  <data name="Root.Toast.FolderOpenedFormat" xml:space="preserve"><value>Opened folder: {0}</value></data>
+  <data name="Root.Toast.FileOpenedFormat" xml:space="preserve"><value>Opened file: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>

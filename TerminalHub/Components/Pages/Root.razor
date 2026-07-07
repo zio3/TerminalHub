@@ -765,6 +765,9 @@
                 if (Directory.Exists(fullPath))
                 {
                     ExplorerLauncher.OpenFolder(fullPath);
+                    // 開いたウィンドウが前面に来ない・起動が遅い等で無反応に見えるため、
+                    // 成功も緑トーストで通知する（解決後のフルパスを出し、意図と違う場所に気づけるように）
+                    toast?.ShowSuccess(string.Format(L["Root.Toast.FolderOpenedFormat"], fullPath));
                     return true;
                 }
                 if (File.Exists(fullPath))
@@ -775,6 +778,7 @@
                         FileName = fullPath,
                         UseShellExecute = true,
                     });
+                    toast?.ShowSuccess(string.Format(L["Root.Toast.FileOpenedFormat"], fullPath));
                     return true;
                 }
                 return false;
