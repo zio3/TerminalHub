@@ -506,12 +506,7 @@ function setupPrNumberDetection(term, sessionId) {
                         end: { x: match.index + text.length + 1, y: bufferLineNumber }
                     },
                     text: text,
-                    activate: (e, uri) => {
-                        if (window.terminalHubDotNetRef) {
-                            window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPrNumberClick', sessionId, uri)
-                                .catch(err => console.error('[PR Detection] open failed:', err));
-                        }
-                    }
+                    activate: (e, uri) => activateTerminalPrNumber(sessionId, uri)
                 });
             }
 
@@ -538,6 +533,17 @@ function activateTerminalPath(sessionId, path) {
         window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPathClick', sessionId, path)
             .catch(err => console.error('[Path Detection] open failed:', err));
     }
+}
+
+// PR/Issue リンクのアクティベート処理。
+// 外部ブラウザを開く（＝外部遷移する）ため、URL/パスと同様にコピー動作モードを尊重する。
+// C# 側は copyMode=true のとき開かずに PR ページ URL を返すので、それをクリップボードへコピーする
+// （モバイル全画面向け。#123 の生テキストではなく解決後の URL をコピーする方が有用なため）。
+function activateTerminalPrNumber(sessionId, prText) {
+    if (!window.terminalHubDotNetRef) return;
+    window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPrNumberClick', sessionId, prText, terminalLinkCopyMode)
+        .then(url => { if (url) copyLinkToClipboard(url); })
+        .catch(err => console.error('[PR Detection] open failed:', err));
 }
 
 // URL検出の設定
