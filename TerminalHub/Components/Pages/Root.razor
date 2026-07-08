@@ -861,6 +861,60 @@
         }
     }
 
+    /// <summary>
+    /// ターミナル内の PR/Issue 番号（#123）がクリックされた時の処理（JavaScript から呼び出される）。
+    /// セッションの作業フォルダの origin が GitHub なら該当 PR ページを解決する。
+    /// 外部ブラウザを開く＝外部遷移するため、コピー動作モード（モバイル全画面向け）を尊重する:
+    /// copyMode=true のときは開かずに URL を返し、JS 側でクリップボードへコピーさせる。
+    /// GitHub 以外・解決不可なら警告トーストのみで null を返す（クリックしても無害）。
+    /// </summary>
+    /// <returns>コピー動作モードでコピーすべき URL。開いた場合・解決不可なら null</returns>
+    [JSInvokable]
+    public async Task<string?> OnTerminalPrNumberClick(string sessionId, string prText, bool copyMode)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return null;
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(prText))
+                return null;
+
+            // "#123" から数字だけ取り出す
+            var digits = new string(prText.Where(char.IsDigit).ToArray());
+            if (!int.TryParse(digits, out var number) || number <= 0)
+                return null;
+
+            var url = await GitService.GetGitHubPrUrlAsync(basePath, number);
+            if (string.IsNullOrEmpty(url))
+            {
+                // origin が GitHub でない or 取得失敗（誤検出クリック含む・無害）
+                toast?.ShowWarning(string.Format(L["Root.Toast.PrNotOnGitHubFormat"], prText.Trim()));
+                return null;
+            }
+
+            if (copyMode)
+            {
+                // 開かずに URL を返す（JS 側で copyLinkToClipboard する）
+                return url;
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[PrNumberClick] PR ページを開けませんでした: {PrText}", prText);
+            return null;
+        }
+    }
+
     private async Task AddSession()
     {
         showCreateDialog = true;

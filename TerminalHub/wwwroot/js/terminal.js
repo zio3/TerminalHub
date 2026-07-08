@@ -470,6 +470,57 @@ function setupCommitHashDetection(term, sessionId) {
     }
 }
 
+// ===== PR/Issue 番号検出（#123 クリックで GitHub の該当 PR ページを開く） =====
+// 実データ調査より: 実ターミナル出力の #数字 は大半が本物の PR/Issue 参照で、
+// 唯一の恒常的な誤検出源は Claude Code の画像貼り付け UI「[Image #1]」だけだったため、それのみ除外する。
+function setupPrNumberDetection(term, sessionId) {
+    if (typeof term.registerLinkProvider !== 'function') {
+        return;
+    }
+
+    const prRegex = /#\d{1,6}/g;
+
+    const linkProvider = {
+        provideLinks: (bufferLineNumber, callback) => {
+            // bufferLineNumber は 1 始まり、getLine() は 0 始まり
+            const line = term.buffer.active.getLine(bufferLineNumber - 1);
+            if (!line) {
+                callback(undefined);
+                return;
+            }
+
+            const lineText = getBufferLineText(line);
+
+            const links = [];
+            let match;
+            prRegex.lastIndex = 0;
+            while ((match = prRegex.exec(lineText)) !== null) {
+                const text = match[0];
+
+                // 「Image #1」（画像貼り付けマーカー）は PR 参照ではないので除外
+                if (/Image\s*$/i.test(lineText.slice(0, match.index))) continue;
+
+                links.push({
+                    range: {
+                        start: { x: match.index + 1, y: bufferLineNumber },
+                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                    },
+                    text: text,
+                    activate: (e, uri) => activateTerminalPrNumber(sessionId, uri)
+                });
+            }
+
+            callback(links.length > 0 ? links : undefined);
+        }
+    };
+
+    try {
+        term.registerLinkProvider(linkProvider);
+    } catch (error) {
+        console.error('[PR Detection] Failed to register link provider:', error);
+    }
+}
+
 // パスリンクのアクティベート処理
 function activateTerminalPath(sessionId, path) {
     if (terminalLinkCopyMode) {
@@ -482,6 +533,17 @@ function activateTerminalPath(sessionId, path) {
         window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPathClick', sessionId, path)
             .catch(err => console.error('[Path Detection] open failed:', err));
     }
+}
+
+// PR/Issue リンクのアクティベート処理。
+// 外部ブラウザを開く（＝外部遷移する）ため、URL/パスと同様にコピー動作モードを尊重する。
+// C# 側は copyMode=true のとき開かずに PR ページ URL を返すので、それをクリップボードへコピーする
+// （モバイル全画面向け。#123 の生テキストではなく解決後の URL をコピーする方が有用なため）。
+function activateTerminalPrNumber(sessionId, prText) {
+    if (!window.terminalHubDotNetRef) return;
+    window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPrNumberClick', sessionId, prText, terminalLinkCopyMode)
+        .then(url => { if (url) copyLinkToClipboard(url); })
+        .catch(err => console.error('[PR Detection] open failed:', err));
 }
 
 // URL検出の設定
@@ -867,6 +929,7 @@ window.terminalFunctions = {
             // ファイルパス検出機能を追加（フォルダ=Explorer/ファイル=既定アプリで開く）
             setupFilePathDetection(term, sessionId);
             setupCommitHashDetection(term, sessionId);
+            setupPrNumberDetection(term, sessionId);
 
             // Unicode11Addonをロード（ブロック文字の幅計算を改善）
             if (typeof Unicode11Addon !== 'undefined' && Unicode11Addon.Unicode11Addon) {
