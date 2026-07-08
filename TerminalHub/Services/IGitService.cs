@@ -77,6 +77,15 @@ namespace TerminalHub.Services
         /// <param name="hash">コミットハッシュ（7〜40桁の16進）</param>
         /// <returns>コミット情報。ハッシュがコミットに解決できない場合は null</returns>
         Task<GitCommitInfo?> GetCommitInfoAsync(string path, string hash);
+
+        /// <summary>
+        /// origin が GitHub リポジトリの場合、指定番号の PR ページ URL を組み立てて返す。
+        /// GitHub の /pull/{n} は対象が Issue なら /issues/{n} へ自動リダイレクトされるため PR/Issue の区別は不要。
+        /// </summary>
+        /// <param name="path">リポジトリのパス</param>
+        /// <param name="number">PR/Issue 番号</param>
+        /// <returns>PR ページ URL。origin が github.com でない・取得失敗時は null</returns>
+        Task<string?> GetGitHubPrUrlAsync(string path, int number);
     }
 
     /// <summary>

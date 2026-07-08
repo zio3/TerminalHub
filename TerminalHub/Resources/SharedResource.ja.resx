@@ -607,6 +607,7 @@
   <data name="Root.Toast.FolderOpenedFormat" xml:space="preserve"><value>フォルダを開きました: {0}</value></data>
   <data name="Root.Toast.FileOpenedFormat" xml:space="preserve"><value>ファイルを開きました: {0}</value></data>
   <data name="Root.Toast.CommitNotFoundFormat" xml:space="preserve"><value>コミットが見つかりません: {0}</value></data>
+  <data name="Root.Toast.PrNotOnGitHubFormat" xml:space="preserve"><value>GitHub リポジトリではないため開けません: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>ターミナルを破棄しました</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>ターミナル破棄エラー: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>ターミナルを再作成しました</value></data>

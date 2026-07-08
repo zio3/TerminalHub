@@ -470,6 +470,39 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<string?> GetGitHubPrUrlAsync(string path, int number)
+        {
+            try
+            {
+                if (number <= 0)
+                    return null;
+
+                var result = await ExecuteGitCommandAsync(path, "remote get-url origin");
+                if (!result.Success || string.IsNullOrWhiteSpace(result.Output))
+                    return null;
+
+                // 対応する origin URL 形式:
+                //   https://github.com/owner/repo(.git)
+                //   git@github.com:owner/repo(.git)
+                //   ssh://git@github.com/owner/repo(.git)
+                // github.com 以外（GitLab 等）や解析不能なら null（＝リンク無効）
+                var url = result.Output.Trim();
+                var m = System.Text.RegularExpressions.Regex.Match(
+                    url,
+                    @"^(?:https?://|ssh://git@|git@)github\.com[:/](?<owner>[^/]+)/(?<repo>[^/]+?)(?:\.git)?/?$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!m.Success)
+                    return null;
+
+                return $"https://github.com/{m.Groups["owner"].Value}/{m.Groups["repo"].Value}/pull/{number}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "GitHub PR URL の組み立てに失敗しました: {Path} #{Number}", path, number);
+                return null;
+            }
+        }
+
         private async Task<(bool Success, string? Output, string? Error)> ExecuteGitCommandAsync(string workingDirectory, string arguments)
         {
             try

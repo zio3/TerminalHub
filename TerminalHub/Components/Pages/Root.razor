@@ -861,6 +861,49 @@
         }
     }
 
+    /// <summary>
+    /// ターミナル内の PR/Issue 番号（#123）がクリックされた時の処理（JavaScript から呼び出される）。
+    /// セッションの作業フォルダの origin が GitHub なら該当 PR ページを既定ブラウザで開く。
+    /// GitHub 以外・解決不可なら警告トーストのみ（クリックしても無害）。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnTerminalPrNumberClick(string sessionId, string prText)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return;
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(prText))
+                return;
+
+            // "#123" から数字だけ取り出す
+            var digits = new string(prText.Where(char.IsDigit).ToArray());
+            if (!int.TryParse(digits, out var number) || number <= 0)
+                return;
+
+            var url = await GitService.GetGitHubPrUrlAsync(basePath, number);
+            if (string.IsNullOrEmpty(url))
+            {
+                // origin が GitHub でない or 取得失敗（誤検出クリック含む・無害）
+                toast?.ShowWarning(string.Format(L["Root.Toast.PrNotOnGitHubFormat"], prText.Trim()));
+                return;
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[PrNumberClick] PR ページを開けませんでした: {PrText}", prText);
+        }
+    }
+
     private async Task AddSession()
     {
         showCreateDialog = true;
