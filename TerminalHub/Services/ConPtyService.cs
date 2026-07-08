@@ -83,6 +83,10 @@ namespace TerminalHub.Services
         // 書き込みの直列化用。UI・MCP(send_to_session)・RemoteLaunch など複数経路から
         // 同時に WriteAsync が呼ばれると、256文字チャンク＋Delay の隙間で入力が混ざるため排他する
         private readonly SemaphoreSlim _writeLock = new(1, 1);
+        // _writeLock の待機を Dispose 時に解除するためのトークン。
+        // SemaphoreSlim.Dispose() は既に WaitAsync で待機中のタスクを解放しないため、
+        // Dispose で Cancel して待機側を OperationCanceledException で抜けさせ、永久ブロックを防ぐ
+        private readonly CancellationTokenSource _writeLockCts = new();
         private System.Timers.Timer? _flushTimer;
         private readonly StringBuilder _outputBuffer = new();
         private const int FLUSH_INTERVAL_MS = 16; // 約60fps
@@ -356,14 +360,20 @@ namespace TerminalHub.Services
             if (_writer == null || _disposed)
                 return;
 
-            // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ
+            // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ。
+            // 待機中に Dispose されると SemaphoreSlim.Dispose では解放されないため、
+            // _writeLockCts のキャンセルで待機を打ち切る（OperationCanceledException で抜ける）
             try
             {
-                await _writeLock.WaitAsync();
+                await _writeLock.WaitAsync(_writeLockCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return; // Dispose により待機がキャンセルされた
             }
             catch (ObjectDisposedException)
             {
-                return; // 破棄済みなら何もしない
+                return; // 破棄済みなら何もしない（Cancel 後に CTS が破棄されたケースを含む）
             }
 
             try
@@ -387,6 +397,11 @@ namespace TerminalHub.Services
 
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or IOException)
+            {
+                // 書き込みループの途中で Dispose され _writer/パイプが破棄されたケース。
+                // 呼び出し元(UIイベント/MCP send_to_session)へ例外を伝播させず握りつぶす
             }
             finally
             {
@@ -621,6 +636,16 @@ namespace TerminalHub.Services
             // まず破棄フラグを設定
             _disposed = true;
 
+            // 書き込み待機を解除（_writeLock.WaitAsync で待機中の WriteAsync を抜けさせる）
+            try
+            {
+                _writeLockCts.Cancel();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cancel write lock waiters during disposal");
+            }
+
             // フロー制御を解除（読み取りタスクがブロックされている場合に備えて）
             lock (_pauseLock)
             {
@@ -706,6 +731,7 @@ namespace TerminalHub.Services
 
             _process?.Dispose();
             _readCancellationTokenSource?.Dispose();
+            _writeLockCts.Dispose();
         }
 
         // P/Invoke定義
