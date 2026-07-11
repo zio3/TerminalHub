@@ -475,6 +475,9 @@
   <data name="SubSession.FolderSuffix.Placeholder.Default" xml:space="preserve"><value>Empty: auto-derive from branch name</value></data>
   <data name="SubSession.FolderSuffix.Placeholder.Detached" xml:space="preserve"><value>Empty: auto-name as "worktree-1", etc.</value></data>
   <data name="SubSession.FolderSuffix.Invalid" xml:space="preserve"><value>Contains invalid characters (&lt; &gt; : " / \ | ? * not allowed; cannot start with "." "-" or end with ".")</value></data>
+  <data name="SubSession.SessionName.Label" xml:space="preserve"><value>Session name (optional)</value></data>
+  <data name="SubSession.SessionName.Help" xml:space="preserve"><value>Leave empty to auto-generate a name.</value></data>
+  <data name="SubSession.SessionName.Placeholder" xml:space="preserve"><value>Auto-named from the folder if left empty</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>

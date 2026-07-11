@@ -2326,7 +2326,8 @@
                     if (!string.IsNullOrEmpty(subSessionParentSessionPath))
                     {
                         newSession = await SessionManager.CreateSamePathSessionAsync(
-                            subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options);
+                            subSessionParentSessionId.Value, subSessionParentSessionPath, result.TerminalType, result.Options,
+                            string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
                     }
                     break;
 
@@ -2335,7 +2336,8 @@
                     if (!string.IsNullOrEmpty(result.WorktreePath))
                     {
                         newSession = await CreateNewFolderSession(
-                            subSessionParentSessionId.Value, result.WorktreePath, result.TerminalType, result.Options);
+                            subSessionParentSessionId.Value, result.WorktreePath, result.TerminalType, result.Options,
+                            string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
                     }
                     break;
             }
@@ -2428,7 +2430,7 @@
         return sessionInfo;
     }
 
-    private async Task<SessionInfo?> CreateNewFolderSession(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string> options)
+    private async Task<SessionInfo?> CreateNewFolderSession(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string> options, string? customDisplayName = null)
     {
         try
         {
@@ -2452,10 +2454,14 @@
                 Directory.CreateDirectory(folderPath);
             }
 
-            // 新しいフォルダでセッション作成（統一された表示名を使用）
+            // 新しいフォルダでセッション作成。ユーザー指定名があればそれを優先し、
+            // 無ければ従来どおり「親セッション名 (フォルダ名)」の統一表示名を使用
+            var displayName = !string.IsNullOrWhiteSpace(customDisplayName)
+                ? customDisplayName.Trim()
+                : $"{parentSession.DisplayName} ({Path.GetFileName(folderPath)})";
             var sessionInfo = await SessionManager.CreateSessionAsync(
                 folderPath,
-                $"{parentSession.DisplayName} ({Path.GetFileName(folderPath)})",
+                displayName,
                 terminalType,
                 options
             );
