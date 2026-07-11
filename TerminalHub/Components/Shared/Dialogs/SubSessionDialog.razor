@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
 @inject ILocalStorageService LocalStorage
+@inject IFolderPickerService FolderPicker
 @inject IStringLocalizer<SharedResource> L
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
@@ -253,6 +254,19 @@
                     {
                         <!-- 同じフォルダで開く -->
                         <div class="tab-pane active">
+                            <!-- セッション名(任意) -->
+                            <div class="mb-3">
+                                <label for="samePathSessionName" class="form-label">@L["SubSession.SessionName.Label"]</label>
+                                <input type="text" class="form-control" id="samePathSessionName"
+                                       @bind="sessionName"
+                                       @bind:event="oninput"
+                                       @onkeydown="OnKeyDown"
+                                       placeholder="@L["SubSession.SessionName.Placeholder"]">
+                                <small class="form-text text-muted">
+                                    @L["SubSession.SessionName.Help"]
+                                </small>
+                            </div>
+
                             <!-- 共通オプションセレクター -->
                             <SessionOptionsSelector @ref="optionsSelectorSamePath"
                                                   SelectedType="selectedTerminalType"
@@ -295,6 +309,19 @@
                             
                             @if (!string.IsNullOrWhiteSpace(newFolderPath))
                             {
+                                <!-- セッション名(任意) -->
+                                <div class="mb-3">
+                                    <label for="newFolderSessionName" class="form-label">@L["SubSession.SessionName.Label"]</label>
+                                    <input type="text" class="form-control" id="newFolderSessionName"
+                                           @bind="sessionName"
+                                           @bind:event="oninput"
+                                           @onkeydown="OnKeyDown"
+                                           placeholder="@L["SubSession.SessionName.Placeholder"]">
+                                    <small class="form-text text-muted">
+                                        @L["SubSession.SessionName.Help"]
+                                    </small>
+                                </div>
+
                                 <!-- セッションオプション選択 -->
                                 <div class="mt-3">
                                     <SessionOptionsSelector @ref="optionsSelectorNewFolder"
@@ -445,6 +472,9 @@
     // 新しいフォルダ用の変数
     private string newFolderPath = "";
 
+    // セッション名(任意)。SamePath/NewFolder タブ用。未入力なら従来どおり自動命名
+    private string sessionName = "";
+
     [Parameter] public string? ParentSessionPath { get; set; }
     
     private bool _wasVisible = false;
@@ -478,6 +508,7 @@
             // CLI モード系の直近選択も復元（SessionCreateDialog とキー共有）
             await LoadLastUsedCliModes();
             newFolderPath = "";
+            sessionName = "";
             
             // 親セッションのパスがあり、Gitリポジトリの場合はブランチ一覧とworktree一覧を取得
             if (!string.IsNullOrEmpty(ParentSessionPath) && IsGitRepository)
@@ -531,7 +562,11 @@
                 },
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch,
                 UseDetached = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.Detached,
-                FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : ""
+                FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : "",
+                // セッション名は SamePath/NewFolder タブのみ有効。未入力なら空(=受け取り側で自動命名)
+                SessionName = (activeTab == TabType.SamePath || activeTab == TabType.NewFolder)
+                    ? sessionName?.Trim() ?? ""
+                    : ""
             };
 
             // Create タブの選択結果を「直近の選択」として LocalStorage に保存
@@ -586,10 +621,20 @@
     
     private async Task SelectFolderDialog()
     {
-        // ブラウザではファイルシステムへの直接アクセスが制限されているため、
-        // 手動入力でのパス指定を推奨
-        // 必要に応じて将来的にFile System Access APIを使用可能
-        await Task.CompletedTask;
+        try
+        {
+            // Windowsネイティブのフォルダ選択ダイアログを表示。
+            // 初期ディレクトリは親セッションのフォルダ（あれば）にする。
+            var selected = await FolderPicker.PickFolderAsync(ParentSessionPath);
+            if (!string.IsNullOrEmpty(selected))
+            {
+                newFolderPath = selected;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = string.Format(L["SubSession.ErrorFormat"], ex.Message);
+        }
     }
 
     // SessionCreateDialog が保存した CLI モードの直近選択を、初期値として読むだけ。
@@ -774,6 +819,8 @@
         public bool UseExistingBranch { get; set; }
         public bool UseDetached { get; set; }
         public string FolderSuffix { get; set; } = "";
+        // ユーザー指定のセッション名(任意)。空なら受け取り側で自動命名する
+        public string SessionName { get; set; } = "";
     }
 
     public enum SubSessionType

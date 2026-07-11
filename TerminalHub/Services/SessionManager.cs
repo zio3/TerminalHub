@@ -56,7 +56,7 @@ namespace TerminalHub.Services
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options, string? folderSuffix, bool detached);
-        Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options);
+        Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options, string? customDisplayName = null);
         Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false);
         Task<bool> RestartSessionAsync(Guid sessionId);
 
@@ -780,7 +780,7 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options = null)
+        public async Task<SessionInfo?> CreateSamePathSessionAsync(Guid parentSessionId, string folderPath, TerminalType terminalType, Dictionary<string, string>? options = null, string? customDisplayName = null)
         {
             try
             {
@@ -804,15 +804,17 @@ namespace TerminalHub.Services
                     ParentSessionId = parentSessionId
                 };
 
-                // セッション種類に応じた表示名を設定
-                sessionInfo.DisplayName = terminalType switch
-                {
-                    TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
-                    TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
-                    TerminalType.Antigravity => $"{sessionInfo.FolderName} (Antigravity)",
-                    TerminalType.Grok => $"{sessionInfo.FolderName} (Grok)",
-                    _ => sessionInfo.FolderName
-                };
+                // 表示名を設定。ユーザー指定があればそれを優先し、無ければ種類に応じた既定名
+                sessionInfo.DisplayName = !string.IsNullOrWhiteSpace(customDisplayName)
+                    ? customDisplayName.Trim()
+                    : terminalType switch
+                    {
+                        TerminalType.ClaudeCode => $"{sessionInfo.FolderName} (Claude)",
+                        TerminalType.CodexCLI => $"{sessionInfo.FolderName} (Codex)",
+                        TerminalType.Antigravity => $"{sessionInfo.FolderName} (Antigravity)",
+                        TerminalType.Grok => $"{sessionInfo.FolderName} (Grok)",
+                        _ => sessionInfo.FolderName
+                    };
 
                 // Git情報を設定
                 await PopulateGitInfoAsync(sessionInfo);
