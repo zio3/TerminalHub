@@ -13,10 +13,18 @@ namespace TerminalHub.Services
         private readonly ConcurrentDictionary<Guid, ConPtySessionSubscription> _subscriptions = new();
         private bool _disposed;
 
+        // 「ゾンビCircuit累積」診断用: 生存中のインスタンス数（＝生存Circuit数）を数える。
+        // Scopedサービスなので 1インスタンス = 1Circuit。使い続けて遅くなったときに
+        // この数が増え続けていれば、破棄されない古いCircuitが積み上がっている証拠。
+        private static int _liveInstanceCount;
+        // このインスタンス（Circuit）を識別する短縮ID。複数タブ／再接続の区別用。
+        private readonly string _circuitTag = Guid.NewGuid().ToString("N").Substring(0, 8);
+
         public ConPtyConnectionService(ILogger<ConPtyConnectionService> logger)
         {
             _logger = logger;
-            _logger.LogInformation($"ConPtyConnectionService created for new Circuit");
+            var live = System.Threading.Interlocked.Increment(ref _liveInstanceCount);
+            _logger.LogInformation("[CircuitLife] Circuit created (tag={CircuitTag}). 生存Circuit数={LiveCount}", _circuitTag, live);
         }
 
         /// <summary>
@@ -127,6 +135,9 @@ namespace TerminalHub.Services
             _logger.LogInformation("Disposing ConPtyConnectionService");
             UnsubscribeAll();
             _disposed = true;
+
+            var live = System.Threading.Interlocked.Decrement(ref _liveInstanceCount);
+            _logger.LogInformation("[CircuitLife] Circuit disposed (tag={CircuitTag}). 生存Circuit数={LiveCount}", _circuitTag, live);
         }
 
         /// <summary>
