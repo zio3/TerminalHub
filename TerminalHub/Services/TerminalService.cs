@@ -189,10 +189,21 @@ namespace TerminalHub.Services
             // 大きなリプレイを分割し、チャンク間で await して Dispatcher に制御を返す。
             // xterm の write() は連続呼び出しでパーサ状態を保持するため、ANSI エスケープ列の
             // 途中で分割されても次の write で継続処理され、描画は壊れない。
-            for (var offset = 0; offset < data.Length; offset += chunkSize)
+            // ただし UTF-16 サロゲートペア（絵文字等の非BMP文字）は別々の write() 呼び出しに
+            // 分かれるとゴミ文字化しうる（過去に PR #95 で潰したクラスのバグ）。境界が高位
+            // サロゲートで終わる場合は 1 文字手前で区切り、ペアを分断しない。
+            var offset = 0;
+            while (offset < data.Length)
             {
                 var length = Math.Min(chunkSize, data.Length - offset);
+                // 末尾が高位サロゲート（＝直後に低位サロゲートが続くペアの前半）なら 1 文字縮める。
+                // まだ続きがある（offset + length < data.Length）ときのみ調整すればよい。
+                if (offset + length < data.Length && char.IsHighSurrogate(data[offset + length - 1]))
+                {
+                    length--;
+                }
                 await terminal.InvokeVoidAsync("write", data.Substring(offset, length));
+                offset += length;
             }
         }
 
