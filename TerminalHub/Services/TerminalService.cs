@@ -172,6 +172,41 @@ namespace TerminalHub.Services
             await terminal.InvokeVoidAsync("write", data);
         }
 
+        public async Task WriteToTerminalChunkedAsync(IJSObjectReference terminal, string data, int chunkSize = 32768)
+        {
+            if (string.IsNullOrEmpty(data))
+            {
+                return;
+            }
+
+            // チャンクサイズ以下なら分割コスト（interop 往復の増加）をかけず一発で書く。
+            if (data.Length <= chunkSize)
+            {
+                await terminal.InvokeVoidAsync("write", data);
+                return;
+            }
+
+            // 大きなリプレイを分割し、チャンク間で await して Dispatcher に制御を返す。
+            // xterm の write() は連続呼び出しでパーサ状態を保持するため、ANSI エスケープ列の
+            // 途中で分割されても次の write で継続処理され、描画は壊れない。
+            // ただし UTF-16 サロゲートペア（絵文字等の非BMP文字）は別々の write() 呼び出しに
+            // 分かれるとゴミ文字化しうる（過去に PR #95 で潰したクラスのバグ）。境界が高位
+            // サロゲートで終わる場合は 1 文字手前で区切り、ペアを分断しない。
+            var offset = 0;
+            while (offset < data.Length)
+            {
+                var length = Math.Min(chunkSize, data.Length - offset);
+                // 末尾が高位サロゲート（＝直後に低位サロゲートが続くペアの前半）なら 1 文字縮める。
+                // まだ続きがある（offset + length < data.Length）ときのみ調整すればよい。
+                if (offset + length < data.Length && char.IsHighSurrogate(data[offset + length - 1]))
+                {
+                    length--;
+                }
+                await terminal.InvokeVoidAsync("write", data.Substring(offset, length));
+                offset += length;
+            }
+        }
+
         public async Task RefreshTerminalAsync(Guid sessionId)
         {
             try
