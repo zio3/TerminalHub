@@ -250,6 +250,14 @@ namespace TerminalHub.Services
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
 
+            // ConPTYへ渡した端は CreatePseudoConsole 内部で複製されるため、親側では即閉じる
+            // （MS公式サンプルと同じ作法）。特に出力パイプの書き込み端をホストが保持し続けると、
+            // ConPTY終了後も読み取り側がEOFにならず、読み取りループが抜けられなくなる
+            CloseHandle(_hPipeIn);
+            _hPipeIn = IntPtr.Zero;
+            CloseHandle(_hPipeOut);
+            _hPipeOut = IntPtr.Zero;
+
                 // プロセス属性リストの初期化（1回目は必要サイズの取得。失敗が正常な標準パターン）
                 var lpSize = IntPtr.Zero;
                 InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
