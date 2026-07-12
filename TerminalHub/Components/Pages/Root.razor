@@ -1166,10 +1166,15 @@
         var wasAlreadyActive = activeSessionId == sessionId;
 
         // 選択「前」の ConPTY 接続状態を捕捉する。判定は一覧の「薄く表示（未接続）」と
-        // 同じ述語（SessionList.GetConnectionOpacityClass）に合わせる: プロセスが生きて
-        // 接続済みなら通常表示＝昇格しない、null/終了済み（薄く表示）なら今回の選択で
-        // 新規接続する＝昇格対象。
-        var wasConnected = SessionManager.GetSessionInfo(sessionId)?.ConPtySession is { HasExited: false };
+        // 同じ述語（SessionList.GetConnectionOpacityClass）に合わせる: 接続処理中
+        // （IsConnecting）または プロセスが生きて接続済み（ConPtySession が非 null かつ
+        // 未終了）なら通常表示＝昇格しない。null/終了済み（薄く表示）なら今回の選択で
+        // 新規接続する＝昇格対象。IsConnecting を含めないと、接続処理中の窓
+        // （GetSessionAsync が IsConnecting を立ててから ConPtySession をセットするまで）に
+        // 別ブラウザ等から選択された場合に「通常表示なのに昇格」してしまうため、3 分岐を揃える。
+        var beforeInfo = SessionManager.GetSessionInfo(sessionId);
+        var wasConnected = beforeInfo?.IsConnecting == true
+            || beforeInfo?.ConPtySession is { HasExited: false };
 
         await SelectSession(sessionId);
 
