@@ -1157,11 +1157,19 @@
     // LastAccessedAt を更新して並びの先頭へ引き上げる。プログラム由来の SelectSession
     // 呼び出し（起動復元・URL・削除後フォールバック・再起動）では上げたくないので、
     // 共通の SelectSession ではなくこの入口だけで昇格処理を行う。
+    // 昇格対象は「この選択で新規に ConPTY へ接続したセッション」のみ。既に起動済み
+    // （一覧で通常表示）のセッションを選び直しただけでは順位を動かさない。
     private async Task HandleSessionSelectFromList(Guid sessionId)
     {
         // 今アクティブなセッションの再クリックは順位を動かさない。
         // （SelectSession は先頭で即 return する no-op になるので、昇格もさせない）
         var wasAlreadyActive = activeSessionId == sessionId;
+
+        // 選択「前」の ConPTY 接続状態を捕捉する。判定は一覧の「薄く表示（未接続）」と
+        // 同じ述語（SessionList.GetConnectionOpacityClass）に合わせる: プロセスが生きて
+        // 接続済みなら通常表示＝昇格しない、null/終了済み（薄く表示）なら今回の選択で
+        // 新規接続する＝昇格対象。
+        var wasConnected = SessionManager.GetSessionInfo(sessionId)?.ConPtySession is { HasExited: false };
 
         await SelectSession(sessionId);
 
@@ -1172,6 +1180,10 @@
         // activeSessionId を null に戻して return する。その場合は昇格しない
         // （実際に開けて表示できたセッションだけを先頭へ上げる）。
         if (activeSessionId != sessionId)
+            return;
+
+        // 既に接続済み（通常表示）だった＝新規接続ではないので昇格しない。
+        if (wasConnected)
             return;
 
         if (!AppSettingsService.GetSettings().Experimental.PromoteSessionOnOpen)
