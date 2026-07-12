@@ -120,7 +120,15 @@ namespace TerminalHub.Constants
                 args.Add("resume --last");
             }
 
-            if (!options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true")
+            // --no-alt-screen を既定 ON にする前は、追加引数欄のプレースホルダー例が
+            // "--no-alt-screen" だった。その名残で extra-args / custom-args に手書きで
+            // --no-alt-screen を入れている既存セッションがあり得るため、その場合は
+            // 自動付与をスキップして二重指定（--no-alt-screen --no-alt-screen）を防ぐ。
+            var userSuppliedNoAltScreen =
+                ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
+                ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
+            if ((!options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true") &&
+                !userSuppliedNoAltScreen)
             {
                 args.Add("--no-alt-screen");
             }
@@ -229,6 +237,19 @@ namespace TerminalHub.Constants
             AppendCustomArgs(args, options);
 
             return string.Join(" ", args);
+        }
+
+        // 空白区切りの引数文字列（extra-args / custom-args）に、指定トークンが
+        // 独立した引数として含まれるかを判定する（--no-alt-screen の二重指定防止に使用）。
+        private static bool ContainsArgToken(string? rawArgs, string token)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            return Array.IndexOf(tokens, token) >= 0;
         }
 
         // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。
