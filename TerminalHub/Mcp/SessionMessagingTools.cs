@@ -38,7 +38,7 @@ namespace TerminalHub.Mcp
 
         [McpServerTool(Name = "list_sessions")]
         [Description(
-            "TerminalHub が管理中の(アーカイブでない)セッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
+            "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
             "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
             "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。")]
         public static IEnumerable<SessionSummary> ListSessions(
