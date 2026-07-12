@@ -31,6 +31,14 @@ public class ExperimentalSettings
     public bool AutoRegisterMcp { get; set; } = false;
 
     /// <summary>
+    /// セッションを一覧からクリックして開いたときに、そのセッションの LastAccessedAt を
+    /// 更新して一覧の先頭へ引き上げる。既定OFF。ONにすると「最終利用順」ソート時に、
+    /// 開いた（＝注目した）セッションが自然に上へ来る。順位を上げるためだけに挨拶を
+    /// 打っていた運用の代替。プログラム由来の選択（起動復元・URL・再起動等）では上げない。
+    /// </summary>
+    public bool PromoteSessionOnOpen { get; set; } = false;
+
+    /// <summary>
     /// MCP サーバーが接続時にモデルへ配布する instructions（取扱説明・運用ルール）。
     /// null または空なら組み込みの既定テンプレ(McpInstructionDefaults.Template)を使う。
     /// ユーザーが書き換えたら、その内容をそのまま配布する（＝ユーザーが著者、TerminalHub は下書きを置くだけ）。
