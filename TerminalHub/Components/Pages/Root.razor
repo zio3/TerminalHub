@@ -1324,7 +1324,10 @@
                         {
                             Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
                                 sessionId, replaySnapshot.Content.Length);
-                            await TerminalService.WriteToTerminalAsync(activeTerminal, replaySnapshot.Content);
+                            // 巨大なリプレイを一発で書くと Blazor サーキットの Dispatcher を長時間占有し、
+                            // 直後の送信などの UI 操作が書き込み完了まで待たされる。チャンク分割して
+                            // 合間に await することで、待機中の操作がチャンクの合間に割り込めるようにする。
+                            await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replaySnapshot.Content);
                             Logger.LogInformation("[SelectSession] バッファ書き込み完了");
                         }
                     }
@@ -1335,7 +1338,9 @@
 
                     if (!string.IsNullOrEmpty(replayTail))
                     {
-                        await TerminalService.WriteToTerminalAsync(activeTerminal, replayTail);
+                        // テールも同様にチャンク分割（通常は小さいが、リプレイ中に溜まったライブ出力が
+                        // 大きくなるケースに備える）
+                        await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replayTail);
                     }
                     _restoringSessionId = null;
                 }

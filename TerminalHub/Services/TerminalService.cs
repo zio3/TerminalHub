@@ -172,6 +172,30 @@ namespace TerminalHub.Services
             await terminal.InvokeVoidAsync("write", data);
         }
 
+        public async Task WriteToTerminalChunkedAsync(IJSObjectReference terminal, string data, int chunkSize = 32768)
+        {
+            if (string.IsNullOrEmpty(data))
+            {
+                return;
+            }
+
+            // チャンクサイズ以下なら分割コスト（interop 往復の増加）をかけず一発で書く。
+            if (data.Length <= chunkSize)
+            {
+                await terminal.InvokeVoidAsync("write", data);
+                return;
+            }
+
+            // 大きなリプレイを分割し、チャンク間で await して Dispatcher に制御を返す。
+            // xterm の write() は連続呼び出しでパーサ状態を保持するため、ANSI エスケープ列の
+            // 途中で分割されても次の write で継続処理され、描画は壊れない。
+            for (var offset = 0; offset < data.Length; offset += chunkSize)
+            {
+                var length = Math.Min(chunkSize, data.Length - offset);
+                await terminal.InvokeVoidAsync("write", data.Substring(offset, length));
+            }
+        }
+
         public async Task RefreshTerminalAsync(Guid sessionId)
         {
             try
