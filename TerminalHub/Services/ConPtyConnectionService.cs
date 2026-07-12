@@ -47,6 +47,22 @@ namespace TerminalHub.Services
 
             _logger.LogInformation($"Subscribing to session {sessionId}");
 
+            // 同じIDの購読が既にあっても、ConPtySession が別インスタンスなら
+            // セッション再起動・再作成で置き換わったということ。古い購読を解除して
+            // 新しいインスタンスへ登録し直す（残したままだと TryAdd がスキップして
+            // 新プロセスの出力がこのCircuitへ届かなくなる）
+            if (_subscriptions.TryGetValue(sessionId, out var existing))
+            {
+                if (ReferenceEquals(existing.ConPtySession, conPtySession))
+                {
+                    _logger.LogDebug($"Session {sessionId} is already subscribed");
+                    return;
+                }
+
+                _logger.LogInformation($"Session {sessionId} was replaced. Re-subscribing to the new ConPtySession");
+                UnsubscribeFromSession(sessionId);
+            }
+
             // イベントハンドラーを作成
             EventHandler<DataReceivedEventArgs> dataHandler = (sender, args) =>
             {
