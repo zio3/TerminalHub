@@ -427,6 +427,7 @@
                     Mode = options.ContainsKey("mode") ? options["mode"] : "auto",
                     ResumeLast = (options.ContainsKey("resume-last") && options["resume-last"] == "true")
                         || (options.ContainsKey("resume-picker") && options["resume-picker"] == "true"),
+                    NoAltScreen = !options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true",
                     SandboxMode = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "",
                     ApprovalPolicy = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "",
                     SearchEnabled = options.ContainsKey("search") && options["search"] == "true",

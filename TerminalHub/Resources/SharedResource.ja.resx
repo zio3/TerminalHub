@@ -385,6 +385,10 @@
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示（推奨）</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>スクロール履歴を保持し、長いセッションの復帰を安定させます（--no-alt-screen）。</value></data>
+  <data name="SessionOptions.Codex.PermissionsDetails" xml:space="preserve"><value>権限の詳細設定</value></data>
+  <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>高度な設定</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
@@ -405,7 +409,7 @@
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --no-alt-screen</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model gpt-5</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
 
   <!-- Antigravity CLI Options -->

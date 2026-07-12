@@ -118,6 +118,11 @@ namespace TerminalHub.Constants
                 args.Add("resume --last");
             }
 
+            if (!options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true")
+            {
+                args.Add("--no-alt-screen");
+            }
+
             if (options.ContainsKey("search") && options["search"] == "true")
             {
                 args.Add("--search");

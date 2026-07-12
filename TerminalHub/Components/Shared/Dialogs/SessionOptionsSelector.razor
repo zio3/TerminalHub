@@ -173,6 +173,24 @@
                 </label>
             </div>
 
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.NoAltScreen" id="@($"codexNoAltScreen{UniqueId}")">
+                <label class="form-check-label" for="@($"codexNoAltScreen{UniqueId}")">
+                    @L["SessionOptions.Codex.NoAltScreen"]
+                </label>
+                <div class="form-text mt-0">@L["SessionOptions.Codex.NoAltScreen.Help"]</div>
+            </div>
+
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
+                <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
+                    @L["SessionOptions.Codex.Search"]
+                </label>
+            </div>
+
+            <details class="border rounded mt-3 p-2">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.PermissionsDetails"]</summary>
+
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Sandbox.Label"]</label>
                 <div class="btn-group d-flex" role="group">
@@ -226,19 +244,16 @@
                 }
             </div>
 
-            <div class="form-check mt-3">
-                <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
-                <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
-                    @L["SessionOptions.Codex.Search"]
-                </label>
-            </div>
-
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
                 <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
                           rows="3" placeholder="@L["SessionOptions.Codex.AdditionalDirs.Placeholder"]"></textarea>
                 <div class="form-text small">@L["SessionOptions.Codex.AdditionalDirs.Help"]</div>
             </div>
+            </details>
+
+            <details class="border rounded mt-2 p-2">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
 
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
@@ -249,6 +264,7 @@
 
             <CustomCliOptionsSection Options="codexCustomOptions" States="customOptionStates"
                                      Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
+            </details>
         </div>
     }
     else if (SelectedType == TerminalType.Antigravity && Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true))
@@ -525,6 +541,7 @@
                 {
                     options["resume-last"] = "true";
                 }
+                options["no-alt-screen"] = CodexOptions.NoAltScreen ? "true" : "false";
                 if (!string.IsNullOrWhiteSpace(CodexOptions.SandboxMode))
                 {
                     options["sandbox-mode"] = CodexOptions.SandboxMode;
@@ -609,6 +626,7 @@
     {
         public string Mode { get; set; } = "auto"; // auto, standard, yolo
         public bool ResumeLast { get; set; } = false;
+        public bool NoAltScreen { get; set; } = true;
         public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "";
         public bool SearchEnabled { get; set; }
