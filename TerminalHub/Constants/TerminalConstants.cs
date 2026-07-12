@@ -113,6 +113,8 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
+            // 現行 Codex CLI は復帰履歴がない初回フォルダでも、ディレクトリの信頼確認後に
+            // 新規セッションとして継続できるため、resume --last 失敗時の再作成処理は不要。
             if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
             {
                 args.Add("resume --last");
