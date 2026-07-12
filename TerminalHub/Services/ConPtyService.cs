@@ -225,10 +225,16 @@ namespace TerminalHub.Services
             {
                 // パイプの作成
                 const uint pipeBufferSize = 65536;
-                CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, pipeBufferSize);
-                CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, pipeBufferSize);
-
+                if (!CreatePipe(out var hPipeIn, out hWritePipe, IntPtr.Zero, pipeBufferSize))
+                {
+                    throw new InvalidOperationException($"Failed to create input pipe: {Marshal.GetLastWin32Error()}");
+                }
                 _hPipeIn = hPipeIn;
+
+                if (!CreatePipe(out hReadPipe, out var hPipeOut, IntPtr.Zero, pipeBufferSize))
+                {
+                    throw new InvalidOperationException($"Failed to create output pipe: {Marshal.GetLastWin32Error()}");
+                }
                 _hPipeOut = hPipeOut;
 
             // ConPTYの作成（XTerm互換のための設定）
@@ -244,21 +250,35 @@ namespace TerminalHub.Services
                 throw new InvalidOperationException($"Failed to create pseudo console: {hr:X}");
             }
 
-                // プロセス属性リストの初期化
+            // ConPTYへ渡した端は CreatePseudoConsole 内部で複製されるため、親側では即閉じる
+            // （MS公式サンプルと同じ作法）。特に出力パイプの書き込み端をホストが保持し続けると、
+            // ConPTY終了後も読み取り側がEOFにならず、読み取りループが抜けられなくなる
+            CloseHandle(_hPipeIn);
+            _hPipeIn = IntPtr.Zero;
+            CloseHandle(_hPipeOut);
+            _hPipeOut = IntPtr.Zero;
+
+                // プロセス属性リストの初期化（1回目は必要サイズの取得。失敗が正常な標準パターン）
                 var lpSize = IntPtr.Zero;
                 InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
                 startupInfo.lpAttributeList = Marshal.AllocHGlobal(lpSize);
-                InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize);
+                if (!InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, ref lpSize))
+                {
+                    throw new InvalidOperationException($"Failed to initialize proc thread attribute list: {Marshal.GetLastWin32Error()}");
+                }
 
             // 擬似コンソールの属性を設定
-            UpdateProcThreadAttribute(
+            if (!UpdateProcThreadAttribute(
                 startupInfo.lpAttributeList,
                 0,
                 (IntPtr)ConPtyTerminalConstants.ProcThreadAttributePseudoConsole,
                 _hPC,
                 (IntPtr)IntPtr.Size,
                 IntPtr.Zero,
-                IntPtr.Zero);
+                IntPtr.Zero))
+            {
+                throw new InvalidOperationException($"Failed to set pseudo console attribute: {Marshal.GetLastWin32Error()}");
+            }
 
             // プロセスの作成
             var processInfo = new PROCESS_INFORMATION();
@@ -332,9 +352,11 @@ namespace TerminalHub.Services
             }
             catch
             {
-                // エラー時のクリーンアップ
+                // エラー時のクリーンアップ（初期化失敗時はDisposeが呼ばれないため、ConPTY側の端もここで閉じる）
                 if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
                 if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                if (_hPipeIn != IntPtr.Zero) { CloseHandle(_hPipeIn); _hPipeIn = IntPtr.Zero; }
+                if (_hPipeOut != IntPtr.Zero) { CloseHandle(_hPipeOut); _hPipeOut = IntPtr.Zero; }
                 if (processInfoHandle != IntPtr.Zero) CloseHandle(processInfoHandle);
                 if (threadInfoHandle != IntPtr.Zero) CloseHandle(threadInfoHandle);
                 if (startupInfo.lpAttributeList != IntPtr.Zero)
@@ -576,6 +598,13 @@ namespace TerminalHub.Services
         {
             if (_hPC != IntPtr.Zero)
             {
+                // 0以下・short範囲外はConPTYに渡せない（shortキャストで壊れた値になる）
+                if (cols <= 0 || rows <= 0 || cols > short.MaxValue || rows > short.MaxValue)
+                {
+                    _logger.LogWarning("無効なリサイズ要求を無視: {Cols}x{Rows}", cols, rows);
+                    return;
+                }
+
                 // 同サイズなら何もしない。ConPTY は ResizePseudoConsole のたびに
                 // ビューポート全体を「通常のスクロール出力」として再送してくるため、
                 // 無駄な呼び出しは画面・スクロールバック多重化の原因になる
@@ -584,10 +613,17 @@ namespace TerminalHub.Services
                     return;
                 }
 
+                var size = new COORD { X = (short)cols, Y = (short)rows };
+                var hr = ResizePseudoConsole(_hPC, size);
+                if (hr != 0)
+                {
+                    // 失敗時は Cols/Rows を更新しない（実際のConPTYサイズと状態バッファの不一致を防ぐ）
+                    _logger.LogWarning("ResizePseudoConsole failed with HRESULT: 0x{Hr:X8} ({Cols}x{Rows})", hr, cols, rows);
+                    return;
+                }
+
                 Cols = cols;
                 Rows = rows;
-                var size = new COORD { X = (short)cols, Y = (short)rows };
-                ResizePseudoConsole(_hPC, size);
 
                 // xterm.jsの場合、リサイズ後に追加の処理は不要
                 // xterm.js側でリフローを処理する
@@ -744,8 +780,9 @@ namespace TerminalHub.Services
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern void ClosePseudoConsole(IntPtr hPC);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool ResizePseudoConsole(IntPtr hPC, COORD size);
+        // HRESULT を返すAPI（bool宣言だと S_OK(0)=false と逆転判定になる）
+        [DllImport("kernel32.dll")]
+        private static extern int ResizePseudoConsole(IntPtr hPC, COORD size);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CloseHandle(IntPtr hObject);
