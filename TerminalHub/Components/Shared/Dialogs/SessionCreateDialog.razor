@@ -147,6 +147,9 @@
     private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
     private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
     private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
+    private const string LAST_CODEX_RESUME_LAST_KEY = "lastCodexResumeLast";
+    private const string LAST_CODEX_NO_ALT_SCREEN_KEY = "lastCodexNoAltScreen";
+    private const string LAST_CODEX_SEARCH_ENABLED_KEY = "lastCodexSearchEnabled";
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
 
@@ -285,6 +288,13 @@
             {
                 codexOptions.ApprovalPolicy = codexApproval;
             }
+
+            codexOptions.ResumeLast =
+                await LocalStorage.GetAsync<bool?>(LAST_CODEX_RESUME_LAST_KEY) ?? codexOptions.ResumeLast;
+            codexOptions.NoAltScreen =
+                await LocalStorage.GetAsync<bool?>(LAST_CODEX_NO_ALT_SCREEN_KEY) ?? codexOptions.NoAltScreen;
+            codexOptions.SearchEnabled =
+                await LocalStorage.GetAsync<bool?>(LAST_CODEX_SEARCH_ENABLED_KEY) ?? codexOptions.SearchEnabled;
         }
         catch
         {
@@ -301,6 +311,9 @@
             await LocalStorage.SetAsync(LAST_CODEX_MODE_KEY, codexOptions.Mode);
             await LocalStorage.SetAsync(LAST_CODEX_SANDBOX_MODE_KEY, codexOptions.SandboxMode);
             await LocalStorage.SetAsync(LAST_CODEX_APPROVAL_POLICY_KEY, codexOptions.ApprovalPolicy);
+            await LocalStorage.SetAsync(LAST_CODEX_RESUME_LAST_KEY, codexOptions.ResumeLast);
+            await LocalStorage.SetAsync(LAST_CODEX_NO_ALT_SCREEN_KEY, codexOptions.NoAltScreen);
+            await LocalStorage.SetAsync(LAST_CODEX_SEARCH_ENABLED_KEY, codexOptions.SearchEnabled);
         }
         catch
         {
