@@ -1075,8 +1075,23 @@ namespace TerminalHub.Services
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
-                _sessions[sessionId] = newSession;
-                sessionInfo.ConPtySession = newSession;
+
+                // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
+                // 削除系はセッション単位ロックを取らないため、CreateSessionAsyncのawait中に
+                // 削除されていると、ここで登録すると削除済みIDのConPTYが辞書に復活してリークする
+                lock (_lockObject)
+                {
+                    if (!_sessionInfos.TryGetValue(sessionId, out var currentInfo) ||
+                        !ReferenceEquals(currentInfo, sessionInfo))
+                    {
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除されていました: SessionId={SessionId}", sessionId);
+                        newSession.Dispose();
+                        return null;
+                    }
+
+                    _sessions[sessionId] = newSession;
+                    sessionInfo.ConPtySession = newSession;
+                }
 
                 _logger.LogInformation("新しいConPtySessionを作成しました（未起動）: {SessionId}", sessionId);
                 return newSession;
@@ -1143,8 +1158,24 @@ namespace TerminalHub.Services
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
-                _sessions[sessionId] = newSession;
-                sessionInfo.ConPtySession = newSession;
+
+                // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
+                // 削除系はセッション単位ロックを取らないため、CreateSessionAsyncのawait中に
+                // 削除されていると、ここで登録・起動すると到達不能なゾンビプロセスが残る
+                lock (_lockObject)
+                {
+                    if (!_sessionInfos.TryGetValue(sessionId, out var currentInfo) ||
+                        !ReferenceEquals(currentInfo, sessionInfo))
+                    {
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除されていました: SessionId={SessionId}", sessionId);
+                        newSession.Dispose();
+                        return false;
+                    }
+
+                    _sessions[sessionId] = newSession;
+                    sessionInfo.ConPtySession = newSession;
+                }
+
                 newSession.Start();
                 // 状態バッファのグリッドも ConPTY と同サイズに揃える（寸法不一致による折返し乱れを防ぐ）
                 sessionInfo.ResizeTerminalBuffer(cols, rows);
