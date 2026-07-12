@@ -1636,6 +1636,10 @@
                 return;
             }
             
+            // このCircuitの購読を解除（残すと破棄済みConPtySessionと相互参照する
+            // エントリがCircuit終了まで蓄積する）
+            ConPtyConnection.UnsubscribeFromSession(sessionId);
+
             // ConPtySessionのクリーンアップ
             if (sessionToRemove.ConPtySession != null)
             {
@@ -1731,6 +1735,9 @@
                 activeTerminal = null;
             }
         }
+
+        // このCircuitの購読を解除（削除時と同様、破棄済みConPtySessionへの参照残留を防ぐ）
+        ConPtyConnection.UnsubscribeFromSession(sessionId);
 
         // SessionManagerでアーカイブ処理（ConPtySessionの破棄含む）
         SessionManager.ArchiveSession(sessionId);

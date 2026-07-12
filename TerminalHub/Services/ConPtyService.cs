@@ -589,7 +589,14 @@ namespace TerminalHub.Services
                 _flushTimer.Dispose();
                 _flushTimer = null;
             }
-            
+
+            // タイマー停止で置き去りになった未フラッシュ分（フラッシュ間隔未満の最終出力）を
+            // 通知前に送出する。これが無いと短命コマンドの最終行・エラーが欠落する
+            if (_enableBuffering)
+            {
+                await FlushOutputBuffer();
+            }
+
             // プロセスが終了したことを通知
             ProcessExited?.Invoke(this, EventArgs.Empty);
         }
