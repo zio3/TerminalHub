@@ -995,6 +995,10 @@ namespace TerminalHub.Services
 
         public async Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false)
         {
+            // 遅延初期化(GetSessionAsync)と同じセッション単位ロックで直列化し、
+            // 再作成中に並行アクセスがConPTYを二重生成してプロセスをリークするのを防ぐ
+            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            await initLock.WaitAsync();
             try
             {
                 var sessionInfo = GetSessionInfo(sessionId);
@@ -1040,10 +1044,18 @@ namespace TerminalHub.Services
                 _logger.LogError(ex, "セッション再作成でエラーが発生しました: {SessionId}", sessionId);
                 return null;
             }
+            finally
+            {
+                initLock.Release();
+            }
         }
 
         public async Task<bool> RestartSessionAsync(Guid sessionId)
         {
+            // 遅延初期化(GetSessionAsync)と同じセッション単位ロックで直列化し、
+            // 再起動中に並行アクセスがConPTYを二重生成してプロセスをリークするのを防ぐ
+            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            await initLock.WaitAsync();
             try
             {
                 var sessionInfo = GetSessionInfo(sessionId);
@@ -1099,6 +1111,10 @@ namespace TerminalHub.Services
             {
                 _logger.LogError(ex, "セッション再起動でエラーが発生しました: {SessionId}", sessionId);
                 return false;
+            }
+            finally
+            {
+                initLock.Release();
             }
         }
 
