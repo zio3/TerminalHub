@@ -146,26 +146,21 @@ public class HookNotificationService : IHookNotificationService
         }
 
         // Webhook通知を送信（本来の hook イベント名 "Stop" をそのまま eventType として送る。
-        // 「Stop = LED 消灯」等の解釈は受け側に委ねる）
-        try
+        // 「Stop = LED 消灯」等の解釈は受け側に委ねる）。
+        // 投げっぱなし（await しない）＝ Webhook 先が遅くても後続の UI 通知(OnHookNotification)や
+        // hook 応答をブロックしない。
+        FireWebhook(new WebhookPayload
         {
-            await _appSettingsService.SendWebhookAsync(new WebhookPayload
-            {
-                EventType = notification.Event,
-                SessionId = session.SessionId,
-                SessionName = session.GetDisplayName(),
-                TerminalType = session.TerminalType.ToString(),
-                ElapsedSeconds = elapsedSeconds,
-                FolderPath = session.FolderPath,
-                Tool = SourceToolName(session)
-            });
-            _logger.LogInformation("Stop Webhook を送信: Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
-                session.GetDisplayName(), elapsedSeconds);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Stop Webhook の送信に失敗: Session={SessionName}", session.GetDisplayName());
-        }
+            EventType = notification.Event,
+            SessionId = session.SessionId,
+            SessionName = session.GetDisplayName(),
+            TerminalType = session.TerminalType.ToString(),
+            ElapsedSeconds = elapsedSeconds,
+            FolderPath = session.FolderPath,
+            Tool = SourceToolName(session)
+        });
+        _logger.LogInformation("Stop Webhook を送信(投げっぱなし): Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
+            session.GetDisplayName(), elapsedSeconds);
 
         // 最終利用時刻を更新（ソート用）
         _logger.LogInformation("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
@@ -230,29 +225,36 @@ public class HookNotificationService : IHookNotificationService
     /// hook イベント名（notification.Event）をそのまま eventType として、セッションキーで Webhook を送る。
     /// start/complete へのマッピングをせず「本来のイベント」を流すための共通処理。
     /// </summary>
-    private async Task SendSessionHookWebhookAsync(SessionInfo session, HookNotification notification)
+    /// <summary>
+    /// Webhook を投げっぱなし(fire-and-forget)で送信する。外部エンドポイントの応答遅延
+    /// （例: Azure Functions のコールドスタートで 10 秒超）で hook 処理や UI 通知
+    /// (OnHookNotification) がブロックされないよう、あえて await しない。HTTP 応答(204)を
+    /// CLI に返した後もバックグラウンドで送信は継続する。全サービスが Singleton＋HttpClientFactory
+    /// のためスコープ破棄の影響を受けず、SendWebhookAsync は内部で全例外を握り潰すため
+    /// 未観測例外にもならない。
+    /// </summary>
+    private void FireWebhook(WebhookPayload payload)
     {
-        try
+        _ = _appSettingsService.SendWebhookAsync(payload);
+    }
+
+    private Task SendSessionHookWebhookAsync(SessionInfo session, HookNotification notification)
+    {
+        // 投げっぱなし。呼び出し元は従来どおり await できるよう即完了 Task を返す。
+        FireWebhook(new WebhookPayload
         {
-            await _appSettingsService.SendWebhookAsync(new WebhookPayload
-            {
-                EventType = notification.Event,
-                SessionId = session.SessionId,
-                SessionName = session.GetDisplayName(),
-                TerminalType = session.TerminalType.ToString(),
-                FolderPath = session.FolderPath,
-                Tool = SourceToolName(session),
-                Message = notification.Message,    // Notification 本文（あれば）
-                ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
-            });
-            _logger.LogInformation("Hook Webhook を送信: Event={Event}, Session={SessionName}",
-                notification.Event, session.GetDisplayName());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Hook Webhook の送信に失敗: Event={Event}, Session={SessionName}",
-                notification.Event, session.GetDisplayName());
-        }
+            EventType = notification.Event,
+            SessionId = session.SessionId,
+            SessionName = session.GetDisplayName(),
+            TerminalType = session.TerminalType.ToString(),
+            FolderPath = session.FolderPath,
+            Tool = SourceToolName(session),
+            Message = notification.Message,    // Notification 本文（あれば）
+            ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
+        });
+        _logger.LogInformation("Hook Webhook を送信(投げっぱなし): Event={Event}, Session={SessionName}",
+            notification.Event, session.GetDisplayName());
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -334,40 +336,35 @@ public class HookNotificationService : IHookNotificationService
     /// 受信側（LED 等）が各サブエージェントを個別のキーとして扱えるようにする。
     /// eventType は本来の hook イベント名（notification.Event）をそのまま送る。
     /// </summary>
-    private async Task SendSubagentWebhookAsync(
+    private Task SendSubagentWebhookAsync(
         SessionInfo session, HookNotification notification, int? elapsedSeconds)
     {
         // agent_id が無いと個別キーにできないため送らない
         if (string.IsNullOrEmpty(notification.AgentId))
         {
-            return;
+            return Task.CompletedTask;
         }
 
         // 呼び出し元（SubagentStart/Stop ハンドラ）が agent_type 空をスキップ済みのため、
         // ここに到達する時点で AgentType は必ず非空。
         var name = $"{session.GetDisplayName()} / {notification.AgentType}";
 
-        try
+        // 投げっぱなし。呼び出し元は従来どおり await できるよう即完了 Task を返す。
+        FireWebhook(new WebhookPayload
         {
-            await _appSettingsService.SendWebhookAsync(new WebhookPayload
-            {
-                EventType = notification.Event,
-                SessionId = session.SessionId,        // 親セッションの GUID（生）
-                SessionName = name,
-                TerminalType = session.TerminalType.ToString(),
-                ElapsedSeconds = elapsedSeconds,
-                FolderPath = session.FolderPath,
-                Tool = SourceToolName(session),
-                AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
-            });
-            _logger.LogInformation(
-                "サブエージェント Webhook 送信: Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
-                notification.Event, notification.AgentId, notification.AgentType);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "サブエージェント Webhook 送信に失敗: Event={Event}, AgentId={AgentId}", notification.Event, notification.AgentId);
-        }
+            EventType = notification.Event,
+            SessionId = session.SessionId,        // 親セッションの GUID（生）
+            SessionName = name,
+            TerminalType = session.TerminalType.ToString(),
+            ElapsedSeconds = elapsedSeconds,
+            FolderPath = session.FolderPath,
+            Tool = SourceToolName(session),
+            AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
+        });
+        _logger.LogInformation(
+            "サブエージェント Webhook 送信(投げっぱなし): Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
+            notification.Event, notification.AgentId, notification.AgentType);
+        return Task.CompletedTask;
     }
 
     // Webhook の tool フィールドに入れる送信元 CLI 名（スペース無し、受信側で扱いやすいように）。
@@ -413,24 +410,17 @@ public class HookNotificationService : IHookNotificationService
         session.ClearWaitingForUserInput();
 
         // Webhook通知を送信（本来の hook イベント名 "UserPromptSubmit" をそのまま eventType として送る。
-        // 「UserPromptSubmit = LED 点灯」等の解釈は受け側に委ねる）
-        try
+        // 「UserPromptSubmit = LED 点灯」等の解釈は受け側に委ねる）。投げっぱなし（await しない）。
+        FireWebhook(new WebhookPayload
         {
-            await _appSettingsService.SendWebhookAsync(new WebhookPayload
-            {
-                EventType = notification.Event,
-                SessionId = session.SessionId,
-                SessionName = session.GetDisplayName(),
-                TerminalType = session.TerminalType.ToString(),
-                FolderPath = session.FolderPath,
-                Tool = SourceToolName(session)
-            });
-            _logger.LogInformation("UserPromptSubmit Webhook を送信: Session={SessionName}", session.GetDisplayName());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "UserPromptSubmit Webhook の送信に失敗: Session={SessionName}", session.GetDisplayName());
-        }
+            EventType = notification.Event,
+            SessionId = session.SessionId,
+            SessionName = session.GetDisplayName(),
+            TerminalType = session.TerminalType.ToString(),
+            FolderPath = session.FolderPath,
+            Tool = SourceToolName(session)
+        });
+        _logger.LogInformation("UserPromptSubmit Webhook を送信(投げっぱなし): Session={SessionName}", session.GetDisplayName());
     }
 
     /// <summary>
