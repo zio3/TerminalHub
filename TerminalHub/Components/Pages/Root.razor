@@ -1168,6 +1168,12 @@
         if (wasAlreadyActive)
             return;
 
+        // 開くのに失敗（ディレクトリ非存在・初期化失敗）したときは SelectSession が
+        // activeSessionId を null に戻して return する。その場合は昇格しない
+        // （実際に開けて表示できたセッションだけを先頭へ上げる）。
+        if (activeSessionId != sessionId)
+            return;
+
         if (!AppSettingsService.GetSettings().Experimental.PromoteSessionOnOpen)
             return;
 
