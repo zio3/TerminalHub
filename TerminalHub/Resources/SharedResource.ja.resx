@@ -396,6 +396,8 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>承認リクエストを自動レビュー</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>承認が必要な操作をレビューエージェントが評価します。追加の使用量が発生し、レビューに失敗した操作は実行されません。</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>

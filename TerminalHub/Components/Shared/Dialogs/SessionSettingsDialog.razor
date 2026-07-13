@@ -425,6 +425,7 @@
                 var savedMode = options.ContainsKey("mode") ? options["mode"] : "";
                 var savedSandbox = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "";
                 var savedApproval = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "";
+                var savedApprovalsReviewer = options.ContainsKey("approvals-reviewer") ? options["approvals-reviewer"] : "";
                 // 旧「Auto」モードは空のサンドボックス/承認を BuildCodexArgs 側で
                 // workspace-write / on-request に補完していた。モード廃止に伴い、その暗黙の
                 // 既定を明示値として顕在化させ、再保存しても挙動が変わらないようにする。
@@ -441,6 +442,7 @@
                     NoAltScreen = !options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true",
                     SandboxMode = savedSandbox,
                     ApprovalPolicy = savedApproval,
+                    AutoReviewApprovals = savedApprovalsReviewer == "auto_review",
                     SearchEnabled = options.ContainsKey("search") && options["search"] == "true",
                     AdditionalDirectories = options.ContainsKey("add-dir") ? options["add-dir"] : "",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""

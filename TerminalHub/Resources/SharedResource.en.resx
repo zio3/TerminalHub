@@ -396,6 +396,8 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>Automatically review approval requests</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>A reviewer agent evaluates actions that require approval. This uses additional model calls, and actions are not run when review fails.</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
