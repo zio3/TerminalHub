@@ -63,7 +63,9 @@ namespace TerminalHub.Services
         private FileStream? _pipeInStream;
         private FileStream? _pipeOutStream;
         private StreamWriter? _writer;
-        private volatile bool _disposed;
+        private int _disposeState;
+        private bool IsDisposed => Volatile.Read(ref _disposeState) != 0;
+        private readonly object _pseudoConsoleLock = new();
         private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
         private Task? _readTask;
         private CancellationTokenSource? _readCancellationTokenSource;
@@ -133,7 +135,7 @@ namespace TerminalHub.Services
                 _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
                 _flushTimer.Elapsed += async (sender, e) =>
                 {
-                    if (!_disposed)
+                    if (!IsDisposed)
                         await FlushOutputBuffer();
                 };
                 _flushTimer.AutoReset = true;
@@ -144,7 +146,7 @@ namespace TerminalHub.Services
         
         public void Start()
         {
-            if (_started || _disposed)
+            if (_started || IsDisposed)
                 return;
                 
             _started = true;
@@ -327,9 +329,11 @@ namespace TerminalHub.Services
                 
                 // ストリームの作成
                 var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
-                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
-
+                hWritePipe = IntPtr.Zero;
                 _pipeInStream = new FileStream(pipeIn, FileAccess.Write);
+
+                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
+                hReadPipe = IntPtr.Zero;
                 _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
                 
                 // StreamWriterを作成（XTerm向けにUTF-8、改行コードLF）
@@ -340,10 +344,6 @@ namespace TerminalHub.Services
                     NewLine = "\n"  // LF改行（Unix形式）
                 };
                 
-                // SafeFileHandleに所有権を移したので、元のハンドルは無効化
-                hWritePipe = IntPtr.Zero;
-                hReadPipe = IntPtr.Zero;
-
                 // ハンドルのクリーンアップ
                 CloseHandle(processInfoHandle);
                 CloseHandle(threadInfoHandle);
@@ -355,6 +355,9 @@ namespace TerminalHub.Services
                 // エラー時のクリーンアップ（初期化失敗時はDisposeが呼ばれないため、ConPTY側の端もここで閉じる）
                 if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
                 if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                _writer?.Dispose();
+                _pipeInStream?.Dispose();
+                _pipeOutStream?.Dispose();
                 if (_hPipeIn != IntPtr.Zero) { CloseHandle(_hPipeIn); _hPipeIn = IntPtr.Zero; }
                 if (_hPipeOut != IntPtr.Zero) { CloseHandle(_hPipeOut); _hPipeOut = IntPtr.Zero; }
                 if (processInfoHandle != IntPtr.Zero) CloseHandle(processInfoHandle);
@@ -379,7 +382,7 @@ namespace TerminalHub.Services
         /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
-            if (_writer == null || _disposed)
+            if (_writer == null || IsDisposed)
                 return;
 
             // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ。
@@ -400,7 +403,7 @@ namespace TerminalHub.Services
 
             try
             {
-                if (_writer == null || _disposed)
+                if (_writer == null || IsDisposed)
                     return;
 
                 // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
@@ -441,15 +444,16 @@ namespace TerminalHub.Services
         // バッファリング関連メソッド
         private async Task BufferOutput(string data)
         {
-            if (_disposed || _outputSemaphore == null)
+            if (IsDisposed)
                 return;
-                
+
+            string? dataToPublish = null;
             try
             {
                 await _outputSemaphore.WaitAsync();
                 try
                 {
-                    if (!_disposed)
+                    if (!IsDisposed)
                     {
                         _outputBuffer.Append(data);
                         
@@ -459,7 +463,7 @@ namespace TerminalHub.Services
                             var bufferedData = _outputBuffer.ToString();
                             _outputBuffer.Clear();
 
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
+                            dataToPublish = bufferedData;
                         }
                     }
                 }
@@ -474,25 +478,28 @@ namespace TerminalHub.Services
             {
                 // セマフォが破棄されている場合は無視
             }
+
+            if (dataToPublish != null)
+                RaiseDataReceived(dataToPublish);
         }
         
         private async Task FlushOutputBuffer()
         {
-            if (_disposed || _outputSemaphore == null)
+            if (IsDisposed)
                 return;
-                
+
+            string? dataToPublish = null;
             try
             {
                 await _outputSemaphore.WaitAsync();
                 try
                 {
-                    if (!_disposed && _outputBuffer.Length > 0)
+                    if (!IsDisposed && _outputBuffer.Length > 0)
                     {
                         var data = _outputBuffer.ToString();
                         _outputBuffer.Clear();
                         
-                        // メインスレッドでイベントを発生
-                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                        dataToPublish = data;
                     }
                 }
                 finally
@@ -505,6 +512,49 @@ namespace TerminalHub.Services
             {
                 // セマフォが破棄されている場合は無視
             }
+
+            if (dataToPublish != null)
+                RaiseDataReceived(dataToPublish);
+        }
+
+        private async Task FlushRemainingOutputAsync()
+        {
+            string? data = null;
+            await _outputSemaphore.WaitAsync();
+            try
+            {
+                if (_outputBuffer.Length > 0)
+                {
+                    data = _outputBuffer.ToString();
+                    _outputBuffer.Clear();
+                }
+            }
+            finally
+            {
+                _outputSemaphore.Release();
+            }
+
+            if (data != null)
+                RaiseDataReceived(data);
+        }
+
+        private void RaiseDataReceived(string data)
+        {
+            var args = new DataReceivedEventArgs(data);
+            foreach (EventHandler<DataReceivedEventArgs> handler in DataReceived?.GetInvocationList() ?? [])
+            {
+                try { handler(this, args); }
+                catch (Exception ex) { _logger.LogError(ex, "Error in ConPTY DataReceived subscriber"); }
+            }
+        }
+
+        private void RaiseProcessExited()
+        {
+            foreach (EventHandler handler in ProcessExited?.GetInvocationList() ?? [])
+            {
+                try { handler(this, EventArgs.Empty); }
+                catch (Exception ex) { _logger.LogError(ex, "Error in ConPTY ProcessExited subscriber"); }
+            }
         }
 
         // バックグラウンドでパイプを読み取るメソッド
@@ -513,7 +563,7 @@ namespace TerminalHub.Services
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
 
-            while (!cancellationToken.IsCancellationRequested && !_disposed)
+            while (!cancellationToken.IsCancellationRequested && !IsDisposed)
             {
                 try
                 {
@@ -561,7 +611,7 @@ namespace TerminalHub.Services
                         else
                         {
                             // 直接イベントを発生
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
+                            RaiseDataReceived(data);
                         }
                     }
                     else
@@ -589,15 +639,21 @@ namespace TerminalHub.Services
                 _flushTimer.Dispose();
                 _flushTimer = null;
             }
+
+            // 終了通知より先に、短時間バッファに残った末尾出力を配送する。
+            await FlushRemainingOutputAsync();
             
             // プロセスが終了したことを通知
-            ProcessExited?.Invoke(this, EventArgs.Empty);
+            RaiseProcessExited();
         }
 
         public void Resize(int cols, int rows)
         {
-            if (_hPC != IntPtr.Zero)
+            lock (_pseudoConsoleLock)
             {
+                if (_hPC == IntPtr.Zero || IsDisposed)
+                    return;
+
                 // 0以下・short範囲外はConPTYに渡せない（shortキャストで壊れた値になる）
                 if (cols <= 0 || rows <= 0 || cols > short.MaxValue || rows > short.MaxValue)
                 {
@@ -667,10 +723,7 @@ namespace TerminalHub.Services
 
         public void Dispose()
         {
-            if (_disposed) return;
-
-            // まず破棄フラグを設定
-            _disposed = true;
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) return;
 
             // 書き込み待機を解除（_writeLock.WaitAsync で待機中の WriteAsync を抜けさせる）
             try
@@ -694,6 +747,8 @@ namespace TerminalHub.Services
             try
             {
                 _readCancellationTokenSource?.Cancel();
+                // パイプ読み取りを先に解除し、待機がタイムアウトしにくいようにする。
+                _pipeOutStream?.Dispose();
                 _readTask?.Wait(1000); // 1秒待機
             }
             catch (Exception ex)
@@ -711,11 +766,7 @@ namespace TerminalHub.Services
                 // 残りのバッファを同期的にフラッシュ
                 try
                 {
-                    if (_outputBuffer.Length > 0)
-                    {
-                        var data = _outputBuffer.ToString();
-                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
-                    }
+                    FlushRemainingOutputAsync().GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -729,7 +780,8 @@ namespace TerminalHub.Services
             _pipeOutStream?.Dispose();
             
             // セマフォを破棄
-            _outputSemaphore?.Dispose();
+            // 読み取りタスクがタイムアウト後もfinally処理で参照する可能性があるため、
+            // _outputSemaphore はここでは破棄しない（セッションとともにGCされる）。
             _writeLock?.Dispose();
 
             // プロセスを終了（bun など孫プロセスが残らないようプロセスツリーごと kill）
@@ -747,10 +799,13 @@ namespace TerminalHub.Services
             }
 
             // プロセスとハンドルを破棄
-            if (_hPC != IntPtr.Zero)
+            lock (_pseudoConsoleLock)
             {
-                ClosePseudoConsole(_hPC);
-                _hPC = IntPtr.Zero;
+                if (_hPC != IntPtr.Zero)
+                {
+                    ClosePseudoConsole(_hPC);
+                    _hPC = IntPtr.Zero;
+                }
             }
 
             if (_hPipeIn != IntPtr.Zero)

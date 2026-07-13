@@ -11,7 +11,8 @@ namespace TerminalHub.Services
     {
         private readonly ILogger<ConPtyConnectionService> _logger;
         private readonly ConcurrentDictionary<Guid, ConPtySessionSubscription> _subscriptions = new();
-        private bool _disposed;
+        private int _disposeState;
+        private readonly object _subscriptionLock = new();
 
         // 「ゾンビCircuit累積」診断用: 生存中のインスタンス数（＝生存Circuit数）を数える。
         // Scopedサービスなので 1インスタンス = 1Circuit。使い続けて遅くなったときに
@@ -42,8 +43,10 @@ namespace TerminalHub.Services
         /// </summary>
         public void SubscribeToSession(Guid sessionId, ConPtySession conPtySession)
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(ConPtyConnectionService));
+            lock (_subscriptionLock)
+            {
+                if (Volatile.Read(ref _disposeState) != 0)
+                    throw new ObjectDisposedException(nameof(ConPtyConnectionService));
 
             _logger.LogInformation($"Subscribing to session {sessionId}");
 
@@ -111,6 +114,7 @@ namespace TerminalHub.Services
             conPtySession.ProcessExited += exitHandler;
 
             _logger.LogInformation($"Successfully subscribed to session {sessionId}");
+            }
         }
 
         /// <summary>
@@ -145,12 +149,14 @@ namespace TerminalHub.Services
 
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0)
                 return;
 
             _logger.LogInformation("Disposing ConPtyConnectionService");
-            UnsubscribeAll();
-            _disposed = true;
+            lock (_subscriptionLock)
+            {
+                UnsubscribeAll();
+            }
 
             var live = System.Threading.Interlocked.Decrement(ref _liveInstanceCount);
             _logger.LogInformation("[CircuitLife] Circuit disposed (tag={CircuitTag}). 生存Circuit数={LiveCount}", _circuitTag, live);
