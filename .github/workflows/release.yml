@@ -100,13 +100,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
         shell: pwsh
         run: |
-          # Inno Setupをダウンロード
-          $url = "https://jrsoftware.org/download.php/is.exe"
-          $output = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $url -OutFile $output
-
-          # サイレントインストール
-          Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+          # Inno Setup を Chocolatey で導入（runner にプリインストール済み）。
+          # 以前は jrsoftware.org/download.php/is.exe を直接ダウンロードしていたが、
+          # このリダイレクタが壊れた応答を返すことがあり不安定だったため choco 経由に変更。
+          choco install innosetup -y --no-progress
 
       - name: Build installer
         if: startsWith(github.ref, 'refs/tags/v') || inputs.build_installer == true
