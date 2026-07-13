@@ -96,4 +96,19 @@ public static class SlashCommandCatalog
         // TODO: Codex / Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
         _ => Empty,
     };
+
+    /// <summary>
+    /// 「名前（"/" 無し）→説明」の辞書。動的取得した名前一覧に説明を上書きする用途
+    /// （<see cref="SlashCommandProvider"/>）。説明が無い名前は辞書に載らない。
+    /// </summary>
+    public static IReadOnlyDictionary<string, string?> BuildDescriptionMap(TerminalType type)
+    {
+        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in ForTerminalType(type))
+        {
+            var key = item.Name.StartsWith("/") ? item.Name.Substring(1) : item.Name;
+            map[key] = item.Description;
+        }
+        return map;
+    }
 }

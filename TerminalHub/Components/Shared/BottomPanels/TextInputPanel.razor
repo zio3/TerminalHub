@@ -6,6 +6,7 @@
 @inject IJSRuntime JS
 @inject IStringLocalizer<SharedResource> L
 @inject IAppSettingsService AppSettingsService
+@inject SlashCommandProvider SlashCommandProvider
 @implements IAsyncDisposable
 
 <style>
@@ -268,6 +269,22 @@
 
     private TerminalType? _lastParamTerminalType;
 
+    protected override void OnInitialized()
+    {
+        // 動的取得が完了したら候補を作り直して再描画する。
+        SlashCommandProvider.Changed += OnSlashCatalogChanged;
+    }
+
+    private void OnSlashCatalogChanged()
+    {
+        // 別スレッド（Task.Run）からの通知なので UI スレッドへマーシャリングする。
+        _ = InvokeAsync(() =>
+        {
+            RecomputeSlashSuggestions();
+            StateHasChanged();
+        });
+    }
+
     protected override void OnParametersSet()
     {
         // BottomPanel/TextInputPanel はセッション切替でも破棄されず生存し続けるため、
@@ -290,6 +307,9 @@
         // フォーカス時に試験機能フラグを読み直す（設定変更を再読み込み/セッション切替なしで反映）。
         // フォーカスは打鍵ごとには発火しないので GetSettings() の頻度は問題にならない。
         _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+        // 機能ONなら、インストール済みバージョンの実コマンド一覧をバックグラウンドで一度だけ取得する
+        // （フォーカス時＝ユーザーが入力を始める合図なので、このタイミングが自然）。
+        if (_slashEnabled) SlashCommandProvider.EnsureLoaded(TerminalType);
         RecomputeSlashSuggestions();
     }
 
@@ -315,7 +335,8 @@
         if (text.IndexOfAny(new[] { ' ', '\t', '\r', '\n' }) >= 0) return;
 
         var query = text.Substring(1); // "/" を除いた検索語
-        var catalog = SlashCommandCatalog.ForTerminalType(TerminalType);
+        // 動的取得済みならその一覧、未取得/非対応なら静的辞書（Provider がフォールバック）。
+        var catalog = SlashCommandProvider.GetCommands(TerminalType);
         if (catalog.Count == 0) return;
 
         var matches = new List<(SlashCommandItem Item, int Rank)>();
@@ -765,6 +786,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        SlashCommandProvider.Changed -= OnSlashCatalogChanged;
+
         if (_slashRegistered)
         {
             try

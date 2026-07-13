@@ -158,6 +158,9 @@ builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 // 生ストリームキャプチャ（VTエミュレータ検証フィクスチャ採取用のデバッグサービス）
 builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
 
+// スラッシュコマンド補完の候補ソース（headless init から動的取得＋静的辞書フォールバック）
+builder.Services.AddSingleton<SlashCommandProvider>();
+
 // MCP サーバー（セッション間メッセージング）。
 // TerminalHub 本体プロセスに HTTP MCP を同居させ、list_sessions / send_to_session / set_memo を公開する。
 // SessionManager(Singleton) に直結するため HTTP トランスポート一択（stdio だと別プロセスで共有状態に届かない）。
