@@ -1024,6 +1024,28 @@
 
                                 <hr />
 
+                                @* テキスト入力欄でスラッシュコマンドの補完を出す（既定OFF・全デバイス共通） *@
+                                <div class="mb-4">
+                                    <h6 class="mb-2">スラッシュコマンド補完</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="slashAutocompleteEnabled" id="slashAutocompleteSwitch">
+                                        <label class="form-check-label" for="slashAutocompleteSwitch">
+                                            入力欄で <code>/</code> を打つとスラッシュコマンドの候補を表示する
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        入力欄の内容が <code>/</code> で始まるときだけ候補ポップアップを表示し、名前の部分一致で絞り込みます
+                                        （<kbd>↑↓</kbd> 選択 / <kbd>Tab</kbd>・<kbd>Enter</kbd> 確定 / <kbd>Esc</kbd> 閉じる）。
+                                        現状は <strong>Claude Code</strong> のみ対応（Codex / Gemini は各CLIの辞書を用意でき次第）。
+                                    </p>
+                                    <p class="text-muted small mt-1 mb-0">
+                                        組み込みコマンド辞書のみ対応（自作コマンドの走査は未対応）。設定変更後、入力欄を選び直すと反映されます。
+                                    </p>
+                                </div>
+
+                                <hr />
+
                                 @* セッションを一覧クリックで開いたら、そのセッションを一番上へ引き上げる（既定OFF・全デバイス共通） *@
                                 <div class="mb-4">
                                     <h6 class="mb-2">セッションを開いたら一番上へ</h6>
@@ -1346,6 +1368,7 @@
     // 開発ツール関連
     private bool devToolsEnabled = false;
     private bool autoRegisterMcpEnabled = false;
+    private bool slashAutocompleteEnabled = false;
     private bool promoteSessionOnOpenEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
     // ローカルMCP タブ: 配布する instructions（空欄=既定テンプレを配布）
@@ -1489,6 +1512,7 @@
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
             autoRegisterMcpEnabled = settings.Experimental.AutoRegisterMcp;
+            slashAutocompleteEnabled = settings.Experimental.SlashAutocompleteEnabled;
             promoteSessionOnOpenEnabled = settings.Experimental.PromoteSessionOnOpen;
             // 未設定(null/空)なら既定テンプレを表示する（textarea は WYSIWYG）
             mcpInstructions = string.IsNullOrWhiteSpace(settings.Experimental.McpInstructions)
@@ -1744,6 +1768,7 @@
                 Experimental = new ExperimentalSettings
                 {
                     AutoRegisterMcp = autoRegisterMcpEnabled,
+                    SlashAutocompleteEnabled = slashAutocompleteEnabled,
                     PromoteSessionOnOpen = promoteSessionOnOpenEnabled,
                     // 既定テンプレそのまま(未編集) or 空なら null 保存し、将来の既定更新に追従させる。
                     // 書き換えられていればその内容を保存する。

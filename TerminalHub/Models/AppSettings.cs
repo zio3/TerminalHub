@@ -62,6 +62,13 @@ public class ExperimentalSettings
     public bool AutoRegisterMcp { get; set; } = false;
 
     /// <summary>
+    /// テキスト入力欄でスラッシュコマンドの補完（オートコンプリート）を有効にする。
+    /// 入力全体が "/" 始まりのときだけ候補ポップアップを表示し、名前の部分一致で絞り込む。
+    /// 現状は Claude Code のみ対応（組み込みコマンド辞書）。既定OFF。
+    /// </summary>
+    public bool SlashAutocompleteEnabled { get; set; } = false;
+
+    /// <summary>
     /// セッションを一覧からクリックして開いたときに、そのセッションの LastAccessedAt を
     /// 更新して一覧の先頭へ引き上げる。既定OFF。ONにすると「最終利用順」ソート時に、
     /// 開いた（＝注目した）セッションが自然に上へ来る。順位を上げるためだけに挨拶を
