@@ -5,6 +5,7 @@
 @inject ILogger<TextInputPanel> Logger
 @inject IJSRuntime JS
 @inject IStringLocalizer<SharedResource> L
+@inject IAppSettingsService AppSettingsService
 @implements IAsyncDisposable
 
 <style>
@@ -257,11 +258,19 @@
     private int _slashSelectedIndex = 0;
     private bool _slashDismissed = false; // Esc で閉じた状態（テキストが変わるまで維持）
     private bool _slashHasFocus = false;  // 入力欄がフォーカスを持っているか
+    private bool _slashEnabled = false;    // 試験機能フラグ（設定で有効化）
     private DotNetObjectReference<TextInputPanel>? _slashDotNetRef;
     private bool _slashRegistered = false;
 
-    // 入力欄がフォーカスを持っているときだけ表示する（モーダル等に隠れて出っぱなしになるのを防ぐ）。
-    private bool SlashPopupOpen => _slashHasFocus && _slashSuggestions.Count > 0;
+    // 機能ON かつ 入力欄がフォーカスを持つときだけ表示する
+    // （モーダル等に隠れて出っぱなしになるのを防ぐ）。
+    private bool SlashPopupOpen => _slashEnabled && _slashHasFocus && _slashSuggestions.Count > 0;
+
+    protected override void OnInitialized()
+    {
+        // 試験機能フラグを読む（AutoRegisterMcp と同じくオンデマンド参照）。
+        _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+    }
 
     private void OnSlashFocus()
     {
@@ -283,6 +292,7 @@
     {
         _slashSuggestions = new();
         _slashSelectedIndex = 0;
+        if (!_slashEnabled) return;
         if (_slashDismissed) return;
 
         var text = Text ?? "";
@@ -379,6 +389,7 @@
     private async Task TryRegisterSlashAutocomplete()
     {
         if (_slashRegistered) return;
+        if (!_slashEnabled) return;
         if (SlashCommandCatalog.ForTerminalType(TerminalType).Count == 0) return;
         try
         {

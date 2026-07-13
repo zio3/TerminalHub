@@ -31,6 +31,13 @@ public class ExperimentalSettings
     public bool AutoRegisterMcp { get; set; } = false;
 
     /// <summary>
+    /// テキスト入力欄でスラッシュコマンドの補完（オートコンプリート）を有効にする。
+    /// 入力全体が "/" 始まりのときだけ候補ポップアップを表示し、名前の部分一致で絞り込む。
+    /// 対応CLI(Claude Code / Codex / Gemini)のみ動作。現状は組み込みコマンド辞書のみ対応。既定OFF。
+    /// </summary>
+    public bool SlashAutocompleteEnabled { get; set; } = false;
+
+    /// <summary>
     /// MCP サーバーが接続時にモデルへ配布する instructions（取扱説明・運用ルール）。
     /// null または空なら組み込みの既定テンプレ(McpInstructionDefaults.Template)を使う。
     /// ユーザーが書き換えたら、その内容をそのまま配布する（＝ユーザーが著者、TerminalHub は下書きを置くだけ）。
