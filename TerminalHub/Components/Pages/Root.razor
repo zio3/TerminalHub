@@ -1127,7 +1127,7 @@
             // SelectSession内でバッファ復元時に設定される
             if (sessionInfo.ConPtySession != null)
             {
-                ConPtyConnection.SubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
+                SafeSubscribeToSession(sessionInfo.SessionId, sessionInfo.ConPtySession);
             }
 
             StateHasChanged();
@@ -1201,6 +1201,28 @@
             sessionInfo.LastAccessedAt = DateTime.Now;
             await SaveSessionToStorageAsync(sessionInfo);
             StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// ConPtyConnectionService への購読を安全に行う。
+    /// Circuit 破棄と非同期継続（OnAfterRenderAsync 等）の競合で、破棄済みの
+    /// ConPtyConnectionService（Scoped＝Circuitごと）に購読しようとして
+    /// ObjectDisposedException が飛ぶことがある。teardown 時の想定内レースなので、
+    /// 購読先の Circuit がもう無い＝配送先が無いだけなので握りつぶす。
+    /// </summary>
+    private void SafeSubscribeToSession(Guid sessionId, TerminalHub.Services.ConPtySession conPtySession)
+    {
+        try
+        {
+            ConPtyConnection.SubscribeToSession(sessionId, conPtySession);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Circuit は既に破棄済み。配送先が無いので無視する。
+            // [CircuitLife] 診断方針（dcd7cd9）に合わせ、握りつぶしが多発したとき気づけるよう
+            // 低レベル(Debug)で痕跡だけ残す。想定内の teardown レースなので Warning にはしない。
+            Logger.LogDebug("[CircuitLife] SubscribeToSession skipped: ConPtyConnectionService already disposed (sessionId={SessionId})", sessionId);
         }
     }
 
@@ -1391,7 +1413,7 @@
         var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
         if (latestSessionInfo?.ConPtySession != null)
         {
-            ConPtyConnection.SubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
+            SafeSubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
         }
         else
         {
@@ -2138,7 +2160,7 @@
                 if (selectedSessionInfo?.ConPtySession != null)
                 {
                     selectedSessionInfo.LastConnectionTime = DateTime.Now;
-                    ConPtyConnection.SubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
+                    SafeSubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 
                 toast?.ShowSuccess(L["Root.Toast.TerminalRecreated"]);
@@ -2913,7 +2935,7 @@
            {
                 // 新しいセッションを購読
                 // 注意: LastConnectionTimeはSelectSession内で設定されるため、ここでは設定しない
-                ConPtyConnection.SubscribeToSession(sessionId, newSession);
+                SafeSubscribeToSession(sessionId, newSession);
                                 // セッションを起動
                 newSession.Start();
                 var defaultCols = Configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
