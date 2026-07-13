@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
 @inject ILocalStorageService LocalStorage
+@inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
 @inject IStringLocalizer<SharedResource> L
 
@@ -392,15 +393,8 @@
     private const string LAST_BRANCH_SELECTION_MODE_KEY = "lastBranchSelectionMode";
     private static readonly HashSet<string> ValidBranchSelectionModes = new() { "NewBranch", "ExistingBranch", "Detached" };
 
-    // LocalStorage: 直近の CLI モード選択 (SessionCreateDialog とキーを共有して値を流用)
-    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
-    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
-    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
-    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
-    private const string LAST_CODEX_AUTO_REVIEW_APPROVALS_KEY = "lastCodexAutoReviewApprovals";
-    private const string LAST_CODEX_RESUME_LAST_KEY = "lastCodexResumeLast";
-    private const string LAST_CODEX_NO_ALT_SCREEN_KEY = "lastCodexNoAltScreen";
-    private const string LAST_CODEX_SEARCH_ENABLED_KEY = "lastCodexSearchEnabled";
+    // 直近の CLI モード選択は AppSettings.SessionDefaults(ファイル) から読む
+    // (値の発生源は SessionCreateDialog に一元化。SubSession 側は読むだけで書き戻さない)。
 
     private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
@@ -641,51 +635,45 @@
 
     // SessionCreateDialog が保存した CLI モードの直近選択を、初期値として読むだけ。
     // SubSessionDialog 側で書き戻しはしない (値の発生源は新規セッション作成画面に一元化)。
-    private async Task LoadLastUsedCliModes()
+    private Task LoadLastUsedCliModes()
     {
         try
         {
-            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
-            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
+            var defaults = AppSettingsService.GetSettings().SessionDefaults;
+
+            if (defaults.LastClaudePermissionMode != null && ValidClaudePermissionModes.Contains(defaults.LastClaudePermissionMode))
             {
-                claudeOptions.PermissionMode = claudePerm;
+                claudeOptions.PermissionMode = defaults.LastClaudePermissionMode;
             }
 
-            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
-            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
+            if (defaults.LastGeminiApprovalMode != null && ValidGeminiApprovalModes.Contains(defaults.LastGeminiApprovalMode))
             {
-                geminiOptions.ApprovalMode = geminiApproval;
+                geminiOptions.ApprovalMode = defaults.LastGeminiApprovalMode;
             }
 
             // Yolo（承認・サンドボックス完全バイパス）は危険なため「最後の選択」を復元せず、
             // 新規サブセッションでは常に OFF 既定にする（安全側）。
 
-            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
-            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
+            if (defaults.LastCodexSandboxMode != null && ValidCodexSandboxModes.Contains(defaults.LastCodexSandboxMode))
             {
-                codexOptions.SandboxMode = codexSandbox;
+                codexOptions.SandboxMode = defaults.LastCodexSandboxMode;
             }
 
-            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
-            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
+            if (defaults.LastCodexApprovalPolicy != null && ValidCodexApprovalPolicies.Contains(defaults.LastCodexApprovalPolicy))
             {
-                codexOptions.ApprovalPolicy = codexApproval;
+                codexOptions.ApprovalPolicy = defaults.LastCodexApprovalPolicy;
             }
 
-            codexOptions.AutoReviewApprovals =
-                await LocalStorage.GetAsync<bool?>(LAST_CODEX_AUTO_REVIEW_APPROVALS_KEY) ?? codexOptions.AutoReviewApprovals;
-
-            codexOptions.ResumeLast =
-                await LocalStorage.GetAsync<bool?>(LAST_CODEX_RESUME_LAST_KEY) ?? codexOptions.ResumeLast;
-            codexOptions.NoAltScreen =
-                await LocalStorage.GetAsync<bool?>(LAST_CODEX_NO_ALT_SCREEN_KEY) ?? codexOptions.NoAltScreen;
-            codexOptions.SearchEnabled =
-                await LocalStorage.GetAsync<bool?>(LAST_CODEX_SEARCH_ENABLED_KEY) ?? codexOptions.SearchEnabled;
+            codexOptions.AutoReviewApprovals = defaults.LastCodexAutoReviewApprovals ?? codexOptions.AutoReviewApprovals;
+            codexOptions.ResumeLast = defaults.LastCodexResumeLast ?? codexOptions.ResumeLast;
+            codexOptions.NoAltScreen = defaults.LastCodexNoAltScreen ?? codexOptions.NoAltScreen;
+            codexOptions.SearchEnabled = defaults.LastCodexSearchEnabled ?? codexOptions.SearchEnabled;
         }
         catch
         {
             // 失敗してもデフォルト値のまま続行
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadLastBranchSelectionMode()
