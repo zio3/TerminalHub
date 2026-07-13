@@ -122,15 +122,18 @@ namespace TerminalHub.Services
         /// </summary>
         public void UnsubscribeFromSession(Guid sessionId)
         {
-            if (_subscriptions.TryRemove(sessionId, out var subscription))
+            lock (_subscriptionLock)
             {
-                _logger.LogInformation($"Unsubscribing from session {sessionId}");
-                
-                // イベントハンドラーを解除
-                subscription.ConPtySession.DataReceived -= subscription.DataHandler;
-                subscription.ConPtySession.ProcessExited -= subscription.ExitHandler;
-                
-                _logger.LogInformation($"Successfully unsubscribed from session {sessionId}");
+                if (_subscriptions.TryRemove(sessionId, out var subscription))
+                {
+                    _logger.LogInformation($"Unsubscribing from session {sessionId}");
+
+                    // 辞書からの削除とイベント解除をSubscribeToSessionに対して原子的に行う。
+                    subscription.ConPtySession.DataReceived -= subscription.DataHandler;
+                    subscription.ConPtySession.ProcessExited -= subscription.ExitHandler;
+
+                    _logger.LogInformation($"Successfully unsubscribed from session {sessionId}");
+                }
             }
         }
 

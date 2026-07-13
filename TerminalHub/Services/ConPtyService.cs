@@ -81,7 +81,8 @@ namespace TerminalHub.Services
         // パフォーマンス最適化設定
         private bool _enableBuffering = true; // バッファリング有効
         // バッファ抽出と配送キューへの追加を同じロックで直列化し、ConPTYの出力順を保つ。
-        // イベント自体はロック外で単一ディスパッチャーが発火するため、購読者からDisposeされてもデッドロックしない。
+        // イベントはロック外で単一ディスパッチャーが発火し、購読者からDisposeされた場合も
+        // 出力ロックへの再入によるデッドロックを防ぐ。
         private readonly object _outputLock = new();
         private readonly Queue<string> _pendingOutput = new();
         private bool _isDispatchingOutput;
