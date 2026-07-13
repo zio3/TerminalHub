@@ -83,9 +83,81 @@ public static class SlashCommandCatalog
         new("/chrome", "Configure Claude in Chrome"),
     };
 
-    // Codex CLI / Gemini CLI の組み込みコマンドは、各CLIに自前で辞書を作らせて
-    // ここへはめ込む予定。それまでは未対応（空＝補完オフ）とする。
-    // （筆者の推測で不正確な一覧を出すより、各CLIが生成した正確な一覧を待つ方針）
+    // Codex CLI の組み込みコマンド。
+    // 出典: Codex 本人(codex-cli 0.144.1)の自己申告。Codex は headless から一覧を
+    // トークン消費なしで取る手段が無い（exec --json は init にコマンドを含まず即ターン開始）ため、
+    // バージョン別の静的辞書として持つ方針。自作プロンプト(~/.codex/prompts/*.md → /prompts:<name>)は別途走査で足す想定。
+    // 除外: /debug-m-drop・/debug-m-update（DO NOT USE）、/rollout・/test-approval（デバッグビルド限定）、
+    //       /clean（/stop の非公開エイリアス）。
+    private static readonly SlashCommandItem[] CodexCommands =
+    {
+        // --- 権限/環境 ---
+        new("/permissions", "Codexが確認なしで実行できる範囲を設定"),
+        new("/ide", "IDEの選択範囲や開いているファイルをコンテキストへ追加"),
+        new("/keymap", "TUIのキーボードショートカットを設定"),
+        new("/vim", "コンポーザーのVimモードを切り替え"),
+        new("/setup-default-sandbox", "Windowsの昇格サンドボックスをセットアップ"),
+        new("/sandbox-add-read-dir", "Windowsサンドボックスへ追加の読み取りディレクトリを許可"),
+        // --- モデル/スタイル ---
+        new("/model", "モデルと推論レベルを選択"),
+        new("/fast", "Fastサービス層を切り替え（対応モデルでのみ動的に出現）"),
+        new("/personality", "応答スタイルを選択"),
+        // --- 実行制御 ---
+        new("/approve", "自動レビューで拒否された直近の操作を1回再試行"),
+        new("/experimental", "実験的機能を切り替え"),
+        new("/memories", "メモリの利用・生成を設定"),
+        new("/plan", "Planモードへ切り替え"),
+        new("/goal", "長時間タスクのGoalを設定・表示・編集"),
+        new("/review", "作業ツリーのコードレビューを開始"),
+        // --- セッション ---
+        new("/new", "同じCLI内で新しいタスクを開始"),
+        new("/clear", "端末表示とタスクコンテキストをクリア"),
+        new("/resume", "保存済みセッションを再開"),
+        new("/fork", "現在のセッションを分岐"),
+        new("/rename", "現在のセッション名を変更"),
+        new("/archive", "現在のセッションをアーカイブして終了"),
+        new("/delete", "現在のセッションを完全削除して終了"),
+        // --- コンテキスト/履歴 ---
+        new("/compact", "会話を要約してコンテキストを圧縮"),
+        new("/copy", "直近のCodex応答をMarkdownとしてコピー"),
+        new("/raw", "コピーしやすいrawスクロールバック表示を切り替え"),
+        new("/diff", "未追跡ファイルを含むGit差分を表示"),
+        new("/mention", "ファイルやフォルダを会話へ添付"),
+        // --- 拡張/連携 ---
+        new("/init", "AGENTS.mdのひな型を生成"),
+        new("/import", "Claude Codeの設定・プロジェクト・最近の会話をインポート"),
+        new("/skills", "スキルを参照・選択"),
+        new("/hooks", "ライフサイクルフックを参照・管理"),
+        new("/plugins", "プラグインを参照・管理"),
+        new("/apps", "Apps（コネクター）を管理"),
+        new("/mcp", "設定済みMCPツールを表示"),
+        // --- エージェント/サイド会話 ---
+        new("/agent", "アクティブなエージェントスレッドを切り替え"),
+        new("/subagents", "エージェント選択（/agent と同系統）"),
+        new("/side", "一時的なサイド会話を開始"),
+        new("/btw", "サイド会話を開始（/side の別名）"),
+        // --- バックグラウンド端末 ---
+        new("/ps", "バックグラウンド端末を一覧表示"),
+        new("/stop", "すべてのバックグラウンド端末を停止"),
+        // --- 診断/表示 ---
+        new("/status", "セッション設定、トークン使用量などを表示"),
+        new("/usage", "アカウント使用量やリセット状況を表示"),
+        new("/debug-config", "設定レイヤーと制約の診断情報を表示"),
+        new("/title", "ターミナルタイトルの表示項目を設定"),
+        new("/statusline", "ステータスラインの表示項目を設定"),
+        new("/theme", "シンタックスハイライトテーマを選択"),
+        new("/pets", "ターミナルペットを選択・非表示"),
+        new("/pet", "ターミナルペット（/pets の別名）"),
+        // --- アプリ/アカウント/終了 ---
+        new("/app", "現在のセッションをCodex Desktopで継続"),
+        new("/feedback", "ログを添えてフィードバックを送信"),
+        new("/logout", "Codexからログアウト"),
+        new("/quit", "Codex CLIを終了"),
+        new("/exit", "Codex CLIを終了（/quit と同じ）"),
+    };
+
+    // Gemini CLI の組み込みコマンドは、各CLIに自前で辞書を作らせてここへはめ込む予定。
+    // それまでは未対応（空＝補完オフ）とする。
 
     private static readonly SlashCommandItem[] Empty = System.Array.Empty<SlashCommandItem>();
 
@@ -93,7 +165,8 @@ public static class SlashCommandCatalog
     public static IReadOnlyList<SlashCommandItem> ForTerminalType(TerminalType type) => type switch
     {
         TerminalType.ClaudeCode => ClaudeCommands,
-        // TODO: Codex / Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
+        TerminalType.CodexCLI => CodexCommands,
+        // TODO: Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
         _ => Empty,
     };
 
