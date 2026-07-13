@@ -172,7 +172,8 @@ public static class SlashCommandCatalog
 
     /// <summary>
     /// 「名前（"/" 無し）→説明」の辞書。動的取得した名前一覧に説明を上書きする用途
-    /// （<see cref="SlashCommandProvider"/>）。説明が無い名前は辞書に載らない。
+    /// （<see cref="SlashCommandProvider"/>）。値は null になり得る（説明未設定の項目）。
+    /// 参照側は TryGetValue で「未登録」と「値 null」を同じ扱い（説明なし）にする。
     /// </summary>
     public static IReadOnlyDictionary<string, string?> BuildDescriptionMap(TerminalType type)
     {

@@ -277,12 +277,31 @@
 
     private void OnSlashCatalogChanged()
     {
-        // 別スレッド（Task.Run）からの通知なので UI スレッドへマーシャリングする。
-        _ = InvokeAsync(() =>
+        // Changed は Singleton の SlashCommandProvider が別スレッド（Task.Run）から発火する。
+        // 各 Circuit の TextInputPanel が購読しているため、取得完了と Circuit 破棄（タブを閉じる等）が
+        // 競合すると、破棄済みレンダラへの InvokeAsync/StateHasChanged が ObjectDisposedException を投げる。
+        // マルチキャストの Action なので、ここで例外を外へ出すと他の購読者への配送も止まってしまう。
+        // 同期throw・非同期faultの両方を握りつぶして、他 Circuit への通知を守る（Root.razor の
+        // SafeSubscribeToSession と同じ「破棄済みは握りつぶす」方針）。
+        try
         {
-            RecomputeSlashSuggestions();
-            StateHasChanged();
-        });
+            var task = InvokeAsync(() =>
+            {
+                RecomputeSlashSuggestions();
+                StateHasChanged();
+            });
+            // fire-and-forget の非同期fault（破棄済みCircuit等）を不観測にしないよう観測して捨てる。
+            _ = task.ContinueWith(
+                static t => { _ = t.Exception; },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Circuit は既に破棄済み。配送先が無いので無視する。
+            Logger.LogDebug("[CircuitLife] OnSlashCatalogChanged skipped: renderer already disposed");
+        }
     }
 
     protected override void OnParametersSet()

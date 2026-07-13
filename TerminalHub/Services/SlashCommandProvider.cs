@@ -29,6 +29,8 @@ public class SlashCommandProvider
     private readonly Dictionary<TerminalType, IReadOnlyList<SlashCommandItem>> _cache = new();
     // 種別ごとの読み込みタスク（多重起動防止）。
     private readonly Dictionary<TerminalType, Task> _loading = new();
+    // 取得を試みた種別（成否問わず）。失敗しても再取得ループしないよう「1回だけ」を守る。
+    private readonly HashSet<TerminalType> _attempted = new();
 
     /// <summary>動的取得が完了してキャッシュが更新されたときに発火（UI 再描画のトリガ用）。</summary>
     public event Action? Changed;
@@ -53,7 +55,8 @@ public class SlashCommandProvider
 
     /// <summary>
     /// 動的取得をバックグラウンドで一度だけ起動する（対応種別のみ）。
-    /// 既に取得済み／取得中なら何もしない。
+    /// 既に取得済み／取得中／試行済み（失敗を含む）なら何もしない。
+    /// ＝失敗しても再取得ループにはならず、以降はプロセス再起動まで静的辞書へフォールバックし続ける。
     ///
     /// 取得は「実プロジェクトを汚さない」ため専用の一時フォルダを cwd にして実行する
     /// （実プロジェクトの /resume 履歴や project固有フックを触らない）。この副作用として
@@ -67,8 +70,9 @@ public class SlashCommandProvider
 
         lock (_lock)
         {
-            if (_cache.ContainsKey(type)) return;
-            if (_loading.ContainsKey(type)) return;
+            if (_cache.ContainsKey(type)) return;   // 取得済み
+            if (_attempted.Contains(type)) return;  // 既に試して失敗済み（再取得ループを防ぐ）
+            if (_loading.ContainsKey(type)) return; // 取得中
             _loading[type] = Task.Run(() => LoadAsync(type));
         }
     }
@@ -102,6 +106,7 @@ public class SlashCommandProvider
             lock (_lock)
             {
                 _loading.Remove(type);
+                _attempted.Add(type); // 成否に関わらず「試した」と記録し、再取得ループを防ぐ
             }
         }
     }
@@ -175,6 +180,11 @@ public class SlashCommandProvider
         {
             // stdin を即閉じ（対話入力待ちで固まらないように）。
             try { proc.StandardInput.Close(); } catch { }
+
+            // stderr は使わないが、放置すると子プロセスが stderr のパイプバッファを埋めて
+            // ブロックし、stdout の読み取り（下のループ）がタイムアウトまで固まる（パイプデッドロック）。
+            // 別タスクで最後まで読み捨てて詰まりを防ぐ（例外は握りつぶす）。
+            _ = DrainAsync(proc.StandardError, cts.Token);
 
             string? line;
             while ((line = await proc.StandardOutput.ReadLineAsync(cts.Token)) != null)
@@ -275,6 +285,17 @@ public class SlashCommandProvider
         foreach (var ch in path)
             sb.Append(ch is '\\' or '/' or ':' ? '-' : ch);
         return sb.ToString();
+    }
+
+    /// <summary>ストリームを最後まで読み捨てる（パイプ詰まり防止）。例外は無視。</summary>
+    private static async Task DrainAsync(StreamReader reader, CancellationToken ct)
+    {
+        try
+        {
+            var buffer = new char[1024];
+            while (await reader.ReadAsync(buffer, ct) > 0) { /* 捨てる */ }
+        }
+        catch { /* プロセス kill/キャンセル等で切れる。無視 */ }
     }
 
     private static void KillQuietly(Process proc)
