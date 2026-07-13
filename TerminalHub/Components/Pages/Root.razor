@@ -1220,6 +1220,9 @@
         catch (ObjectDisposedException)
         {
             // Circuit は既に破棄済み。配送先が無いので無視する。
+            // [CircuitLife] 診断方針（dcd7cd9）に合わせ、握りつぶしが多発したとき気づけるよう
+            // 低レベル(Debug)で痕跡だけ残す。想定内の teardown レースなので Warning にはしない。
+            Logger.LogDebug("[CircuitLife] SubscribeToSession skipped: ConPtyConnectionService already disposed (sessionId={SessionId})", sessionId);
         }
     }
 
