@@ -4,7 +4,6 @@
 @using Microsoft.JSInterop
 @using System.IO
 @inject IJSRuntime JSRuntime
-@inject ILocalStorageService LocalStorage
 @inject ILogger<SessionCreateDialog> Logger
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
@@ -141,12 +140,9 @@
     private SessionOptionsSelector.AntigravityOptionsData antigravityOptions = new();
     private SessionOptionsSelector.GrokOptionsData grokOptions = new();
     private List<string> favoriteFolders = new();
-    private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
-    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
-    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
-    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
-    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
-    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
+    // 「前回の値」はブラウザ localStorage ではなく AppSettings(ファイル) に保存する。
+    // その PC のユーザーの作業習慣であり、ブラウザごとに変えたい性質ではないため。
+    // 保存先は AppSettings.SessionDefaults。値の発生源は本ダイアログに一元化する。
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
 
@@ -211,101 +207,112 @@
         }
     }
 
-    private async Task LoadLastSelectedTerminalType()
+    private Task LoadLastSelectedTerminalType()
     {
         try
         {
-            var savedType = await LocalStorage.GetAsync<int?>(LAST_TERMINAL_TYPE_KEY);
+            var savedType = AppSettingsService.GetSettings().SessionDefaults.LastTerminalType;
             if (savedType.HasValue && Enum.IsDefined(typeof(TerminalType), savedType.Value))
             {
-                selectedType = (TerminalType)savedType.Value;
+                selectedType = savedType.Value;
             }
         }
         catch
         {
             // エラーが発生してもデフォルト値を使用
         }
+        return Task.CompletedTask;
     }
 
-    private async Task SaveLastSelectedTerminalType(TerminalType type)
+    private Task SaveLastSelectedTerminalType(TerminalType type)
     {
         try
         {
-            await LocalStorage.SetAsync(LAST_TERMINAL_TYPE_KEY, (int)type);
+            var settings = AppSettingsService.GetSettings();
+            settings.SessionDefaults.LastTerminalType = type;
+            AppSettingsService.SaveSettings(settings);
         }
         catch
         {
             // エラーが発生しても継続
         }
+        return Task.CompletedTask;
     }
 
-    // 復元値ホワイトリスト: LocalStorage が手動編集等で汚染された場合に
+    // 復元値ホワイトリスト: 設定ファイルが手動編集等で汚染された場合に
     // 不正値で起動引数が壊れるのを防ぐ。SessionOptionsSelector の UI 選択肢と一致させる。
     private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
-    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
 
-    // CLI モード系ラジオの最終選択値を LocalStorage から復元する。
-    // 値が無い・ホワイトリスト外のキーはデフォルト値（各 OptionsData の初期化値）のまま。
+    // CLI モード系ラジオの最終選択値を AppSettings(ファイル) から復元する。
+    // 値が無い(null)・ホワイトリスト外のキーはデフォルト値（各 OptionsData の初期化値）のまま。
     // 初回利用ユーザーは現状の安全側デフォルト (Claude=bypass 等) を維持する。
-    private async Task LoadLastUsedCliModes()
+    private Task LoadLastUsedCliModes()
     {
         try
         {
-            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
-            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
+            var defaults = AppSettingsService.GetSettings().SessionDefaults;
+
+            if (defaults.LastClaudePermissionMode != null && ValidClaudePermissionModes.Contains(defaults.LastClaudePermissionMode))
             {
-                claudeCodeOptions.PermissionMode = claudePerm;
+                claudeCodeOptions.PermissionMode = defaults.LastClaudePermissionMode;
             }
 
-            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
-            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
+            if (defaults.LastGeminiApprovalMode != null && ValidGeminiApprovalModes.Contains(defaults.LastGeminiApprovalMode))
             {
-                geminiOptions.ApprovalMode = geminiApproval;
+                geminiOptions.ApprovalMode = defaults.LastGeminiApprovalMode;
             }
 
-            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
-            if (codexMode != null && ValidCodexModes.Contains(codexMode))
-            {
-                codexOptions.Mode = codexMode;
-            }
+            // Yolo（承認・サンドボックス完全バイパス）は危険なため「最後の選択」を復元せず、
+            // 新規セッションでは常に OFF 既定にする（安全側）。
 
             // Codex SandboxMode / ApprovalPolicy は "" (Default) を有効値として含むため
-            // ホワイトリストにも "" を入れている。
-            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
-            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
+            // ホワイトリストにも "" を入れている（null=未保存 とは区別する）。
+            if (defaults.LastCodexSandboxMode != null && ValidCodexSandboxModes.Contains(defaults.LastCodexSandboxMode))
             {
-                codexOptions.SandboxMode = codexSandbox;
+                codexOptions.SandboxMode = defaults.LastCodexSandboxMode;
             }
 
-            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
-            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
+            if (defaults.LastCodexApprovalPolicy != null && ValidCodexApprovalPolicies.Contains(defaults.LastCodexApprovalPolicy))
             {
-                codexOptions.ApprovalPolicy = codexApproval;
+                codexOptions.ApprovalPolicy = defaults.LastCodexApprovalPolicy;
             }
+
+            codexOptions.AutoReviewApprovals = defaults.LastCodexAutoReviewApprovals ?? codexOptions.AutoReviewApprovals;
+            codexOptions.ResumeLast = defaults.LastCodexResumeLast ?? codexOptions.ResumeLast;
+            codexOptions.NoAltScreen = defaults.LastCodexNoAltScreen ?? codexOptions.NoAltScreen;
+            codexOptions.SearchEnabled = defaults.LastCodexSearchEnabled ?? codexOptions.SearchEnabled;
         }
         catch
         {
             // エラーが発生してもデフォルト値を使用
         }
+        return Task.CompletedTask;
     }
 
-    private async Task SaveLastUsedCliModes()
+    private Task SaveLastUsedCliModes()
     {
         try
         {
-            await LocalStorage.SetAsync(LAST_CLAUDE_PERMISSION_MODE_KEY, claudeCodeOptions.PermissionMode);
-            await LocalStorage.SetAsync(LAST_GEMINI_APPROVAL_MODE_KEY, geminiOptions.ApprovalMode);
-            await LocalStorage.SetAsync(LAST_CODEX_MODE_KEY, codexOptions.Mode);
-            await LocalStorage.SetAsync(LAST_CODEX_SANDBOX_MODE_KEY, codexOptions.SandboxMode);
-            await LocalStorage.SetAsync(LAST_CODEX_APPROVAL_POLICY_KEY, codexOptions.ApprovalPolicy);
+            var settings = AppSettingsService.GetSettings();
+            var defaults = settings.SessionDefaults;
+            defaults.LastClaudePermissionMode = claudeCodeOptions.PermissionMode;
+            defaults.LastGeminiApprovalMode = geminiOptions.ApprovalMode;
+            defaults.LastCodexSandboxMode = codexOptions.SandboxMode;
+            defaults.LastCodexApprovalPolicy = codexOptions.ApprovalPolicy;
+            defaults.LastCodexAutoReviewApprovals = codexOptions.AutoReviewApprovals;
+            defaults.LastCodexResumeLast = codexOptions.ResumeLast;
+            defaults.LastCodexNoAltScreen = codexOptions.NoAltScreen;
+            defaults.LastCodexSearchEnabled = codexOptions.SearchEnabled;
+            AppSettingsService.SaveSettings(settings);
         }
         catch
         {
             // エラーが発生しても継続
         }
+        return Task.CompletedTask;
     }
 
     private void SelectFolder(string folder)
@@ -439,7 +446,7 @@
         antigravityOptions = new();
         grokOptions = new();
         // Create 後・次回ダイアログ表示で前回の CLI モード選択が見えるよう、
-        // 新しい OptionsData インスタンスに LocalStorage の値を反映しなおす。
+        // 新しい OptionsData インスタンスに AppSettings の値を反映しなおす。
         await LoadLastUsedCliModes();
         showCreateFolderDialog = false;
         pendingSessionCreation = false;

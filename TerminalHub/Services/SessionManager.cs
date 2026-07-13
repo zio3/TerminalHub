@@ -421,10 +421,13 @@ namespace TerminalHub.Services
             }
 
             // ConPtyセッションがまだ初期化されていない場合は遅延初期化を実行
+            if (!await TryAcquireInitLockAsync(initLock))
+            {
+                _logger.LogWarning("初期化ロックが破棄されていました（セッション削除と競合）: SessionId={SessionId}", sessionId);
+                return null;
+            }
             try
             {
-                await initLock.WaitAsync();
-
                 // セマフォ取得後、セッションが削除されていないか再確認
                 lock (_lockObject)
                 {
@@ -472,10 +475,12 @@ namespace TerminalHub.Services
                 // ConPtySession登録をロック内で実行
                 lock (_lockObject)
                 {
-                    // 登録前に再度セッションが削除されていないか確認
-                    if (!_sessionInfos.ContainsKey(sessionId))
+                    // 登録前に再度セッションが削除・アーカイブされていないか確認
+                    // （ArchiveSession は _sessionInfos からエントリを消さず IsArchived を立てるだけなので、
+                    //  存在チェックだけでは捕捉できない）
+                    if (!_sessionInfos.TryGetValue(sessionId, out var currentInfo) || currentInfo.IsArchived)
                     {
-                        _logger.LogWarning("ConPtySession作成後にセッションが削除されていました: SessionId={SessionId}", sessionId);
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除またはアーカイブされていました: SessionId={SessionId}", sessionId);
                         newSession.Dispose();
                         return null;
                     }
@@ -511,7 +516,7 @@ namespace TerminalHub.Services
             }
             finally
             {
-                initLock.Release();
+                ReleaseInitLockSafely(initLock);
             }
         }
 
@@ -837,6 +842,41 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// セッション単位の初期化ロックを取得する。
+        /// 削除系メソッド（RemoveSessionAsync/ArchiveSession/DeleteSession）は _initializationLocks から
+        /// TryRemove したセマフォをロック外で Dispose するため、取得がそれと競合すると
+        /// ObjectDisposedException になる。その場合は「セッションは削除中」とみなし false を返す。
+        /// </summary>
+        private static async Task<bool> TryAcquireInitLockAsync(SemaphoreSlim initLock)
+        {
+            try
+            {
+                await initLock.WaitAsync();
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 初期化ロックを解放する。保持中にセッション削除側で Dispose された場合の
+        /// ObjectDisposedException は握りつぶす（finally から呼び出し元へ漏らさない）
+        /// </summary>
+        private static void ReleaseInitLockSafely(SemaphoreSlim initLock)
+        {
+            try
+            {
+                initLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 削除と競合して破棄済み。解放不要
+            }
+        }
+
+        /// <summary>
         /// 既存セッションを破棄する共通処理
         /// </summary>
         private async Task DisposeExistingSessionAsync(Guid sessionId, SessionInfo sessionInfo)
@@ -995,6 +1035,14 @@ namespace TerminalHub.Services
 
         public async Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false)
         {
+            // 遅延初期化(GetSessionAsync)と同じセッション単位ロックで直列化し、
+            // 再作成中に並行アクセスがConPTYを二重生成してプロセスをリークするのを防ぐ
+            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            if (!await TryAcquireInitLockAsync(initLock))
+            {
+                _logger.LogWarning("セッション再作成を中止: 初期化ロックが破棄されていました（セッション削除と競合）: {SessionId}", sessionId);
+                return null;
+            }
             try
             {
                 var sessionInfo = GetSessionInfo(sessionId);
@@ -1029,8 +1077,25 @@ namespace TerminalHub.Services
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
-                _sessions[sessionId] = newSession;
-                sessionInfo.ConPtySession = newSession;
+
+                // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
+                // 削除系はセッション単位ロックを取らないため、CreateSessionAsyncのawait中に
+                // 削除されていると、ここで登録すると削除済みIDのConPTYが辞書に復活してリークする。
+                // ArchiveSession はエントリを残して IsArchived を立てるだけなので、フラグも確認する
+                lock (_lockObject)
+                {
+                    if (!_sessionInfos.TryGetValue(sessionId, out var currentInfo) ||
+                        !ReferenceEquals(currentInfo, sessionInfo) ||
+                        currentInfo.IsArchived)
+                    {
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除またはアーカイブされていました: SessionId={SessionId}", sessionId);
+                        newSession.Dispose();
+                        return null;
+                    }
+
+                    _sessions[sessionId] = newSession;
+                    sessionInfo.ConPtySession = newSession;
+                }
 
                 _logger.LogInformation("新しいConPtySessionを作成しました（未起動）: {SessionId}", sessionId);
                 return newSession;
@@ -1040,10 +1105,22 @@ namespace TerminalHub.Services
                 _logger.LogError(ex, "セッション再作成でエラーが発生しました: {SessionId}", sessionId);
                 return null;
             }
+            finally
+            {
+                ReleaseInitLockSafely(initLock);
+            }
         }
 
         public async Task<bool> RestartSessionAsync(Guid sessionId)
         {
+            // 遅延初期化(GetSessionAsync)と同じセッション単位ロックで直列化し、
+            // 再起動中に並行アクセスがConPTYを二重生成してプロセスをリークするのを防ぐ
+            var initLock = _initializationLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            if (!await TryAcquireInitLockAsync(initLock))
+            {
+                _logger.LogWarning("セッション再起動を中止: 初期化ロックが破棄されていました（セッション削除と競合）: {SessionId}", sessionId);
+                return false;
+            }
             try
             {
                 var sessionInfo = GetSessionInfo(sessionId);
@@ -1085,8 +1162,26 @@ namespace TerminalHub.Services
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
-                _sessions[sessionId] = newSession;
-                sessionInfo.ConPtySession = newSession;
+
+                // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
+                // 削除系はセッション単位ロックを取らないため、CreateSessionAsyncのawait中に
+                // 削除されていると、ここで登録・起動すると到達不能なゾンビプロセスが残る。
+                // ArchiveSession はエントリを残して IsArchived を立てるだけなので、フラグも確認する
+                lock (_lockObject)
+                {
+                    if (!_sessionInfos.TryGetValue(sessionId, out var currentInfo) ||
+                        !ReferenceEquals(currentInfo, sessionInfo) ||
+                        currentInfo.IsArchived)
+                    {
+                        _logger.LogWarning("ConPtySession作成後にセッションが削除またはアーカイブされていました: SessionId={SessionId}", sessionId);
+                        newSession.Dispose();
+                        return false;
+                    }
+
+                    _sessions[sessionId] = newSession;
+                    sessionInfo.ConPtySession = newSession;
+                }
+
                 newSession.Start();
                 // 状態バッファのグリッドも ConPTY と同サイズに揃える（寸法不一致による折返し乱れを防ぐ）
                 sessionInfo.ResizeTerminalBuffer(cols, rows);
@@ -1099,6 +1194,10 @@ namespace TerminalHub.Services
             {
                 _logger.LogError(ex, "セッション再起動でエラーが発生しました: {SessionId}", sessionId);
                 return false;
+            }
+            finally
+            {
+                ReleaseInitLockSafely(initLock);
             }
         }
 

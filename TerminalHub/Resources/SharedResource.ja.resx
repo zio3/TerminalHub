@@ -372,19 +372,14 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
-  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>実行モード</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (推奨)</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>編集＋ビルド/テスト等を基本自動化</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (危険)</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--sandbox workspace-write --ask-for-approval on-request` で実行します。個別指定がある項目はそちらを優先します。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します（危険）。サンドボックスと承認の個別指定は適用されません。</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>承認・サンドボックスを完全バイパス（危険）</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します。ONの間はサンドボックスと承認の指定は無効です（適用されません）。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示（推奨）</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>スクロール履歴を保持し、長いセッションの復帰を安定させます（--no-alt-screen）。</value></data>
+  <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>高度な設定</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
@@ -401,11 +396,13 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>承認リクエストを自動レビュー</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>承認が必要な操作をレビューエージェントが評価します。追加の使用量が発生し、レビューに失敗した操作は実行されません。</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --no-alt-screen</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model gpt-5</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
 
   <!-- Antigravity CLI Options -->

@@ -99,7 +99,7 @@
                      WidthPercent=@sidebarWidthPercent
                      NotificationPendingSessions=@_notificationPendingSessions
                      OnAddSession="AddSession"
-                     OnSessionSelect="async (sessionId) => await SelectSession(sessionId)"
+                     OnSessionSelect="async (sessionId) => await HandleSessionSelectFromList(sessionId)"
                      OnSessionRemove="async (sessionId) => await ArchiveSession(sessionId)"
                      OnSettingsClick="ShowSettings"
                      OnCreateWorktree="ShowWorktreeDialog"
@@ -1152,6 +1152,58 @@
     }
 
 
+    // 一覧クリックでセッションを開いたときの入口。
+    // 試験機能「セッションを開いたら一番上へ」が ON のときだけ、開いたセッションの
+    // LastAccessedAt を更新して並びの先頭へ引き上げる。プログラム由来の SelectSession
+    // 呼び出し（起動復元・URL・削除後フォールバック・再起動）では上げたくないので、
+    // 共通の SelectSession ではなくこの入口だけで昇格処理を行う。
+    // 昇格対象は「この選択で新規に ConPTY へ接続したセッション」のみ。既に起動済み
+    // （一覧で通常表示）のセッションを選び直しただけでは順位を動かさない。
+    private async Task HandleSessionSelectFromList(Guid sessionId)
+    {
+        // 今アクティブなセッションの再クリックは順位を動かさない。
+        // （SelectSession は先頭で即 return する no-op になるので、昇格もさせない）
+        var wasAlreadyActive = activeSessionId == sessionId;
+
+        // 選択「前」の ConPTY 接続状態を捕捉する。判定は一覧の「薄く表示（未接続）」と
+        // 同じ述語（SessionList.GetConnectionOpacityClass）に合わせる: 接続処理中
+        // （IsConnecting）または プロセスが生きて接続済み（ConPtySession が非 null かつ
+        // 未終了）なら通常表示＝昇格しない。null/終了済み（薄く表示）なら今回の選択で
+        // 新規接続する＝昇格対象。IsConnecting を含めないと、接続処理中の窓
+        // （GetSessionAsync が IsConnecting を立ててから ConPtySession をセットするまで）に
+        // 別ブラウザ等から選択された場合に「通常表示なのに昇格」してしまうため、3 分岐を揃える。
+        var beforeInfo = SessionManager.GetSessionInfo(sessionId);
+        var wasConnected = beforeInfo?.IsConnecting == true
+            || beforeInfo?.ConPtySession is { HasExited: false };
+
+        await SelectSession(sessionId);
+
+        if (wasAlreadyActive)
+            return;
+
+        // 開くのに失敗（ディレクトリ非存在・初期化失敗）したときは SelectSession が
+        // activeSessionId を null に戻して return する。その場合は昇格しない
+        // （実際に開けて表示できたセッションだけを先頭へ上げる）。
+        if (activeSessionId != sessionId)
+            return;
+
+        // 既に接続済み（通常表示）だった＝新規接続ではないので昇格しない。
+        if (wasConnected)
+            return;
+
+        if (!AppSettingsService.GetSettings().Experimental.PromoteSessionOnOpen)
+            return;
+
+        var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+        if (sessionInfo != null)
+        {
+            Logger.LogInformation("[LastAccessedAt更新] きっかけ: セッションを開いたら一番上へ(一覧クリック), セッション: {SessionName}", sessionInfo.GetDisplayName());
+            sessionInfo.LastAccessedAt = DateTime.Now;
+            await SaveSessionToStorageAsync(sessionInfo);
+            StateHasChanged();
+        }
+    }
+
     private async Task SelectSession(Guid sessionId, bool forceReinit = false)
     {
         // forceReinit=true の場合は同一セッションでも再初期化を通す。
@@ -1289,7 +1341,12 @@
                         {
                             Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
                                 sessionId, replaySnapshot.Content.Length);
-                            await TerminalService.WriteToTerminalAsync(activeTerminal, replaySnapshot.Content);
+                            // 巨大なリプレイを一発で書くと Blazor サーキットの Dispatcher を長時間占有し、
+                            // 直後の送信などの UI 操作が書き込み完了まで待たされる。チャンク分割して
+                            // 合間に await することで、_terminalWriteLock を要求しない操作（テキスト送信＝
+                            // ConPTY 入力側など）がチャンクの合間に割り込めるようにする。なお同じロックを
+                            // 取るライブ出力書き込みは従来どおりループ全体の完了まで直列化される（順序保証は不変）。
+                            await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replaySnapshot.Content);
                             Logger.LogInformation("[SelectSession] バッファ書き込み完了");
                         }
                     }
@@ -1300,7 +1357,9 @@
 
                     if (!string.IsNullOrEmpty(replayTail))
                     {
-                        await TerminalService.WriteToTerminalAsync(activeTerminal, replayTail);
+                        // テールも同様にチャンク分割（通常は小さいが、リプレイ中に溜まったライブ出力が
+                        // 大きくなるケースに備える）
+                        await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replayTail);
                     }
                     _restoringSessionId = null;
                 }
@@ -1600,6 +1659,9 @@
             {
                 return;
             }
+
+            // このCircuitに残る破棄済みConPtySessionへの参照を解除する。
+            ConPtyConnection.UnsubscribeFromSession(sessionId);
             
             // ConPtySessionのクリーンアップ
             if (sessionToRemove.ConPtySession != null)
@@ -1677,6 +1739,9 @@
             return;
         }
         if (!confirmed) return;
+
+        // 削除時と同様に、このCircuitの購読をセッション破棄前に解除する。
+        ConPtyConnection.UnsubscribeFromSession(sessionId);
 
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);

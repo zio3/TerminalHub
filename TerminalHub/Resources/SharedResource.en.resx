@@ -372,19 +372,14 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
-  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>Execution mode</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (recommended)</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>Mostly automates edits, builds, and tests</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Uses `--sandbox workspace-write --ask-for-approval on-request`. Explicit per-setting choices take precedence.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution (dangerous). Per-setting sandbox and approval choices are ignored.</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Bypass all approvals and sandbox (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution. While on, the sandbox and approval choices are disabled (not applied).</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display (recommended)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Preserves terminal scrollback and improves long-session resume stability (--no-alt-screen).</value></data>
+  <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>Advanced settings</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>Sandbox mode</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI default</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>Do not add --sandbox; use the Codex CLI default.</value></data>
@@ -401,11 +396,13 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>Automatically review approval requests</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>A reviewer agent evaluates actions that require approval. This uses additional model calls, and actions are not run when review fails.</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --no-alt-screen</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --model gpt-5</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
 
   <!-- Antigravity CLI Options -->

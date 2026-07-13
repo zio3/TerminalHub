@@ -113,9 +113,24 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
+            // 現行 Codex CLI は復帰履歴がない初回フォルダでも、ディレクトリの信頼確認後に
+            // 新規セッションとして継続できるため、resume --last 失敗時の再作成処理は不要。
             if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
             {
                 args.Add("resume --last");
+            }
+
+            // --no-alt-screen を既定 ON にする前は、追加引数欄のプレースホルダー例が
+            // "--no-alt-screen" だった。その名残で extra-args / custom-args に手書きで
+            // --no-alt-screen を入れている既存セッションがあり得るため、その場合は
+            // 自動付与をスキップして二重指定（--no-alt-screen --no-alt-screen）を防ぐ。
+            var userSuppliedNoAltScreen =
+                ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
+                ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
+            if ((!options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true") &&
+                !userSuppliedNoAltScreen)
+            {
+                args.Add("--no-alt-screen");
             }
 
             if (options.ContainsKey("search") && options["search"] == "true")
@@ -137,6 +152,7 @@ namespace TerminalHub.Constants
             var mode = options.GetValueOrDefault("mode");
             var sandboxMode = options.GetValueOrDefault("sandbox-mode");
             var approvalPolicy = options.GetValueOrDefault("ask-for-approval");
+            var approvalsReviewer = options.GetValueOrDefault("approvals-reviewer");
 
             // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
             if (mode == "yolo")
@@ -160,6 +176,12 @@ namespace TerminalHub.Constants
                 if (!string.IsNullOrEmpty(approvalPolicy))
                 {
                     args.Add($"--ask-for-approval {approvalPolicy}");
+                }
+
+                // 承認を一切求めない設定ではレビュー対象が存在しないため付与しない。
+                if (approvalsReviewer == "auto_review" && approvalPolicy != "never")
+                {
+                    args.Add("-c approvals_reviewer=auto_review");
                 }
             }
 
@@ -222,6 +244,19 @@ namespace TerminalHub.Constants
             AppendCustomArgs(args, options);
 
             return string.Join(" ", args);
+        }
+
+        // 空白区切りの引数文字列（extra-args / custom-args）に、指定トークンが
+        // 独立した引数として含まれるかを判定する（--no-alt-screen の二重指定防止に使用）。
+        private static bool ContainsArgToken(string? rawArgs, string token)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            return Array.IndexOf(tokens, token) >= 0;
         }
 
         // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。

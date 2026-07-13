@@ -51,6 +51,13 @@ namespace TerminalHub.Services
         Task WriteToTerminalAsync(IJSObjectReference terminal, string data);
 
         /// <summary>
+        /// ターミナルに大きなデータをチャンク分割して書き込む。
+        /// チャンク間で await して Blazor サーキットの Dispatcher に制御を返すため、
+        /// 巨大なリプレイ書き込み中でも送信などの UI 操作が割り込めるようになる。
+        /// </summary>
+        Task WriteToTerminalChunkedAsync(IJSObjectReference terminal, string data, int chunkSize = 32768);
+
+        /// <summary>
         /// 要素が存在するかチェックする
         /// </summary>
         Task<bool> CheckElementExistsAsync(string elementId);
