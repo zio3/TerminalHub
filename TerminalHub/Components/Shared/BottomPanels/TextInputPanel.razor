@@ -266,18 +266,30 @@
     // （モーダル等に隠れて出っぱなしになるのを防ぐ）。
     private bool SlashPopupOpen => _slashEnabled && _slashHasFocus && _slashSuggestions.Count > 0;
 
+    private TerminalType? _lastParamTerminalType;
+
     protected override void OnParametersSet()
     {
-        // 試験機能フラグを読む（AutoRegisterMcp と同じくオンデマンド参照）。
         // BottomPanel/TextInputPanel はセッション切替でも破棄されず生存し続けるため、
         // OnInitialized の1回読みでは設定変更や TerminalType 変化に追従できない。
-        // パラメータ変化（＝設定を変えてセッションを開き直す等）のたびに読み直す。
-        _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+        // ただし Text は双方向バインドで毎打鍵 OnParametersSet が走るため、毎回 GetSettings() すると
+        // 打鍵ごとにディスクI/Oになる。別種のセッションを開いた（TerminalType 変化）ときだけ
+        // フラグを読み直し、候補も作り直す（旧CLIの候補が残らないように）。
+        // 同一セッション内での設定変更の反映は OnSlashFocus 側（フォーカス時＝稀）で拾う。
+        if (_lastParamTerminalType != TerminalType)
+        {
+            _lastParamTerminalType = TerminalType;
+            _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+            RecomputeSlashSuggestions();
+        }
     }
 
     private void OnSlashFocus()
     {
         _slashHasFocus = true;
+        // フォーカス時に試験機能フラグを読み直す（設定変更を再読み込み/セッション切替なしで反映）。
+        // フォーカスは打鍵ごとには発火しないので GetSettings() の頻度は問題にならない。
+        _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
         RecomputeSlashSuggestions();
     }
 
@@ -395,13 +407,22 @@
         if (!_slashEnabled) return;
         // catalog が空(=対象外CLI)でも横取りリスナ自体は無害（ポップアップ非表示時は data-slash-open=0）。
         // 最初に描画されたセッションが対象外でも、切替後に後追いで効くよう TerminalType では弾かない。
+        //
+        // 二重登録レース防止: OnAfterRenderAsync は await を挟むと次レンダーの呼び出しと交錯し得るため、
+        // await より前に同期でフラグを立てて、2回目の呼び出しがこのガードで弾かれるようにする。
+        _slashRegistered = true;
         try
         {
             _slashDotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("slashAutocomplete.register", $"inputText-{PanelId}", _slashDotNetRef);
-            _slashRegistered = true;
         }
-        catch { }
+        catch
+        {
+            // 失敗時はロールバックし、作った参照も破棄して次レンダーで再試行できるようにする。
+            _slashRegistered = false;
+            _slashDotNetRef?.Dispose();
+            _slashDotNetRef = null;
+        }
     }
 
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)

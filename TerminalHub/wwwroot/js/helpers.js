@@ -425,6 +425,10 @@ window.slashAutocomplete = {
     register: function (textareaId, dotNetRef) {
         var ta = document.getElementById(textareaId);
         if (!ta) return;
+        // 二重登録防止: 既に同じテキストエリアへ登録済みなら、古いリスナを外してから付け直す。
+        if (this._handlers[textareaId]) {
+            this.unregister(textareaId);
+        }
         // 横取り対象キー。値部分は特に使わない。
         var keys = { 'ArrowDown': 1, 'ArrowUp': 1, 'Tab': 1, 'Enter': 1, 'Escape': 1 };
         var handler = function (e) {
