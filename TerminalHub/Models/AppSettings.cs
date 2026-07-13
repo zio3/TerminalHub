@@ -16,6 +16,37 @@ public class AppSettings
     public CustomCliOptionsSettings CliOptions { get; set; } = new();
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
     public ExperimentalSettings Experimental { get; set; } = new();
+    public SessionDefaultsSettings SessionDefaults { get; set; } = new();
+}
+
+/// <summary>
+/// セッション作成ダイアログの「前回選んだ値」（入力補助の既定値）。
+/// 従来はブラウザ localStorage に保存していたが、ブラウザごとに変えたい性質のものではない
+/// （その PC のユーザーの作業習慣）ため、ファイルベースの設定へ移した。値の発生源は
+/// 新規セッション作成ダイアログに一元化し、サブセッション側は読むだけ（書き戻さない）。
+/// null は「未保存」を意味し、各 OptionsData の初期値を維持する。
+/// Yolo（承認・サンドボックス完全バイパス）は危険なため、ここには保持しない（毎回 OFF 既定）。
+/// </summary>
+public class SessionDefaultsSettings
+{
+    /// <summary>前回選んだターミナル種別。</summary>
+    public TerminalType? LastTerminalType { get; set; }
+    /// <summary>Claude Code の権限モード（"bypass" | "auto" | "default"）。</summary>
+    public string? LastClaudePermissionMode { get; set; }
+    /// <summary>Gemini CLI の承認モード（"default" | "auto_edit" | "yolo"）。</summary>
+    public string? LastGeminiApprovalMode { get; set; }
+    /// <summary>Codex のサンドボックスモード（"" | "read-only" | "workspace-write" | "danger-full-access"）。</summary>
+    public string? LastCodexSandboxMode { get; set; }
+    /// <summary>Codex の承認ポリシー（"" | "untrusted" | "on-request" | "never"）。</summary>
+    public string? LastCodexApprovalPolicy { get; set; }
+    /// <summary>Codex の承認リクエスト自動レビュー。</summary>
+    public bool? LastCodexAutoReviewApprovals { get; set; }
+    /// <summary>Codex の resume --last。</summary>
+    public bool? LastCodexResumeLast { get; set; }
+    /// <summary>Codex の --no-alt-screen（既定 true を維持するため nullable）。</summary>
+    public bool? LastCodexNoAltScreen { get; set; }
+    /// <summary>Codex の --search。</summary>
+    public bool? LastCodexSearchEnabled { get; set; }
 }
 
 /// <summary>
