@@ -152,6 +152,7 @@ namespace TerminalHub.Constants
             var mode = options.GetValueOrDefault("mode");
             var sandboxMode = options.GetValueOrDefault("sandbox-mode");
             var approvalPolicy = options.GetValueOrDefault("ask-for-approval");
+            var approvalsReviewer = options.GetValueOrDefault("approvals-reviewer");
 
             // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
             if (mode == "yolo")
@@ -175,6 +176,12 @@ namespace TerminalHub.Constants
                 if (!string.IsNullOrEmpty(approvalPolicy))
                 {
                     args.Add($"--ask-for-approval {approvalPolicy}");
+                }
+
+                // 承認を一切求めない設定ではレビュー対象が存在しないため付与しない。
+                if (approvalsReviewer == "auto_review" && approvalPolicy != "never")
+                {
+                    args.Add("-c approvals_reviewer=auto_review");
                 }
             }
 
