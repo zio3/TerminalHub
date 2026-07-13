@@ -144,7 +144,6 @@
     private const string LAST_TERMINAL_TYPE_KEY = "lastSelectedTerminalType";
     private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
     private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
-    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
     private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
     private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
     private const string LAST_CODEX_RESUME_LAST_KEY = "lastCodexResumeLast";
@@ -246,7 +245,6 @@
     // 不正値で起動引数が壊れるのを防ぐ。SessionOptionsSelector の UI 選択肢と一致させる。
     private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
-    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
 
@@ -269,11 +267,8 @@
                 geminiOptions.ApprovalMode = geminiApproval;
             }
 
-            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
-            if (codexMode != null && ValidCodexModes.Contains(codexMode))
-            {
-                codexOptions.Mode = codexMode;
-            }
+            // Yolo（承認・サンドボックス完全バイパス）は危険なため「最後の選択」を復元せず、
+            // 新規セッションでは常に OFF 既定にする（安全側）。
 
             // Codex SandboxMode / ApprovalPolicy は "" (Default) を有効値として含むため
             // ホワイトリストにも "" を入れている。
@@ -308,7 +303,6 @@
         {
             await LocalStorage.SetAsync(LAST_CLAUDE_PERMISSION_MODE_KEY, claudeCodeOptions.PermissionMode);
             await LocalStorage.SetAsync(LAST_GEMINI_APPROVAL_MODE_KEY, geminiOptions.ApprovalMode);
-            await LocalStorage.SetAsync(LAST_CODEX_MODE_KEY, codexOptions.Mode);
             await LocalStorage.SetAsync(LAST_CODEX_SANDBOX_MODE_KEY, codexOptions.SandboxMode);
             await LocalStorage.SetAsync(LAST_CODEX_APPROVAL_POLICY_KEY, codexOptions.ApprovalPolicy);
             await LocalStorage.SetAsync(LAST_CODEX_RESUME_LAST_KEY, codexOptions.ResumeLast);
