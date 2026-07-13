@@ -129,22 +129,6 @@
             <label class="form-label">@L["SessionOptions.Codex.Header"]</label>
 
             <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" @bind="CodexOptions.Yolo" id="@($"codexYolo{UniqueId}")">
-                <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
-                    @L["SessionOptions.Codex.Yolo.Label"]
-                </label>
-                <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
-            </div>
-
-            @if (CodexOptions.Yolo)
-            {
-                <div class="alert alert-danger mt-2 py-2 small">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                    <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
-                </div>
-            }
-
-            <div class="form-check mt-3">
                 <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumeLast" id="@($"codexResumeLast{UniqueId}")">
                 <label class="form-check-label" for="@($"codexResumeLast{UniqueId}")">
                     @L["SessionOptions.Codex.ResumeLast"]
@@ -165,9 +149,6 @@
                     @L["SessionOptions.Codex.Search"]
                 </label>
             </div>
-
-            <details class="border rounded mt-3 p-2">
-                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.PermissionsDetails"]</summary>
 
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Sandbox.Label"]</label>
@@ -226,16 +207,31 @@
                 }
             </div>
 
+            <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.Yolo" id="@($"codexYolo{UniqueId}")">
+                <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
+                    @L["SessionOptions.Codex.Yolo.Label"]
+                </label>
+                <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
+            </div>
+
+            @if (CodexOptions.Yolo)
+            {
+                <div class="alert alert-danger mt-2 py-2 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
+                </div>
+            }
+
+            <details class="border rounded mt-3 p-2">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
+
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
                 <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
                           rows="3" placeholder="@L["SessionOptions.Codex.AdditionalDirs.Placeholder"]"></textarea>
                 <div class="form-text small">@L["SessionOptions.Codex.AdditionalDirs.Help"]</div>
             </div>
-            </details>
-
-            <details class="border rounded mt-2 p-2">
-                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
 
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>

@@ -379,7 +379,6 @@
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示（推奨）</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>スクロール履歴を保持し、長いセッションの復帰を安定させます（--no-alt-screen）。</value></data>
-  <data name="SessionOptions.Codex.PermissionsDetails" xml:space="preserve"><value>権限の詳細設定</value></data>
   <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>高度な設定</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
