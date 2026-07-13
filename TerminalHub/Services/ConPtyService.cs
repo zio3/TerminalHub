@@ -80,7 +80,11 @@ namespace TerminalHub.Services
         
         // パフォーマンス最適化設定
         private bool _enableBuffering = true; // バッファリング有効
-        private readonly SemaphoreSlim _outputSemaphore = new(1, 1);
+        // バッファ抽出と配送キューへの追加を同じロックで直列化し、ConPTYの出力順を保つ。
+        // イベント自体はロック外で単一ディスパッチャーが発火するため、購読者からDisposeされてもデッドロックしない。
+        private readonly object _outputLock = new();
+        private readonly Queue<string> _pendingOutput = new();
+        private bool _isDispatchingOutput;
 
         // 書き込みの直列化用。UI・MCP(send_to_session)・RemoteLaunch など複数経路から
         // 同時に WriteAsync が呼ばれると、256文字チャンク＋Delay の隙間で入力が混ざるため排他する
@@ -133,10 +137,10 @@ namespace TerminalHub.Services
             if (_enableBuffering)
             {
                 _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
-                _flushTimer.Elapsed += async (sender, e) =>
+                _flushTimer.Elapsed += (sender, e) =>
                 {
                     if (!IsDisposed)
-                        await FlushOutputBuffer();
+                        FlushOutputBuffer();
                 };
                 _flushTimer.AutoReset = true;
             }
@@ -442,100 +446,96 @@ namespace TerminalHub.Services
         }
 
         // バッファリング関連メソッド
-        private async Task BufferOutput(string data)
+        private void BufferOutput(string data)
         {
             if (IsDisposed)
                 return;
 
-            string? dataToPublish = null;
-            try
+            bool startDispatcher = false;
+            lock (_outputLock)
             {
-                await _outputSemaphore.WaitAsync();
-                try
+                if (!IsDisposed)
                 {
-                    if (!IsDisposed)
-                    {
-                        _outputBuffer.Append(data);
-                        
-                        // バッファサイズが上限に達したら即座にフラッシュ
-                        if (_outputBuffer.Length >= MAX_BUFFER_SIZE)
-                        {
-                            var bufferedData = _outputBuffer.ToString();
-                            _outputBuffer.Clear();
-
-                            dataToPublish = bufferedData;
-                        }
-                    }
-                }
-                finally
-                {
-                    // 取得したら必ず解放する。イベント処理中に Dispose された場合でも
-                    // Release しないと待機側が詰まる（破棄済みなら ObjectDisposedException を外側の catch で無視）
-                    _outputSemaphore.Release();
+                    _outputBuffer.Append(data);
+                    if (_outputBuffer.Length >= MAX_BUFFER_SIZE)
+                        startDispatcher = EnqueueBufferedOutputLocked();
                 }
             }
-            catch (ObjectDisposedException)
-            {
-                // セマフォが破棄されている場合は無視
-            }
 
-            if (dataToPublish != null)
-                RaiseDataReceived(dataToPublish);
+            if (startDispatcher)
+                DispatchPendingOutput();
         }
         
-        private async Task FlushOutputBuffer()
+        private void FlushOutputBuffer()
         {
             if (IsDisposed)
                 return;
 
-            string? dataToPublish = null;
-            try
+            bool startDispatcher;
+            lock (_outputLock)
             {
-                await _outputSemaphore.WaitAsync();
-                try
-                {
-                    if (!IsDisposed && _outputBuffer.Length > 0)
-                    {
-                        var data = _outputBuffer.ToString();
-                        _outputBuffer.Clear();
-                        
-                        dataToPublish = data;
-                    }
-                }
-                finally
-                {
-                    // 取得したら必ず解放する（破棄済みなら ObjectDisposedException を外側の catch で無視）
-                    _outputSemaphore.Release();
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-                // セマフォが破棄されている場合は無視
+                startDispatcher = !IsDisposed && EnqueueBufferedOutputLocked();
             }
 
-            if (dataToPublish != null)
-                RaiseDataReceived(dataToPublish);
+            if (startDispatcher)
+                DispatchPendingOutput();
         }
 
-        private async Task FlushRemainingOutputAsync()
+        private void FlushRemainingOutput(bool waitForDispatch = false)
         {
-            string? data = null;
-            await _outputSemaphore.WaitAsync();
-            try
+            bool startDispatcher;
+            lock (_outputLock)
             {
-                if (_outputBuffer.Length > 0)
-                {
-                    data = _outputBuffer.ToString();
-                    _outputBuffer.Clear();
-                }
-            }
-            finally
-            {
-                _outputSemaphore.Release();
+                // Dispose後も既に読み取った末尾データは配送する。
+                startDispatcher = EnqueueBufferedOutputLocked();
             }
 
-            if (data != null)
+            if (startDispatcher)
+                DispatchPendingOutput();
+
+            if (waitForDispatch)
+            {
+                lock (_outputLock)
+                {
+                    while (_isDispatchingOutput)
+                        Monitor.Wait(_outputLock);
+                }
+            }
+        }
+
+        // _outputLockを保持して呼ぶこと。
+        private bool EnqueueBufferedOutputLocked()
+        {
+            if (_outputBuffer.Length == 0)
+                return false;
+
+            _pendingOutput.Enqueue(_outputBuffer.ToString());
+            _outputBuffer.Clear();
+            if (_isDispatchingOutput)
+                return false;
+
+            _isDispatchingOutput = true;
+            return true;
+        }
+
+        private void DispatchPendingOutput()
+        {
+            while (true)
+            {
+                string data;
+                lock (_outputLock)
+                {
+                    if (_pendingOutput.Count == 0)
+                    {
+                        _isDispatchingOutput = false;
+                        Monitor.PulseAll(_outputLock);
+                        return;
+                    }
+                    data = _pendingOutput.Dequeue();
+                }
+
                 RaiseDataReceived(data);
+            }
         }
 
         private void RaiseDataReceived(string data)
@@ -606,7 +606,7 @@ namespace TerminalHub.Services
                         if (_enableBuffering)
                         {
                             // バッファリングが有効な場合
-                            await BufferOutput(data);
+                            BufferOutput(data);
                         }
                         else
                         {
@@ -641,7 +641,7 @@ namespace TerminalHub.Services
             }
 
             // 終了通知より先に、短時間バッファに残った末尾出力を配送する。
-            await FlushRemainingOutputAsync();
+            FlushRemainingOutput(waitForDispatch: true);
             
             // プロセスが終了したことを通知
             RaiseProcessExited();
@@ -766,7 +766,7 @@ namespace TerminalHub.Services
                 // 残りのバッファを同期的にフラッシュ
                 try
                 {
-                    FlushRemainingOutputAsync().GetAwaiter().GetResult();
+                    FlushRemainingOutput();
                 }
                 catch (Exception ex)
                 {
@@ -779,9 +779,6 @@ namespace TerminalHub.Services
             _pipeInStream?.Dispose();
             _pipeOutStream?.Dispose();
             
-            // セマフォを破棄
-            // 読み取りタスクがタイムアウト後もfinally処理で参照する可能性があるため、
-            // _outputSemaphore はここでは破棄しない（セッションとともにGCされる）。
             _writeLock?.Dispose();
 
             // プロセスを終了（bun など孫プロセスが残らないようプロセスツリーごと kill）
