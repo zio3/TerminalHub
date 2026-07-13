@@ -372,16 +372,8 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
-  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>Execution mode</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (recommended)</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>Mostly automates edits, builds, and tests</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Uses `--sandbox workspace-write --ask-for-approval on-request`. Explicit per-setting choices take precedence.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution (dangerous). Per-setting sandbox and approval choices are ignored.</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Bypass all approvals and sandbox (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution. While on, the sandbox and approval choices are disabled (not applied).</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>

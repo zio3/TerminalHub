@@ -128,37 +128,15 @@
         <div class="mb-3">
             <label class="form-label">@L["SessionOptions.Codex.Header"]</label>
 
-            <div class="mt-2">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Mode.Label"]</label>
-                <div class="btn-group d-flex" role="group">
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeAuto{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "auto")"
-                           @onchange="() => SetCodexMode(CodexMode.Auto)" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"codexModeAuto{UniqueId}")" title="@L["SessionOptions.Codex.Mode.AutoTitle"]">
-                        @L["SessionOptions.Codex.Mode.AutoLabel"]
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "standard")"
-                           @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="@L["SessionOptions.Codex.Mode.StandardTitle"]">
-                        @L["SessionOptions.Codex.Mode.StandardLabel"]
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "yolo")"
-                           @onchange="() => SetCodexMode(CodexMode.Yolo)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="@L["SessionOptions.Codex.Mode.YoloTitle"]">
-                        @L["SessionOptions.Codex.Mode.YoloLabel"]
-                    </label>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(GetCodexModeHelp()))
-                {
-                    <div class="form-text small">@GetCodexModeHelp()</div>
-                }
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.Yolo" id="@($"codexYolo{UniqueId}")">
+                <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
+                    @L["SessionOptions.Codex.Yolo.Label"]
+                </label>
+                <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
             </div>
 
-            @if (CodexOptions.Mode == "yolo")
+            @if (CodexOptions.Yolo)
             {
                 <div class="alert alert-danger mt-2 py-2 small">
                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
@@ -196,6 +174,7 @@
                 <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
                            checked="@(string.IsNullOrEmpty(CodexOptions.SandboxMode))"
+                           disabled="@CodexOptions.Yolo"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.Default)" autocomplete="off">
                     <label class="btn btn-outline-secondary btn-sm" for="@($"codexSandboxNone{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.DefaultTitle"]">
                         @L["SessionOptions.Codex.Sandbox.DefaultLabel"]
@@ -203,6 +182,7 @@
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxReadOnly{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "read-only")"
+                           disabled="@CodexOptions.Yolo"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.ReadOnly)" autocomplete="off">
                     <label class="btn btn-outline-success btn-sm" for="@($"codexSandboxReadOnly{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.ReadOnlyTitle"]">
                         @L["SessionOptions.Codex.Sandbox.ReadOnlyLabel"]
@@ -210,6 +190,7 @@
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxWorkspace{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "workspace-write")"
+                           disabled="@CodexOptions.Yolo"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.WorkspaceWrite)" autocomplete="off">
                     <label class="btn btn-outline-primary btn-sm" for="@($"codexSandboxWorkspace{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.WorkspaceTitle"]">
                         @L["SessionOptions.Codex.Sandbox.WorkspaceLabel"]
@@ -217,6 +198,7 @@
 
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxFull{UniqueId}")"
                            checked="@(CodexOptions.SandboxMode == "danger-full-access")"
+                           disabled="@CodexOptions.Yolo"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.FullAccess)" autocomplete="off">
                     <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.FullAccessTitle"]">
                         @L["SessionOptions.Codex.Sandbox.FullAccessLabel"]
@@ -231,7 +213,7 @@
 
             <div class="mt-3">
                 <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.ApprovalPolicy.Label"]</label>
-                <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy">
+                <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy" disabled="@CodexOptions.Yolo">
                     <option value="">@L["Common.Unspecified"]</option>
                     <option value="untrusted">untrusted</option>
                     <option value="on-request">on-request</option>
@@ -458,19 +440,7 @@
         await SelectedTypeChanged.InvokeAsync(newType);
     }
 
-    private enum CodexMode { Auto, Standard, Yolo }
     private enum CodexSandbox { Default, ReadOnly, WorkspaceWrite, FullAccess }
-
-    private void SetCodexMode(CodexMode mode)
-    {
-        CodexOptions.Mode = mode switch
-        {
-            CodexMode.Auto => "auto",
-            CodexMode.Standard => "standard",
-            CodexMode.Yolo => "yolo",
-            _ => "auto"
-        };
-    }
 
     private void SetCodexSandboxMode(CodexSandbox mode)
     {
@@ -536,7 +506,10 @@
                 break;
 
             case TerminalType.CodexCLI:
-                options["mode"] = CodexOptions.Mode;
+                // 後方互換のため保存キーは従来どおり "mode"。Yolo=ON は "yolo"、それ以外は
+                // "standard"（サンドボックス/承認をそのまま渡す）。旧 "auto" は書き出さない
+                // （BuildCodexArgs は既存セッション互換のため "auto" の解釈を残している）。
+                options["mode"] = CodexOptions.Yolo ? "yolo" : "standard";
                 if (CodexOptions.ResumeLast)
                 {
                     options["resume-last"] = "true";
@@ -624,11 +597,14 @@
 
     public class CodexOptionsData
     {
-        public string Mode { get; set; } = "auto"; // auto, standard, yolo
+        // 承認・サンドボックスを完全バイパス（--dangerously-bypass-approvals-and-sandbox）。
+        // ON の間はサンドボックス/承認の指定は無視される（BuildCodexArgs 側で mode=yolo として処理）。
+        public bool Yolo { get; set; } = false;
         public bool ResumeLast { get; set; } = false;
         public bool NoAltScreen { get; set; } = true;
-        public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
-        public string ApprovalPolicy { get; set; } = "";
+        // 既定は旧「Auto」相当（workspace-write + on-request）を明示値として持たせる。
+        public string SandboxMode { get; set; } = "workspace-write"; // "", read-only, workspace-write, danger-full-access
+        public string ApprovalPolicy { get; set; } = "on-request";
         public bool SearchEnabled { get; set; }
         public string AdditionalDirectories { get; set; } = "";
         public string ExtraArgs { get; set; } = "";
@@ -677,17 +653,6 @@
             "untrusted" => L["SessionOptions.Codex.ApprovalPolicy.HelpUntrusted"],
             "on-request" => L["SessionOptions.Codex.ApprovalPolicy.HelpOnRequest"],
             "never" => L["SessionOptions.Codex.ApprovalPolicy.HelpNever"],
-            _ => ""
-        };
-    }
-
-    private string GetCodexModeHelp()
-    {
-        return CodexOptions.Mode switch
-        {
-            "auto" => L["SessionOptions.Codex.Mode.HelpAuto"],
-            "standard" => L["SessionOptions.Codex.Mode.HelpStandard"],
-            "yolo" => L["SessionOptions.Codex.Mode.HelpYolo"],
             _ => ""
         };
     }
