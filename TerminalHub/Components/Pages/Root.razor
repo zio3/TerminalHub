@@ -1659,6 +1659,9 @@
             {
                 return;
             }
+
+            // このCircuitに残る破棄済みConPtySessionへの参照を解除する。
+            ConPtyConnection.UnsubscribeFromSession(sessionId);
             
             // ConPtySessionのクリーンアップ
             if (sessionToRemove.ConPtySession != null)
@@ -1736,6 +1739,9 @@
             return;
         }
         if (!confirmed) return;
+
+        // 削除時と同様に、このCircuitの購読をセッション破棄前に解除する。
+        ConPtyConnection.UnsubscribeFromSession(sessionId);
 
         // セッションのタイマーを停止
         OutputAnalyzerService.StopSessionTimer(sessionId);

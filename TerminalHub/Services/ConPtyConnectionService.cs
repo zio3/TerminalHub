@@ -11,7 +11,8 @@ namespace TerminalHub.Services
     {
         private readonly ILogger<ConPtyConnectionService> _logger;
         private readonly ConcurrentDictionary<Guid, ConPtySessionSubscription> _subscriptions = new();
-        private bool _disposed;
+        private int _disposeState;
+        private readonly object _subscriptionLock = new();
 
         // 「ゾンビCircuit累積」診断用: 生存中のインスタンス数（＝生存Circuit数）を数える。
         // Scopedサービスなので 1インスタンス = 1Circuit。使い続けて遅くなったときに
@@ -42,8 +43,10 @@ namespace TerminalHub.Services
         /// </summary>
         public void SubscribeToSession(Guid sessionId, ConPtySession conPtySession)
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(ConPtyConnectionService));
+            lock (_subscriptionLock)
+            {
+                if (Volatile.Read(ref _disposeState) != 0)
+                    throw new ObjectDisposedException(nameof(ConPtyConnectionService));
 
             _logger.LogInformation($"Subscribing to session {sessionId}");
 
@@ -111,6 +114,7 @@ namespace TerminalHub.Services
             conPtySession.ProcessExited += exitHandler;
 
             _logger.LogInformation($"Successfully subscribed to session {sessionId}");
+            }
         }
 
         /// <summary>
@@ -118,15 +122,18 @@ namespace TerminalHub.Services
         /// </summary>
         public void UnsubscribeFromSession(Guid sessionId)
         {
-            if (_subscriptions.TryRemove(sessionId, out var subscription))
+            lock (_subscriptionLock)
             {
-                _logger.LogInformation($"Unsubscribing from session {sessionId}");
-                
-                // イベントハンドラーを解除
-                subscription.ConPtySession.DataReceived -= subscription.DataHandler;
-                subscription.ConPtySession.ProcessExited -= subscription.ExitHandler;
-                
-                _logger.LogInformation($"Successfully unsubscribed from session {sessionId}");
+                if (_subscriptions.TryRemove(sessionId, out var subscription))
+                {
+                    _logger.LogInformation($"Unsubscribing from session {sessionId}");
+
+                    // 辞書からの削除とイベント解除をSubscribeToSessionに対して原子的に行う。
+                    subscription.ConPtySession.DataReceived -= subscription.DataHandler;
+                    subscription.ConPtySession.ProcessExited -= subscription.ExitHandler;
+
+                    _logger.LogInformation($"Successfully unsubscribed from session {sessionId}");
+                }
             }
         }
 
@@ -145,12 +152,14 @@ namespace TerminalHub.Services
 
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0)
                 return;
 
             _logger.LogInformation("Disposing ConPtyConnectionService");
-            UnsubscribeAll();
-            _disposed = true;
+            lock (_subscriptionLock)
+            {
+                UnsubscribeAll();
+            }
 
             var live = System.Threading.Interlocked.Decrement(ref _liveInstanceCount);
             _logger.LogInformation("[CircuitLife] Circuit disposed (tag={CircuitTag}). 生存Circuit数={LiveCount}", _circuitTag, live);
