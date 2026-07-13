@@ -12,7 +12,7 @@
         position: absolute;
         top: 2.2em;
         left: 0.5rem;
-        z-index: 1080;
+        z-index: 1000;
         min-width: 20rem;
         max-width: min(90%, 40rem);
         max-height: 16rem;
@@ -82,6 +82,8 @@
                       @bind:event="oninput"
                       @onkeydown="OnTextAreaKeyDown"
                       @onkeydown:preventDefault="@shouldPreventDefault"
+                      @onfocus="OnSlashFocus"
+                      @onblur="OnSlashBlur"
                       placeholder="@PlaceholderText"
                       style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
             </textarea>
@@ -95,6 +97,7 @@
                         var parts = HighlightName(item.Name);
                         <div class="slashac-item @(idx == _slashSelectedIndex ? "active" : "")"
                              @onclick="() => OnSlashItemClick(idx)"
+                             @onmousedown:preventDefault="true"
                              @onmouseenter="() => _slashSelectedIndex = idx">
                             <span class="slashac-name">@parts.Before<span class="slashac-hl">@parts.Match</span>@parts.After</span>
                             @if (!string.IsNullOrEmpty(item.Description))
@@ -253,10 +256,23 @@
     private List<SlashCommandItem> _slashSuggestions = new();
     private int _slashSelectedIndex = 0;
     private bool _slashDismissed = false; // Esc で閉じた状態（テキストが変わるまで維持）
+    private bool _slashHasFocus = false;  // 入力欄がフォーカスを持っているか
     private DotNetObjectReference<TextInputPanel>? _slashDotNetRef;
     private bool _slashRegistered = false;
 
-    private bool SlashPopupOpen => _slashSuggestions.Count > 0;
+    // 入力欄がフォーカスを持っているときだけ表示する（モーダル等に隠れて出っぱなしになるのを防ぐ）。
+    private bool SlashPopupOpen => _slashHasFocus && _slashSuggestions.Count > 0;
+
+    private void OnSlashFocus()
+    {
+        _slashHasFocus = true;
+        RecomputeSlashSuggestions();
+    }
+
+    private void OnSlashBlur()
+    {
+        _slashHasFocus = false;
+    }
 
     /// <summary>
     /// 現在の入力から補完候補を再計算する。
