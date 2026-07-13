@@ -23,71 +23,77 @@ public record SlashCommandItem(string Name, string? Description);
 public static class SlashCommandCatalog
 {
     // Claude Code の組み込みコマンド（＋バンドルされたスキル）。
+    // 出典: 公式ドキュメント（code.claude.com/docs/en/commands）。網羅は必須ではなく、
+    // 実用的な範囲でのベストエフォート（バージョンにより多少ずれ得る）。
     private static readonly SlashCommandItem[] ClaudeCommands =
     {
-        new("/clear", "Start a new session with empty context"),
-        new("/compact", "Compact the conversation to free up context"),
-        new("/context", "Show current context usage"),
-        new("/resume", "Resume a previous conversation"),
-        new("/rewind", "Restore the code and/or conversation to a previous point"),
-        new("/fork", "Fork the current conversation"),
-        new("/model", "Switch the active model"),
-        new("/effort", "Change the reasoning effort level"),
-        new("/fast", "Toggle fast mode"),
-        new("/config", "Open configuration"),
-        new("/permissions", "Manage tool permissions"),
-        new("/mcp", "Manage MCP server connections"),
-        new("/memory", "Edit memory files"),
+        // --- コア（セッション/ナビゲーション） ---
         new("/init", "Initialize a CLAUDE.md for this codebase"),
-        new("/diff", "Show the current diff"),
-        new("/copy", "Copy the last response"),
-        new("/export", "Export the conversation"),
-        new("/usage", "Show token usage"),
-        new("/help", "Show help"),
-        // バンドルスキル
-        new("/review", "Review a GitHub pull request"),
-        new("/code-review", "Review the current diff for bugs and cleanups"),
-        new("/security-review", "Security review of the pending changes"),
-        new("/simplify", "Clean up the changed code for reuse and simplicity"),
-        new("/loop", "Run a prompt or command on a recurring interval"),
-        new("/schedule", "Manage scheduled cloud agents"),
+        new("/memory", "Edit memory files"),
+        new("/clear", "Start a new conversation with empty context"),
+        new("/resume", "Resume a previous conversation"),
+        new("/branch", "Create a branching conversation fork"),
+        new("/fork", "Spawn a background subagent on a directive"),
+        new("/cd", "Move the session to a new working directory"),
+        new("/add-dir", "Add directory access without moving the session"),
+        new("/rename", "Rename the current session"),
+        new("/exit", "Exit the CLI or detach a background session"),
+        // --- モデル/設定 ---
+        new("/model", "Switch the AI model"),
+        new("/effort", "Set the reasoning effort level"),
+        new("/config", "Open settings or set configuration"),
+        new("/permissions", "Manage tool permission rules"),
+        new("/mcp", "Manage MCP server connections"),
+        new("/hooks", "View hook configurations"),
+        new("/keybindings", "Open the keyboard shortcuts file"),
+        // --- コンテキスト/履歴 ---
+        new("/context", "Visualize context usage"),
+        new("/compact", "Summarize the conversation to free context"),
+        new("/rewind", "Rewind to a previous point"),
+        new("/export", "Export the conversation as text"),
+        new("/copy", "Copy the last response to the clipboard"),
+        // --- 診断/ヘルプ/アカウント ---
+        new("/doctor", "Run a setup checkup and diagnostics"),
+        new("/debug", "Enable debug logging"),
+        new("/status", "Show version, model, and account info"),
+        new("/usage", "View usage and costs"),
+        new("/feedback", "Report a bug or share the conversation"),
+        new("/release-notes", "View the changelog"),
+        new("/skills", "List available skills"),
+        new("/plugin", "Manage plugins"),
+        new("/help", "Show help and available commands"),
+        new("/login", "Sign in to your account"),
+        new("/logout", "Sign out"),
+        // --- バンドルスキル/拡張コマンド ---
+        new("/code-review", "Review the diff for bugs and cleanups"),
+        new("/simplify", "Review changed code for cleanup opportunities"),
+        new("/security-review", "Check the diff for vulnerabilities"),
+        new("/review", "Fast single-pass PR review"),
+        new("/plan", "Enter plan mode for large changes"),
+        new("/batch", "Orchestrate large-scale parallel changes"),
+        new("/loop", "Run a prompt repeatedly on a schedule"),
+        new("/schedule", "Create or manage scheduled routines"),
+        new("/diff", "View uncommitted changes interactively"),
+        new("/run", "Launch and drive your project's app"),
+        new("/deep-research", "Fan out web searches and synthesize a report"),
+        new("/tasks", "List background subagent tasks"),
+        new("/background", "Detach the session as a background agent"),
+        new("/focus", "Toggle focus view"),
+        new("/ide", "Manage IDE integrations"),
+        new("/chrome", "Configure Claude in Chrome"),
     };
 
-    // Codex CLI の組み込みコマンド。
-    private static readonly SlashCommandItem[] CodexCommands =
-    {
-        new("/clear", "Clear the conversation"),
-        new("/compact", "Compact the conversation"),
-        new("/new", "Start a new conversation"),
-        new("/model", "Switch the model"),
-        new("/approvals", "Change the approval policy"),
-        new("/diff", "Show the working diff"),
-        new("/mcp", "Manage MCP servers"),
-        new("/init", "Create an AGENTS.md for this project"),
-        new("/help", "Show help"),
-    };
-
-    // Gemini CLI の組み込みコマンド。
-    private static readonly SlashCommandItem[] GeminiCommands =
-    {
-        new("/clear", "Clear the screen and context"),
-        new("/compress", "Compress the context"),
-        new("/chat", "Manage saved chat sessions"),
-        new("/memory", "Manage memory (GEMINI.md)"),
-        new("/tools", "List available tools"),
-        new("/mcp", "List MCP servers and tools"),
-        new("/stats", "Show session stats"),
-        new("/help", "Show help"),
-    };
+    // Codex CLI / Gemini CLI の組み込みコマンドは、各CLIに自前で辞書を作らせて
+    // ここへはめ込む予定。それまでは未対応（空＝補完オフ）とする。
+    // （筆者の推測で不正確な一覧を出すより、各CLIが生成した正確な一覧を待つ方針）
 
     private static readonly SlashCommandItem[] Empty = System.Array.Empty<SlashCommandItem>();
 
-    /// <summary>CLI種別ごとの候補。スラッシュコマンドを持たない種別は空を返す（＝補完無効）。</summary>
+    /// <summary>CLI種別ごとの候補。辞書が無い種別は空を返す（＝補完無効）。</summary>
     public static IReadOnlyList<SlashCommandItem> ForTerminalType(TerminalType type) => type switch
     {
         TerminalType.ClaudeCode => ClaudeCommands,
-        TerminalType.CodexCLI => CodexCommands,
-        TerminalType.GeminiCLI => GeminiCommands,
+        // TODO: Codex / Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
         _ => Empty,
     };
 }

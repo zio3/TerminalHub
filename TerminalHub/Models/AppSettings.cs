@@ -33,7 +33,7 @@ public class ExperimentalSettings
     /// <summary>
     /// テキスト入力欄でスラッシュコマンドの補完（オートコンプリート）を有効にする。
     /// 入力全体が "/" 始まりのときだけ候補ポップアップを表示し、名前の部分一致で絞り込む。
-    /// 対応CLI(Claude Code / Codex / Gemini)のみ動作。現状は組み込みコマンド辞書のみ対応。既定OFF。
+    /// 現状は Claude Code のみ対応（組み込みコマンド辞書）。既定OFF。
     /// </summary>
     public bool SlashAutocompleteEnabled { get; set; } = false;
 
