@@ -435,6 +435,8 @@ window.slashAutocomplete = {
             if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.altKey)) return;
             // Tab/ArrowはCtrl併用時（他機能）も尊重して素通し。
             if ((e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') && e.ctrlKey) return;
+            // Shift+Tab は Claude Code のモード切替に使われ得るので横取りしない。
+            if (e.key === 'Tab' && e.shiftKey) return;
             e.preventDefault();
             e.stopPropagation();
             dotNetRef.invokeMethodAsync('OnSlashKey', e.key);
@@ -449,5 +451,10 @@ window.slashAutocomplete = {
             h.ta.removeEventListener('keydown', h.handler, true);
             delete this._handlers[textareaId];
         }
+    },
+    // 候補をマウスクリックで確定した後、テキストエリアへフォーカスを戻す。
+    focusInput: function (textareaId) {
+        var ta = document.getElementById(textareaId);
+        if (ta) ta.focus();
     }
 };

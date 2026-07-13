@@ -266,9 +266,12 @@
     // （モーダル等に隠れて出っぱなしになるのを防ぐ）。
     private bool SlashPopupOpen => _slashEnabled && _slashHasFocus && _slashSuggestions.Count > 0;
 
-    protected override void OnInitialized()
+    protected override void OnParametersSet()
     {
         // 試験機能フラグを読む（AutoRegisterMcp と同じくオンデマンド参照）。
+        // BottomPanel/TextInputPanel はセッション切替でも破棄されず生存し続けるため、
+        // OnInitialized の1回読みでは設定変更や TerminalType 変化に追従できない。
+        // パラメータ変化（＝設定を変えてセッションを開き直す等）のたびに読み直す。
         _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
     }
 
@@ -382,15 +385,16 @@
         _slashSelectedIndex = index;
         AcceptSlashSuggestion();
         StateHasChanged();
-        // クリック後はテキストエリアにフォーカスを戻す。
-        try { await JS.InvokeVoidAsync("terminalHubHelpers.focusTextArea"); } catch { }
+        // クリック後はテキストエリアにフォーカスを戻す（自前ヘルパで id 指定・確実に戻す）。
+        try { await JS.InvokeVoidAsync("slashAutocomplete.focusInput", $"inputText-{PanelId}"); } catch { }
     }
 
     private async Task TryRegisterSlashAutocomplete()
     {
         if (_slashRegistered) return;
         if (!_slashEnabled) return;
-        if (SlashCommandCatalog.ForTerminalType(TerminalType).Count == 0) return;
+        // catalog が空(=対象外CLI)でも横取りリスナ自体は無害（ポップアップ非表示時は data-slash-open=0）。
+        // 最初に描画されたセッションが対象外でも、切替後に後追いで効くよう TerminalType では弾かない。
         try
         {
             _slashDotNetRef = DotNetObjectReference.Create(this);
@@ -404,8 +408,9 @@
     {
         // スラッシュ補完ポップアップ表示中は、制御キーの処理を JS 横取り（OnSlashKey）に委ねる。
         // ここでは何もしないことで、Enter 送信や Escape 中断などの既定動作を確実に抑止する。
+        // Shift+Tab は Claude Code のモード切替に使われ得るので横取り対象から除外する。
         if (SlashPopupOpen &&
-            (e.Key == "Enter" || e.Key == "Tab" || e.Key == "Escape" ||
+            (e.Key == "Enter" || (e.Key == "Tab" && !e.ShiftKey) || e.Key == "Escape" ||
              ((e.Key == "ArrowDown" || e.Key == "ArrowUp") && !e.CtrlKey)))
         {
             shouldPreventDefault = false;
@@ -612,9 +617,9 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        // 未登録の間は毎レンダーで登録を試みる（設定ON化やセッション切替後に後追いで付くように）。
+        if (!_slashRegistered)
         {
-            // スラッシュ補完のキー横取りリスナを登録（対象CLIのみ）。
             await TryRegisterSlashAutocomplete();
         }
 
