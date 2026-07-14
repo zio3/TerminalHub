@@ -400,6 +400,7 @@
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
+    private static readonly HashSet<string> ValidCodexApprovalReviewers = new() { "", "user", "auto_review" };
     private static readonly HashSet<string> ValidCodexPermissionPresets = new() { "codex-default", "recommended", "custom" };
     private static readonly HashSet<string> ValidCodexWindowsSandboxes = new() { "", "elevated", "unelevated" };
     private static readonly HashSet<string> ValidCodexNetworkAccess = new() { "", "true", "false" };
@@ -680,7 +681,11 @@
                 codexOptions.ApprovalPolicy = defaults.LastCodexApprovalPolicy;
             }
 
-            if (defaults.LastCodexAutoReviewApprovals.HasValue)
+            if (defaults.LastCodexApprovalReviewer != null && ValidCodexApprovalReviewers.Contains(defaults.LastCodexApprovalReviewer))
+            {
+                codexOptions.ApprovalReviewer = defaults.LastCodexApprovalReviewer;
+            }
+            else if (defaults.LastCodexAutoReviewApprovals.HasValue)
             {
                 codexOptions.ApprovalReviewer = defaults.LastCodexAutoReviewApprovals.Value ? "auto_review" : "";
             }

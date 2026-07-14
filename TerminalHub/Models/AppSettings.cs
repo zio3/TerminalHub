@@ -43,6 +43,8 @@ public class SessionDefaultsSettings
     public string? LastCodexApprovalPolicy { get; set; }
     /// <summary>Codex の承認リクエスト自動レビュー。</summary>
     public bool? LastCodexAutoReviewApprovals { get; set; }
+    /// <summary>Codex の承認審査者（"" | "user" | "auto_review"）。</summary>
+    public string? LastCodexApprovalReviewer { get; set; }
     /// <summary>Codex の Windows サンドボックス方式（"" | "elevated" | "unelevated"）。</summary>
     public string? LastCodexWindowsSandbox { get; set; }
     /// <summary>Codex のコマンド用ネットワーク（"" | "true" | "false"）。</summary>

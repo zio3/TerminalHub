@@ -237,6 +237,7 @@ Codex本体とconfig.tomlの設定を使用します。
 UI 上の要件：
 
 - 赤色など、他のプリセットと明確に異なる表示にする
+- UI操作は独立させるが、設定状態としては `カスタム` の一種として扱う
 - 初回選択時に警告を表示する
 - 可能であれば「このセッションだけ適用」を基本にする
 - 有効中は画面へ常時 YOLO バッジを表示する
@@ -244,7 +245,9 @@ UI 上の要件：
 
 ## 起動引数の組み立て
 
-`ProcessStartInfo.ArgumentList` を使用し、設定名と値を個別の引数として追加する。
+通常のプロセス起動では `ProcessStartInfo.ArgumentList` を使用し、設定名と値を個別の引数として追加する。
+
+ただし TerminalHub の ConPTY 起動経路は、擬似コンソール属性を設定するため Win32 `CreateProcess` を直接使用しており、`ProcessStartInfo.ArgumentList` は利用できない。現行実装では、UIから選べる列挙値を検証済みの値に限定し、`TerminalConstants.BuildCodexArgs` で設定上書きを組み立てる。自由入力を含む起動引数全体のトークン化は、ConPTY起動APIの引数モデルを変更する別リファクタリングとして扱う。
 
 ```csharp
 args.Add("-c");

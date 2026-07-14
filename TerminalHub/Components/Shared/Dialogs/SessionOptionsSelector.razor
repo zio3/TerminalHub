@@ -531,6 +531,7 @@
 
     private void SetCodexPreset(string preset)
     {
+        showCodexYoloConfirmation = false;
         CodexOptions.PermissionPreset = preset;
         CodexOptions.Yolo = false;
 
@@ -565,6 +566,7 @@
         if (!requested)
         {
             CodexOptions.Yolo = false;
+            CodexOptions.PermissionPreset = "custom";
             showCodexYoloConfirmation = false;
             return;
         }
@@ -575,6 +577,7 @@
     private void ConfirmCodexYolo()
     {
         CodexOptions.Yolo = true;
+        CodexOptions.PermissionPreset = "custom";
         showCodexYoloConfirmation = false;
     }
 
