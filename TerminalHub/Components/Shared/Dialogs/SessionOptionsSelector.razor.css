@@ -1,0 +1,98 @@
+.codex-preset-grid {
+    display: grid;
+    gap: .65rem;
+}
+
+.codex-preset-card {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .8rem .9rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .65rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.codex-preset-card:hover {
+    border-color: rgba(var(--bs-primary-rgb), .55);
+    transform: translateY(-1px);
+}
+
+.btn-check:focus-visible + .codex-preset-card {
+    outline: 3px solid rgba(var(--bs-primary-rgb), .28);
+    outline-offset: 2px;
+}
+
+.btn-check:checked + .codex-preset-card {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 1px var(--bs-primary), 0 .35rem 1rem rgba(var(--bs-primary-rgb), .1);
+}
+
+.codex-preset-card-recommended {
+    background: linear-gradient(105deg, rgba(var(--bs-primary-rgb), .1), transparent 68%);
+}
+
+.codex-preset-icon {
+    display: grid;
+    flex: 0 0 2rem;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border-radius: .55rem;
+    background: rgba(var(--bs-primary-rgb), .12);
+    color: var(--bs-primary);
+    font-size: 1.05rem;
+}
+
+.codex-preset-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.codex-preset-copy small {
+    color: var(--bs-secondary-color);
+    line-height: 1.35;
+}
+
+.codex-boundary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin-top: .25rem;
+}
+
+.codex-boundary-strip span {
+    padding: .08rem .4rem;
+    border: 1px solid rgba(var(--bs-primary-rgb), .25);
+    border-radius: 999px;
+    color: var(--bs-primary-text-emphasis);
+    font-family: var(--bs-font-monospace);
+    font-size: .68rem;
+}
+
+.codex-yolo-panel {
+    padding: .75rem .85rem;
+    border: 1px dashed rgba(var(--bs-danger-rgb), .45);
+    border-radius: .65rem;
+    background: rgba(var(--bs-danger-rgb), .035);
+}
+
+.codex-yolo-panel.is-active {
+    border-style: solid;
+    background: rgba(var(--bs-danger-rgb), .09);
+}
+
+.codex-uac-note {
+    border-left: .25rem solid var(--bs-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .codex-preset-card {
+        transition: none;
+    }
+}

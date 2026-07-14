@@ -113,13 +113,6 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-            // 現行 Codex CLI は復帰履歴がない初回フォルダでも、ディレクトリの信頼確認後に
-            // 新規セッションとして継続できるため、resume --last 失敗時の再作成処理は不要。
-            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
-            {
-                args.Add("resume --last");
-            }
-
             // extra-args / custom-args に手書きで --no-alt-screen を入れている既存セッションが
             // あり得るため、UI側の明示指定と重なっても二重指定しない。
             var userSuppliedNoAltScreen =
@@ -129,11 +122,6 @@ namespace TerminalHub.Constants
                 !userSuppliedNoAltScreen)
             {
                 args.Add("--no-alt-screen");
-            }
-
-            if (options.ContainsKey("search") && options["search"] == "true")
-            {
-                args.Add("--search");
             }
 
             if (options.TryGetValue("add-dir", out var addDirValue) && !string.IsNullOrWhiteSpace(addDirValue))
@@ -151,6 +139,32 @@ namespace TerminalHub.Constants
             var sandboxMode = options.GetValueOrDefault("sandbox-mode");
             var approvalPolicy = options.GetValueOrDefault("ask-for-approval");
             var approvalsReviewer = options.GetValueOrDefault("approvals-reviewer");
+            var windowsSandbox = options.GetValueOrDefault("windows-sandbox");
+            var networkAccess = options.GetValueOrDefault("network-access");
+            var webSearchMode = options.GetValueOrDefault("web-search-mode");
+            var permissionPreset = options.GetValueOrDefault("permission-preset");
+
+            // プリセットを保存値の寄せ集めではなく、起動時の契約として扱う。
+            // これにより古い詳細値が残っていても Codex標準は上書きを一切渡さず、
+            // 推奨は常に文書化された組み合わせで起動する。
+            if (permissionPreset == "codex-default")
+            {
+                sandboxMode = "";
+                approvalPolicy = "";
+                approvalsReviewer = "";
+                windowsSandbox = "";
+                networkAccess = "";
+                webSearchMode = "";
+            }
+            else if (permissionPreset == "recommended")
+            {
+                sandboxMode = "workspace-write";
+                approvalPolicy = "on-request";
+                approvalsReviewer = "auto_review";
+                windowsSandbox = "elevated";
+                networkAccess = "true";
+                webSearchMode = "live";
+            }
 
             // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
             if (mode == "yolo")
@@ -181,6 +195,35 @@ namespace TerminalHub.Constants
                 {
                     args.Add("-c approvals_reviewer=auto_review");
                 }
+                else if (approvalsReviewer == "user" && approvalPolicy != "never")
+                {
+                    args.Add("-c approvals_reviewer=user");
+                }
+
+                if (windowsSandbox is "elevated" or "unelevated")
+                {
+                    args.Add($"-c windows.sandbox={windowsSandbox}");
+                }
+
+                if (networkAccess is "true" or "false")
+                {
+                    args.Add($"-c sandbox_workspace_write.network_access={networkAccess}");
+                }
+
+                if (webSearchMode == "live")
+                {
+                    args.Add("--search");
+                }
+                else if (webSearchMode is "disabled" or "cached" or "indexed")
+                {
+                    args.Add($"-c web_search={webSearchMode}");
+                }
+                else if (permissionPreset != "codex-default" &&
+                         options.ContainsKey("search") && options["search"] == "true")
+                {
+                    // 旧保存形式との互換性。
+                    args.Add("--search");
+                }
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
@@ -189,6 +232,12 @@ namespace TerminalHub.Constants
             }
 
             AppendCustomArgs(args, options);
+
+            // 設定上書きはサブコマンドより前へ置く。resume --last は必ず最後に追加する。
+            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
+            {
+                args.Add("resume --last");
+            }
 
             return string.Join(" ", args);
         }

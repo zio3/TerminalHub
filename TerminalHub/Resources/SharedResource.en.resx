@@ -372,10 +372,35 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
+  <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>Permission preset</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Codex defaults</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Use Codex and config.toml settings without overriding them.</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>Automatic</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>Recommended</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>Automate workspace development and network use; AI reviews operations outside the boundary.</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Uac" xml:space="preserve"><value>Windows may show UAC once while preparing the elevated sandbox.</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>Custom</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>Choose sandbox, approval, and network behavior individually.</value></data>
+  <data name="SessionOptions.Codex.FollowCodex" xml:space="preserve"><value>Use Codex setting</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Label" xml:space="preserve"><value>Windows sandbox</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Help" xml:space="preserve"><value>Elevated enforces boundaries through a dedicated low-privilege user.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>Command network access</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Allow" xml:space="preserve"><value>Allow</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Deny" xml:space="preserve"><value>Deny</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>Controls network use by git, gh, package managers, and other commands.</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Label" xml:space="preserve"><value>Approval reviewer</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.User" xml:space="preserve"><value>Ask the user</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Auto" xml:space="preserve"><value>AI automatic review</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Label" xml:space="preserve"><value>Web search</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>Live search</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>Codex web search is independent from network access for commands.</value></data>
   <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Bypass all approvals and sandbox (dangerous)</value></data>
   <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution. While on, the sandbox and approval choices are disabled (not applied).</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>This disables safety boundaries</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>Enable anyway</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Avoids the alternate screen and keeps Codex output in the terminal scrollback (--no-alt-screen).</value></data>

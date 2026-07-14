@@ -372,10 +372,35 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
+  <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>権限プリセット</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Codex 標準</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Codex 本体と config.toml の設定をそのまま使用します。</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>自動・推奨</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>推奨</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>ワークスペース内の開発とネットワーク利用を自動化し、範囲外の操作は AI が審査します。</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Uac" xml:space="preserve"><value>初回のみ、Windows サンドボックスの準備で UAC が表示される場合があります。</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>カスタム</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>サンドボックス、承認、ネットワークを個別に指定します。</value></data>
+  <data name="SessionOptions.Codex.FollowCodex" xml:space="preserve"><value>Codex の設定に従う</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Label" xml:space="preserve"><value>Windows サンドボックス</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Help" xml:space="preserve"><value>Elevated は専用の低権限ユーザーで境界を強制します。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>コマンドのネットワーク</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Allow" xml:space="preserve"><value>許可</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Deny" xml:space="preserve"><value>禁止</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>git、gh、パッケージマネージャーなどの通信を制御します。</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Label" xml:space="preserve"><value>承認の審査者</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.User" xml:space="preserve"><value>ユーザーへ確認</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Auto" xml:space="preserve"><value>AI による自動審査</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Label" xml:space="preserve"><value>Web 検索</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>ライブ検索</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>無効</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>コマンドのネットワーク設定とは独立した Codex の検索機能です。</value></data>
   <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>承認・サンドボックスを完全バイパス（危険）</value></data>
   <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します。ONの間はサンドボックスと承認の指定は無効です（適用されません）。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>安全機構を解除します</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>理解して有効化</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>代替画面を使わず、Codex の出力をターミナルのスクロール履歴に残します（--no-alt-screen）。</value></data>

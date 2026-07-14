@@ -426,6 +426,13 @@
                 var savedSandbox = options.ContainsKey("sandbox-mode") ? options["sandbox-mode"] : "";
                 var savedApproval = options.ContainsKey("ask-for-approval") ? options["ask-for-approval"] : "";
                 var savedApprovalsReviewer = options.ContainsKey("approvals-reviewer") ? options["approvals-reviewer"] : "";
+                var savedWindowsSandbox = options.GetValueOrDefault("windows-sandbox", "");
+                var savedNetworkAccess = options.GetValueOrDefault("network-access", "");
+                var savedWebSearchMode = options.GetValueOrDefault("web-search-mode", "");
+                if (string.IsNullOrEmpty(savedWebSearchMode) && options.GetValueOrDefault("search") == "true")
+                {
+                    savedWebSearchMode = "live";
+                }
                 // 旧「Auto」モードは空のサンドボックス/承認を BuildCodexArgs 側で
                 // workspace-write / on-request に補完していた。モード廃止に伴い、その暗黙の
                 // 既定を明示値として顕在化させ、再保存しても挙動が変わらないようにする。
@@ -433,17 +440,38 @@
                 {
                     if (string.IsNullOrEmpty(savedSandbox)) savedSandbox = "workspace-write";
                     if (string.IsNullOrEmpty(savedApproval)) savedApproval = "on-request";
+                    if (string.IsNullOrEmpty(savedApprovalsReviewer)) savedApprovalsReviewer = "auto_review";
+                    if (string.IsNullOrEmpty(savedWindowsSandbox)) savedWindowsSandbox = "elevated";
+                    if (string.IsNullOrEmpty(savedNetworkAccess)) savedNetworkAccess = "true";
+                    if (string.IsNullOrEmpty(savedWebSearchMode)) savedWebSearchMode = "live";
+                }
+                var savedPreset = options.GetValueOrDefault("permission-preset");
+                if (string.IsNullOrEmpty(savedPreset))
+                {
+                    savedPreset = savedMode == "auto" ||
+                        (savedSandbox == "workspace-write" && savedApproval == "on-request" &&
+                         savedApprovalsReviewer == "auto_review" && savedWindowsSandbox == "elevated" &&
+                         savedNetworkAccess == "true" && savedWebSearchMode == "live")
+                        ? "recommended"
+                        : string.IsNullOrEmpty(savedSandbox) && string.IsNullOrEmpty(savedApproval) &&
+                          string.IsNullOrEmpty(savedApprovalsReviewer) && string.IsNullOrEmpty(savedWindowsSandbox) &&
+                          string.IsNullOrEmpty(savedNetworkAccess) && string.IsNullOrEmpty(savedWebSearchMode)
+                            ? "codex-default"
+                            : "custom";
                 }
                 codexOptions = new SessionOptionsSelector.CodexOptionsData
                 {
                     Yolo = savedMode == "yolo",
+                    PermissionPreset = savedPreset,
                     ResumeLast = (options.ContainsKey("resume-last") && options["resume-last"] == "true")
                         || (options.ContainsKey("resume-picker") && options["resume-picker"] == "true"),
                     NoAltScreen = options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true",
                     SandboxMode = savedSandbox,
                     ApprovalPolicy = savedApproval,
-                    AutoReviewApprovals = savedApprovalsReviewer == "auto_review",
-                    SearchEnabled = options.ContainsKey("search") && options["search"] == "true",
+                    ApprovalReviewer = savedApprovalsReviewer,
+                    WindowsSandbox = savedWindowsSandbox,
+                    NetworkAccess = savedNetworkAccess,
+                    WebSearchMode = savedWebSearchMode,
                     AdditionalDirectories = options.ContainsKey("add-dir") ? options["add-dir"] : "",
                     ExtraArgs = options.ContainsKey("extra-args") ? options["extra-args"] : ""
                 };
