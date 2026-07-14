@@ -457,7 +457,8 @@
         _hookNotificationHandler = (sender, args) =>
         {
             // Hook は en スレッドから発火するため、Circuit のカルチャを復元してから描画する。
-            _ = InvokeWithCircuitCultureAsync(() => OnHookNotification(args.Notification));
+            _ = InvokeWithCircuitCultureAsync(() => OnHookNotification(
+                args.Notification, args.PermissionRequestRequiresUserInput));
         };
         HookNotificationService.OnHookNotification += _hookNotificationHandler;
 
@@ -2674,7 +2675,9 @@
         StateHasChanged();
     }
 
-    private async Task OnHookNotification(HookNotification notification)
+    private async Task OnHookNotification(
+        HookNotification notification,
+        bool permissionRequestRequiresUserInput)
     {
         var eventType = notification.GetEventType();
         if (eventType == null) return;
@@ -2754,6 +2757,14 @@
             case HookEventType.Notification:
             case HookEventType.PreToolUse:
             case HookEventType.PermissionRequest:
+                // Auto-review に委譲された PermissionRequest はユーザー操作待ちではない。
+                // 内部履歴には残すが、ベルやカーソルパッド切替へは伝搬しない。
+                if (eventType == HookEventType.PermissionRequest && !permissionRequestRequiresUserInput)
+                {
+                    StateHasChanged();
+                    break;
+                }
+
                 // Notification / PreToolUse / PermissionRequest は「ユーザーの入力が必要」な状態。
                 // 非アクティブセッションならベル（通知マーク）を立てて、別セッションを見ている時でも気づけるように。
                 // 解除は不要: 入力するにはそのセッションへ切り替える＝SelectSession でベルが自然に消える。
@@ -2788,7 +2799,8 @@
                     StateHasChanged();
                 }
                 else if (autoSwitchCursorPadEnabled && bottomPanel != null
-                         && IsUserInputWaitEvent(eventType, notification.Message))
+                         && IsUserInputWaitEvent(
+                             eventType, notification.Message, permissionRequestRequiresUserInput))
                 {
                     // 試験機能: アクティブ(表示中)セッションが入力待ちになったら、既存のカーソルパッドタブが
                     // あればそこへ自動切替する（無ければ何もしない）。↑↓←→/Enter でそのまま応答できる。
@@ -2802,9 +2814,12 @@
     /// この hook イベントが「ユーザーの入力受付中(許可/選択待ち)」を意味するか。
     /// PreToolUse=選択待ち / PermissionRequest=許可待ち / Notification は message に "permission" を含むときのみ。
     /// </summary>
-    private static bool IsUserInputWaitEvent(HookEventType? eventType, string? message)
+    private static bool IsUserInputWaitEvent(
+        HookEventType? eventType,
+        string? message,
+        bool permissionRequestRequiresUserInput)
         => eventType == HookEventType.PreToolUse
-        || eventType == HookEventType.PermissionRequest
+        || (eventType == HookEventType.PermissionRequest && permissionRequestRequiresUserInput)
         || (eventType == HookEventType.Notification
             && ClassifyNotificationBell(message) == SessionBellKind.Confirm);
 

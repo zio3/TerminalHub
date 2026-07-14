@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TerminalHub.Constants;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services;
@@ -25,10 +26,14 @@ public interface IHookNotificationService
 public class HookNotificationEventArgs : EventArgs
 {
     public HookNotification Notification { get; }
+    public bool PermissionRequestRequiresUserInput { get; }
 
-    public HookNotificationEventArgs(HookNotification notification)
+    public HookNotificationEventArgs(
+        HookNotification notification,
+        bool permissionRequestRequiresUserInput)
     {
         Notification = notification;
+        PermissionRequestRequiresUserInput = permissionRequestRequiresUserInput;
     }
 }
 
@@ -84,6 +89,9 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
+        var permissionRequestRequiresUserInput = eventType != HookEventType.PermissionRequest ||
+            TerminalConstants.CodexPermissionRequestRequiresUserInput(session.Options);
+
         // イベント種類に応じた処理（ステータス更新を先に実行）
         switch (eventType)
         {
@@ -120,7 +128,8 @@ public class HookNotificationService : IHookNotificationService
                 break;
 
             case HookEventType.PermissionRequest:
-                await HandlePermissionRequestEventAsync(session, notification);
+                await HandlePermissionRequestEventAsync(
+                    session, notification, permissionRequestRequiresUserInput);
                 break;
         }
 
@@ -128,7 +137,9 @@ public class HookNotificationService : IHookNotificationService
         session.RecordHookEvent(notification.Event, notification.AgentId, notification.AgentType, session.RunningSubagentCount, notification.Message, notification.ToolName);
 
         // イベントを発火（ステータス更新後にUIを更新させる）
-        OnHookNotification?.Invoke(this, new HookNotificationEventArgs(notification));
+        OnHookNotification?.Invoke(
+            this,
+            new HookNotificationEventArgs(notification, permissionRequestRequiresUserInput));
     }
 
     private async Task HandleStopEventAsync(SessionInfo session, HookNotification notification)
@@ -469,12 +480,31 @@ public class HookNotificationService : IHookNotificationService
     }
 
     /// <summary>
-    /// PermissionRequest（Codex）: ツール実行の承認待ち。本来の "PermissionRequest" を toolName 付きで
-    /// Webhook 送信する（受信側で「確認待ち」として LED 色を変えられる）。ベル表示は Root.razor 側。
+    /// PermissionRequest（Codex）: user reviewer の場合だけユーザー承認待ちとして扱い、
+    /// toolName 付きで Webhook 送信する。auto_review の場合は内部履歴だけに記録し、
+    /// 下流がユーザー待ちと誤認しないよう Webhook へ伝搬しない。ベル表示は Root.razor 側。
     /// hook 戻り値で承認制御はしない（観測のみ。ブリッジは空応答で Codex の通常承認フローを保つ）。
     /// </summary>
-    private async Task HandlePermissionRequestEventAsync(SessionInfo session, HookNotification notification)
+    private async Task HandlePermissionRequestEventAsync(
+        SessionInfo session,
+        HookNotification notification,
+        bool requiresUserInput)
     {
+        if (!requiresUserInput)
+        {
+            _logger.LogInformation(
+                "PermissionRequest イベント処理（ツール={ToolName}、Auto-reviewへ委譲、Webhook抑制）: Session={SessionName}",
+                notification.ToolName, session.GetDisplayName());
+
+            // 設定変更前の許可待ちが残っていても、選択待ち状態は壊さず許可待ちだけ解除する。
+            session.IsWaitingForPermission = false;
+            if (!session.IsWaitingForSelection)
+            {
+                session.LastWaitingHookSetTime = null;
+            }
+            return;
+        }
+
         _logger.LogInformation(
             "PermissionRequest イベント処理（ツール={ToolName}、承認待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
