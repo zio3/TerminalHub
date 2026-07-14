@@ -47,6 +47,14 @@ namespace TerminalHub.Models
         public bool IsActive { get; set; }
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
+
+        /// <summary>
+        /// 起動済み Codex プロセスへ渡した権限設定。
+        /// Options は再起動なしでも更新されるため、Hook の判定にはこちらを優先する。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CodexProcessOptionsSnapshot? RunningCodexOptions { get; internal set; }
+
         public string Memo { get; set; } = string.Empty;
 
         // このセッションでだけ表示・送信できるカスタムコマンド（グローバル設定の Commands とは別管理）。

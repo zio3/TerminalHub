@@ -1,4 +1,5 @@
 using TerminalHub.Constants;
+using TerminalHub.Models;
 using Xunit;
 
 namespace TerminalHub.Terminal.Tests;
@@ -40,6 +41,74 @@ public sealed class CodexArgumentsTests
         Assert.Equal(
             "--sandbox workspace-write --ask-for-approval on-request -c approvals_reviewer=user -c windows.sandbox=elevated -c sandbox_workspace_write.network_access=true --search",
             TerminalConstants.BuildCodexArgs(options));
+    }
+
+    [Fact]
+    public void PermissionRequest_UsesPresetReviewer()
+    {
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string> { ["permission-preset"] = "recommended" }));
+        Assert.True(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string> { ["permission-preset"] = "ask-for-approval" }));
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string>
+            {
+                ["permission-preset"] = "custom",
+                ["approvals-reviewer"] = "auto_review"
+            }));
+        Assert.True(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void PermissionRequest_UsesLastExplicitReviewerOverride()
+    {
+        Assert.True(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string>
+            {
+                ["permission-preset"] = "recommended",
+                ["extra-args"] = "-c approvals_reviewer=user"
+            }));
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string>
+            {
+                ["permission-preset"] = "ask-for-approval",
+                ["extra-args"] = "-c approvals_reviewer=user",
+                ["custom-args"] = "-c \"approvals_reviewer=auto_review\""
+            }));
+    }
+
+    [Fact]
+    public void PermissionRequest_DoesNotWaitWhenApprovalsAreDisabled()
+    {
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string> { ["mode"] = "yolo" }));
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(
+            new Dictionary<string, string>
+            {
+                ["permission-preset"] = "custom",
+                ["ask-for-approval"] = "on-request",
+                ["extra-args"] = "--ask-for-approval=never"
+            }));
+    }
+
+    [Fact]
+    public void PermissionRequest_ProcessSnapshotDoesNotChangeUntilRestart()
+    {
+        var launchOptions = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "ask-for-approval"
+        };
+        var runningProcess = CodexProcessOptionsSnapshot.Capture(launchOptions);
+
+        var savedWithoutRestart = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "recommended"
+        };
+
+        Assert.True(CodexProcessOptionsSnapshot.ResolvePermissionRequestRequiresUserInput(
+            runningProcess, savedWithoutRestart));
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(savedWithoutRestart));
     }
 
     [Fact]

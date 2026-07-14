@@ -466,7 +466,11 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
+                // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
+                var terminalType = sessionInfo.TerminalType;
+                var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
+                var (command, args) = BuildTerminalCommand(terminalType, options);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
@@ -1022,15 +1026,25 @@ namespace TerminalHub.Services
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
         {
-            var options = sessionInfo.Options ?? new Dictionary<string, string>();
+            // 呼び出し後の設定保存で、生成するコマンドと実行時スナップショットが変わらないよう複製する。
+            var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
             var hasContinueOption = options.ContainsKey("continue");
 
             if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && hasContinueOption)
             {
-                options = new Dictionary<string, string>(options);
                 options.Remove("continue");
             }
             return options;
+        }
+
+        private static void CaptureRunningCodexOptions(
+            SessionInfo sessionInfo,
+            TerminalType terminalType,
+            Dictionary<string, string> options)
+        {
+            sessionInfo.RunningCodexOptions = terminalType == TerminalType.CodexCLI
+                ? CodexProcessOptionsSnapshot.Capture(options)
+                : null;
         }
 
         public async Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false)
@@ -1072,7 +1086,9 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var terminalType = sessionInfo.TerminalType;
+                var (command, args) = BuildTerminalCommand(terminalType, options);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
@@ -1157,7 +1173,9 @@ namespace TerminalHub.Services
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var terminalType = sessionInfo.TerminalType;
+                var (command, args) = BuildTerminalCommand(terminalType, options);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);

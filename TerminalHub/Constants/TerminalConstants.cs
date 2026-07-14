@@ -265,6 +265,58 @@ namespace TerminalHub.Constants
             return string.Join(" ", args);
         }
 
+        /// <summary>
+        /// TerminalHub の保存値と手書き引数から、Codex が PermissionRequest を
+        /// ユーザーへ回す構成かを判定する。未指定値は Codex の既定（user）として扱う。
+        /// </summary>
+        public static bool CodexPermissionRequestRequiresUserInput(Dictionary<string, string> options)
+        {
+            if (options.GetValueOrDefault("mode") == "yolo" ||
+                ContainsCodexArgOption(options, "--dangerously-bypass-approvals-and-sandbox"))
+            {
+                return false;
+            }
+
+            var approvalPolicy = options.GetValueOrDefault("ask-for-approval") ?? "";
+            var approvalsReviewer = options.GetValueOrDefault("approvals-reviewer") ?? "";
+            var permissionPreset = options.GetValueOrDefault("permission-preset");
+
+            if (permissionPreset == "codex-default")
+            {
+                approvalPolicy = "";
+                approvalsReviewer = "";
+            }
+            else if (permissionPreset == "ask-for-approval")
+            {
+                approvalPolicy = "on-request";
+                approvalsReviewer = "user";
+            }
+            else if (permissionPreset == "recommended")
+            {
+                approvalPolicy = "on-request";
+                approvalsReviewer = "auto_review";
+            }
+
+            if (options.GetValueOrDefault("mode") == "auto" && string.IsNullOrEmpty(approvalPolicy))
+            {
+                approvalPolicy = "on-request";
+            }
+
+            approvalPolicy = GetLastCodexArgOptionValue(
+                options, approvalPolicy, "--ask-for-approval", "-a");
+            approvalsReviewer = GetLastCodexConfigOverrideValue(
+                options, "approvals_reviewer") ?? approvalsReviewer;
+
+            if (approvalPolicy == "never")
+            {
+                return false;
+            }
+
+            // config.toml に委ねる未指定ケースは実効値を観測できないため、
+            // 誤ってユーザー待ちを抑制しないよう Codex 既定の user として扱う。
+            return approvalsReviewer != "auto_review";
+        }
+
         // Antigravity CLI (agy): 承認スキップと会話継続を Claude/Codex と同じ形で扱う。
         public static string BuildAntigravityArgs(Dictionary<string, string> options)
         {
@@ -369,6 +421,68 @@ namespace TerminalHub.Constants
             var prefix = settingName + "=";
             return rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
                 .Any(token => token.StartsWith(prefix, StringComparison.Ordinal));
+        }
+
+        private static string GetLastCodexArgOptionValue(
+            Dictionary<string, string> options,
+            string fallback,
+            params string[] optionNames)
+        {
+            var value = fallback;
+            foreach (var rawArgs in new[]
+                     {
+                         options.GetValueOrDefault("extra-args"),
+                         options.GetValueOrDefault("custom-args")
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(rawArgs)) continue;
+
+                var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                for (var i = 0; i < tokens.Length; i++)
+                {
+                    var token = tokens[i].Trim('"', '\'');
+                    foreach (var optionName in optionNames)
+                    {
+                        if (token == optionName && i + 1 < tokens.Length)
+                        {
+                            value = tokens[i + 1].Trim('"', '\'');
+                        }
+                        else if (token.StartsWith(optionName + "=", StringComparison.Ordinal))
+                        {
+                            value = token[(optionName.Length + 1)..].Trim('"', '\'');
+                        }
+                    }
+                }
+            }
+
+            return value;
+        }
+
+        private static string? GetLastCodexConfigOverrideValue(
+            Dictionary<string, string> options,
+            string settingName)
+        {
+            string? value = null;
+            var prefix = settingName + "=";
+            foreach (var rawArgs in new[]
+                     {
+                         options.GetValueOrDefault("extra-args"),
+                         options.GetValueOrDefault("custom-args")
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(rawArgs)) continue;
+
+                foreach (var token in rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var normalizedToken = token.Trim('"', '\'');
+                    if (normalizedToken.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        value = normalizedToken[prefix.Length..].Trim('"', '\'');
+                    }
+                }
+            }
+
+            return value;
         }
 
         // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。
