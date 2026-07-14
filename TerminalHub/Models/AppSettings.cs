@@ -35,12 +35,22 @@ public class SessionDefaultsSettings
     public string? LastClaudePermissionMode { get; set; }
     /// <summary>Gemini CLI の承認モード（"default" | "auto_edit" | "yolo"）。</summary>
     public string? LastGeminiApprovalMode { get; set; }
+    /// <summary>Codex の権限プリセット（"ask-for-approval" | "recommended" | "custom"）。</summary>
+    public string? LastCodexPermissionPreset { get; set; }
     /// <summary>Codex のサンドボックスモード（"" | "read-only" | "workspace-write" | "danger-full-access"）。</summary>
     public string? LastCodexSandboxMode { get; set; }
     /// <summary>Codex の承認ポリシー（"" | "untrusted" | "on-request" | "never"）。</summary>
     public string? LastCodexApprovalPolicy { get; set; }
     /// <summary>Codex の承認リクエスト自動レビュー。</summary>
     public bool? LastCodexAutoReviewApprovals { get; set; }
+    /// <summary>Codex の承認審査者（"" | "user" | "auto_review"）。</summary>
+    public string? LastCodexApprovalReviewer { get; set; }
+    /// <summary>Codex の Windows サンドボックス方式（"" | "elevated" | "unelevated"）。</summary>
+    public string? LastCodexWindowsSandbox { get; set; }
+    /// <summary>Codex のコマンド用ネットワーク（"" | "true" | "false"）。</summary>
+    public string? LastCodexNetworkAccess { get; set; }
+    /// <summary>Codex の Web 検索（"" | "live" | "disabled"）。</summary>
+    public string? LastCodexWebSearchMode { get; set; }
     /// <summary>Codex の resume --last。</summary>
     public bool? LastCodexResumeLast { get; set; }
     /// <summary>Codex の --no-alt-screen。未設定時は false。</summary>

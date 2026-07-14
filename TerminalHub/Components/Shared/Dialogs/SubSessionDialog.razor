@@ -400,6 +400,11 @@
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
+    private static readonly HashSet<string> ValidCodexApprovalReviewers = new() { "", "user", "auto_review" };
+    private static readonly HashSet<string> ValidCodexPermissionPresets = new() { "ask-for-approval", "recommended", "custom" };
+    private static readonly HashSet<string> ValidCodexWindowsSandboxes = new() { "", "elevated", "unelevated" };
+    private static readonly HashSet<string> ValidCodexNetworkAccess = new() { "", "true", "false" };
+    private static readonly HashSet<string> ValidCodexWebSearchModes = new() { "", "live", "disabled" };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -654,20 +659,68 @@
             // Yolo（承認・サンドボックス完全バイパス）は危険なため「最後の選択」を復元せず、
             // 新規サブセッションでは常に OFF 既定にする（安全側）。
 
-            if (defaults.LastCodexSandboxMode != null && ValidCodexSandboxModes.Contains(defaults.LastCodexSandboxMode))
+            var isLegacyCodexDefault = defaults.LastCodexPermissionPreset == "codex-default";
+            if (isLegacyCodexDefault)
+            {
+                // 旧「Codex標準」は上書きなしだったため、同じ実効値をカスタムとして維持する。
+                codexOptions.PermissionPreset = "custom";
+                codexOptions.SandboxMode = "";
+                codexOptions.ApprovalPolicy = "";
+                codexOptions.ApprovalReviewer = "";
+                codexOptions.WindowsSandbox = "";
+                codexOptions.NetworkAccess = "";
+                codexOptions.WebSearchMode = "";
+            }
+            else if (defaults.LastCodexPermissionPreset != null && ValidCodexPermissionPresets.Contains(defaults.LastCodexPermissionPreset))
+            {
+                codexOptions.PermissionPreset = defaults.LastCodexPermissionPreset;
+            }
+            else if (defaults.LastCodexSandboxMode != null || defaults.LastCodexApprovalPolicy != null ||
+                     defaults.LastCodexAutoReviewApprovals != null || defaults.LastCodexSearchEnabled != null)
+            {
+                codexOptions.PermissionPreset = "custom";
+                codexOptions.WindowsSandbox = "";
+                codexOptions.NetworkAccess = "";
+                codexOptions.ApprovalReviewer = "";
+                codexOptions.WebSearchMode = "";
+            }
+
+            if (!isLegacyCodexDefault && defaults.LastCodexSandboxMode != null && ValidCodexSandboxModes.Contains(defaults.LastCodexSandboxMode))
             {
                 codexOptions.SandboxMode = defaults.LastCodexSandboxMode;
             }
 
-            if (defaults.LastCodexApprovalPolicy != null && ValidCodexApprovalPolicies.Contains(defaults.LastCodexApprovalPolicy))
+            if (!isLegacyCodexDefault && defaults.LastCodexApprovalPolicy != null && ValidCodexApprovalPolicies.Contains(defaults.LastCodexApprovalPolicy))
             {
                 codexOptions.ApprovalPolicy = defaults.LastCodexApprovalPolicy;
             }
 
-            codexOptions.AutoReviewApprovals = defaults.LastCodexAutoReviewApprovals ?? codexOptions.AutoReviewApprovals;
+            if (!isLegacyCodexDefault && defaults.LastCodexApprovalReviewer != null && ValidCodexApprovalReviewers.Contains(defaults.LastCodexApprovalReviewer))
+            {
+                codexOptions.ApprovalReviewer = defaults.LastCodexApprovalReviewer;
+            }
+            else if (!isLegacyCodexDefault && defaults.LastCodexAutoReviewApprovals.HasValue)
+            {
+                codexOptions.ApprovalReviewer = defaults.LastCodexAutoReviewApprovals.Value ? "auto_review" : "";
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexWindowsSandbox != null && ValidCodexWindowsSandboxes.Contains(defaults.LastCodexWindowsSandbox))
+            {
+                codexOptions.WindowsSandbox = defaults.LastCodexWindowsSandbox;
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexNetworkAccess != null && ValidCodexNetworkAccess.Contains(defaults.LastCodexNetworkAccess))
+            {
+                codexOptions.NetworkAccess = defaults.LastCodexNetworkAccess;
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexWebSearchMode != null && ValidCodexWebSearchModes.Contains(defaults.LastCodexWebSearchMode))
+            {
+                codexOptions.WebSearchMode = defaults.LastCodexWebSearchMode;
+            }
+            else if (!isLegacyCodexDefault && defaults.LastCodexSearchEnabled.HasValue)
+            {
+                codexOptions.WebSearchMode = defaults.LastCodexSearchEnabled.Value ? "live" : "";
+            }
             codexOptions.ResumeLast = defaults.LastCodexResumeLast ?? codexOptions.ResumeLast;
             codexOptions.NoAltScreen = defaults.LastCodexNoAltScreen ?? codexOptions.NoAltScreen;
-            codexOptions.SearchEnabled = defaults.LastCodexSearchEnabled ?? codexOptions.SearchEnabled;
         }
         catch
         {

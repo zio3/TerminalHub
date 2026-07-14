@@ -113,27 +113,25 @@ namespace TerminalHub.Constants
         {
             var args = new List<string>();
 
-            // 現行 Codex CLI は復帰履歴がない初回フォルダでも、ディレクトリの信頼確認後に
-            // 新規セッションとして継続できるため、resume --last 失敗時の再作成処理は不要。
-            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
-            {
-                args.Add("resume --last");
-            }
-
             // extra-args / custom-args に手書きで --no-alt-screen を入れている既存セッションが
             // あり得るため、UI側の明示指定と重なっても二重指定しない。
             var userSuppliedNoAltScreen =
                 ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
                 ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
+            var userSuppliedSearch = ContainsCodexArgToken(options, "--search");
+            var userSuppliedSandbox = ContainsCodexArgOption(options, "--sandbox", "-s");
+            var userSuppliedApprovalPolicy = ContainsCodexArgOption(options, "--ask-for-approval", "-a");
+            var userSuppliedDangerousBypass = ContainsCodexArgOption(
+                options,
+                "--dangerously-bypass-approvals-and-sandbox");
+            var userSuppliedApprovalsReviewer = ContainsCodexConfigOverride(options, "approvals_reviewer");
+            var userSuppliedWindowsSandbox = ContainsCodexConfigOverride(options, "windows.sandbox");
+            var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
+            var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
                 args.Add("--no-alt-screen");
-            }
-
-            if (options.ContainsKey("search") && options["search"] == "true")
-            {
-                args.Add("--search");
             }
 
             if (options.TryGetValue("add-dir", out var addDirValue) && !string.IsNullOrWhiteSpace(addDirValue))
@@ -151,11 +149,49 @@ namespace TerminalHub.Constants
             var sandboxMode = options.GetValueOrDefault("sandbox-mode");
             var approvalPolicy = options.GetValueOrDefault("ask-for-approval");
             var approvalsReviewer = options.GetValueOrDefault("approvals-reviewer");
+            var windowsSandbox = options.GetValueOrDefault("windows-sandbox");
+            var networkAccess = options.GetValueOrDefault("network-access");
+            var webSearchMode = options.GetValueOrDefault("web-search-mode");
+            var permissionPreset = options.GetValueOrDefault("permission-preset");
+
+            // プリセットを保存値の寄せ集めではなく、起動時の契約として扱う。
+            // これにより古い詳細値が残っていても、各プリセットは常に文書化された
+            // 組み合わせで起動する。codex-default は旧保存値との互換用。
+            if (permissionPreset == "codex-default")
+            {
+                sandboxMode = "";
+                approvalPolicy = "";
+                approvalsReviewer = "";
+                windowsSandbox = "";
+                networkAccess = "";
+                webSearchMode = "";
+            }
+            else if (permissionPreset == "ask-for-approval")
+            {
+                sandboxMode = "workspace-write";
+                approvalPolicy = "on-request";
+                approvalsReviewer = "user";
+                windowsSandbox = "elevated";
+                networkAccess = "true";
+                webSearchMode = "live";
+            }
+            else if (permissionPreset == "recommended")
+            {
+                sandboxMode = "workspace-write";
+                approvalPolicy = "on-request";
+                approvalsReviewer = "auto_review";
+                windowsSandbox = "elevated";
+                networkAccess = "true";
+                webSearchMode = "live";
+            }
 
             // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
             if (mode == "yolo")
             {
-                args.Add("--dangerously-bypass-approvals-and-sandbox");
+                if (!userSuppliedDangerousBypass)
+                {
+                    args.Add("--dangerously-bypass-approvals-and-sandbox");
+                }
             }
             else
             {
@@ -166,20 +202,50 @@ namespace TerminalHub.Constants
                     approvalPolicy = string.IsNullOrEmpty(approvalPolicy) ? "on-request" : approvalPolicy;
                 }
 
-                if (!string.IsNullOrEmpty(sandboxMode))
+                if (!string.IsNullOrEmpty(sandboxMode) && !userSuppliedSandbox)
                 {
                     args.Add($"--sandbox {sandboxMode}");
                 }
 
-                if (!string.IsNullOrEmpty(approvalPolicy))
+                if (!string.IsNullOrEmpty(approvalPolicy) && !userSuppliedApprovalPolicy)
                 {
                     args.Add($"--ask-for-approval {approvalPolicy}");
                 }
 
                 // 承認を一切求めない設定ではレビュー対象が存在しないため付与しない。
-                if (approvalsReviewer == "auto_review" && approvalPolicy != "never")
+                if (approvalsReviewer == "auto_review" && approvalPolicy != "never" && !userSuppliedApprovalsReviewer)
                 {
                     args.Add("-c approvals_reviewer=auto_review");
+                }
+                else if (approvalsReviewer == "user" && approvalPolicy != "never" && !userSuppliedApprovalsReviewer)
+                {
+                    args.Add("-c approvals_reviewer=user");
+                }
+
+                if (windowsSandbox is ("elevated" or "unelevated") && !userSuppliedWindowsSandbox)
+                {
+                    args.Add($"-c windows.sandbox={windowsSandbox}");
+                }
+
+                if (networkAccess is ("true" or "false") && !userSuppliedNetworkAccess)
+                {
+                    args.Add($"-c sandbox_workspace_write.network_access={networkAccess}");
+                }
+
+                if (webSearchMode == "live" && !userSuppliedSearch && !userSuppliedWebSearch)
+                {
+                    args.Add("--search");
+                }
+                else if (webSearchMode is ("disabled" or "cached" or "indexed") && !userSuppliedWebSearch)
+                {
+                    args.Add($"-c web_search={webSearchMode}");
+                }
+                else if (permissionPreset != "codex-default" &&
+                         options.ContainsKey("search") && options["search"] == "true" &&
+                         !userSuppliedSearch && !userSuppliedWebSearch)
+                {
+                    // 旧保存形式との互換性。
+                    args.Add("--search");
                 }
             }
 
@@ -189,6 +255,12 @@ namespace TerminalHub.Constants
             }
 
             AppendCustomArgs(args, options);
+
+            // 設定上書きはサブコマンドより前へ置く。resume --last は必ず最後に追加する。
+            if (options.ContainsKey("resume-last") && options["resume-last"] == "true")
+            {
+                args.Add("resume --last");
+            }
 
             return string.Join(" ", args);
         }
@@ -255,6 +327,48 @@ namespace TerminalHub.Constants
 
             var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             return Array.IndexOf(tokens, token) >= 0;
+        }
+
+        private static bool ContainsCodexArgToken(Dictionary<string, string> options, string token)
+        {
+            return ContainsArgToken(options.GetValueOrDefault("extra-args"), token) ||
+                   ContainsArgToken(options.GetValueOrDefault("custom-args"), token);
+        }
+
+        private static bool ContainsCodexArgOption(Dictionary<string, string> options, params string[] optionNames)
+        {
+            return ContainsArgOption(options.GetValueOrDefault("extra-args"), optionNames) ||
+                   ContainsArgOption(options.GetValueOrDefault("custom-args"), optionNames);
+        }
+
+        private static bool ContainsArgOption(string? rawArgs, params string[] optionNames)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Any(token => optionNames.Any(optionName =>
+                token == optionName || token.StartsWith(optionName + "=", StringComparison.Ordinal)));
+        }
+
+        private static bool ContainsCodexConfigOverride(Dictionary<string, string> options, string settingName)
+        {
+            return ContainsConfigOverride(options.GetValueOrDefault("extra-args"), settingName) ||
+                   ContainsConfigOverride(options.GetValueOrDefault("custom-args"), settingName);
+        }
+
+        private static bool ContainsConfigOverride(string? rawArgs, string settingName)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var prefix = settingName + "=";
+            return rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Any(token => token.StartsWith(prefix, StringComparison.Ordinal));
         }
 
         // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。
