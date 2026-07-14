@@ -1,4 +1,5 @@
 using TerminalHub.Constants;
+using TerminalHub.Models;
 using Xunit;
 
 namespace TerminalHub.Terminal.Tests;
@@ -89,6 +90,25 @@ public sealed class CodexArgumentsTests
                 ["ask-for-approval"] = "on-request",
                 ["extra-args"] = "--ask-for-approval=never"
             }));
+    }
+
+    [Fact]
+    public void PermissionRequest_ProcessSnapshotDoesNotChangeUntilRestart()
+    {
+        var launchOptions = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "ask-for-approval"
+        };
+        var runningProcess = CodexProcessOptionsSnapshot.Capture(launchOptions);
+
+        var savedWithoutRestart = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "recommended"
+        };
+
+        Assert.True(CodexProcessOptionsSnapshot.ResolvePermissionRequestRequiresUserInput(
+            runningProcess, savedWithoutRestart));
+        Assert.False(TerminalConstants.CodexPermissionRequestRequiresUserInput(savedWithoutRestart));
     }
 
     [Fact]

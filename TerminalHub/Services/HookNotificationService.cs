@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using TerminalHub.Constants;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services;
@@ -90,7 +89,8 @@ public class HookNotificationService : IHookNotificationService
         }
 
         var permissionRequestRequiresUserInput = eventType != HookEventType.PermissionRequest ||
-            TerminalConstants.CodexPermissionRequestRequiresUserInput(session.Options);
+            CodexProcessOptionsSnapshot.ResolvePermissionRequestRequiresUserInput(
+                session.RunningCodexOptions, session.Options);
 
         // イベント種類に応じた処理（ステータス更新を先に実行）
         switch (eventType)
