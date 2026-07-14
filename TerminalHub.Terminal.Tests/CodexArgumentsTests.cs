@@ -89,7 +89,13 @@ public sealed class CodexArgumentsTests
         var options = new Dictionary<string, string>
         {
             ["mode"] = "yolo",
-            ["permission-preset"] = "recommended",
+            ["permission-preset"] = "custom",
+            ["sandbox-mode"] = "workspace-write",
+            ["ask-for-approval"] = "on-request",
+            ["approvals-reviewer"] = "user",
+            ["windows-sandbox"] = "elevated",
+            ["network-access"] = "true",
+            ["web-search-mode"] = "live",
             ["resume-last"] = "true"
         };
 

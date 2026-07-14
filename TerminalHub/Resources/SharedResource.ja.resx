@@ -395,7 +395,7 @@
   <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>無効</value></data>
   <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>コマンドのネットワーク設定とは独立した Codex の検索機能です。</value></data>
   <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>サンドボックスと承認を無効にする（危険）</value></data>
-  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>この起動引数を追加すると、Codex がコンピューター全体を操作できるようになります。ONの間は、ほかのサンドボックスと承認の設定は適用されません。</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>この起動引数を追加すると、Codex がコンピューター全体を操作できるようになります。ONの間は、上の権限プリセットと詳細設定はすべて無視されます。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>この引数は、隔離された環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
   <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>サンドボックスと承認を無効にします</value></data>

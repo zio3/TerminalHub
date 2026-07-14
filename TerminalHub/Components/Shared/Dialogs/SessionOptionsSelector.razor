@@ -148,7 +148,7 @@
                 <div class="codex-preset-grid">
                     <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetDefault{UniqueId}")"
                            checked="@(CodexOptions.PermissionPreset == "ask-for-approval")"
-                           @onchange='() => SetCodexPreset("ask-for-approval")' autocomplete="off">
+                           @onchange='() => SetCodexPreset("ask-for-approval")' disabled="@CodexOptions.Yolo" autocomplete="off">
                     <label class="codex-preset-card" for="@($"codexPresetDefault{UniqueId}")">
                         <span class="codex-preset-icon"><i class="bi bi-sliders"></i></span>
                         <span class="codex-preset-copy">
@@ -159,7 +159,7 @@
 
                     <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetRecommended{UniqueId}")"
                            checked="@(CodexOptions.PermissionPreset == "recommended")"
-                           @onchange='() => SetCodexPreset("recommended")' autocomplete="off">
+                           @onchange='() => SetCodexPreset("recommended")' disabled="@CodexOptions.Yolo" autocomplete="off">
                     <label class="codex-preset-card codex-preset-card-recommended" for="@($"codexPresetRecommended{UniqueId}")">
                         <span class="codex-preset-icon"><i class="bi bi-shield-check"></i></span>
                         <span class="codex-preset-copy">
@@ -170,7 +170,7 @@
 
                     <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetCustom{UniqueId}")"
                            checked="@(CodexOptions.PermissionPreset == "custom")"
-                           @onchange='() => SetCodexPreset("custom")' autocomplete="off">
+                           @onchange='() => SetCodexPreset("custom")' disabled="@CodexOptions.Yolo" autocomplete="off">
                     <label class="codex-preset-card" for="@($"codexPresetCustom{UniqueId}")">
                         <span class="codex-preset-icon"><i class="bi bi-toggles"></i></span>
                         <span class="codex-preset-copy">

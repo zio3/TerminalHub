@@ -33,6 +33,13 @@
     box-shadow: 0 0 0 1px var(--bs-primary), 0 .35rem 1rem rgba(var(--bs-primary-rgb), .1);
 }
 
+.btn-check:disabled + .codex-preset-card {
+    pointer-events: none;
+    cursor: not-allowed;
+    opacity: .55;
+    transform: none;
+}
+
 .codex-preset-card-recommended {
     background: linear-gradient(105deg, rgba(var(--bs-primary-rgb), .1), transparent 68%);
 }
@@ -87,6 +94,10 @@
 
 .codex-settings-section > summary::marker {
     color: var(--bs-secondary-color);
+}
+
+.codex-settings-section fieldset:disabled {
+    opacity: .55;
 }
 
 @media (max-width: 767.98px) {
