@@ -395,12 +395,12 @@
   <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>Live search</value></data>
   <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>Disabled</value></data>
   <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>Codex web search is independent from network access for commands.</value></data>
-  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Bypass all approvals and sandbox (dangerous)</value></data>
-  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution. While on, the sandbox and approval choices are disabled (not applied).</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Disable sandbox and approvals (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Adding this launch argument allows Codex to operate across the entire computer. While enabled, the other sandbox and approval settings are not applied.</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
-  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
-  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>This disables safety boundaries</value></data>
-  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>Enable anyway</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>Only use this argument in an isolated environment (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>This disables the sandbox and approvals</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>Understand the risk and enable</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Avoids the alternate screen and keeps Codex output in the terminal scrollback (--no-alt-screen).</value></data>

@@ -395,12 +395,12 @@
   <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>ライブ検索</value></data>
   <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>無効</value></data>
   <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>コマンドのネットワーク設定とは独立した Codex の検索機能です。</value></data>
-  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>承認・サンドボックスを完全バイパス（危険）</value></data>
-  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します。ONの間はサンドボックスと承認の指定は無効です（適用されません）。</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>サンドボックスと承認を無効にする（危険）</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>この起動引数を追加すると、Codex がコンピューター全体を操作できるようになります。ONの間は、ほかのサンドボックスと承認の設定は適用されません。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
-  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
-  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>安全機構を解除します</value></data>
-  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>理解して有効化</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>この引数は、隔離された環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>サンドボックスと承認を無効にします</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>危険性を理解して有効化</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>代替画面を使わず、Codex の出力をターミナルのスクロール履歴に残します（--no-alt-screen）。</value></data>
