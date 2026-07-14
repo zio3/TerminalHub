@@ -787,6 +787,12 @@ namespace TerminalHub.Services
                         case ProbeState.Ground:
                             if (ch == '\x1b')
                                 _state = ProbeState.Escape;
+                            else if (ch == '\u009b')
+                                _state = ProbeState.Csi;
+                            else if (ch == '\u009d')
+                                _state = ProbeState.Osc;
+                            else if (ch is '\u0090' or '\u0098' or '\u009e' or '\u009f')
+                                _state = ProbeState.ControlString;
                             else if (!char.IsControl(ch) && !char.IsWhiteSpace(ch))
                                 found = true;
                             break;
@@ -797,8 +803,18 @@ namespace TerminalHub.Services
                                 '[' => ProbeState.Csi,
                                 ']' => ProbeState.Osc,
                                 'P' or 'X' or '^' or '_' => ProbeState.ControlString,
+                                >= ' ' and <= '/' => ProbeState.EscapeIntermediate,
                                 _ => ProbeState.Ground
                             };
+                            break;
+
+                        case ProbeState.EscapeIntermediate:
+                            if (ch == '\x1b')
+                                _state = ProbeState.Escape;
+                            else if (ch is >= '0' and <= '~')
+                                _state = ProbeState.Ground;
+                            else if (ch is not (>= ' ' and <= '/'))
+                                _state = ProbeState.Ground;
                             break;
 
                         case ProbeState.Csi:
@@ -834,6 +850,7 @@ namespace TerminalHub.Services
             {
                 Ground,
                 Escape,
+                EscapeIntermediate,
                 Csi,
                 Osc,
                 OscEscape,

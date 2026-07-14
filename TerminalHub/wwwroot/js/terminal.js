@@ -1031,9 +1031,26 @@ window.terminalFunctions = {
             focus: () => term.focus(),
             resize: async () => {
                 // DOMの表示切替とBlazorの描画が完了した後のレイアウトでfitする。
-                // 固定時間待機ではなく、ブラウザーの描画フレームに同期する。
-                await new Promise(resolve =>
-                    requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                // 通常はブラウザーの描画フレームに同期する。バックグラウンドタブでは
+                // requestAnimationFrameが停止するため即時に進み、途中で非表示になった
+                // 場合にも安全弁で復元処理を止めない。
+                await new Promise(resolve => {
+                    let completed = false;
+                    const finish = () => {
+                        if (completed) return;
+                        completed = true;
+                        clearTimeout(fallbackTimer);
+                        resolve();
+                    };
+                    const fallbackTimer = setTimeout(finish, 250);
+
+                    if (document.visibilityState !== 'visible') {
+                        finish();
+                        return;
+                    }
+
+                    requestAnimationFrame(() => requestAnimationFrame(finish));
+                });
 
                 if (fitAddon) {
                     try {
