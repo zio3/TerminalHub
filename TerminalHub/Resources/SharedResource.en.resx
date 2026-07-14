@@ -377,8 +377,8 @@
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
-  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display (recommended)</value></data>
-  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Preserves terminal scrollback and improves long-session resume stability (--no-alt-screen).</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Avoids the alternate screen and keeps Codex output in the terminal scrollback (--no-alt-screen).</value></data>
   <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>Advanced settings</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>Sandbox mode</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI default</value></data>

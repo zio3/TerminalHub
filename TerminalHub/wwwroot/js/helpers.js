@@ -47,7 +47,6 @@ window.terminalHubHelpers = {
                     console.log(`  - element.parentNode: ${!!termInfo.terminal.element.parentNode}`);
                     console.log(`  - rows: ${termInfo.terminal.rows}, cols: ${termInfo.terminal.cols}`);
                 }
-                console.log(`  - isFirstWrite: ${termInfo.isFirstWrite}`);
                 console.log(`  - fitAddon存在: ${!!termInfo.fitAddon}`);
             });
         } else {

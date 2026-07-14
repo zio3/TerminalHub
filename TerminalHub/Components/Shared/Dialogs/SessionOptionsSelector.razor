@@ -611,7 +611,7 @@
         // ON の間はサンドボックス/承認の指定は無視される（BuildCodexArgs 側で mode=yolo として処理）。
         public bool Yolo { get; set; } = false;
         public bool ResumeLast { get; set; } = false;
-        public bool NoAltScreen { get; set; } = true;
+        public bool NoAltScreen { get; set; } = false;
         // 既定は旧「Auto」相当（workspace-write + on-request）を明示値として持たせる。
         public string SandboxMode { get; set; } = "workspace-write"; // "", read-only, workspace-write, danger-full-access
         public string ApprovalPolicy { get; set; } = "on-request";
