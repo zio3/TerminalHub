@@ -442,16 +442,27 @@
                     if (string.IsNullOrEmpty(savedApproval)) savedApproval = "on-request";
                 }
                 var savedPreset = options.GetValueOrDefault("permission-preset");
+                if (savedPreset == "codex-default")
+                {
+                    // 旧「Codex標準」は上書きなし。カスタムの全項目未指定として挙動を維持する。
+                    savedPreset = "custom";
+                    savedSandbox = "";
+                    savedApproval = "";
+                    savedApprovalsReviewer = "";
+                    savedWindowsSandbox = "";
+                    savedNetworkAccess = "";
+                    savedWebSearchMode = "";
+                }
                 if (string.IsNullOrEmpty(savedPreset))
                 {
                     savedPreset = savedSandbox == "workspace-write" && savedApproval == "on-request" &&
                          savedApprovalsReviewer == "auto_review" && savedWindowsSandbox == "elevated" &&
                          savedNetworkAccess == "true" && savedWebSearchMode == "live"
                         ? "recommended"
-                        : string.IsNullOrEmpty(savedSandbox) && string.IsNullOrEmpty(savedApproval) &&
-                          string.IsNullOrEmpty(savedApprovalsReviewer) && string.IsNullOrEmpty(savedWindowsSandbox) &&
-                          string.IsNullOrEmpty(savedNetworkAccess) && string.IsNullOrEmpty(savedWebSearchMode)
-                            ? "codex-default"
+                        : savedSandbox == "workspace-write" && savedApproval == "on-request" &&
+                          savedApprovalsReviewer == "user" && savedWindowsSandbox == "elevated" &&
+                          savedNetworkAccess == "true" && savedWebSearchMode == "live"
+                            ? "ask-for-approval"
                             : "custom";
                 }
                 codexOptions = new SessionOptionsSelector.CodexOptionsData

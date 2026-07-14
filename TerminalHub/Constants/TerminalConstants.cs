@@ -155,8 +155,8 @@ namespace TerminalHub.Constants
             var permissionPreset = options.GetValueOrDefault("permission-preset");
 
             // プリセットを保存値の寄せ集めではなく、起動時の契約として扱う。
-            // これにより古い詳細値が残っていても Codex標準は上書きを一切渡さず、
-            // 推奨は常に文書化された組み合わせで起動する。
+            // これにより古い詳細値が残っていても、各プリセットは常に文書化された
+            // 組み合わせで起動する。codex-default は旧保存値との互換用。
             if (permissionPreset == "codex-default")
             {
                 sandboxMode = "";
@@ -165,6 +165,15 @@ namespace TerminalHub.Constants
                 windowsSandbox = "";
                 networkAccess = "";
                 webSearchMode = "";
+            }
+            else if (permissionPreset == "ask-for-approval")
+            {
+                sandboxMode = "workspace-write";
+                approvalPolicy = "on-request";
+                approvalsReviewer = "user";
+                windowsSandbox = "elevated";
+                networkAccess = "true";
+                webSearchMode = "live";
             }
             else if (permissionPreset == "recommended")
             {

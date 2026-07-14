@@ -147,8 +147,8 @@
                 <label class="form-label small text-muted mb-2">@L["SessionOptions.Codex.Preset.Label"]</label>
                 <div class="codex-preset-grid">
                     <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetDefault{UniqueId}")"
-                           checked="@(CodexOptions.PermissionPreset == "codex-default")"
-                           @onchange='() => SetCodexPreset("codex-default")' autocomplete="off">
+                           checked="@(CodexOptions.PermissionPreset == "ask-for-approval")"
+                           @onchange='() => SetCodexPreset("ask-for-approval")' autocomplete="off">
                     <label class="codex-preset-card" for="@($"codexPresetDefault{UniqueId}")">
                         <span class="codex-preset-icon"><i class="bi bi-sliders"></i></span>
                         <span class="codex-preset-copy">
@@ -537,14 +537,14 @@
         CodexOptions.PermissionPreset = preset;
         CodexOptions.Yolo = false;
 
-        if (preset == "codex-default")
+        if (preset == "ask-for-approval")
         {
-            CodexOptions.SandboxMode = "";
-            CodexOptions.ApprovalPolicy = "";
-            CodexOptions.ApprovalReviewer = "";
-            CodexOptions.WindowsSandbox = "";
-            CodexOptions.NetworkAccess = "";
-            CodexOptions.WebSearchMode = "";
+            CodexOptions.SandboxMode = "workspace-write";
+            CodexOptions.ApprovalPolicy = "on-request";
+            CodexOptions.ApprovalReviewer = "user";
+            CodexOptions.WindowsSandbox = "elevated";
+            CodexOptions.NetworkAccess = "true";
+            CodexOptions.WebSearchMode = "live";
         }
         else if (preset == "recommended")
         {

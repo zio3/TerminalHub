@@ -374,7 +374,7 @@
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
   <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>Permission preset</value></data>
   <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Ask for approval</value></data>
-  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Follow Codex settings and ask you to approve actions when needed.</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Allow development and network access, and ask you to approve potentially unsafe actions.</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>Delegate approval</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>Recommended</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>Automate routine work while AI reviews actions that may be unsafe on your behalf.</value></data>

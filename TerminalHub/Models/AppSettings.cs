@@ -35,7 +35,7 @@ public class SessionDefaultsSettings
     public string? LastClaudePermissionMode { get; set; }
     /// <summary>Gemini CLI の承認モード（"default" | "auto_edit" | "yolo"）。</summary>
     public string? LastGeminiApprovalMode { get; set; }
-    /// <summary>Codex の権限プリセット（"codex-default" | "recommended" | "custom"）。</summary>
+    /// <summary>Codex の権限プリセット（"ask-for-approval" | "recommended" | "custom"）。</summary>
     public string? LastCodexPermissionPreset { get; set; }
     /// <summary>Codex のサンドボックスモード（"" | "read-only" | "workspace-write" | "danger-full-access"）。</summary>
     public string? LastCodexSandboxMode { get; set; }

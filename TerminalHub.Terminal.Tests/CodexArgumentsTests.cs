@@ -24,7 +24,26 @@ public sealed class CodexArgumentsTests
     }
 
     [Fact]
-    public void CodexDefaultPreset_DropsStalePermissionOverrides()
+    public void AskForApprovalPreset_UsesUserAsReviewer()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "ask-for-approval",
+            ["sandbox-mode"] = "read-only",
+            ["ask-for-approval"] = "never",
+            ["approvals-reviewer"] = "auto_review",
+            ["windows-sandbox"] = "unelevated",
+            ["network-access"] = "false",
+            ["web-search-mode"] = "disabled"
+        };
+
+        Assert.Equal(
+            "--sandbox workspace-write --ask-for-approval on-request -c approvals_reviewer=user -c windows.sandbox=elevated -c sandbox_workspace_write.network_access=true --search",
+            TerminalConstants.BuildCodexArgs(options));
+    }
+
+    [Fact]
+    public void LegacyCodexDefaultPreset_DropsStalePermissionOverrides()
     {
         var options = new Dictionary<string, string>
         {
