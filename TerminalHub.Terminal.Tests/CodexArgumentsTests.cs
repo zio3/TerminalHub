@@ -112,4 +112,36 @@ public sealed class CodexArgumentsTests
             "-c web_search=disabled",
             TerminalConstants.BuildCodexArgs(options));
     }
+
+    [Fact]
+    public void RecommendedPreset_DoesNotDuplicateUserSuppliedNonRepeatableOptions()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "recommended",
+            ["extra-args"] = "--sandbox=read-only -a never"
+        };
+
+        var actual = TerminalConstants.BuildCodexArgs(options);
+
+        Assert.Equal(
+            "-c approvals_reviewer=auto_review -c windows.sandbox=elevated " +
+            "-c sandbox_workspace_write.network_access=true --search --sandbox=read-only -a never",
+            actual);
+    }
+
+    [Fact]
+    public void Yolo_DoesNotDuplicateUserSuppliedDangerousBypass()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["mode"] = "yolo",
+            ["extra-args"] = "--dangerously-bypass-approvals-and-sandbox",
+            ["resume-last"] = "true"
+        };
+
+        Assert.Equal(
+            "--dangerously-bypass-approvals-and-sandbox resume --last",
+            TerminalConstants.BuildCodexArgs(options));
+    }
 }

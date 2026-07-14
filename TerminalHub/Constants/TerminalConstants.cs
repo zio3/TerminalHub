@@ -119,6 +119,11 @@ namespace TerminalHub.Constants
                 ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
                 ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
             var userSuppliedSearch = ContainsCodexArgToken(options, "--search");
+            var userSuppliedSandbox = ContainsCodexArgOption(options, "--sandbox", "-s");
+            var userSuppliedApprovalPolicy = ContainsCodexArgOption(options, "--ask-for-approval", "-a");
+            var userSuppliedDangerousBypass = ContainsCodexArgOption(
+                options,
+                "--dangerously-bypass-approvals-and-sandbox");
             var userSuppliedApprovalsReviewer = ContainsCodexConfigOverride(options, "approvals_reviewer");
             var userSuppliedWindowsSandbox = ContainsCodexConfigOverride(options, "windows.sandbox");
             var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
@@ -174,7 +179,10 @@ namespace TerminalHub.Constants
             // 保存済みのモード名は維持し、現行CLIの明示的な設定へ変換する。
             if (mode == "yolo")
             {
-                args.Add("--dangerously-bypass-approvals-and-sandbox");
+                if (!userSuppliedDangerousBypass)
+                {
+                    args.Add("--dangerously-bypass-approvals-and-sandbox");
+                }
             }
             else
             {
@@ -185,12 +193,12 @@ namespace TerminalHub.Constants
                     approvalPolicy = string.IsNullOrEmpty(approvalPolicy) ? "on-request" : approvalPolicy;
                 }
 
-                if (!string.IsNullOrEmpty(sandboxMode))
+                if (!string.IsNullOrEmpty(sandboxMode) && !userSuppliedSandbox)
                 {
                     args.Add($"--sandbox {sandboxMode}");
                 }
 
-                if (!string.IsNullOrEmpty(approvalPolicy))
+                if (!string.IsNullOrEmpty(approvalPolicy) && !userSuppliedApprovalPolicy)
                 {
                     args.Add($"--ask-for-approval {approvalPolicy}");
                 }
@@ -316,6 +324,24 @@ namespace TerminalHub.Constants
         {
             return ContainsArgToken(options.GetValueOrDefault("extra-args"), token) ||
                    ContainsArgToken(options.GetValueOrDefault("custom-args"), token);
+        }
+
+        private static bool ContainsCodexArgOption(Dictionary<string, string> options, params string[] optionNames)
+        {
+            return ContainsArgOption(options.GetValueOrDefault("extra-args"), optionNames) ||
+                   ContainsArgOption(options.GetValueOrDefault("custom-args"), optionNames);
+        }
+
+        private static bool ContainsArgOption(string? rawArgs, params string[] optionNames)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Any(token => optionNames.Any(optionName =>
+                token == optionName || token.StartsWith(optionName + "=", StringComparison.Ordinal)));
         }
 
         private static bool ContainsCodexConfigOverride(Dictionary<string, string> options, string settingName)
