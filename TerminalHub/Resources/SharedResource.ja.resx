@@ -373,11 +373,11 @@
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
   <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>権限プリセット</value></data>
-  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Codex 標準</value></data>
-  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Codex 本体と config.toml の設定をそのまま使用します。</value></data>
-  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>自動・推奨</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>承認を求める</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Codex 本体の設定に従い、必要な操作ではユーザーに承認を求めます。</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>代理で承認</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>推奨</value></data>
-  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>ワークスペース内の開発とネットワーク利用を自動化し、範囲外の操作は AI が審査します。</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>通常作業を自動化し、安全でない可能性がある操作は AI が代理で審査します。</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Uac" xml:space="preserve"><value>初回のみ、Windows サンドボックスの準備で UAC が表示される場合があります。</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>カスタム</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>サンドボックス、承認、ネットワークを個別に指定します。</value></data>

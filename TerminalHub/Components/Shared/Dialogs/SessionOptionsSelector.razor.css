@@ -61,22 +61,6 @@
     line-height: 1.35;
 }
 
-.codex-boundary-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .3rem;
-    margin-top: .25rem;
-}
-
-.codex-boundary-strip span {
-    padding: .08rem .4rem;
-    border: 1px solid rgba(var(--bs-primary-rgb), .25);
-    border-radius: 999px;
-    color: var(--bs-primary-text-emphasis);
-    font-family: var(--bs-font-monospace);
-    font-size: .68rem;
-}
-
 .codex-yolo-panel {
     padding: .75rem .85rem;
     border: 1px dashed rgba(var(--bs-danger-rgb), .45);

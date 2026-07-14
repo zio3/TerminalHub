@@ -373,11 +373,11 @@
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
   <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>Permission preset</value></data>
-  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Codex defaults</value></data>
-  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Use Codex and config.toml settings without overriding them.</value></data>
-  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>Automatic</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Ask for approval</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Follow Codex settings and ask you to approve actions when needed.</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>Delegate approval</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>Recommended</value></data>
-  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>Automate workspace development and network use; AI reviews operations outside the boundary.</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>Automate routine work while AI reviews actions that may be unsafe on your behalf.</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Uac" xml:space="preserve"><value>Windows may show UAC once while preparing the elevated sandbox.</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>Custom</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>Choose sandbox, approval, and network behavior individually.</value></data>
