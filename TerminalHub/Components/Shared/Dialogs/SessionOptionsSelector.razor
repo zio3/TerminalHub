@@ -181,13 +181,6 @@
                 </div>
             </div>
 
-            @if (CodexOptions.PermissionPreset == "recommended" && !CodexOptions.Yolo)
-            {
-                <div class="alert alert-primary codex-uac-note mt-3 mb-0 py-2 small">
-                    <i class="bi bi-windows me-1"></i>@L["SessionOptions.Codex.Preset.Recommended.Uac"]
-                </div>
-            }
-
             <details class="codex-settings-section mt-3" open="@(CodexOptions.PermissionPreset == "custom")">
                 <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.PermissionDetails"]</summary>
 

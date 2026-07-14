@@ -73,10 +73,6 @@
     background: rgba(var(--bs-danger-rgb), .09);
 }
 
-.codex-uac-note {
-    border-left: .25rem solid var(--bs-primary);
-}
-
 .codex-settings-section {
     padding: .65rem .75rem;
     border: 1px solid var(--bs-border-color);

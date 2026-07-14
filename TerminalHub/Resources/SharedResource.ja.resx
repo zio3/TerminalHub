@@ -378,7 +378,6 @@
   <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>代理で承認</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>推奨</value></data>
   <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>通常作業を自動化し、安全でない可能性がある操作は AI が代理で審査します。</value></data>
-  <data name="SessionOptions.Codex.Preset.Recommended.Uac" xml:space="preserve"><value>初回のみ、Windows サンドボックスの準備で UAC が表示される場合があります。</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>カスタム</value></data>
   <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>サンドボックス、承認、ネットワークを個別に指定します。</value></data>
   <data name="SessionOptions.Codex.FollowCodex" xml:space="preserve"><value>Codex の設定に従う</value></data>
