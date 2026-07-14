@@ -13,7 +13,19 @@ if exist "publish" (
     echo     Cleaning old publish folder...
     rd /s /q "publish"
 )
-dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish
+
+echo     Collecting build metadata from git HEAD...
+set "BUILD_COMMIT="
+set "BUILD_PR="
+set "BUILD_DATE="
+for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set "BUILD_COMMIT=%%i"
+for /f "tokens=4" %%i in ('git log --grep^="Merge pull request #" -1 --pretty^=%%s 2^>nul') do set "MERGE_PR_TOKEN=%%i"
+if defined MERGE_PR_TOKEN set "BUILD_PR=!MERGE_PR_TOKEN:#=!"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')" 2^>nul') do set "BUILD_DATE=%%i"
+echo     Channel=preview PR=#!BUILD_PR! Commit=!BUILD_COMMIT! Date=!BUILD_DATE!
+echo.
+
+dotnet publish TerminalHub/TerminalHub.csproj -c Release -r win-x64 --self-contained true -o ./publish /p:BuildChannel=preview /p:BuildPr=!BUILD_PR! /p:BuildCommit=!BUILD_COMMIT! /p:BuildDate=!BUILD_DATE!
 if !errorlevel! neq 0 (
     echo [ERROR] Publish failed.
     pause
