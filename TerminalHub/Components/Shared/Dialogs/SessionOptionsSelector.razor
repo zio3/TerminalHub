@@ -184,39 +184,6 @@
                 </div>
             </div>
 
-            <div class="codex-yolo-panel mt-3 @(CodexOptions.Yolo ? "is-active" : "")">
-                <div class="form-check m-0">
-                    <input class="form-check-input" type="checkbox" checked="@CodexOptions.Yolo"
-                           @onchange="OnCodexYoloChanged" id="@($"codexYolo{UniqueId}")">
-                    <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
-                        <i class="bi bi-exclamation-octagon me-1"></i>@L["SessionOptions.Codex.Yolo.Label"]
-                    </label>
-                    <code class="d-block mt-1">--dangerously-bypass-approvals-and-sandbox</code>
-                    <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
-                </div>
-                @if (CodexOptions.Yolo)
-                {
-                    <div class="alert alert-danger mt-2 mb-0 py-2 small">
-                        <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
-                    </div>
-                }
-                else if (showCodexYoloConfirmation)
-                {
-                    <div class="alert alert-danger mt-2 mb-0 py-2 small">
-                        <strong>@L["SessionOptions.Codex.YoloConfirm.Title"]</strong>
-                        <div class="mt-1">@L["SessionOptions.Codex.YoloWarning.Message"]</div>
-                        <div class="d-flex gap-2 mt-2">
-                            <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmCodexYolo">
-                                @L["SessionOptions.Codex.YoloConfirm.Enable"]
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelCodexYolo">
-                                @L["Common.Cancel"]
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-
             @if (CodexOptions.PermissionPreset == "recommended" && !CodexOptions.Yolo)
             {
                 <div class="alert alert-primary codex-uac-note mt-3 mb-0 py-2 small">
@@ -224,8 +191,8 @@
                 </div>
             }
 
-            <details class="border rounded mt-3 p-2" open="@(CodexOptions.PermissionPreset == "custom")">
-                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
+            <details class="codex-settings-section mt-3" open="@(CodexOptions.PermissionPreset == "custom")">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.PermissionDetails"]</summary>
 
                 <fieldset disabled="@CodexOptions.Yolo">
                 <div class="mt-3">
@@ -315,6 +282,44 @@
                     </select>
                     <div class="form-text small">@L["SessionOptions.Codex.WebSearch.Help"]</div>
                 </div>
+                </fieldset>
+
+                <div class="codex-yolo-panel mt-3 @(CodexOptions.Yolo ? "is-active" : "")">
+                    <div class="form-check m-0">
+                        <input class="form-check-input" type="checkbox" checked="@CodexOptions.Yolo"
+                               @onchange="OnCodexYoloChanged" id="@($"codexYolo{UniqueId}")">
+                        <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
+                            <i class="bi bi-exclamation-octagon me-1"></i>@L["SessionOptions.Codex.Yolo.Label"]
+                        </label>
+                        <code class="d-block mt-1">--dangerously-bypass-approvals-and-sandbox</code>
+                        <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
+                    </div>
+                    @if (CodexOptions.Yolo)
+                    {
+                        <div class="alert alert-danger mt-2 mb-0 py-2 small">
+                            <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
+                        </div>
+                    }
+                    else if (showCodexYoloConfirmation)
+                    {
+                        <div class="alert alert-danger mt-2 mb-0 py-2 small">
+                            <strong>@L["SessionOptions.Codex.YoloConfirm.Title"]</strong>
+                            <div class="mt-1">@L["SessionOptions.Codex.YoloWarning.Message"]</div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmCodexYolo">
+                                    @L["SessionOptions.Codex.YoloConfirm.Enable"]
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelCodexYolo">
+                                    @L["Common.Cancel"]
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </details>
+
+            <details class="codex-settings-section mt-3">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
 
                 <div class="mt-3">
                     <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
@@ -332,7 +337,6 @@
 
                 <CustomCliOptionsSection Options="codexCustomOptions" States="customOptionStates"
                                          Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
-                </fieldset>
             </details>
         </div>
     }

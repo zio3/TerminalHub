@@ -405,6 +405,7 @@
   <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示</value></data>
   <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>代替画面を使わず、Codex の出力をターミナルのスクロール履歴に残します（--no-alt-screen）。</value></data>
   <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>高度な設定</value></data>
+  <data name="SessionOptions.Codex.PermissionDetails" xml:space="preserve"><value>権限の詳細設定</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>

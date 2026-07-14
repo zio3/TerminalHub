@@ -1,10 +1,12 @@
 .codex-preset-grid {
     display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: .65rem;
 }
 
 .codex-preset-card {
     display: flex;
+    min-width: 0;
     align-items: flex-start;
     gap: .75rem;
     padding: .8rem .9rem;
@@ -89,6 +91,28 @@
 
 .codex-uac-note {
     border-left: .25rem solid var(--bs-primary);
+}
+
+.codex-settings-section {
+    padding: .65rem .75rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .65rem;
+    background: rgba(var(--bs-secondary-rgb), .025);
+}
+
+.codex-settings-section > summary {
+    cursor: pointer;
+    color: var(--bs-body-color);
+}
+
+.codex-settings-section > summary::marker {
+    color: var(--bs-secondary-color);
+}
+
+@media (max-width: 767.98px) {
+    .codex-preset-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
