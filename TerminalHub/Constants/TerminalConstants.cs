@@ -118,6 +118,11 @@ namespace TerminalHub.Constants
             var userSuppliedNoAltScreen =
                 ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
                 ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
+            var userSuppliedSearch = ContainsCodexArgToken(options, "--search");
+            var userSuppliedApprovalsReviewer = ContainsCodexConfigOverride(options, "approvals_reviewer");
+            var userSuppliedWindowsSandbox = ContainsCodexConfigOverride(options, "windows.sandbox");
+            var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
+            var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
@@ -191,35 +196,36 @@ namespace TerminalHub.Constants
                 }
 
                 // 承認を一切求めない設定ではレビュー対象が存在しないため付与しない。
-                if (approvalsReviewer == "auto_review" && approvalPolicy != "never")
+                if (approvalsReviewer == "auto_review" && approvalPolicy != "never" && !userSuppliedApprovalsReviewer)
                 {
                     args.Add("-c approvals_reviewer=auto_review");
                 }
-                else if (approvalsReviewer == "user" && approvalPolicy != "never")
+                else if (approvalsReviewer == "user" && approvalPolicy != "never" && !userSuppliedApprovalsReviewer)
                 {
                     args.Add("-c approvals_reviewer=user");
                 }
 
-                if (windowsSandbox is "elevated" or "unelevated")
+                if (windowsSandbox is ("elevated" or "unelevated") && !userSuppliedWindowsSandbox)
                 {
                     args.Add($"-c windows.sandbox={windowsSandbox}");
                 }
 
-                if (networkAccess is "true" or "false")
+                if (networkAccess is ("true" or "false") && !userSuppliedNetworkAccess)
                 {
                     args.Add($"-c sandbox_workspace_write.network_access={networkAccess}");
                 }
 
-                if (webSearchMode == "live")
+                if (webSearchMode == "live" && !userSuppliedSearch && !userSuppliedWebSearch)
                 {
                     args.Add("--search");
                 }
-                else if (webSearchMode is "disabled" or "cached" or "indexed")
+                else if (webSearchMode is ("disabled" or "cached" or "indexed") && !userSuppliedWebSearch)
                 {
                     args.Add($"-c web_search={webSearchMode}");
                 }
                 else if (permissionPreset != "codex-default" &&
-                         options.ContainsKey("search") && options["search"] == "true")
+                         options.ContainsKey("search") && options["search"] == "true" &&
+                         !userSuppliedSearch && !userSuppliedWebSearch)
                 {
                     // 旧保存形式との互換性。
                     args.Add("--search");
@@ -304,6 +310,30 @@ namespace TerminalHub.Constants
 
             var tokens = rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             return Array.IndexOf(tokens, token) >= 0;
+        }
+
+        private static bool ContainsCodexArgToken(Dictionary<string, string> options, string token)
+        {
+            return ContainsArgToken(options.GetValueOrDefault("extra-args"), token) ||
+                   ContainsArgToken(options.GetValueOrDefault("custom-args"), token);
+        }
+
+        private static bool ContainsCodexConfigOverride(Dictionary<string, string> options, string settingName)
+        {
+            return ContainsConfigOverride(options.GetValueOrDefault("extra-args"), settingName) ||
+                   ContainsConfigOverride(options.GetValueOrDefault("custom-args"), settingName);
+        }
+
+        private static bool ContainsConfigOverride(string? rawArgs, string settingName)
+        {
+            if (string.IsNullOrWhiteSpace(rawArgs))
+            {
+                return false;
+            }
+
+            var prefix = settingName + "=";
+            return rawArgs.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Any(token => token.StartsWith(prefix, StringComparison.Ordinal));
         }
 
         // ユーザー定義カスタムオプションで ON にされた行を、まとめて末尾に追記する。

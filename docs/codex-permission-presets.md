@@ -246,16 +246,12 @@ UI 上の要件：
 
 ## 起動引数の組み立て
 
-通常のプロセス起動では `ProcessStartInfo.ArgumentList` を使用し、設定名と値を個別の引数として追加する。
-
-ただし TerminalHub の ConPTY 起動経路は、擬似コンソール属性を設定するため Win32 `CreateProcess` を直接使用しており、`ProcessStartInfo.ArgumentList` は利用できない。現行実装では、UIから選べる列挙値を検証済みの値に限定し、`TerminalConstants.BuildCodexArgs` で設定上書きを組み立てる。自由入力を含む起動引数全体のトークン化は、ConPTY起動APIの引数モデルを変更する別リファクタリングとして扱う。
+TerminalHub の ConPTY 起動経路は、擬似コンソール属性を設定するため Win32 `CreateProcess` を直接使用しており、`ProcessStartInfo.ArgumentList` は利用できない。現行実装では、UIから選べる列挙値を検証済みの値に限定し、`TerminalConstants.BuildCodexArgs` で空白を含む引数断片を組み立て、最後に `string.Join(" ", args)` でコマンドライン文字列へ変換する。自由入力を含む起動引数全体のトークン化は、ConPTY起動APIの引数モデルを変更する別リファクタリングとして扱う。
 
 ```csharp
-args.Add("-c");
-args.Add("windows.sandbox=\"elevated\"");
-
-args.Add("-c");
-args.Add("sandbox_workspace_write.network_access=true");
+args.Add("-c windows.sandbox=elevated");
+args.Add("-c sandbox_workspace_write.network_access=true");
+return string.Join(" ", args);
 ```
 
 セッションを復帰する場合も、設定上書きは `resume` より前へ配置する。

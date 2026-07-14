@@ -78,4 +78,38 @@ public sealed class CodexArgumentsTests
             "--dangerously-bypass-approvals-and-sandbox resume --last",
             TerminalConstants.BuildCodexArgs(options));
     }
+
+    [Fact]
+    public void RecommendedPreset_DoesNotDuplicateUserSuppliedOverrides()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "recommended",
+            ["extra-args"] = "-c windows.sandbox=unelevated --search",
+            ["custom-args"] = "-c approvals_reviewer=user -c sandbox_workspace_write.network_access=false"
+        };
+
+        var actual = TerminalConstants.BuildCodexArgs(options);
+
+        Assert.Equal(
+            "--sandbox workspace-write --ask-for-approval on-request " +
+            "-c windows.sandbox=unelevated --search " +
+            "-c approvals_reviewer=user -c sandbox_workspace_write.network_access=false",
+            actual);
+    }
+
+    [Fact]
+    public void CustomPreset_DoesNotAddSearchWhenWebSearchOverrideIsUserSupplied()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["permission-preset"] = "custom",
+            ["web-search-mode"] = "live",
+            ["extra-args"] = "-c web_search=disabled"
+        };
+
+        Assert.Equal(
+            "-c web_search=disabled",
+            TerminalConstants.BuildCodexArgs(options));
+    }
 }

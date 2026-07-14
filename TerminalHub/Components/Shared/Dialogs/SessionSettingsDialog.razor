@@ -440,18 +440,13 @@
                 {
                     if (string.IsNullOrEmpty(savedSandbox)) savedSandbox = "workspace-write";
                     if (string.IsNullOrEmpty(savedApproval)) savedApproval = "on-request";
-                    if (string.IsNullOrEmpty(savedApprovalsReviewer)) savedApprovalsReviewer = "auto_review";
-                    if (string.IsNullOrEmpty(savedWindowsSandbox)) savedWindowsSandbox = "elevated";
-                    if (string.IsNullOrEmpty(savedNetworkAccess)) savedNetworkAccess = "true";
-                    if (string.IsNullOrEmpty(savedWebSearchMode)) savedWebSearchMode = "live";
                 }
                 var savedPreset = options.GetValueOrDefault("permission-preset");
                 if (string.IsNullOrEmpty(savedPreset))
                 {
-                    savedPreset = savedMode == "auto" ||
-                        (savedSandbox == "workspace-write" && savedApproval == "on-request" &&
+                    savedPreset = savedSandbox == "workspace-write" && savedApproval == "on-request" &&
                          savedApprovalsReviewer == "auto_review" && savedWindowsSandbox == "elevated" &&
-                         savedNetworkAccess == "true" && savedWebSearchMode == "live")
+                         savedNetworkAccess == "true" && savedWebSearchMode == "live"
                         ? "recommended"
                         : string.IsNullOrEmpty(savedSandbox) && string.IsNullOrEmpty(savedApproval) &&
                           string.IsNullOrEmpty(savedApprovalsReviewer) && string.IsNullOrEmpty(savedWindowsSandbox) &&
