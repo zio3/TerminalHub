@@ -43,7 +43,7 @@ public class SessionDefaultsSettings
     public bool? LastCodexAutoReviewApprovals { get; set; }
     /// <summary>Codex の resume --last。</summary>
     public bool? LastCodexResumeLast { get; set; }
-    /// <summary>Codex の --no-alt-screen（既定 true を維持するため nullable）。</summary>
+    /// <summary>Codex の --no-alt-screen。未設定時は false。</summary>
     public bool? LastCodexNoAltScreen { get; set; }
     /// <summary>Codex の --search。</summary>
     public bool? LastCodexSearchEnabled { get; set; }

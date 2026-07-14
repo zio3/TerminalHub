@@ -75,6 +75,20 @@ namespace TerminalHub.Services
         // 注入し、CLI/エージェントが「自分がどの TerminalHub セッションか」を自己識別できるようにする。
         private readonly Guid? _sessionId;
 
+        // Codex resume 起動停止の診断用。CreateProcess はコンストラクター内、パイプ読み取りは
+        // Start() 後に始まるため、その間隔と「制御シーケンスしか届かない」状態を記録する。
+        // 通常セッションのログを増やさないよう codex resume --last のときだけ有効化する。
+        private readonly Stopwatch _startupStopwatch = Stopwatch.StartNew();
+        private bool _startupDiagnosticsEnabled;
+        private long _processStartedElapsedMs = -1;
+        private long _readerStartedElapsedMs = -1;
+        private long _firstOutputElapsedMs = -1;
+        private long _firstPrintableElapsedMs = -1;
+        private long _lastOutputElapsedMs = -1;
+        private long _startupBytesRead;
+        private int _startupChunksRead;
+        private readonly StartupOutputProbe _startupOutputProbe = new();
+
         // 環境変数フラグ
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         
@@ -166,7 +180,18 @@ namespace TerminalHub.Services
             }
             
             _readCancellationTokenSource = new CancellationTokenSource();
+            _readerStartedElapsedMs = _startupStopwatch.ElapsedMilliseconds;
+            if (_startupDiagnosticsEnabled)
+            {
+                _logger.LogInformation(
+                    "[ConPtyStartup] 出力読み取り開始: SessionId={SessionId}, ProcessId={ProcessId}, ProcessToReaderMs={ProcessToReaderMs}, Size={Cols}x{Rows}",
+                    _sessionId, ProcessId, ElapsedSince(_processStartedElapsedMs, _readerStartedElapsedMs), Cols, Rows);
+            }
             _readTask = Task.Run(() => ReadPipeAsync(_readCancellationTokenSource.Token));
+            if (_startupDiagnosticsEnabled)
+            {
+                _ = Task.Run(() => MonitorStartupOutputAsync(_readCancellationTokenSource.Token));
+            }
         }
 
         private IntPtr CreateEnvironmentBlock()
@@ -293,6 +318,10 @@ namespace TerminalHub.Services
             var fullCommand = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
             var cmdline = $"cmd.exe /c {fullCommand}";
 
+            _startupDiagnosticsEnabled =
+                cmdline.Contains("codex", StringComparison.OrdinalIgnoreCase) &&
+                cmdline.Contains("resume --last", StringComparison.OrdinalIgnoreCase);
+
             _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");
             
             // XTerm互換のための環境変数を設定
@@ -328,6 +357,13 @@ namespace TerminalHub.Services
             }
 
             _process = Process.GetProcessById((int)processInfo.dwProcessId);
+            _processStartedElapsedMs = _startupStopwatch.ElapsedMilliseconds;
+            if (_startupDiagnosticsEnabled)
+            {
+                _logger.LogInformation(
+                    "[ConPtyStartup] Codex resume プロセス起動: SessionId={SessionId}, ProcessId={ProcessId}, Size={Cols}x{Rows}",
+                    _sessionId, _process.Id, Cols, Rows);
+            }
 
                 processInfoHandle = processInfo.hProcess;
                 threadInfoHandle = processInfo.hThread;
@@ -604,6 +640,8 @@ namespace TerminalHub.Services
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
                         var data = new string(charBuffer, 0, charsRead);
 
+                        RecordStartupOutput(bytesRead, data);
+
                         if (_enableBuffering)
                         {
                             // バッファリングが有効な場合
@@ -643,9 +681,182 @@ namespace TerminalHub.Services
 
             // 終了通知より先に、短時間バッファに残った末尾出力を配送する。
             FlushRemainingOutput(waitForDispatch: true);
+
+            LogStartupSummary("読み取り終了");
             
             // プロセスが終了したことを通知
             RaiseProcessExited();
+        }
+
+        private void RecordStartupOutput(int bytesRead, string data)
+        {
+            if (!_startupDiagnosticsEnabled)
+                return;
+
+            var now = _startupStopwatch.ElapsedMilliseconds;
+            Interlocked.Add(ref _startupBytesRead, bytesRead);
+            Interlocked.Increment(ref _startupChunksRead);
+            Volatile.Write(ref _lastOutputElapsedMs, now);
+
+            if (Interlocked.CompareExchange(ref _firstOutputElapsedMs, now, -1) == -1)
+            {
+                _logger.LogInformation(
+                    "[ConPtyStartup] 最初の出力受信: SessionId={SessionId}, ProcessId={ProcessId}, Bytes={Bytes}, Chars={Chars}, ProcessToOutputMs={ProcessToOutputMs}, ReaderToOutputMs={ReaderToOutputMs}",
+                    _sessionId, ProcessId, bytesRead, data.Length,
+                    ElapsedSince(_processStartedElapsedMs, now), ElapsedSince(_readerStartedElapsedMs, now));
+            }
+
+            if (_startupOutputProbe.FeedAndDetectPrintable(data) &&
+                Interlocked.CompareExchange(ref _firstPrintableElapsedMs, now, -1) == -1)
+            {
+                _logger.LogInformation(
+                    "[ConPtyStartup] 最初の表示文字受信: SessionId={SessionId}, ProcessId={ProcessId}, ProcessToPrintableMs={ProcessToPrintableMs}, BytesSoFar={Bytes}, ChunksSoFar={Chunks}",
+                    _sessionId, ProcessId, ElapsedSince(_processStartedElapsedMs, now),
+                    Interlocked.Read(ref _startupBytesRead), Volatile.Read(ref _startupChunksRead));
+            }
+        }
+
+        private async Task MonitorStartupOutputAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+                LogStartupCheckpoint(3);
+
+                await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
+                LogStartupCheckpoint(10);
+            }
+            catch (OperationCanceledException)
+            {
+                // セッション終了・破棄時の通常経路。
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[ConPtyStartup] 起動診断タスクでエラー: SessionId={SessionId}", _sessionId);
+            }
+        }
+
+        private void LogStartupCheckpoint(int seconds)
+        {
+            if (!_startupDiagnosticsEnabled || Volatile.Read(ref _firstPrintableElapsedMs) >= 0)
+                return;
+
+            _logger.LogWarning(
+                "[ConPtyStartup] {Seconds}秒経過しても表示文字なし: SessionId={SessionId}, ProcessId={ProcessId}, Bytes={Bytes}, Chunks={Chunks}, FirstOutputMs={FirstOutputMs}, LastOutputMs={LastOutputMs}, HasExited={HasExited}, OutputPaused={OutputPaused}, Size={Cols}x{Rows}, ProcessToReaderMs={ProcessToReaderMs}",
+                seconds, _sessionId, ProcessId,
+                Interlocked.Read(ref _startupBytesRead), Volatile.Read(ref _startupChunksRead),
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _firstOutputElapsedMs)),
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _lastOutputElapsedMs)),
+                HasExited, _outputPaused, Cols, Rows,
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _readerStartedElapsedMs)));
+        }
+
+        private void LogStartupSummary(string reason)
+        {
+            if (!_startupDiagnosticsEnabled)
+                return;
+
+            _logger.LogInformation(
+                "[ConPtyStartup] {Reason}: SessionId={SessionId}, ProcessId={ProcessId}, Bytes={Bytes}, Chunks={Chunks}, FirstOutputMs={FirstOutputMs}, FirstPrintableMs={FirstPrintableMs}, LastOutputMs={LastOutputMs}, HasExited={HasExited}",
+                reason, _sessionId, ProcessId,
+                Interlocked.Read(ref _startupBytesRead), Volatile.Read(ref _startupChunksRead),
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _firstOutputElapsedMs)),
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _firstPrintableElapsedMs)),
+                ElapsedSince(_processStartedElapsedMs, Volatile.Read(ref _lastOutputElapsedMs)),
+                HasExited);
+        }
+
+        private static long ElapsedSince(long start, long end)
+            => start >= 0 && end >= start ? end - start : -1;
+
+        /// <summary>
+        /// ANSI/OSC/DCS をまたいで、画面に表示される空白以外の文字を検出する。
+        /// チャンク境界でシーケンスが分断されても CSI の終端文字（K/h等）を本文扱いしない。
+        /// </summary>
+        private sealed class StartupOutputProbe
+        {
+            private ProbeState _state;
+
+            public bool FeedAndDetectPrintable(string data)
+            {
+                var found = false;
+                foreach (var ch in data)
+                {
+                    switch (_state)
+                    {
+                        case ProbeState.Ground:
+                            if (ch == '\x1b')
+                                _state = ProbeState.Escape;
+                            else if (ch == '\u009b')
+                                _state = ProbeState.Csi;
+                            else if (ch == '\u009d')
+                                _state = ProbeState.Osc;
+                            else if (ch is '\u0090' or '\u0098' or '\u009e' or '\u009f')
+                                _state = ProbeState.ControlString;
+                            else if (!char.IsControl(ch) && !char.IsWhiteSpace(ch))
+                                found = true;
+                            break;
+
+                        case ProbeState.Escape:
+                            _state = ch switch
+                            {
+                                '[' => ProbeState.Csi,
+                                ']' => ProbeState.Osc,
+                                'P' or 'X' or '^' or '_' => ProbeState.ControlString,
+                                >= ' ' and <= '/' => ProbeState.EscapeIntermediate,
+                                _ => ProbeState.Ground
+                            };
+                            break;
+
+                        case ProbeState.EscapeIntermediate:
+                            if (ch == '\x1b')
+                                _state = ProbeState.Escape;
+                            else if (ch is >= '0' and <= '~')
+                                _state = ProbeState.Ground;
+                            else if (ch is not (>= ' ' and <= '/'))
+                                _state = ProbeState.Ground;
+                            break;
+
+                        case ProbeState.Csi:
+                            if (ch is >= '@' and <= '~')
+                                _state = ProbeState.Ground;
+                            break;
+
+                        case ProbeState.Osc:
+                            if (ch == '\a')
+                                _state = ProbeState.Ground;
+                            else if (ch == '\x1b')
+                                _state = ProbeState.OscEscape;
+                            break;
+
+                        case ProbeState.OscEscape:
+                            _state = ch == '\\' ? ProbeState.Ground : ProbeState.Osc;
+                            break;
+
+                        case ProbeState.ControlString:
+                            if (ch == '\x1b')
+                                _state = ProbeState.ControlStringEscape;
+                            break;
+
+                        case ProbeState.ControlStringEscape:
+                            _state = ch == '\\' ? ProbeState.Ground : ProbeState.ControlString;
+                            break;
+                    }
+                }
+                return found;
+            }
+
+            private enum ProbeState
+            {
+                Ground,
+                Escape,
+                EscapeIntermediate,
+                Csi,
+                Osc,
+                OscEscape,
+                ControlString,
+                ControlStringEscape
+            }
         }
 
         public void Resize(int cols, int rows)

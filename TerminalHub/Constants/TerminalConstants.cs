@@ -120,14 +120,12 @@ namespace TerminalHub.Constants
                 args.Add("resume --last");
             }
 
-            // --no-alt-screen を既定 ON にする前は、追加引数欄のプレースホルダー例が
-            // "--no-alt-screen" だった。その名残で extra-args / custom-args に手書きで
-            // --no-alt-screen を入れている既存セッションがあり得るため、その場合は
-            // 自動付与をスキップして二重指定（--no-alt-screen --no-alt-screen）を防ぐ。
+            // extra-args / custom-args に手書きで --no-alt-screen を入れている既存セッションが
+            // あり得るため、UI側の明示指定と重なっても二重指定しない。
             var userSuppliedNoAltScreen =
                 ContainsArgToken(options.GetValueOrDefault("extra-args"), "--no-alt-screen") ||
                 ContainsArgToken(options.GetValueOrDefault("custom-args"), "--no-alt-screen");
-            if ((!options.TryGetValue("no-alt-screen", out var noAltScreen) || noAltScreen == "true") &&
+            if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
                 args.Add("--no-alt-screen");

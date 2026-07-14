@@ -879,14 +879,6 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
-                // リサイズイベントをトラック
-                const terminalInfo = window.multiSessionTerminals[sessionId];
-                if (terminalInfo) {
-                    if (terminalInfo.isFirstWrite) {
-                        terminalInfo.resizeCount = 1;
-                    }
-                }
-
                 notifyResize(size.cols, size.rows, 'onResize', '');
             });
 
@@ -994,9 +986,6 @@ window.terminalFunctions = {
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
             // console.log(`[JS] 現在のターミナル数: ${Object.keys(window.multiSessionTerminals).length}`);
 
-            // ターミナルごとの状態を保存（if (element) ブロック内に移動）
-            window.multiSessionTerminals[sessionId].isFirstWrite = true;
-            window.multiSessionTerminals[sessionId].resizeCount = 0;
         } else {
             // DOM要素が見つからない場合はエラーログを出力
             console.error(`[JS] createMultiSessionTerminal: DOM要素が見つかりません terminalId=${terminalId}`);
@@ -1005,7 +994,6 @@ window.terminalFunctions = {
 
         return {
             write: (data) => {
-                const terminalInfo = window.multiSessionTerminals[sessionId];
                 const dataLength = data.length;
 
                 // デバッグ: 大きなデータの書き込みを検出
@@ -1035,63 +1023,35 @@ window.terminalFunctions = {
                     });
                 };
 
-                // terminalInfoが存在しない場合は単純にデータを書き込み
-                if (!terminalInfo) {
-                    writeWithCallback(data);
-                    return;
-                }
-
-                // リサイズ直後の書き込みはカウント
-                if (terminalInfo.resizeCount > 0 && terminalInfo.resizeCount < 3) {
-                    terminalInfo.resizeCount++;
-                    // リサイズ後の書き込み
-                    // リサイズデータは通常通り処理
-                    writeWithCallback(data);
-
-                    if (terminalInfo.resizeCount >= 2) {
-                        // リサイズ完了 - スクロールバック復元完了
-                        // リサイズ完了 - スクロールバック復元
-                        terminalInfo.resizeCount = 0;
-
-                    }
-                }
-                // セッション切り替え直後の最初の書き込みを検出（リサイズトリック前）
-                else if (terminalInfo.isFirstWrite && data.includes('\x1b[2J') && (data.match(/\x1b\[K/g) || []).length > 10) {
-                    // 画面クリアをスキップして、カーソル位置のみ適用
-                    let processedData = data;
-
-                    // 画面クリア(\x1b[2J)を削除
-                    processedData = processedData.replace(/\x1b\[2J/g, '');
-                    // ホーム位置への移動(\x1b[H)も一時的に削除
-                    processedData = processedData.replace(/\x1b\[H/g, '');
-
-                    // 改行を追加して続きから表示
-                    const separator = '\r\n--- セッション再開 ---\r\n';
-                    term.write(separator);
-                    writeWithCallback(processedData);
-
-                    // セッション切り替え検出 - スクロールバック保持
-                    terminalInfo.isFirstWrite = false;
-
-                    // リサイズトリックを待つ
-                    terminalInfo.resizeCount = 1;
-                } else {
-                    // 通常の書き込み
-                    const beforeViewportY = term.buffer.active.viewportY;
-                    const beforeLength = term.buffer.active.length;
-                    const isAtBottom = beforeViewportY + term.rows >= beforeLength;
-
-                    writeWithCallback(data);
-
-                    if (terminalInfo) {
-                        terminalInfo.isFirstWrite = false;
-                    }
-                }
+                // サーバー側の状態バッファが復元順序を保証するため、ANSIシーケンスを
+                // 加工せず、そのままxtermへ渡す。
+                writeWithCallback(data);
             },
             clear: () => term.clear(),
             focus: () => term.focus(),
-            resize: () => {
-                // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
+            resize: async () => {
+                // DOMの表示切替とBlazorの描画が完了した後のレイアウトでfitする。
+                // 通常はブラウザーの描画フレームに同期する。バックグラウンドタブでは
+                // requestAnimationFrameが停止するため即時に進み、途中で非表示になった
+                // 場合にも安全弁で復元処理を止めない。
+                await new Promise(resolve => {
+                    let completed = false;
+                    const finish = () => {
+                        if (completed) return;
+                        completed = true;
+                        clearTimeout(fallbackTimer);
+                        resolve();
+                    };
+                    const fallbackTimer = setTimeout(finish, 250);
+
+                    if (document.visibilityState !== 'visible') {
+                        finish();
+                        return;
+                    }
+
+                    requestAnimationFrame(() => requestAnimationFrame(finish));
+                });
+
                 if (fitAddon) {
                     try {
                         fitAddon.fit();
@@ -1146,11 +1106,7 @@ window.terminalFunctions = {
             console.log(`[JS] showTerminal: ターミナルを表示に設定`);
             console.log(`[JS] showTerminal: 設定後 display=${terminal.style.display}, offsetWidth=${terminal.offsetWidth}, offsetHeight=${terminal.offsetHeight}`);
             
-            // セッション表示時に初回書き込みフラグをリセット
             if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-                window.multiSessionTerminals[sessionId].isFirstWrite = true;
-                console.log(`[JS] showTerminal: 初回書き込みフラグをリセット`);
-                
                 // xtermオブジェクトの存在確認
                 const termObj = window.multiSessionTerminals[sessionId];
                 console.log(`[JS] showTerminal: xterm存在確認 - terminal=${!!termObj.terminal}, element=${!!termObj.terminal?.element}`);
@@ -1182,12 +1138,8 @@ window.terminalFunctions = {
                             terminal.appendChild(termObj.terminal.element);
                         }
                         
-                        // 表示復帰時の再描画トリガー（WebGL コンテキスト喪失時は onContextLoss で DOM レンダラーへフォールバック済み。ここではサイズ同期のみ）
-                        // fit()でサイズが変わった場合はonResizeイベント経由でC#側にログが記録される
-                        if (termObj.fitAddon) {
-                            termObj.fitAddon.fit();
-                        }
-
+                        // 表示復帰時は再描画だけ行う。サイズ同期は呼び出し元または
+                        // ResizeObserverに一本化し、ここではfit()しない。
                         termObj.terminal.focus();
                         termObj.terminal.refresh(0, termObj.terminal.rows - 1);
                         console.log(`[JS] showTerminal: フォーカスとリフレッシュ実行`);
@@ -1217,10 +1169,8 @@ window.terminalFunctions = {
             terminal.style.opacity = '0';
             terminal.style.display = 'block';
             
-            // セッション表示時に初回書き込みフラグをリセット
             if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
                 const terminalInfo = window.multiSessionTerminals[sessionId];
-                terminalInfo.isFirstWrite = true;
                 terminalInfo.pendingShow = true;
                 // セッションを一時非表示に設定
                 
@@ -1317,14 +1267,10 @@ window.terminalFunctions = {
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
             const terminalInfo = window.multiSessionTerminals[sessionId];
             const term = terminalInfo.terminal;
-            const fitAddon = terminalInfo.fitAddon;
 
-            if (term && fitAddon) {
+            if (term) {
                 try {
-                    // fit()を実行して確実にサイズを合わせる
-                    fitAddon.fit();
-
-                    // 全行をリフレッシュして表示を更新
+                    // サイズ変更は行わず、全行の再描画だけを実行する。
                     term.refresh(0, term.rows - 1);
 
                     console.log(`[JS] refreshTerminal: リフレッシュ完了 sessionId=${sessionId}, cols=${term.cols}, rows=${term.rows}`);
