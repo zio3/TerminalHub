@@ -565,9 +565,12 @@
                 // 埋め込み済みのため、ここでは JS での再適用は行わない（フラッシュ防止）。
                 // テーマのみ全デバイス共通 (app-settings) のまま。
             }
-            catch
+            catch (Exception ex)
             {
-                // エラー時はデフォルト値を使用
+                // 起動を止めないために握り潰すが、無言だと「設定が効かない」が不可視になるため記録する。
+                // 注意: この try は JS 初期化〜設定読み込みまでを広く囲っているので、途中で落ちると
+                // そこまでに適用した設定は生きたまま、以降はフィールド初期値のまま、という混在になる。
+                Logger.LogError(ex, "[起動] 初期化・設定読み込みに失敗（以降の設定は既定値のまま）");
             }
 
             // ストレージサービスを初期化（SQLite強制）
@@ -654,9 +657,12 @@
 
                         sessionsToPopulateGitInfo.Add(newSession.SessionId);
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Failed to restore session
+                        // 1件の失敗で残りの復元まで止めないよう握り潰すが、無言だと
+                        // 「起動したらセッションが1個消えている」が不可視になるため記録する。
+                        Logger.LogError(ex, "[起動] セッションの復元に失敗: SessionId={SessionId}, Name={Name}",
+                            sessionInfo.SessionId, sessionInfo.DisplayName);
                     }
                 }
             }
@@ -1592,9 +1598,11 @@
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // ProcessReceivedData error
+            // ここは ConPTY 出力のホットパス。1セッションの失敗で受信ループ全体を止めないよう
+            // 握り潰すが、無言だと文字化け・出力欠落の調査時に原因が見えないため記録する。
+            Logger.LogError(ex, "[ProcessReceivedData] 出力処理に失敗: SessionId={SessionId}", sessionId);
         }
     }
 
