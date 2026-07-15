@@ -409,18 +409,18 @@ namespace TerminalHub.Services
                 // 受け手に猶予を与える意味はなく、遅延にしかならない。onData 経由のキー入力は
                 // 1打鍵ごとに WriteAsync を呼ぶ（=常に1チャンク）ため、ここで待つと全打鍵が
                 // 20ms 遅れる。
-                const int CHUNK_SIZE = 256;
                 const int INTER_CHUNK_DELAY_MS = 20;
 
-                for (int i = 0; i < input.Length; i += CHUNK_SIZE)
+                var offset = 0;
+                while (offset < input.Length)
                 {
-                    var isLastChunk = i + CHUNK_SIZE >= input.Length;
-                    var chunk = isLastChunk
-                        ? input.Substring(i)
-                        : input.Substring(i, CHUNK_SIZE);
+                    // 境界はサロゲートペアを分断しないよう調整される（ConPtyWriteChunker 参照）
+                    var length = ConPtyWriteChunker.NextChunkLength(input, offset);
+                    var isLastChunk = offset + length >= input.Length;
 
-                    await _writer.WriteAsync(chunk);
+                    await _writer.WriteAsync(input.Substring(offset, length));
                     await _writer.FlushAsync();
+                    offset += length;
 
                     if (!isLastChunk)
                     {

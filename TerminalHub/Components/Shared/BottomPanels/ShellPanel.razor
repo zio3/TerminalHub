@@ -241,16 +241,11 @@
             return;
         }
 
-        await JSRuntime.InvokeVoidAsync("eval", $@"
-            (function() {{
-                const terminalId = '{TerminalId}';
-                const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                if (termObj) {{
-                    termObj.terminal.dispose();
-                    delete window.multiSessionTerminals[terminalId];
-                }}
-            }})()
-        ");
+        // 通常セッションと同じ cleanupTerminal に寄せる。手書きで terminal.dispose() と
+        // multiSessionTerminals からの削除だけを行うと、ResizeObserver・フロー制御の状態・
+        // コンテナへ登録したタッチスクロールのリスナー（と慣性スクロールの rAF）が
+        // 解除されず、シェルタブを開閉するたびに残り続ける。
+        await JSRuntime.InvokeVoidAsync("terminalFunctions.cleanupTerminal", TerminalId);
 
         await terminal.DisposeAsync();
         terminal = null;
