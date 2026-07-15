@@ -927,17 +927,12 @@ window.terminalFunctions = {
                 // フロー制御: 書き込み前にバイト数を加算
                 window.flowControlManager.beforeWrite(sessionId, dataLength);
 
-                // 書き込み完了コールバック付きの関数
-                const writeWithCallback = (writeData) => {
-                    term.write(writeData, () => {
-                        // 書き込み完了後にフロー制御を更新
-                        window.flowControlManager.afterWrite(sessionId, writeData.length);
-                    });
-                };
-
                 // サーバー側の状態バッファが復元順序を保証するため、ANSIシーケンスを
                 // 加工せず、そのままxtermへ渡す。
-                writeWithCallback(data);
+                term.write(data, () => {
+                    // 書き込み完了後にフロー制御を更新
+                    window.flowControlManager.afterWrite(sessionId, dataLength);
+                });
             },
             clear: () => term.clear(),
             focus: () => term.focus(),
@@ -975,20 +970,6 @@ window.terminalFunctions = {
             getSize: () => {
                 return { cols: term.cols, rows: term.rows };
             },
-            scrollToBottom: () => {
-                term.scrollToBottom();
-            },
-            scrollToTop: () => {
-                term.scrollToTop();
-            },
-            getScrollPosition: () => {
-                return {
-                    scrollY: term.buffer.active.viewportY,
-                    scrollTop: term.buffer.active.baseY,
-                    length: term.buffer.active.length,
-                    cursorY: term.buffer.active.cursorY
-                };
-            },
             dispose: () => {
                 window.resizeObserverManager.remove(sessionId);
                 term.dispose();
@@ -1022,10 +1003,6 @@ window.terminalFunctions = {
         terminal.style.display = 'block';
     },
     
-    terminalExists: function(sessionId) {
-        return document.getElementById(`terminal-${sessionId}`) !== null;
-    },
-
     // ターミナルクリーンアップ関数
     cleanupTerminal: function(sessionId) {
         console.log(`[JS] cleanupTerminal: ★★★ 開始 sessionId=${sessionId}`);
@@ -1078,17 +1055,6 @@ window.terminalFunctions = {
     // ターミナル破棄関数
     destroyTerminal: function(sessionId) {
         this.cleanupTerminal(sessionId);
-    },
-
-    // ターミナルを最下段にスクロール
-    scrollToBottom: function(sessionId) {
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const terminal = window.multiSessionTerminals[sessionId].terminal;
-            if (terminal) {
-                // xtermのscrollToBottom機能を1回だけ実行
-                terminal.scrollToBottom();
-            }
-        }
     },
 
     // ターミナルをリフレッシュ（バッファ復元後の表示更新用）

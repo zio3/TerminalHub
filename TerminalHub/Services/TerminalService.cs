@@ -126,18 +126,6 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task ScrollToBottomAsync(Guid sessionId)
-        {
-            try
-            {
-                await _jsRuntime.InvokeVoidAsync("terminalFunctions.scrollToBottom", sessionId.ToString());
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "[ScrollToBottom] スクロールエラー（無視）");
-            }
-        }
-
         public async Task WriteToTerminalAsync(IJSObjectReference terminal, string data)
         {
             await terminal.InvokeVoidAsync("write", data);

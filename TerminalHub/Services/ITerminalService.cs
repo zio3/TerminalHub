@@ -36,11 +36,6 @@ namespace TerminalHub.Services
         Task<(int Cols, int Rows)?> GetTerminalSizeAsync(IJSObjectReference terminal);
 
         /// <summary>
-        /// ターミナルを最下部にスクロールする
-        /// </summary>
-        Task ScrollToBottomAsync(Guid sessionId);
-
-        /// <summary>
         /// ターミナルにデータを書き込む
         /// </summary>
         Task WriteToTerminalAsync(IJSObjectReference terminal, string data);
