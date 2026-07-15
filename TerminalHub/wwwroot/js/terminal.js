@@ -950,14 +950,6 @@ window.terminalFunctions = {
     
     // ターミナルクリーンアップ関数
     cleanupTerminal: function(sessionId) {
-        console.log(`[JS] cleanupTerminal: ★★★ 開始 sessionId=${sessionId}`);
-        console.trace(`[JS] cleanupTerminal: 呼び出し元`);
-
-        // 削除前の状態を記録
-        if (window.multiSessionTerminals) {
-            console.log(`[JS] cleanupTerminal: 削除前のターミナル数=${Object.keys(window.multiSessionTerminals).length}`);
-            console.log(`[JS] cleanupTerminal: 削除前のセッションID一覧: ${Object.keys(window.multiSessionTerminals).join(', ')}`);
-        }
 
         // フロー制御のクリーンアップ
         window.flowControlManager.remove(sessionId);

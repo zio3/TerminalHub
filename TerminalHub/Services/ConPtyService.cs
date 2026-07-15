@@ -332,10 +332,10 @@ namespace TerminalHub.Services
                 _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
                 
                 // StreamWriterを作成（XTerm向けにUTF-8、改行コードLF）
-                // バッファサイズを65KBに増やして長い文字列の問題を解決
+                // AutoFlush は使わない。書き込みは WriteAsync の1経路だけで、そこがチャンクごとに
+                // 明示的に FlushAsync している（送出のタイミングはそちらで管理する）。
                 _writer = new StreamWriter(_pipeInStream, new UTF8Encoding(false), bufferSize: 65536)
                 {
-                    AutoFlush = true,
                     NewLine = "\n"  // LF改行（Unix形式）
                 };
                 

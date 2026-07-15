@@ -20,9 +20,11 @@
         /// （例: ASCII 255文字 + 😀 → F0 9F 98 80 ではなく EF BF BD が2つ）。
         /// 末尾が高位サロゲートになる場合は1文字手前で区切り、ペアを次のチャンクへ送る。
         /// </summary>
-        public static int NextChunkLength(string input, int offset, int chunkSize = ChunkSize)
+        public static int NextChunkLength(string input, int offset)
         {
-            var length = System.Math.Min(chunkSize, input.Length - offset);
+            // chunkSize は引数にしない。1 を渡されると高位サロゲート先頭の入力で length が 0 になり、
+            // 呼び出し側の offset が進まず無限ループになる。可変にする理由も無いので固定にしておく。
+            var length = System.Math.Min(ChunkSize, input.Length - offset);
 
             // 後続がある場合のみ調整すればよい（末尾の孤立サロゲートは分割とは無関係）
             if (offset + length < input.Length && char.IsHighSurrogate(input[offset + length - 1]))

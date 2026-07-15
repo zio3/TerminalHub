@@ -209,19 +209,37 @@
 
     public async ValueTask DisposeAsync()
     {
+        // イベントハンドラーを先に解除（Dispose中のデータ受信を防止）
+        if (shellSession != null)
+        {
+            shellSession.DataReceived -= OnDataReceived;
+            shellSession.ProcessExited -= OnProcessExited;
+        }
+
+        // JS 側とサーバー側の破棄は独立させる。
+        // Circuit 切断（ブラウザのリロード・タブを閉じる等）では JS 相互運用が
+        // JSDisconnectedException で失敗するが、両者を1つの try に入れていると
+        // そこで抜けて ConPTY の破棄に到達せず、cmd.exe/powershell が残ってしまう。
         try
         {
-            // イベントハンドラーを先に解除（Dispose中のデータ受信を防止）
-            if (shellSession != null)
-            {
-                shellSession.DataReceived -= OnDataReceived;
-                shellSession.ProcessExited -= OnProcessExited;
-            }
-
-            // XTermの破棄
             await DisposeTerminalAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // ブラウザ側は既に消えており、JS のリソースもページごと解放済み
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "シェルパネルのxterm破棄エラー: {PanelId}", PanelId);
+        }
+        finally
+        {
+            terminal = null;
+        }
 
-            // ConPTYセッションの破棄
+        // ConPTY はサーバー側のリソースなので、JS の破棄が失敗しても必ず落とす
+        try
+        {
             if (shellSession != null)
             {
                 shellSession.Dispose();
@@ -230,7 +248,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "シェルパネルの破棄エラー: {PanelId}", PanelId);
+            Logger.LogError(ex, "シェルパネルのConPTY破棄エラー: {PanelId}", PanelId);
         }
     }
 
