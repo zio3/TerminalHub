@@ -1,4 +1,4 @@
-@page "/multisession"
+﻿@page "/multisession"
 @page "/"
 @using TerminalHub.Components.Shared
 @using TerminalHub.Components.Shared.Dialogs
@@ -237,7 +237,7 @@
 
     private HashSet<string> checkedScripts = new HashSet<string>();
 
-    // セッション再選択時のConPTYリサイズスキップフラグ
+    // 画面復元中（セッション切替・ターミナル再作成）のConPTYリサイズスキップフラグ
     // fit()によるリサイズがConPTYに通知されると画面内容が再送信され重複するため
     private bool _skipConPtyResize = false;
 
@@ -1307,7 +1307,43 @@
         // アクティブセッションIDをローカルストレージに保存
         await SaveActiveSessionIdToStorageAsync(sessionId);
 
-        // セッション切替中はConPTYリサイズをスキップ
+        await ShowAndRestoreTerminalAsync(sessionId, "SelectSession");
+
+        // ConPtySessionをConPtyConnectionServiceに登録
+        // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
+        // 注意: LastConnectionTimeは上で既に設定済み（バッファ復元時）
+        var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
+        if (latestSessionInfo?.ConPtySession != null)
+        {
+            SafeSubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
+        }
+        else
+        {
+            // ConPty session not found - continue without subscription
+        }
+
+        // チェックされたスクリプトを復元
+        if (selectedSession != null)
+        {
+            checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
+            StateHasChanged(); // UIを更新
+        }
+
+        // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
+    }
+
+    // xterm を表示・初期化し、メモリ上の状態バッファから画面を復元する。
+    // セッション切替とターミナル再作成の両方から使う共通経路。
+    //
+    // 前提: アクティブセッション専用。呼び出し時点で activeSessionId == sessionId であること。
+    // リプレイ前のサイズ同期がフィールドの activeSession に対して Resize を撃つため、
+    // この前提が崩れると別セッションの ConPTY を黙ってリサイズしてしまう。
+    // callerTag はログの経路識別用（どちらの呼び出し元から来たかを追えるようにする）。
+    private async Task ShowAndRestoreTerminalAsync(Guid sessionId, string callerTag)
+    {
+        var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+
+        // 復元中はConPTYリサイズをスキップ
         // showTerminal/InitializeTerminal内のfitAddon.fit()が過渡的なサイズでConPTYに通知するのを防ぐ
         // DOM表示後にレイアウト確定を待ち、ResizeTerminalAsyncを1回だけ実行して同期する
         _skipConPtyResize = true;
@@ -1328,7 +1364,7 @@
             await InitializeTerminal(sessionId);
 
             // ブラウザーのレイアウト確定後にfit()を1回だけ実行する。
-            // 切替中フラグは維持しているため、onResize経由ではConPTYへ転送されない。
+            // 復元中フラグは維持しているため、onResize経由ではConPTYへ転送されない。
             if (activeTerminal != null)
             {
                 await TerminalService.ResizeTerminalAsync(activeTerminal);
@@ -1341,7 +1377,7 @@
                 selectedSession.LastConnectionTime = DateTime.Now;
 
                 // リプレイ前にエミュレータ/ConPTYを、確定したxtermの実サイズへ1回だけ同期する。
-                // 切替中はリサイズ通知を skip しているため、別セッション閲覧中にパネル開閉や
+                // 復元中はリサイズ通知を skip しているため、別セッション閲覧中にパネル開閉や
                 // ウィンドウ変更があるとサイズがずれたままになる。エミュレータの行数が xterm より
                 // 大きい状態でリプレイすると、超過分が xterm のスクロールバックへ押し出されて
                 // 「古い画面が上に残る」重複が恒久化する。
@@ -1350,8 +1386,8 @@
                 if (xtermSize is { Cols: >= 20, Rows: >= 10 } size && activeSession != null &&
                     (activeSession.Cols != size.Cols || activeSession.Rows != size.Rows))
                 {
-                    Logger.LogInformation("[SelectSession] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
-                        activeSession.Cols, activeSession.Rows, size.Cols, size.Rows);
+                    Logger.LogInformation("[{Caller}] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
+                        callerTag, activeSession.Cols, activeSession.Rows, size.Cols, size.Rows);
                     // 必ずエミュレータ → ConPTY の順（再送データより先に画面を空にするため）
                     selectedSession.ResizeTerminalBuffer(size.Cols, size.Rows);
                     activeSession.Resize(size.Cols, size.Rows);
@@ -1368,15 +1404,15 @@
                     {
                         if (!string.IsNullOrEmpty(replaySnapshot.Content))
                         {
-                            Logger.LogInformation("[SelectSession] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
-                                sessionId, replaySnapshot.Content.Length);
+                            Logger.LogInformation("[{Caller}] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
+                                callerTag, sessionId, replaySnapshot.Content.Length);
                             // 巨大なリプレイを一発で書くと Blazor サーキットの Dispatcher を長時間占有し、
                             // 直後の送信などの UI 操作が書き込み完了まで待たされる。チャンク分割して
                             // 合間に await することで、_terminalWriteLock を要求しない操作（テキスト送信＝
                             // ConPTY 入力側など）がチャンクの合間に割り込めるようにする。なお同じロックを
                             // 取るライブ出力書き込みは従来どおりループ全体の完了まで直列化される（順序保証は不変）。
                             await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replaySnapshot.Content);
-                            Logger.LogInformation("[SelectSession] バッファ書き込み完了");
+                            Logger.LogInformation("[{Caller}] バッファ書き込み完了", callerTag);
                         }
                     }
                     finally
@@ -1409,38 +1445,6 @@
             _skipConPtyResize = false;
             _restoringSessionId = null;
         }
-
-        // ConPtySessionをConPtyConnectionServiceに登録
-        // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
-        // 注意: LastConnectionTimeは上で既に設定済み（バッファ復元時）
-        var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
-        if (latestSessionInfo?.ConPtySession != null)
-        {
-            SafeSubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
-        }
-        else
-        {
-            // ConPty session not found - continue without subscription
-        }
-
-        // チェックされたスクリプトを復元
-        if (selectedSession != null)
-        {
-            checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
-            StateHasChanged(); // UIを更新
-        }
-
-        // テキストエリアにフォーカス
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("terminalHubHelpers.focusTextArea");
-        }
-        catch (Exception)
-        {
-            // エラーは無視
-        }
-
-        // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
     }
 
     private async Task InitializeTerminal(Guid sessionId)
@@ -1923,13 +1927,13 @@
             }
             if (guid == activeSessionId && activeSession != null)
             {
-                // セッション再選択時のfit()によるリサイズはConPTYに通知しない
+                // 画面復元中のfit()によるリサイズはConPTYに通知しない
                 // ConPTYリサイズは画面内容を再送信するため、重複が発生する
                 if (_skipConPtyResize)
                 {
                     if (Logger.IsEnabled(LogLevel.Debug))
                     {
-                        Logger.LogDebug("[Resize] ConPTYスキップ(切替中): {Cols}x{Rows} src={Source} session={SessionId}",
+                        Logger.LogDebug("[Resize] ConPTYスキップ(復元中): {Cols}x{Rows} src={Source} session={SessionId}",
                             cols, rows, source, shortId);
                     }
                     return;
@@ -2119,7 +2123,7 @@
         try
         {
             // JavaScript側のターミナルを破棄
-            await TerminalService.DestroyTerminalAsync(sessionId, showAlert);
+            await TerminalService.DestroyTerminalAsync(sessionId);
 
             // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
             if (activeSessionId == sessionId && activeTerminal != null)
@@ -2152,17 +2156,16 @@
                 // 既存のターミナルを破棄（アラートなし）
                 await DestroyTerminal(sessionId, false);
 
-                // 新しいターミナルを初期化
-                await InitializeTerminal(sessionId);
-
-                // ターミナル再作成処理
-                var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-                await TerminalService.RecreateTerminalAsync(sessionId, selectedSessionInfo!, activeSession);
+                // セッション切替と同じ経路で初期化し、状態バッファから画面を復元する。
+                // （以前はここで実行中プロセスへ \r\n を撃って再描画させていたが、
+                //   対話型 CLI に空プロンプトを送ることになるため廃止した）
+                await ShowAndRestoreTerminalAsync(sessionId, "RecreateTerminal");
 
                 // ConPtyConnectionServiceに再登録
+                // 注意: LastConnectionTime は ShowAndRestoreTerminalAsync 内で設定済み
+                var selectedSessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
                 if (selectedSessionInfo?.ConPtySession != null)
                 {
-                    selectedSessionInfo.LastConnectionTime = DateTime.Now;
                     SafeSubscribeToSession(selectedSessionInfo.SessionId, selectedSessionInfo.ConPtySession);
                 }
 

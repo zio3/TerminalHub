@@ -16,9 +16,10 @@ namespace TerminalHub.Analyzers
             _analyzers = new Dictionary<TerminalType, IOutputAnalyzer>
             {
                 { TerminalType.ClaudeCode, new ClaudeCodeAnalyzer() },
-                { TerminalType.GeminiCLI, new GeminiCliAnalyzer() },
                 { TerminalType.CodexCLI, new CodexCliAnalyzer() }
                 // TerminalType.Terminal には解析器を設定しない
+                // TerminalType.GeminiCLI は廃止（起動経路は SessionManager から撤去済み。
+                // 既存セッションは通常ターミナルとして起動するため解析器も不要）
             };
         }
 
