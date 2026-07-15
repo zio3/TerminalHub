@@ -822,3 +822,15 @@ h1:focus {
     border-top: 2px solid var(--th-accent);
     background-color: rgba(127, 127, 127, 0.08);
 }
+
+/* IME 変換候補の表示位置対策。
+   xterm.css は入力補助用の hidden textarea を left:-9999em へ飛ばしている（カーソルを
+   見せないため）が、そのままだと IME の変換候補ウィンドウが画面外の左端に出てしまう。
+   left:0 へ引き戻してターミナル左端に出るようにする。
+   xterm.css 側の left は !important ではないので、読み込み順に関わらずこちらが勝つ。 */
+.xterm-helper-textarea {
+    left: 0 !important;
+}
+.xterm .composition-view {
+    left: 0 !important;
+}
