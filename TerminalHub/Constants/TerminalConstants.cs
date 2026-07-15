@@ -1,4 +1,4 @@
-namespace TerminalHub.Constants
+﻿namespace TerminalHub.Constants
 {
     public static class TerminalConstants
     {
@@ -11,7 +11,6 @@ namespace TerminalHub.Constants
         // タイミング（ミリ秒）
         public const int ResizeDelay = 20;           // リサイズ後の待機（最小値）
         public const int DomUpdateDelay = 50;         // DOM更新待機
-        public const int SessionCreationDelay = 100;  // セッション作成待機
         public const int InitializationDelay = 500;   // 初期化待機（必要最小限）
         public const int MinimalDelay = 10;           // 最小待機時間
         public const int ButtonPressAnimationDelay = 150; // ボタン押下アニメーション

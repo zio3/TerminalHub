@@ -68,35 +68,6 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task RecreateTerminalAsync(Guid sessionId, SessionInfo sessionInfo, ConPtySession? activeSession)
-        {
-            _logger.LogDebug("[RecreateTerminal] セッション {SessionId} のターミナルを再作成", sessionId);
-
-            try
-            {
-                // DOM更新と読み取りタスクの完全な終了を待つ
-                await Task.Delay(TerminalConstants.SessionCreationDelay);
-
-                // ターミナルdivの表示状態を確実に設定
-                await EnsureTerminalVisibleAsync(sessionId);
-
-                // ConPTYから自動的に画面状態が送信されるため、スナップショット送信は不要
-                if (sessionInfo?.ConPtySession != null && activeSession != null)
-                {
-                    await Task.Delay(100); // ターミナル初期化完了を待つ
-
-                    // ターミナルに初期プロンプトを送信して接続を確認
-                    await activeSession.WriteAsync("\r\n");
-                    _logger.LogDebug("[RecreateTerminal] プロンプト送信完了");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[RecreateTerminal] エラー");
-                throw;
-            }
-        }
-
         public async Task HideAllTerminalsAsync()
         {
             _logger.LogDebug("[HideAllTerminals] すべてのターミナルを非表示に");
@@ -232,9 +203,5 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task EnsureTerminalVisibleAsync(Guid sessionId)
-        {
-            await _jsRuntime.InvokeVoidAsync("terminalFunctions.ensureTerminalVisible", sessionId.ToString());
-        }
     }
 }

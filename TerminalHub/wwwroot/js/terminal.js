@@ -1130,15 +1130,6 @@ window.terminalFunctions = {
         this.cleanupTerminal(sessionId);
     },
 
-    // ターミナル再作成用の表示設定
-    ensureTerminalVisible: function(sessionId) {
-        const terminalDiv = document.getElementById(`terminal-${sessionId}`);
-        if (terminalDiv) {
-            terminalDiv.style.display = 'block';
-            // console.log('[RecreateTerminal] ターミナルdiv表示設定');
-        }
-    },
-
     // ターミナルを最下段にスクロール
     scrollToBottom: function(sessionId) {
         if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
@@ -1197,34 +1188,4 @@ window.terminalFunctions = {
 };
 
 // terminalHubHelpers オブジェクト
-window.terminalHubHelpers = {
-    // テキストエリアにフォーカス
-    focusTextArea: function() {
-        const textArea = document.querySelector('textarea[data-input-area]');
-        if (textArea) {
-            textArea.focus();
-        }
-    },
-
-    // エレメントの存在確認
-    checkElementExists: function(elementId) {
-        return document.getElementById(elementId) !== null;
-    },
-
-    // フロー制御のステータスを取得（デバッグ用）
-    getFlowControlStatus: function(sessionId) {
-        return window.flowControlManager.getStatus(sessionId);
-    },
-
-    // 全セッションのフロー制御ステータスを取得（デバッグ用）
-    getAllFlowControlStatus: function() {
-        const result = {};
-        if (window.multiSessionTerminals) {
-            for (const sessionId of Object.keys(window.multiSessionTerminals)) {
-                result[sessionId] = window.flowControlManager.getStatus(sessionId);
-            }
-        }
-        return result;
-    }
-};
 

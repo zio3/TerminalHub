@@ -1,4 +1,4 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -14,11 +14,6 @@ namespace TerminalHub.Services
         /// ターミナルを破棄する
         /// </summary>
         Task DestroyTerminalAsync(Guid sessionId);
-
-        /// <summary>
-        /// ターミナルを再作成する
-        /// </summary>
-        Task RecreateTerminalAsync(Guid sessionId, SessionInfo sessionInfo, ConPtySession? activeSession);
 
         /// <summary>
         /// すべてのターミナルを非表示にする
@@ -61,11 +56,6 @@ namespace TerminalHub.Services
         /// 要素が存在するかチェックする
         /// </summary>
         Task<bool> CheckElementExistsAsync(string elementId);
-
-        /// <summary>
-        /// ターミナルの表示状態を確実に設定する
-        /// </summary>
-        Task EnsureTerminalVisibleAsync(Guid sessionId);
 
         /// <summary>
         /// ターミナルの表示をリフレッシュする（バッファ復元後の表示更新用）
