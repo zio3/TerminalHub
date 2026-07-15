@@ -5,19 +5,10 @@
         // ターミナルサイズ
         public const int DefaultCols = 120;
         public const int DefaultRows = 30;
-        public const int MinCols = 80;
-        public const int MinRows = 24;
-        
+
         // タイミング（ミリ秒）
         public const int DomUpdateDelay = 50;         // DOM更新待機
-        
-        // プロセス
-        public const uint ExtendedStartupinfoPresent = 0x00080000;
-        public const int ProcThreadAttributePseudoConsole = 0x00020016;
-        
-        // セッション
-        public const int SessionIdDisplayLength = 8;
-        
+
         // ファイルパス
         public const string DefaultShell = @"C:\Windows\System32\cmd.exe";
         
@@ -38,26 +29,6 @@
 
             // 3. どちらもなければネイティブ版のパスを返す（推奨インストール方法）
             return nativePath;
-        }
-
-        /// <summary>
-        /// Claude Codeのインストール状態を確認
-        /// </summary>
-        public static (bool isInstalled, string path, string installType) GetClaudeCodeInstallInfo()
-        {
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-            // ネイティブ版
-            var nativePath = Path.Combine(userProfile, ".local", "bin", "claude.exe");
-            if (File.Exists(nativePath))
-                return (true, nativePath, "native");
-
-            // npm版
-            var npmPath = Path.Combine(userProfile, "AppData", "Roaming", "npm", "claude.cmd");
-            if (File.Exists(npmPath))
-                return (true, npmPath, "npm");
-
-            return (false, nativePath, "not installed");
         }
 
         // コマンドライン引数の構築ヘルパー

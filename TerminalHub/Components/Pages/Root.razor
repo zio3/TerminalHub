@@ -3077,21 +3077,8 @@
             _processExitedHandler = null;
         }
 
-        // JavaScript interopを安全に処理
-        try
-        {
-            // 履歴を保存（JavaScript interopを使用）
-            await InputHistoryService.SaveHistoryAsync();
-        }
-        catch (JSDisconnectedException)
-        {
-            // 回路が切断されている場合は無視
-        }
-        catch (Exception)
-        {
-            // その他のエラーも無視
-        }
-        
+        // 入力履歴は AddToHistory 時点で SQLite へ保存済みのため、破棄時の保存は不要
+
         // HookNotificationServiceのイベントハンドラーを削除
         if (_hookNotificationHandler != null)
         {

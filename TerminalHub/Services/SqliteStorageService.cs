@@ -175,10 +175,6 @@ namespace TerminalHub.Services
             }
 
             // 両方空 → SQLiteを初期化して使用（新規ユーザー）
-            if (!SqliteDatabaseExists)
-            {
-                await _repository.InitializeAsync();
-            }
             await _repository.InitializeAsync();
             return _sqliteStorageService;
         }

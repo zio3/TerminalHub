@@ -84,7 +84,6 @@ var dbPath = AppDataPaths.GetDatabaseFilePath(
     builder.Environment.IsDevelopment(),
     builder.Configuration.GetValue<string>("Database:FileName"));
 builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
-Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();
@@ -188,6 +187,10 @@ builder.Services
 
 
 var app = builder.Build();
+
+// dev/prod で保存先が切り替わるため、どのDBを開いたかを起動時に残す
+app.Logger.LogInformation("[DB] 使用するDB: Environment={Environment}, FullPath={DbPath}",
+    app.Environment.EnvironmentName, dbPath);
 
 // ターミナル状態バッファ（VTエミュレータ）の初期グリッドサイズを設定
 // （SessionInfo 作成時に TerminalStateBufferFactory.Create() が参照する）
