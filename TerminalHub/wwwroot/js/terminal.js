@@ -328,15 +328,31 @@ function showLinkCopyNotice(uri, success) {
 // バッファ行のテキストを取得（各リンクプロバイダー共通）
 // ワイド文字（全角等）の2セル目は getChars() が空を返すためスペースで埋め、
 // 文字列インデックスとターミナル列番号を揃える
+// 行のテキストと、各文字が始まるセル列(0始まり)の対応表を返す。
+//
+// 全角文字は2セルを占め、xterm は2セル目を「幅0・getChars()=''」のセルとして返す。
+// これを ' ' として拾うと（旧実装）パスの途中に空白が入り、空白を含まない前提の
+// pathRegex がそこで切れる（例: C:\Users\info\テスト用メモ.md が
+// "C:\Users\info\テ" までしかリンク化されない）。幅0のセルは飛ばす。
+//
+// また x はセル列なので、全角があると文字数（match.index）とズレる。columns で引き直す。
 function getBufferLineText(line) {
-    let lineText = '';
+    let text = '';
+    const columns = [];
     for (let i = 0; i < line.length; i++) {
         const cell = line.getCell(i);
-        if (cell) {
-            lineText += cell.getChars() || ' ';
+        if (!cell || cell.getWidth() === 0) {
+            continue; // 全角の後続セル（幅0）は本体側に含まれている
         }
+        const chars = cell.getChars() || ' ';
+        // サロゲートペアや結合文字で chars が複数コード単位になる場合も同じ列を指す
+        for (let k = 0; k < chars.length; k++) {
+            columns.push(i);
+        }
+        text += chars;
     }
-    return lineText;
+    columns.push(line.length); // 末尾（マッチ終端の変換用）
+    return { text, columns };
 }
 
 // ファイルパス検出の設定
@@ -366,7 +382,7 @@ function setupFilePathDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -390,8 +406,8 @@ function setupFilePathDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
                     activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPath(sessionId, uri); }
@@ -432,7 +448,7 @@ function setupCommitHashDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -454,8 +470,8 @@ function setupCommitHashDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
                     activate: (e, uri) => {
@@ -498,7 +514,7 @@ function setupPrNumberDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -511,8 +527,8 @@ function setupPrNumberDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
                     activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPrNumber(sessionId, uri); }
@@ -596,7 +612,7 @@ function setupUrlDetectionFallback(term) {
                 }
                 
                 // 行のテキストを取得
-                const lineText = getBufferLineText(line);
+                const { text: lineText, columns } = getBufferLineText(line);
 
                 // URLを検出
                 const links = [];
@@ -606,8 +622,8 @@ function setupUrlDetectionFallback(term) {
                 while ((match = urlRegex.exec(lineText)) !== null) {
                     const link = {
                         range: {
-                            start: { x: match.index + 1, y: bufferLineNumber },
-                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber }
+                            start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                            end: { x: columns[match.index + match[0].length] + 1, y: bufferLineNumber }
                         },
                         text: match[0],
                         activate: (e, uri) => {
