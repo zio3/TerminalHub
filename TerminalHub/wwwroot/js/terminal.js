@@ -622,6 +622,123 @@ function setupUrlDetectionFallback(term) {
     }
 }
 
+// ---- 選択テキストの右クリックメニュー ----
+//
+// リンクプロバイダはトークンの「境界」を推測する必要があり、日本語やスペースを含む
+// ファイル名では破綻するため対応を見送っている。選択は境界をユーザーが与えてくれるので、
+// 選択テキストならその制約がない（「パスっぽいか」の判定自体は容易）。
+//
+// パスっぽい選択があるときだけ自前メニューを出し、それ以外はネイティブメニューに素通しする。
+// こうすると通常の文章を選んでの DeepL・スペルチェック・絵文字は従来どおり使える。
+
+// 選択がパスらしいか。リンクプロバイダの pathRegex と違い境界の切り出しは不要で、
+// 「区切り文字を含むか / ドライブレターで始まるか / 拡張子で終わるか」だけ見る。
+function looksLikePath(text) {
+    if (!text || text.length > 4096 || /[\r\n]/.test(text)) return false;
+    return /[\\/]/.test(text) || /^[A-Za-z]:/.test(text) || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(text);
+}
+
+function closeTerminalContextMenu() {
+    const existing = document.getElementById('terminal-context-menu');
+    if (existing) existing.remove();
+}
+
+function showTerminalContextMenu(x, y, items) {
+    closeTerminalContextMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'terminal-context-menu';
+    menu.className = 'terminal-context-menu';
+    menu.setAttribute('role', 'menu');
+
+    for (const item of items) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'terminal-context-menu-item';
+        button.setAttribute('role', 'menuitem');
+        button.textContent = item.label;
+        button.addEventListener('click', () => {
+            closeTerminalContextMenu();
+            item.action();
+        });
+        menu.appendChild(button);
+    }
+
+    // 画面外にはみ出さないよう、いったん不可視で置いて実寸から補正する
+    menu.style.visibility = 'hidden';
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.min(x, window.innerWidth - rect.width - 4)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - rect.height - 4)}px`;
+    menu.style.visibility = '';
+
+    // 次のクリック・ESC・スクロールで閉じる（capture で確実に拾う）
+    const dismiss = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Escape') return;
+        if (e.type === 'mousedown' && menu.contains(e.target)) return;
+        closeTerminalContextMenu();
+        document.removeEventListener('mousedown', dismiss, true);
+        document.removeEventListener('keydown', dismiss, true);
+        window.removeEventListener('blur', dismiss);
+    };
+    document.addEventListener('mousedown', dismiss, true);
+    document.addEventListener('keydown', dismiss, true);
+    window.addEventListener('blur', dismiss);
+}
+
+// element へ contextmenu を登録する。attachTouchScroll と同じく、コンテナ div は
+// セッションごとに永続する一方 createMultiSessionTerminal は毎回呼ばれるため、
+// 前回のリスナーを必ず外してから付け直す（外し忘れるとセッションを開くたび多重登録される）。
+function attachSelectionContextMenu(term, element, sessionId) {
+    if (typeof element._selectionMenuDetach === 'function') {
+        element._selectionMenuDetach();
+    }
+
+    const onContextMenu = (e) => {
+        let selection = '';
+        try {
+            selection = (term.getSelection() || '').trim();
+        } catch {
+            return; // 破棄済み等。ネイティブメニューに任せる
+        }
+
+        if (!selection) return;
+
+        const items = [
+            { label: 'コピー', action: () => copyLinkToClipboard(selection) },
+        ];
+
+        if (looksLikePath(selection)) {
+            // 「開く」はリンククリックと同じ経路（C# 側でセッションのフォルダ基準に解決し、
+            // フォルダ=Explorer / ファイル=既定アプリ。実在しなければ警告トースト）
+            items.push({ label: '開く', action: () => activateTerminalPath(sessionId, selection) });
+            items.push({
+                label: 'フルパスをコピー',
+                action: () => {
+                    if (!window.terminalHubDotNetRef) return;
+                    window.terminalHubDotNetRef.invokeMethodAsync('ResolveTerminalPath', sessionId, selection)
+                        .then(full => copyLinkToClipboard(full || selection))
+                        .catch(() => copyLinkToClipboard(selection));
+                }
+            });
+        }
+
+        // パスでなければ「コピー」しか無い＝ネイティブメニューの方が有用なので出さない
+        if (items.length === 1) return;
+
+        e.preventDefault();
+        showTerminalContextMenu(e.clientX, e.clientY, items);
+    };
+
+    element.addEventListener('contextmenu', onContextMenu);
+
+    element._selectionMenuDetach = () => {
+        closeTerminalContextMenu();
+        element.removeEventListener('contextmenu', onContextMenu);
+        element._selectionMenuDetach = null;
+    };
+}
+
 window.terminalFunctions = {
     // マルチセッション用のターミナル作成関数
     createMultiSessionTerminal: function(terminalId, sessionId, dotNetRef, fontSize) {
@@ -717,6 +834,9 @@ window.terminalFunctions = {
             // （v5 までは動作していた退行）。指の移動量を scrollLines に変換して自前で処理する。
             // 併せて app.css の .xterm { touch-action: none } でページ全体へのスクロール伝播を抑止。
             attachTouchScroll(term, element);
+
+            // 選択テキストの右クリックメニュー（パスっぽい選択のときだけ出す）
+            attachSelectionContextMenu(term, element, sessionId);
 
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
@@ -984,9 +1104,12 @@ window.terminalFunctions = {
 
         // ターミナルdiv内をクリア - より安全なDOM操作を使用
         if (terminalDiv) {
-            // タッチスクロールのリスナーを外す（破棄済み term への参照を残さない）
+            // 登録したリスナーを外す（破棄済み term への参照を残さない）
             if (typeof terminalDiv._touchScrollDetach === 'function') {
                 terminalDiv._touchScrollDetach();
+            }
+            if (typeof terminalDiv._selectionMenuDetach === 'function') {
+                terminalDiv._selectionMenuDetach();
             }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
