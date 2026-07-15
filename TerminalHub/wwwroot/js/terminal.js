@@ -847,7 +847,10 @@ window.terminalFunctions = {
             
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
-                fitAddon: fitAddon
+                fitAddon: fitAddon,
+                // コンテナ要素。cleanupTerminal がタッチリスナー解除と DOM クリアに使う。
+                // id から組み立てると命名規則（terminal-{guid}）に依存し、シェルパネルで外れる。
+                container: element
             };
 
             // フロー制御マネージャーにdotNetRefを設定
@@ -913,11 +916,9 @@ window.terminalFunctions = {
             },
             getSize: () => {
                 return { cols: term.cols, rows: term.rows };
-            },
-            dispose: () => {
-                window.resizeObserverManager.remove(sessionId);
-                term.dispose();
             }
+            // 破棄は terminalFunctions.cleanupTerminal に一本化する。ここに dispose を生やすと
+            // フロー制御・タッチリスナー・DOM クリアを取りこぼした不完全な破棄経路が増える。
         };
     },
 
@@ -964,11 +965,18 @@ window.terminalFunctions = {
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
         
+        // コンテナは作成時に保持した参照を使う。id を `terminal-${sessionId}` と組み立てると
+        // 通常セッション（コンテナ terminal-{guid}）でしか当たらず、シェルパネル
+        // （コンテナ shell-panel-*、キー shell-term-*）ではタッチリスナー解除と
+        // DOM クリアが空振りする。旧データ用に getElementById もフォールバックとして残す。
+        const terminalInfo = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
+        const terminalDiv = terminalInfo?.container || document.getElementById(`terminal-${sessionId}`);
+
         // ターミナルインスタンスのクリーンアップ
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            if (window.multiSessionTerminals[sessionId].terminal) {
+        if (terminalInfo) {
+            if (terminalInfo.terminal) {
                 try {
-                    window.multiSessionTerminals[sessionId].terminal.dispose();
+                    terminalInfo.terminal.dispose();
                 } catch (e) {
                     // WebglAddonの内部レンダラーが不整合な状態（スリープ復帰後・コンテキスト喪失後等）でも安全に破棄
                     console.log(`[JS] cleanupTerminal: dispose()エラー（無視）: ${e.message}`);
@@ -981,9 +989,8 @@ window.terminalFunctions = {
         else {
             console.log(`[JS] cleanupTerminal: ★★★ 警告: 削除対象のターミナルが存在しない sessionId=${sessionId}`);
         }
-        
+
         // ターミナルdiv内をクリア - より安全なDOM操作を使用
-        const terminalDiv = document.getElementById(`terminal-${sessionId}`);
         if (terminalDiv) {
             // タッチスクロールのリスナーを外す（破棄済み term への参照を残さない）
             if (typeof terminalDiv._touchScrollDetach === 'function') {
