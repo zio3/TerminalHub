@@ -271,6 +271,14 @@ window.setTerminalLinkCopyMode = function (enabled) {
     terminalLinkCopyMode = !!enabled;
 };
 
+// リンク活性化を左クリックだけに限定するガード。
+// xterm はリンクの activate を呼ぶ前にマウスボタンを見ないため、素通しにすると
+// 右クリック（コンテキストメニューを出したいだけ）や中クリックでもリンクが開いてしまう。
+// button: 0=左 / 1=中 / 2=右。event が無い経路（将来の API 変更等）では従来どおり通す。
+function isPrimaryClick(e) {
+    return !e || e.button === undefined || e.button === 0;
+}
+
 // リンクのアクティベート処理（WebLinksAddon / フォールバック共通）
 function activateTerminalLink(uri) {
     if (terminalLinkCopyMode) {
@@ -386,7 +394,7 @@ function setupFilePathDetection(term, sessionId) {
                         end: { x: match.index + text.length + 1, y: bufferLineNumber }
                     },
                     text: text,
-                    activate: (e, uri) => activateTerminalPath(sessionId, uri)
+                    activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPath(sessionId, uri); }
                 });
             }
 
@@ -451,6 +459,7 @@ function setupCommitHashDetection(term, sessionId) {
                     },
                     text: text,
                     activate: (e, uri) => {
+                        if (!isPrimaryClick(e)) return;
                         if (window.terminalHubDotNetRef) {
                             window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalCommitHashClick', sessionId, uri)
                                 .catch(err => console.error('[Hash Detection] open failed:', err));
@@ -506,7 +515,7 @@ function setupPrNumberDetection(term, sessionId) {
                         end: { x: match.index + text.length + 1, y: bufferLineNumber }
                     },
                     text: text,
-                    activate: (e, uri) => activateTerminalPrNumber(sessionId, uri)
+                    activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPrNumber(sessionId, uri); }
                 });
             }
 
@@ -553,7 +562,9 @@ function setupUrlDetection(term) {
         try {
             // WebLinksAddonを作成（URLをクリック可能にする）
             // 既定ハンドラは直接 window.open するため、コピー動作モードを差し込めるようカスタムハンドラを渡す
-            const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => activateTerminalLink(uri));
+            const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => {
+                if (isPrimaryClick(event)) activateTerminalLink(uri);
+            });
             term.loadAddon(webLinksAddon);
             console.log('[URL Detection] WebLinksAddon loaded successfully');
         } catch (error) {
@@ -600,6 +611,7 @@ function setupUrlDetectionFallback(term) {
                         },
                         text: match[0],
                         activate: (e, uri) => {
+                            if (!isPrimaryClick(e)) return;
                             console.log('[URL Detection] Link activated:', uri);
                             activateTerminalLink(uri);
                         }
