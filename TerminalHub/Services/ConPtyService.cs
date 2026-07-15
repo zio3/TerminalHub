@@ -401,18 +401,31 @@ namespace TerminalHub.Services
                 if (_writer == null || IsDisposed)
                     return;
 
-                // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
+                // 長い文字列を一括で流し込むと受け手（conhost の入力バッファ / CLI）が取りこぼすため、
+                // 分割して間隔を空けながら送る。CHUNK_SIZE/INTER_CHUNK_DELAY_MS は実測で調整された値で
+                // 理論的な裏付けはないが、間隔を詰めると切れが再発した経緯があるので安易に縮めないこと。
+                //
+                // ウェイトが要るのは「チャンクとチャンクの間」だけ。最後のチャンクの後に待っても
+                // 受け手に猶予を与える意味はなく、遅延にしかならない。onData 経由のキー入力は
+                // 1打鍵ごとに WriteAsync を呼ぶ（=常に1チャンク）ため、ここで待つと全打鍵が
+                // 20ms 遅れる。
                 const int CHUNK_SIZE = 256;
+                const int INTER_CHUNK_DELAY_MS = 20;
 
                 for (int i = 0; i < input.Length; i += CHUNK_SIZE)
                 {
-                    var chunk = i + CHUNK_SIZE < input.Length
-                        ? input.Substring(i, CHUNK_SIZE)
-                        : input.Substring(i);
+                    var isLastChunk = i + CHUNK_SIZE >= input.Length;
+                    var chunk = isLastChunk
+                        ? input.Substring(i)
+                        : input.Substring(i, CHUNK_SIZE);
 
                     await _writer.WriteAsync(chunk);
                     await _writer.FlushAsync();
-                    await Task.Delay(20);
+
+                    if (!isLastChunk)
+                    {
+                        await Task.Delay(INTER_CHUNK_DELAY_MS);
+                    }
                 }
 
                 // 統計情報を更新
