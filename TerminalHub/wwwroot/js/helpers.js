@@ -56,44 +56,6 @@ window.terminalHubHelpers = {
         console.log('[診断] ===== ターミナル診断終了 =====');
     },
     
-    // ターミナルの修復を試みる
-    repairTerminal: function(sessionId) {
-        console.log(`[修復] セッション ${sessionId} の修復開始`);
-        
-        const terminalDiv = document.getElementById(`terminal-${sessionId}`);
-        if (!terminalDiv) {
-            console.log(`[修復] DOM要素が見つかりません`);
-            return;
-        }
-        
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const termInfo = window.multiSessionTerminals[sessionId];
-            if (termInfo.terminal && termInfo.terminal.element) {
-                // xtermの要素が正しい親要素に存在するか確認
-                if (termInfo.terminal.element.parentNode !== terminalDiv) {
-                    console.log(`[修復] xterm要素を正しいDOM要素に再アタッチ`);
-                    terminalDiv.appendChild(termInfo.terminal.element);
-                }
-                
-                // リフレッシュを実行
-                console.log(`[修復] ターミナルをリフレッシュ`);
-                termInfo.terminal.refresh(0, termInfo.terminal.rows - 1);
-                
-                // fitAddonがあればfit実行
-                if (termInfo.fitAddon) {
-                    console.log(`[修復] fitAddon.fit()実行`);
-                    termInfo.fitAddon.fit();
-                }
-                
-                console.log(`[修復] 修復完了`);
-            } else {
-                console.log(`[修復] xtermインスタンスが破損しています`);
-            }
-        } else {
-            console.log(`[修復] JS側のターミナル情報が見つかりません`);
-        }
-    },
-
     // Keyboard shortcuts
     setupKeyboardShortcuts: function(dotNetRef) {
         window.terminalHubKeyHandler = function(e) {
@@ -118,14 +80,6 @@ window.terminalHubHelpers = {
             document.removeEventListener('keydown', window.terminalHubKeyHandler);
             window.terminalHubKeyHandler = null;
         }
-    },
-    
-    // Get window dimensions
-    getWindowSize: function() {
-        return {
-            width: window.innerWidth,
-            height: window.innerHeight
-        };
     },
     
     // Check if element exists

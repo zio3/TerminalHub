@@ -66,43 +66,26 @@ namespace TerminalHub.Services
                     else if (result.IsProcessing)
                     {
                         // 出力解析で「処理中(esc to interrupt 等)」を検出＝ユーザープロンプト待ちではない状態。
-                        if (result.IsWaitingForUser)
-                        {
-                            // 出力解析ベースで入力待ちを検出（Gemini 等）。種別まではわからないので選択待ち扱い。
-                            sessionInfo.IsWaitingForSelection = true;
-                        }
-                        else
-                        {
-                            // 処理中＝プロンプト待ちではないので、hook(PermissionRequest/PreToolUse)が立てた
-                            // 許可/選択待ちも含めて解除する。Codex は承認後の作業中に waiting が残り続けて
-                            // send_to_session が誤ブロックされるのを防ぐ（Codexは Stop まで waiting が下がらないため）。
-                            //
-                            // ただし hook が直前(クールダウン内)に待ちを立てた場合は解除しない。
-                            // プロンプト表示直前の古いスピナー出力チャンクが遅れて解析され、開いている
-                            // プロンプトの待ちを誤クリアする（→ send_to_session が誤送信）レースを避けるため。
-                            var withinHookCooldown =
-                                IsHookDriven(sessionInfo.TerminalType) &&
-                                sessionInfo.LastWaitingHookSetTime.HasValue &&
-                                (DateTime.Now - sessionInfo.LastWaitingHookSetTime.Value).TotalSeconds < WaitingHookCooldownSeconds;
+                        // 処理中＝プロンプト待ちではないので、hook(PermissionRequest/PreToolUse)が立てた
+                        // 許可/選択待ちも含めて解除する。Codex は承認後の作業中に waiting が残り続けて
+                        // send_to_session が誤ブロックされるのを防ぐ（Codexは Stop まで waiting が下がらないため）。
+                        //
+                        // ただし hook が直前(クールダウン内)に待ちを立てた場合は解除しない。
+                        // プロンプト表示直前の古いスピナー出力チャンクが遅れて解析され、開いている
+                        // プロンプトの待ちを誤クリアする（→ send_to_session が誤送信）レースを避けるため。
+                        var withinHookCooldown =
+                            IsHookDriven(sessionInfo.TerminalType) &&
+                            sessionInfo.LastWaitingHookSetTime.HasValue &&
+                            (DateTime.Now - sessionInfo.LastWaitingHookSetTime.Value).TotalSeconds < WaitingHookCooldownSeconds;
 
-                            if (!withinHookCooldown)
-                            {
-                                sessionInfo.ClearWaitingForUserInput();
-                            }
+                        if (!withinHookCooldown)
+                        {
+                            sessionInfo.ClearWaitingForUserInput();
                         }
 
-                        // ステータステキストを決定
-                        var statusText = result.ProcessingText ?? result.StatusText;
-
-                        if (!string.IsNullOrEmpty(statusText))
+                        if (!string.IsNullOrEmpty(result.ProcessingText))
                         {
-                            // GeminiCLIの場合は経過秒数も設定
-                            if (result.ElapsedSeconds.HasValue)
-                            {
-                                sessionInfo.ProcessingElapsedSeconds = result.ElapsedSeconds.Value;
-                            }
-
-                            UpdateSessionProcessingStatus(sessionInfo, statusText, activeSessionId, updateStatus, result.MatchedText);
+                            UpdateSessionProcessingStatus(sessionInfo, result.ProcessingText, activeSessionId, updateStatus, result.MatchedText);
                         }
                     }
                     else

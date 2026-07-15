@@ -51,7 +51,7 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task DestroyTerminalAsync(Guid sessionId, bool showAlert = true)
+        public async Task DestroyTerminalAsync(Guid sessionId)
         {
             _logger.LogDebug("[DestroyTerminal] セッション {SessionId} のターミナルを破棄", sessionId);
 

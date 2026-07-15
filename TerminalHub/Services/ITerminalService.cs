@@ -13,7 +13,7 @@ namespace TerminalHub.Services
         /// <summary>
         /// ターミナルを破棄する
         /// </summary>
-        Task DestroyTerminalAsync(Guid sessionId, bool showAlert = true);
+        Task DestroyTerminalAsync(Guid sessionId);
 
         /// <summary>
         /// ターミナルを再作成する

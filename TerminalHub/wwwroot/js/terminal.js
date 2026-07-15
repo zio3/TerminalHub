@@ -622,54 +622,6 @@ function setupUrlDetectionFallback(term) {
     }
 }
 
-//// IME検出とフォーカス制御
-//function setupIMEDetection(term, element, sessionId) {
-//    console.log(`[IME Detection] セットアップ開始: sessionId=${sessionId}`);
-    
-//    // xterm.jsのテキストエリアを取得
-//    const textareas = element.querySelectorAll('.xterm-helper-textarea');
-//    if (textareas.length === 0) {
-//        console.log('[IME Detection] helper-textareaが見つかりません');
-//        return;
-//    }
-    
-//    const helperTextarea = textareas[0];
-    
-//    // composition開始イベントをリッスン
-//    helperTextarea.addEventListener('compositionstart', (e) => {
-//        console.log(`[IME Detection] IME開始検出: sessionId=${sessionId}`);
-        
-//        // 下部のテキストエリアを探してフォーカス
-//        const inputTextarea = document.querySelector('textarea#inputText');
-//        if (inputTextarea) {
-//            console.log('[IME Detection] テキストエリアにフォーカスを移動');
-//            inputTextarea.focus();
-            
-//            // 既存の入力があれば、それを保持
-//            const existingText = inputTextarea.value;
-//            if (existingText) {
-//                // カーソルを最後に移動
-//                inputTextarea.setSelectionRange(existingText.length, existingText.length);
-//            }
-//        } else {
-//            console.log('[IME Detection] 入力用テキストエリアが見つかりません');
-//        }
-//    });
-    
-//    // キーダウンイベントでもIMEを検出（keyCode 229）
-//    helperTextarea.addEventListener('keydown', (e) => {
-//        if (e.keyCode === 229) {
-//            console.log(`[IME Detection] IME keyCode 229検出: sessionId=${sessionId}`);
-            
-//            const inputTextarea = document.querySelector('textarea#inputText');
-//            if (inputTextarea && document.activeElement !== inputTextarea) {
-//                console.log('[IME Detection] テキストエリアにフォーカスを移動 (keyCode 229)');
-//                inputTextarea.focus();
-//            }
-//        }
-//    });
-//}
-
 // 右クリック検出とIMEスタイル制御
 function setupContextMenuAndIME(element, sessionId) {
     let imeStyleSheet = null;
@@ -873,10 +825,7 @@ window.terminalFunctions = {
             
             // 右クリック検出とIMEスタイル制御
             setupContextMenuAndIME(element, sessionId);
-            
-            // IME検出とフォーカス制御
-         //   setupIMEDetection(term, element, sessionId);
-            
+
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
                 notifyResize(size.cols, size.rows, 'onResize', '');
@@ -952,30 +901,9 @@ window.terminalFunctions = {
                 }
             }
             
-            // スクロール関数をオーバーライドしてログを追加
-            const originalScrollToBottom = term.scrollToBottom.bind(term);
-            const originalScrollToTop = term.scrollToTop.bind(term);
-            const originalScrollToLine = term.scrollToLine.bind(term);
-            
-            term.scrollToBottom = function() {
-                return originalScrollToBottom();
-            };
-            
-            term.scrollToTop = function() {
-                return originalScrollToTop();
-            };
-            
-            term.scrollToLine = function(line) {
-                return originalScrollToLine(line);
-            };
-            
-            // スクロール設定の状態を確認
-            
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
-                fitAddon: fitAddon,
-                scrollPosition: 0,
-                hasBufferedContent: false
+                fitAddon: fitAddon
             };
 
             // フロー制御マネージャーにdotNetRefを設定
@@ -995,22 +923,6 @@ window.terminalFunctions = {
         return {
             write: (data) => {
                 const dataLength = data.length;
-
-                // デバッグ: 大きなデータの書き込みを検出
-                if (dataLength > 100000) {
-                    console.warn(`[JS] write: 大きなデータ検出 sessionId=${sessionId}, size=${dataLength}`);
-                }
-
-                // デバッグ: 危険なカーソル移動シーケンスを検出（行番号1000以上）
-                const cursorMoveRegex = /\x1b\[(\d+);?(\d*)H/g;
-                let match;
-                while ((match = cursorMoveRegex.exec(data)) !== null) {
-                    const row = parseInt(match[1], 10);
-                    if (row > 1000) {
-                        console.error(`[JS] write: 危険なカーソル移動検出! row=${row}, match=${match[0].replace(/\x1b/g, '\\e')}`);
-                        console.error(`[JS] write: データの最初500文字: ${data.substring(0, 500).replace(/\x1b/g, '\\e').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}`);
-                    }
-                }
 
                 // フロー制御: 書き込み前にバイト数を加算
                 window.flowControlManager.beforeWrite(sessionId, dataLength);
@@ -1160,30 +1072,6 @@ window.terminalFunctions = {
         }
     },
     
-    // ターミナルを一時的に非表示にして、データ受信後に表示
-    showTerminalWithDelay: function(sessionId, delayMs = 100) {
-        const terminal = document.getElementById(`terminal-${sessionId}`);
-        if (terminal) {
-            // まず非表示にする（opacity使用でスムーズに）
-            terminal.style.transition = 'opacity 0.2s ease-in-out';
-            terminal.style.opacity = '0';
-            terminal.style.display = 'block';
-            
-            if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-                const terminalInfo = window.multiSessionTerminals[sessionId];
-                terminalInfo.pendingShow = true;
-                // セッションを一時非表示に設定
-                
-                // 指定時間後にフェードイン
-                setTimeout(() => {
-                    terminal.style.opacity = '1';
-                    terminalInfo.pendingShow = false;
-                    // セッションをフェードイン表示
-                }, delayMs);
-            }
-        }
-    },
-
     terminalExists: function(sessionId) {
         return document.getElementById(`terminal-${sessionId}`) !== null;
     },
@@ -1277,41 +1165,6 @@ window.terminalFunctions = {
                 } catch (e) {
                     console.log(`[JS] refreshTerminal: エラー ${e.message}`);
                 }
-            }
-        }
-    },
-
-    // バッファ内容を書き込む専用関数（スクロール処理含む）
-    writeBuffered: function(sessionId, data) {
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const terminalInfo = window.multiSessionTerminals[sessionId];
-            const term = terminalInfo.terminal;
-            
-            // バッファ内容を書き込み
-            term.write(data);
-            
-            // xtermの自動スクロール機能に任せる（scrollOnOutput: trueが設定済み）
-            
-            terminalInfo.hasBufferedContent = true;
-        }
-    },
-
-    // スクロール位置を保存
-    saveScrollPosition: function(sessionId) {
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const terminalInfo = window.multiSessionTerminals[sessionId];
-            const term = terminalInfo.terminal;
-            terminalInfo.scrollPosition = term.buffer.active.viewportY;
-        }
-    },
-
-    // スクロール位置を復元
-    restoreScrollPosition: function(sessionId) {
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const terminalInfo = window.multiSessionTerminals[sessionId];
-            const term = terminalInfo.terminal;
-            if (terminalInfo.scrollPosition > 0) {
-                term.scrollToLine(terminalInfo.scrollPosition);
             }
         }
     },

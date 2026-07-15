@@ -25,10 +25,7 @@ namespace TerminalHub.Analyzers
     {
         public bool IsProcessing { get; set; }
         public bool IsInterrupted { get; set; }
-        public bool IsWaitingForUser { get; set; }
-        public int? ElapsedSeconds { get; set; }      // GeminiCLI用
-        public string? StatusText { get; set; }       // GeminiCLI用
-        public string? ProcessingText { get; set; }   // ClaudeCode用
+        public string? ProcessingText { get; set; }
         /// <summary>
         /// 正規表現がマッチした部分文字列（ANSIクリーン済み）。診断用。
         /// </summary>

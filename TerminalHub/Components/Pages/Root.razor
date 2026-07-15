@@ -2119,7 +2119,7 @@
         try
         {
             // JavaScript側のターミナルを破棄
-            await TerminalService.DestroyTerminalAsync(sessionId, showAlert);
+            await TerminalService.DestroyTerminalAsync(sessionId);
 
             // C#側のターミナル参照を削除（アクティブセッションの場合のみ）
             if (activeSessionId == sessionId && activeTerminal != null)
