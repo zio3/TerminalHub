@@ -654,7 +654,11 @@ window.terminalFunctions = {
             // 囲み数字（①②③ 等）の範囲だけ等幅日本語フォントへ差し替えて読みやすくする。
             // 末尾はフォント未解決時の保険（Consolas → monospace）。
             fontFamily: "TermMix, 'Cascadia Mono', Consolas, monospace",
-            scrollback: 10000,
+            // サーバー側エミュレータの TerminalGrid.MaxScrollback と必ず揃えること。
+            // PR #91 以降、画面の真実はエミュレータ側にあり、xterm はセッション切替のたびに
+            // そこからのリプレイで作り直される。ここだけ大きくしても、切り替えた瞬間に
+            // エミュレータの上限まで減るため「履歴が急に半分になった」ように見えるだけ。
+            scrollback: 5000,
             scrollOnInput: true,
             // scrollOnOutput は false にする。true だと出力のたびに最下部へ強制スクロールされ、
             // Claude Code のように毎秒複数回再描画する CLI では、履歴を遡って読むことができなくなる

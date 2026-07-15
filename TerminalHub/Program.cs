@@ -442,6 +442,11 @@ static async Task<int> RunCodexBridgeAsync(string[] args)
 
         var path = $"/api/hook/codex/{sessionId}";
         // まず HTTP、ダメなら HTTPS（Claude ブリッジと同じフォールバック）。
+        // http → https の順で試す。hook に書き込むブリッジ起動コマンド (CodexHookService.BuildBridgeCommand)
+        // は --port しか渡さず、スキームを伝えていない。TerminalHub 本体は既定では HTTP のみで listen する
+        // が、SessionManager.GetServerBaseUrl は「HTTPS しかなければ HTTPS を使う」構成も想定しているため、
+        // HTTPS-only で起動された場合はこのフォールバックが唯一の到達手段になる。
+        // 「本体は HTTP しか listen していないから https 分岐は死んでいる」と判断して消さないこと。
         foreach (var scheme in new[] { "http", "https" })
         {
             try

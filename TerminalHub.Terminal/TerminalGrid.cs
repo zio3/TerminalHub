@@ -15,7 +15,13 @@ public sealed class TerminalGrid
     /// <summary>スクロールバック（古い行が先頭）。alt-screen 中は追記しない。</summary>
     private readonly List<Cell[]> _scrollback = new();
 
-    /// <summary>スクロールバック保持行数の上限。</summary>
+    /// <summary>
+    /// スクロールバック保持行数の上限。
+    /// クライアント側 xterm の scrollback（wwwroot/js/terminal.js）と必ず揃えること。
+    /// セッション切替時の表示はここからのリプレイで作り直されるため、xterm 側だけ大きくしても
+    /// 切替の瞬間にこの上限まで減る。1行は Cols 個の Cell（＋セルごとの文字列）を保持するので、
+    /// 増やすとセッション数に比例してメモリを消費する点に注意。
+    /// </summary>
     public int MaxScrollback { get; set; } = 5000;
 
     // カーソル（0-based）
