@@ -1186,6 +1186,3 @@ window.terminalFunctions = {
         console.log(`[JS] updateAllTerminalFontSizes: fontSize=${fontSize}, actualSize=${actualSize}`);
     }
 };
-
-// terminalHubHelpers オブジェクト
-

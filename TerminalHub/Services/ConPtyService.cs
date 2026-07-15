@@ -78,7 +78,6 @@ namespace TerminalHub.Services
         // 環境変数フラグ
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         
-        // パフォーマンス最適化設定
         // バッファ抽出と配送キューへの追加を同じロックで直列化し、ConPTYの出力順を保つ。
         // イベントはロック外で単一ディスパッチャーが発火し、購読者からDisposeされた場合も
         // 出力ロックへの再入によるデッドロックを防ぐ。
