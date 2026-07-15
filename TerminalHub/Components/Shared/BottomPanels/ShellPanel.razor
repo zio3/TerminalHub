@@ -1,3 +1,4 @@
+@using TerminalHub.Constants
 @using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.JSInterop
@@ -41,28 +42,11 @@
                 WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
 
-            // ConPTYセッション作成
-            var conPtyService = new ConPtyService(LoggerFactory.CreateLogger<ConPtyService>());
-            shellSession = await conPtyService.CreateSessionAsync(ShellExecutable, "", WorkingDirectory, 120, 30);
-
-            shellSession.DataReceived += OnDataReceived;
-            shellSession.ProcessExited += OnProcessExited;
-            shellSession.Start();
-
-            // ConPTYの初期化が完了するまで少し待つ
-            await Task.Delay(100);
-
-            // DOM要素の存在を確認
-            var elementExists = await JSRuntime.InvokeAsync<bool>("eval", $@"
-                !!document.getElementById('{ContainerId}')
-            ");
-
-            if (!elementExists)
-            {
-                await Task.Delay(200);
-            }
-
-            // XTermを作成
+            // 先に xterm を用意してから ConPTY を起動する。
+            // 逆順にすると Start() 後・xterm 作成前に届いた出力が OnDataReceived の
+            // terminal == null で捨てられるため、シェルの初期プロンプトが欠ける。
+            // コンテナ div はこのコンポーネントのマークアップにあり、OnAfterRenderAsync
+            // (firstRender) の時点でレンダリング済みなので、DOM の存在待ちは不要。
             terminal = await JSRuntime.InvokeAsync<IJSObjectReference>(
                 "terminalFunctions.createMultiSessionTerminal",
                 ContainerId,
@@ -70,18 +54,22 @@
                 DotNetRef
             );
 
-            // フォーカスとリサイズ
-            await JSRuntime.InvokeVoidAsync("eval", $@"
-                (function() {{
-                    const termObj = window.multiSessionTerminals && window.multiSessionTerminals['{TerminalId}'];
-                    if (termObj && termObj.terminal) {{
-                        termObj.terminal.focus();
-                        if (termObj.fitAddon) {{
-                            termObj.fitAddon.fit();
-                        }}
-                    }}
-                }})()
-            ");
+            // createMultiSessionTerminal 内で fit 済み。その初期サイズ通知
+            // (OnTerminalSizeChanged → SendResize) は shellSession がまだ null のため
+            // 捨てられるので、ここで実サイズを取得して ConPTY の初期サイズに使う。
+            var size = await GetTerminalSizeAsync();
+            var cols = size?.Cols is >= 20 ? size.Cols : TerminalConstants.DefaultCols;
+            var rows = size?.Rows is >= 5 ? size.Rows : TerminalConstants.DefaultRows;
+
+            // ConPTY を生成し、購読してから読み取りを開始する（Start 前に購読するので取りこぼさない）
+            var conPtyService = new ConPtyService(LoggerFactory.CreateLogger<ConPtyService>());
+            shellSession = await conPtyService.CreateSessionAsync(ShellExecutable, "", WorkingDirectory, cols, rows);
+
+            shellSession.DataReceived += OnDataReceived;
+            shellSession.ProcessExited += OnProcessExited;
+            shellSession.Start();
+
+            await FocusTerminalAsync();
 
             isInitialized = true;
             OnPanelReady?.Invoke(this);
@@ -90,7 +78,7 @@
         {
             Logger.LogError(ex, "シェルパネルの初期化エラー: {PanelId}", PanelId);
 
-            // JS初期化失敗時に起動済みConPTYを片付ける
+            // 起動済みConPTYを片付ける
             if (shellSession != null)
             {
                 try
@@ -106,7 +94,52 @@
                 }
                 shellSession = null;
             }
+
+            // xterm を先に作るようになったため、ConPTY 側で失敗した場合に作成済みの
+            // xterm が取り残されないよう破棄する
+            if (terminal != null)
+            {
+                try
+                {
+                    await DisposeTerminalAsync();
+                }
+                catch (Exception disposeEx)
+                {
+                    Logger.LogWarning(disposeEx, "xterm破棄エラー: {PanelId}", PanelId);
+                }
+            }
         }
+    }
+
+    private async Task<TerminalSize?> GetTerminalSizeAsync()
+    {
+        try
+        {
+            return terminal is null ? null : await terminal.InvokeAsync<TerminalSize>("getSize");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "シェルパネルのサイズ取得エラー: {PanelId}", PanelId);
+            return null;
+        }
+    }
+
+    private async Task FocusTerminalAsync()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", $@"
+            (function() {{
+                const termObj = window.multiSessionTerminals && window.multiSessionTerminals['{TerminalId}'];
+                if (termObj && termObj.terminal) {{
+                    termObj.terminal.focus();
+                }}
+            }})()
+        ");
+    }
+
+    private sealed class TerminalSize
+    {
+        public int Cols { get; set; }
+        public int Rows { get; set; }
     }
 
     private async void OnDataReceived(object? sender, DataReceivedEventArgs args)
@@ -186,22 +219,7 @@
             }
 
             // XTermの破棄
-            if (terminal != null)
-            {
-                await JSRuntime.InvokeVoidAsync("eval", $@"
-                    (function() {{
-                        const terminalId = '{TerminalId}';
-                        const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
-                        if (termObj) {{
-                            termObj.terminal.dispose();
-                            delete window.multiSessionTerminals[terminalId];
-                        }}
-                    }})()
-                ");
-
-                await terminal.DisposeAsync();
-                terminal = null;
-            }
+            await DisposeTerminalAsync();
 
             // ConPTYセッションの破棄
             if (shellSession != null)
@@ -214,5 +232,27 @@
         {
             Logger.LogError(ex, "シェルパネルの破棄エラー: {PanelId}", PanelId);
         }
+    }
+
+    private async Task DisposeTerminalAsync()
+    {
+        if (terminal == null)
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync("eval", $@"
+            (function() {{
+                const terminalId = '{TerminalId}';
+                const termObj = window.multiSessionTerminals && window.multiSessionTerminals[terminalId];
+                if (termObj) {{
+                    termObj.terminal.dispose();
+                    delete window.multiSessionTerminals[terminalId];
+                }}
+            }})()
+        ");
+
+        await terminal.DisposeAsync();
+        terminal = null;
     }
 }

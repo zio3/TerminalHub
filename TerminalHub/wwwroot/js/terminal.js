@@ -1008,68 +1008,18 @@ window.terminalFunctions = {
         console.log('[JS] hideAllTerminals: 完了');
     },
 
+    // コンテナの表示を戻すだけ。hideAllTerminals が display:none にしたのを対で戻す。
+    // xterm 内部DOMの修復（子要素の総当たり再表示・親への再アタッチ）は、Blazor が DOM を
+    // 差し替えていた時代の対症療法で、xterm が意図的に隠す内部要素まで触るリスクがあった。
+    // 呼び出し元(SelectSession)は直後に xterm を作り直してリプレイするため、
+    // ここでの focus/refresh も不要。
     showTerminal: function(sessionId) {
-        console.log(`[JS] showTerminal: 開始 sessionId=${sessionId}`);
         const terminal = document.getElementById(`terminal-${sessionId}`);
-        if (terminal) {
-            console.log(`[JS] showTerminal: ターミナル要素が見つかりました`);
-            console.log(`[JS] showTerminal: 設定前 display=${terminal.style.display}, visibility=${terminal.style.visibility}, opacity=${terminal.style.opacity}`);
-            terminal.style.display = 'block';
-            console.log(`[JS] showTerminal: ターミナルを表示に設定`);
-            console.log(`[JS] showTerminal: 設定後 display=${terminal.style.display}, offsetWidth=${terminal.offsetWidth}, offsetHeight=${terminal.offsetHeight}`);
-            
-            if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-                // xtermオブジェクトの存在確認
-                const termObj = window.multiSessionTerminals[sessionId];
-                console.log(`[JS] showTerminal: xterm存在確認 - terminal=${!!termObj.terminal}, element=${!!termObj.terminal?.element}`);
-                if (termObj.terminal && termObj.terminal.element) {
-                    console.log(`[JS] showTerminal: xterm.element - display=${termObj.terminal.element.style.display}, 親要素=${!!termObj.terminal.element.parentElement}`);
-                    
-                    // xterm要素を強制的に表示
-                    if (termObj.terminal.element.style.display === 'none' || !termObj.terminal.element.style.display) {
-                        console.log(`[JS] showTerminal: xterm要素を強制表示`);
-                        termObj.terminal.element.style.display = 'block';
-                    }
-                    
-                    // 子要素も確認
-                    const children = termObj.terminal.element.children;
-                    console.log(`[JS] showTerminal: xterm子要素数=${children.length}`);
-                    for (let i = 0; i < children.length; i++) {
-                        if (children[i].style.display === 'none') {
-                            console.log(`[JS] showTerminal: 子要素${i}を表示に変更`);
-                            children[i].style.display = '';
-                        }
-                    }
-                    
-                    // 強制的にフォーカスとリフレッシュ
-                    try {
-                        // xterm要素が正しい親要素にあるか確認
-                        if (termObj.terminal.element.parentNode !== terminal) {
-                            console.log(`[JS] showTerminal: ★★★ 警告: xterm要素が正しい親要素にありません！`);
-                            console.log(`[JS] showTerminal: 修復: xterm要素を再アタッチ`);
-                            terminal.appendChild(termObj.terminal.element);
-                        }
-                        
-                        // 表示復帰時は再描画だけ行う。サイズ同期は呼び出し元または
-                        // ResizeObserverに一本化し、ここではfit()しない。
-                        termObj.terminal.focus();
-                        termObj.terminal.refresh(0, termObj.terminal.rows - 1);
-                        console.log(`[JS] showTerminal: フォーカスとリフレッシュ実行`);
-                    } catch (e) {
-                        console.log(`[JS] showTerminal: フォーカス/リフレッシュエラー: ${e.message}`);
-                    }
-                }
-            } else {
-                console.log(`[JS] showTerminal: ★★★ 警告: multiSessionTerminalsが見つからない sessionId=${sessionId}`);
-                console.log(`[JS] showTerminal: デバッグ - window.multiSessionTerminals=${!!window.multiSessionTerminals}`);
-                if (window.multiSessionTerminals) {
-                    console.log(`[JS] showTerminal: 利用可能なセッション: ${Object.keys(window.multiSessionTerminals).join(', ')}`);
-                }
-            }
-            console.log(`[JS] showTerminal: 完了`);
-        } else {
-            console.log(`[JS] showTerminal: ★★★ エラー: ターミナル要素が見つからない terminal-${sessionId}`);
+        if (!terminal) {
+            console.error(`[JS] showTerminal: ターミナル要素が見つからない terminal-${sessionId}`);
+            return;
         }
+        terminal.style.display = 'block';
     },
     
     terminalExists: function(sessionId) {
