@@ -104,6 +104,12 @@
                                     <small class="form-text text-muted">
                                         @L["SubSession.NewBranch.Help"]
                                     </small>
+                                    @if (!string.IsNullOrWhiteSpace(branchName) && !IsValidBranchName(branchName))
+                                    {
+                                        <div class="text-danger small mt-1">
+                                            <i class="bi bi-exclamation-circle me-1"></i>@L["SubSession.NewBranch.Invalid"]
+                                        </div>
+                                    }
                                 </div>
                             }
                             else if (branchSelectionMode == BranchSelectionMode.Detached)
@@ -436,7 +442,9 @@
             {
                 TabType.Create => IsGitRepository && branchSelectionMode switch
                 {
-                    BranchSelectionMode.NewBranch => !string.IsNullOrWhiteSpace(branchName),
+                    // 空でないことに加えて Git のブランチ名規則も満たすこと。
+                    // 満たさないまま進めると worktree 作成が git のエラーで落ちて理由が分かりにくい
+                    BranchSelectionMode.NewBranch => IsValidBranchName(branchName),
                     BranchSelectionMode.ExistingBranch => !string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null,
                     BranchSelectionMode.Detached => true,
                     _ => false
@@ -850,12 +858,6 @@
     private Task OnTerminalTypeChanged(TerminalType newType)
     {
         selectedTerminalType = newType;
-        return Task.CompletedTask;
-    }
-
-    private Task OnStartupCommandChanged(string newCommand)
-    {
-        startupCommand = newCommand;
         return Task.CompletedTask;
     }
 

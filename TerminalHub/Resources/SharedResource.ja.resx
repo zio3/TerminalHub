@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     i18n 共有リソース (日本語)
@@ -502,6 +502,7 @@
   <data name="SubSession.SessionName.Placeholder" xml:space="preserve"><value>未入力ならフォルダ名から自動命名</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>新しいブランチ名</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>このブランチ名で新しい Worktree が作成されます</value></data>
+  <data name="SubSession.NewBranch.Invalid" xml:space="preserve"><value>Git のブランチ名として使用できません（空白 ~ ^ : ? * [ \ や ".." は不可、先頭の "." "-" や末尾の "." "/" も不可。HEAD 等の予約名も不可）</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>既存のブランチを選択</value></data>
   <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>ブランチ一覧を読み込み中…</value></data>
   <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>利用可能なブランチがありません</value></data>

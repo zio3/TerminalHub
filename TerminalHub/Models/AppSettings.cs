@@ -1,4 +1,4 @@
-namespace TerminalHub.Models;
+﻿namespace TerminalHub.Models;
 
 /// <summary>
 /// アプリケーション全体の設定（ファイルベースで永続化）
@@ -229,15 +229,7 @@ public class CustomCliOptionsSettings
     public List<UserCliOption> Antigravity { get; set; } = new();
     public List<UserCliOption> Grok { get; set; } = new();
 
-    public List<UserCliOption> ForType(TerminalType type) => type switch
-    {
-        TerminalType.ClaudeCode => ClaudeCode,
-        TerminalType.GeminiCLI => GeminiCLI,
-        TerminalType.CodexCLI => CodexCLI,
-        TerminalType.Antigravity => Antigravity,
-        TerminalType.Grok => Grok,
-        _ => new List<UserCliOption>()
-    };
+
 }
 
 /// <summary>

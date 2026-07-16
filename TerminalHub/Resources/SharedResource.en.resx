@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     i18n shared resources (English - canonical)
@@ -502,6 +502,7 @@
   <data name="SubSession.SessionName.Placeholder" xml:space="preserve"><value>Auto-named from the folder if left empty</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
+  <data name="SubSession.NewBranch.Invalid" xml:space="preserve"><value>Not a valid Git branch name (space ~ ^ : ? * [ \ and ".." are not allowed; cannot start with "." "-" or end with "." "/"; reserved names like HEAD are not allowed)</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>
   <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>Loading branch list...</value></data>
   <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>No branches available</value></data>
