@@ -20,7 +20,7 @@ namespace TerminalHub.Services;
 ///                 このサービスは <see cref="BuildMcpUrl"/> で URL を組むだけ。呼び出しは SessionManager、
 ///                 オプション付与は TerminalConstants.BuildCodexArgs が行う。
 ///
-/// どちらも起動オプションなので、この機能が書いたものは残らない。
+/// どちらも起動オプションなので、この機能は新しいプロジェクト設定を残さない（OFF に戻せば次の起動から繋がらない）。
 ///
 /// ただし旧バージョン（〜v1.0.70）は設定ファイルへ書き込む方式だったため、その残骸は残る
 /// （Claude は <c>&lt;folder&gt;/.mcp.json</c>、Codex は <c>&lt;folder&gt;/.codex/config.toml</c>）。
