@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
@@ -16,9 +16,9 @@ namespace TerminalHub.Services;
 ///                 (<see cref="AppDataPaths.GetMcpConfigFilePath"/>) に置き、パスだけをコマンドラインに乗せる。
 ///                 生成はこのサービス (<see cref="EnsureClaudeMcpConfigFile"/>)、オプション付与は
 ///                 SessionManager/TerminalConstants 側。
-/// - Codex       → <c>-c mcp_servers.terminalhub.url=&lt;URL&gt;</c>。ファイルを用意する必要がないため
-///                 このサービスは関与せず、URL 生成は SessionManager、オプション付与は
-///                 TerminalConstants.BuildCodexArgs が行う（URL は <see cref="BuildMcpUrl"/> で組む）。
+/// - Codex       → <c>-c mcp_servers.terminalhub.url=&lt;URL&gt;</c>。ファイルを用意する必要がないので
+///                 このサービスは <see cref="BuildMcpUrl"/> で URL を組むだけ。呼び出しは SessionManager、
+///                 オプション付与は TerminalConstants.BuildCodexArgs が行う。
 ///
 /// どちらも起動オプションなので、OFF にすれば次回起動から即座に繋がらなくなる（残骸なし）。
 /// ただし旧バージョンが <c>&lt;folder&gt;/.codex/config.toml</c> へ書いた terminalhub エントリは残る。

@@ -1,4 +1,4 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 using TerminalHub.Services;
 using System.Text;
 
@@ -180,9 +180,6 @@ namespace TerminalHub.Models
 
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HookConfigured { get; set; } // Claude Code hook 設定済みかどうか
-
-        // McpConfigured は廃止。MCP は Claude/Codex とも起動オプションで渡すようになり、
-        // 「設定ファイルへ書き込み済みか」を覚えておく必要がなくなった（毎回の起動時に組み立てる）。
 
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態

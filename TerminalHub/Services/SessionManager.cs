@@ -214,7 +214,7 @@ namespace TerminalHub.Services
             if (_mcpConfigService == null || _appSettingsService == null)
                 return null;
 
-            if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
+            if (!_appSettingsService.GetSettings().Experimental.EnableLocalMcp)
                 return null;
 
             return _mcpConfigService.EnsureClaudeMcpConfigFile(GetServerBaseUrl());
@@ -231,7 +231,7 @@ namespace TerminalHub.Services
             if (_mcpConfigService == null || _appSettingsService == null)
                 return null;
 
-            if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
+            if (!_appSettingsService.GetSettings().Experimental.EnableLocalMcp)
                 return null;
 
             return _mcpConfigService.BuildMcpUrl(GetServerBaseUrl());

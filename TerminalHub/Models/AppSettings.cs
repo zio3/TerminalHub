@@ -70,7 +70,7 @@ public class ExperimentalSettings
     /// どちらも起動オプションで渡し、ユーザーの設定ファイルは書き換えない。
     /// Claude Code は --mcp-config <JSONパス>、Codex は -c mcp_servers.terminalhub.url=...。
     /// </summary>
-    public bool AutoRegisterMcp { get; set; } = false;
+    public bool EnableLocalMcp { get; set; } = false;
 
     /// <summary>
     /// テキスト入力欄でスラッシュコマンドの補完（オートコンプリート）を有効にする。

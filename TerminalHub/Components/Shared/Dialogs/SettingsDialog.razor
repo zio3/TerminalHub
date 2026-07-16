@@ -103,8 +103,8 @@
                                 <i class="bi bi-flask me-1"></i>試験機能
                             </button>
                         </li>
-                        @* ローカルMCP タブ: MCP自動登録(AutoRegisterMcp)が有効なときだけ表示する *@
-                        @if (autoRegisterMcpEnabled)
+                        @* ローカルMCP タブ: ローカルMCP(EnableLocalMcp)が有効なときだけ表示する *@
+                        @if (enableLocalMcp)
                         {
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link @(activeTab == "localMcp" ? "active" : "")"
@@ -997,30 +997,20 @@
 
                                 <hr />
 
-                                @* 各CLIで terminalhub MCP を有効化する（既定OFF・全デバイス共通） *@
+                                @* 各CLIで TerminalHub MCP を有効化する（既定OFF・全デバイス共通） *@
                                 <div class="mb-4">
-                                    <h6 class="mb-2">MCP自動登録</h6>
+                                    <h6 class="mb-2">TerminalHub MCP</h6>
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
-                                        <label class="form-check-label" for="autoRegisterMcpSwitch">
-                                            対応CLIに TerminalHub のローカル MCP を自動で繋ぐ
+                                        <input class="form-check-input" type="checkbox" @bind="enableLocalMcp" id="enableLocalMcpSwitch">
+                                        <label class="form-check-label" for="enableLocalMcpSwitch">
+                                            対応CLIで TerminalHub MCP を有効化する
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に
-                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を繋ぎます。
-                                        起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
-                                        <strong>どちらも起動オプションで渡すので、設定ファイルは書き換えません</strong>。
-                                        OFFに戻せば次の起動から繋がらなくなり、残骸も残りません。
-                                    </p>
-                                    <ul class="text-muted small mt-1 mb-0">
-                                        <li>Claude Code → <code>--mcp-config &lt;JSONパス&gt;</code>（作業フォルダにも <code>~/.claude.json</code> にも何も足しません）</li>
-                                        <li>Codex → <code>-c mcp_servers.terminalhub.url=...</code>（手書きの <code>-c</code> 指定がある場合はそちらを優先します）</li>
-                                    </ul>
-                                    <p class="text-muted small mt-1 mb-0">
-                                        あなたが自分で入れた MCP サーバーはそのまま使えます（置き換えではなく追加）。
-                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。全デバイス共通の設定です。
+                                        ONにすると、<strong>Claude Code / Codex</strong> のセッションを起動しただけで
+                                        <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
+                                        あなたが自分で入れた MCP サーバーはそのまま使えます（置き換えではなく追加）。全デバイス共通の設定です。
                                     </p>
                                 </div>
 
@@ -1370,7 +1360,7 @@
 
     // 開発ツール関連
     private bool devToolsEnabled = false;
-    private bool autoRegisterMcpEnabled = false;
+    private bool enableLocalMcp = false;
     private bool slashAutocompleteEnabled = false;
     private bool promoteSessionOnOpenEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
@@ -1514,7 +1504,7 @@
 
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
-            autoRegisterMcpEnabled = settings.Experimental.AutoRegisterMcp;
+            enableLocalMcp = settings.Experimental.EnableLocalMcp;
             slashAutocompleteEnabled = settings.Experimental.SlashAutocompleteEnabled;
             promoteSessionOnOpenEnabled = settings.Experimental.PromoteSessionOnOpen;
             // 未設定(null/空)なら既定テンプレを表示する（textarea は WYSIWYG）
@@ -1770,7 +1760,7 @@
                 },
                 Experimental = new ExperimentalSettings
                 {
-                    AutoRegisterMcp = autoRegisterMcpEnabled,
+                    EnableLocalMcp = enableLocalMcp,
                     SlashAutocompleteEnabled = slashAutocompleteEnabled,
                     PromoteSessionOnOpen = promoteSessionOnOpenEnabled,
                     // 既定テンプレそのまま(未編集) or 空なら null 保存し、将来の既定更新に追従させる。
