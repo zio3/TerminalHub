@@ -960,7 +960,8 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// CodexCLI セッション初期化／再起動の直前に呼び出し、
-        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
+        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 側は書き込み方式をやめ、
+        /// BuildTerminalCommand 内で --settings により渡す（ResolveClaudeHookConfigPath）。
         /// Hook は常時有効（UI トグルは廃止）。
         /// </summary>
         private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
