@@ -37,7 +37,7 @@
         /// options ではなく引数で受けるのは、これがセッションに保存される設定ではなく
         /// 「起動時のポートに依存する一時的な値」だから（SessionInfo.Options は永続化される）。
         /// </param>
-        public static string BuildClaudeCodeArgs(Dictionary<string, string> options, string? mcpConfigPath = null)
+        public static string BuildClaudeCodeArgs(Dictionary<string, string> options, string? mcpConfigPath = null, string? hookConfigPath = null)
         {
             var args = new List<string>();
 
@@ -76,6 +76,14 @@
             if (!string.IsNullOrWhiteSpace(mcpConfigPath))
             {
                 args.Add($"--mcp-config \"{mcpConfigPath}\"");
+            }
+
+            // hook 設定（TerminalHub の通知連携）。--settings で渡した hooks は
+            // ユーザーの settings.local.json の hooks と共存する（両方発火・実測確認済み）。
+            // 引用符の理由は --mcp-config と同じ。
+            if (!string.IsNullOrWhiteSpace(hookConfigPath))
+            {
+                args.Add($"--settings \"{hookConfigPath}\"");
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
