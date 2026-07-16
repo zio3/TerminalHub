@@ -822,3 +822,35 @@ h1:focus {
     border-top: 2px solid var(--th-accent);
     background-color: rgba(127, 127, 127, 0.08);
 }
+
+/* ターミナルの選択テキスト右クリックメニュー（terminal.js の showTerminalContextMenu）。
+   パスっぽい選択のときだけ出す。それ以外はネイティブメニューに素通しするので、
+   通常の文章での DeepL・スペルチェック等は従来どおり使える。 */
+.terminal-context-menu {
+    position: fixed;
+    z-index: 2000;
+    min-width: 12rem;
+    padding: 0.25rem;
+    background-color: var(--th-surface);
+    border: 1px solid var(--th-border);
+    border-radius: var(--th-radius-sm);
+    box-shadow: var(--th-shadow-lg);
+}
+
+.terminal-context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.4rem 0.75rem;
+    border: 0;
+    border-radius: var(--th-radius-sm);
+    background: transparent;
+    color: var(--th-text-primary);
+    font-size: 0.875rem;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.terminal-context-menu-item:hover,
+.terminal-context-menu-item:focus-visible {
+    background-color: var(--th-sidebar-hover);
+}

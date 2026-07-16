@@ -827,6 +827,61 @@
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 選択テキストをセッションのフォルダ基準で解決し、実在すれば絶対パスを返す（JavaScript から呼び出される）。
+    /// 右クリックメニューの「フルパスをコピー」用。実在しなければ null を返し、呼び出し側はメニューを出さない。
+    /// </summary>
+    [JSInvokable]
+    public Task<string?> ResolveTerminalPath(string sessionId, string path)
+    {
+        try
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return Task.FromResult<string?>(null);
+
+            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+            var basePath = session?.FolderPath;
+            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(path))
+                return Task.FromResult<string?>(null);
+
+            // OnTerminalPathClick と同じ規則で解決する（行番号付き表記のフォールバックも同様）
+            string? Resolve(string candidate)
+            {
+                string fullPath;
+                try
+                {
+                    fullPath = System.IO.Path.IsPathRooted(candidate)
+                        ? System.IO.Path.GetFullPath(candidate)
+                        : System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, candidate));
+                }
+                catch
+                {
+                    return null;
+                }
+
+                return Directory.Exists(fullPath) || File.Exists(fullPath) ? fullPath : null;
+            }
+
+            var trimmed = path.Trim();
+            var resolved = Resolve(trimmed);
+            if (resolved == null)
+            {
+                var withoutLineNumber = System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?::\d+)+$", "");
+                if (withoutLineNumber != trimmed)
+                {
+                    resolved = Resolve(withoutLineNumber);
+                }
+            }
+
+            return Task.FromResult(resolved);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[ResolveTerminalPath] パスを解決できませんでした: {Path}", path);
+            return Task.FromResult<string?>(null);
+        }
+    }
+
     // コミット情報ダイアログ（ターミナル内のコミットハッシュクリックで開く）
     private bool showCommitInfoDialog = false;
     private string? commitInfoFolderPath;

@@ -271,6 +271,14 @@ window.setTerminalLinkCopyMode = function (enabled) {
     terminalLinkCopyMode = !!enabled;
 };
 
+// リンク活性化を左クリックだけに限定するガード。
+// xterm はリンクの activate を呼ぶ前にマウスボタンを見ないため、素通しにすると
+// 右クリック（コンテキストメニューを出したいだけ）や中クリックでもリンクが開いてしまう。
+// button: 0=左 / 1=中 / 2=右。event が無い経路（将来の API 変更等）では従来どおり通す。
+function isPrimaryClick(e) {
+    return !e || e.button === undefined || e.button === 0;
+}
+
 // リンクのアクティベート処理（WebLinksAddon / フォールバック共通）
 function activateTerminalLink(uri) {
     if (terminalLinkCopyMode) {
@@ -320,15 +328,31 @@ function showLinkCopyNotice(uri, success) {
 // バッファ行のテキストを取得（各リンクプロバイダー共通）
 // ワイド文字（全角等）の2セル目は getChars() が空を返すためスペースで埋め、
 // 文字列インデックスとターミナル列番号を揃える
+// 行のテキストと、各文字が始まるセル列(0始まり)の対応表を返す。
+//
+// 全角文字は2セルを占め、xterm は2セル目を「幅0・getChars()=''」のセルとして返す。
+// これを ' ' として拾うと（旧実装）パスの途中に空白が入り、空白を含まない前提の
+// pathRegex がそこで切れる（例: C:\Users\info\テスト用メモ.md が
+// "C:\Users\info\テ" までしかリンク化されない）。幅0のセルは飛ばす。
+//
+// また x はセル列なので、全角があると文字数（match.index）とズレる。columns で引き直す。
 function getBufferLineText(line) {
-    let lineText = '';
+    let text = '';
+    const columns = [];
     for (let i = 0; i < line.length; i++) {
         const cell = line.getCell(i);
-        if (cell) {
-            lineText += cell.getChars() || ' ';
+        if (!cell || cell.getWidth() === 0) {
+            continue; // 全角の後続セル（幅0）は本体側に含まれている
         }
+        const chars = cell.getChars() || ' ';
+        // サロゲートペアや結合文字で chars が複数コード単位になる場合も同じ列を指す
+        for (let k = 0; k < chars.length; k++) {
+            columns.push(i);
+        }
+        text += chars;
     }
-    return lineText;
+    columns.push(line.length); // 末尾（マッチ終端の変換用）
+    return { text, columns };
 }
 
 // ファイルパス検出の設定
@@ -358,7 +382,7 @@ function setupFilePathDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -382,11 +406,11 @@ function setupFilePathDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
-                    activate: (e, uri) => activateTerminalPath(sessionId, uri)
+                    activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPath(sessionId, uri); }
                 });
             }
 
@@ -424,7 +448,7 @@ function setupCommitHashDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -446,11 +470,12 @@ function setupCommitHashDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
                     activate: (e, uri) => {
+                        if (!isPrimaryClick(e)) return;
                         if (window.terminalHubDotNetRef) {
                             window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalCommitHashClick', sessionId, uri)
                                 .catch(err => console.error('[Hash Detection] open failed:', err));
@@ -489,7 +514,7 @@ function setupPrNumberDetection(term, sessionId) {
                 return;
             }
 
-            const lineText = getBufferLineText(line);
+            const { text: lineText, columns } = getBufferLineText(line);
 
             const links = [];
             let match;
@@ -502,11 +527,11 @@ function setupPrNumberDetection(term, sessionId) {
 
                 links.push({
                     range: {
-                        start: { x: match.index + 1, y: bufferLineNumber },
-                        end: { x: match.index + text.length + 1, y: bufferLineNumber }
+                        start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                        end: { x: columns[match.index + text.length] + 1, y: bufferLineNumber }
                     },
                     text: text,
-                    activate: (e, uri) => activateTerminalPrNumber(sessionId, uri)
+                    activate: (e, uri) => { if (isPrimaryClick(e)) activateTerminalPrNumber(sessionId, uri); }
                 });
             }
 
@@ -553,7 +578,9 @@ function setupUrlDetection(term) {
         try {
             // WebLinksAddonを作成（URLをクリック可能にする）
             // 既定ハンドラは直接 window.open するため、コピー動作モードを差し込めるようカスタムハンドラを渡す
-            const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => activateTerminalLink(uri));
+            const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => {
+                if (isPrimaryClick(event)) activateTerminalLink(uri);
+            });
             term.loadAddon(webLinksAddon);
             console.log('[URL Detection] WebLinksAddon loaded successfully');
         } catch (error) {
@@ -585,7 +612,7 @@ function setupUrlDetectionFallback(term) {
                 }
                 
                 // 行のテキストを取得
-                const lineText = getBufferLineText(line);
+                const { text: lineText, columns } = getBufferLineText(line);
 
                 // URLを検出
                 const links = [];
@@ -595,11 +622,12 @@ function setupUrlDetectionFallback(term) {
                 while ((match = urlRegex.exec(lineText)) !== null) {
                     const link = {
                         range: {
-                            start: { x: match.index + 1, y: bufferLineNumber },
-                            end: { x: match.index + match[0].length + 1, y: bufferLineNumber }
+                            start: { x: columns[match.index] + 1, y: bufferLineNumber },
+                            end: { x: columns[match.index + match[0].length] + 1, y: bufferLineNumber }
                         },
                         text: match[0],
                         activate: (e, uri) => {
+                            if (!isPrimaryClick(e)) return;
                             console.log('[URL Detection] Link activated:', uri);
                             activateTerminalLink(uri);
                         }
@@ -620,6 +648,123 @@ function setupUrlDetectionFallback(term) {
     } else {
         console.warn('[URL Detection] Fallback: No suitable API found for URL detection');
     }
+}
+
+// ---- 選択テキストの右クリックメニュー ----
+//
+// リンクプロバイダはトークンの「境界」を推測する必要があり、日本語やスペースを含む
+// ファイル名では破綻するため対応を見送っている。選択は境界をユーザーが与えてくれるので、
+// 選択テキストならその制約がない（「パスっぽいか」の判定自体は容易）。
+//
+// パスっぽい選択があるときだけ自前メニューを出し、それ以外はネイティブメニューに素通しする。
+// こうすると通常の文章を選んでの DeepL・スペルチェック・絵文字は従来どおり使える。
+
+// 選択がパスらしいか。リンクプロバイダの pathRegex と違い境界の切り出しは不要で、
+// 「区切り文字を含むか / ドライブレターで始まるか / 拡張子で終わるか」だけ見る。
+function looksLikePath(text) {
+    if (!text || text.length > 4096 || /[\r\n]/.test(text)) return false;
+    return /[\\/]/.test(text) || /^[A-Za-z]:/.test(text) || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(text);
+}
+
+function closeTerminalContextMenu() {
+    const existing = document.getElementById('terminal-context-menu');
+    if (existing) existing.remove();
+}
+
+function showTerminalContextMenu(x, y, items) {
+    closeTerminalContextMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'terminal-context-menu';
+    menu.className = 'terminal-context-menu';
+    menu.setAttribute('role', 'menu');
+
+    for (const item of items) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'terminal-context-menu-item';
+        button.setAttribute('role', 'menuitem');
+        button.textContent = item.label;
+        button.addEventListener('click', () => {
+            closeTerminalContextMenu();
+            item.action();
+        });
+        menu.appendChild(button);
+    }
+
+    // 画面外にはみ出さないよう、いったん不可視で置いて実寸から補正する
+    menu.style.visibility = 'hidden';
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.min(x, window.innerWidth - rect.width - 4)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - rect.height - 4)}px`;
+    menu.style.visibility = '';
+
+    // 次のクリック・ESC・スクロールで閉じる（capture で確実に拾う）
+    const dismiss = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Escape') return;
+        if (e.type === 'mousedown' && menu.contains(e.target)) return;
+        closeTerminalContextMenu();
+        document.removeEventListener('mousedown', dismiss, true);
+        document.removeEventListener('keydown', dismiss, true);
+        window.removeEventListener('blur', dismiss);
+    };
+    document.addEventListener('mousedown', dismiss, true);
+    document.addEventListener('keydown', dismiss, true);
+    window.addEventListener('blur', dismiss);
+}
+
+// element へ contextmenu を登録する。attachTouchScroll と同じく、コンテナ div は
+// セッションごとに永続する一方 createMultiSessionTerminal は毎回呼ばれるため、
+// 前回のリスナーを必ず外してから付け直す（外し忘れるとセッションを開くたび多重登録される）。
+function attachSelectionContextMenu(term, element, sessionId) {
+    if (typeof element._selectionMenuDetach === 'function') {
+        element._selectionMenuDetach();
+    }
+
+    const onContextMenu = (e) => {
+        let selection = '';
+        try {
+            selection = (term.getSelection() || '').trim();
+        } catch {
+            return; // 破棄済み等。ネイティブメニューに任せる
+        }
+
+        if (!selection) return;
+
+        const items = [
+            { label: 'コピー', action: () => copyLinkToClipboard(selection) },
+        ];
+
+        if (looksLikePath(selection)) {
+            // 「開く」はリンククリックと同じ経路（C# 側でセッションのフォルダ基準に解決し、
+            // フォルダ=Explorer / ファイル=既定アプリ。実在しなければ警告トースト）
+            items.push({ label: '開く', action: () => activateTerminalPath(sessionId, selection) });
+            items.push({
+                label: 'フルパスをコピー',
+                action: () => {
+                    if (!window.terminalHubDotNetRef) return;
+                    window.terminalHubDotNetRef.invokeMethodAsync('ResolveTerminalPath', sessionId, selection)
+                        .then(full => copyLinkToClipboard(full || selection))
+                        .catch(() => copyLinkToClipboard(selection));
+                }
+            });
+        }
+
+        // パスでなければ「コピー」しか無い＝ネイティブメニューの方が有用なので出さない
+        if (items.length === 1) return;
+
+        e.preventDefault();
+        showTerminalContextMenu(e.clientX, e.clientY, items);
+    };
+
+    element.addEventListener('contextmenu', onContextMenu);
+
+    element._selectionMenuDetach = () => {
+        closeTerminalContextMenu();
+        element.removeEventListener('contextmenu', onContextMenu);
+        element._selectionMenuDetach = null;
+    };
 }
 
 window.terminalFunctions = {
@@ -717,6 +862,9 @@ window.terminalFunctions = {
             // （v5 までは動作していた退行）。指の移動量を scrollLines に変換して自前で処理する。
             // 併せて app.css の .xterm { touch-action: none } でページ全体へのスクロール伝播を抑止。
             attachTouchScroll(term, element);
+
+            // 選択テキストの右クリックメニュー（パスっぽい選択のときだけ出す）
+            attachSelectionContextMenu(term, element, sessionId);
 
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
@@ -984,9 +1132,12 @@ window.terminalFunctions = {
 
         // ターミナルdiv内をクリア - より安全なDOM操作を使用
         if (terminalDiv) {
-            // タッチスクロールのリスナーを外す（破棄済み term への参照を残さない）
+            // 登録したリスナーを外す（破棄済み term への参照を残さない）
             if (typeof terminalDiv._touchScrollDetach === 'function') {
                 terminalDiv._touchScrollDetach();
+            }
+            if (typeof terminalDiv._selectionMenuDetach === 'function') {
+                terminalDiv._selectionMenuDetach();
             }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
