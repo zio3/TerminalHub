@@ -92,7 +92,8 @@
 
         public static string BuildCodexArgs(
             Dictionary<string, string> options,
-            string? terminalHubMcpUrl = null)
+            string? terminalHubMcpUrl = null,
+            string? terminalHubHookArgs = null)
         {
             var args = new List<string>();
 
@@ -238,6 +239,14 @@
             if (!string.IsNullOrWhiteSpace(terminalHubMcpUrl) && !userSuppliedTerminalHubMcpUrl)
             {
                 args.Add($"-c mcp_servers.terminalhub.url={terminalHubMcpUrl}");
+            }
+
+            // TerminalHub の lifecycle hook もプロジェクト設定へ永続化せず、起動時だけ注入する。
+            // ユーザーの extra-args / custom-args より前へ置き、同じ hooks.* を明示された場合は
+            // 後勝ちでユーザー指定を優先できる並びにする。
+            if (!string.IsNullOrWhiteSpace(terminalHubHookArgs))
+            {
+                args.Add(terminalHubHookArgs);
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))

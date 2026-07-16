@@ -263,7 +263,11 @@ namespace TerminalHub.Services
                 // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
 
                 case TerminalType.CodexCLI:
-                    var codexArgs = TerminalConstants.BuildCodexArgs(options, GetCodexMcpUrl());
+                    var codexHookArgs = _codexHookService?.BuildHookConfigArguments(GetServerBaseUrl());
+                    var codexArgs = TerminalConstants.BuildCodexArgs(
+                        options,
+                        GetCodexMcpUrl(),
+                        codexHookArgs);
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";
@@ -491,8 +495,6 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
-
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -979,35 +981,6 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// CodexCLI セッション初期化／再起動の直前に呼び出し、
-        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
-        /// Hook は常時有効（UI トグルは廃止）。
-        /// </summary>
-        private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
-        {
-            if (sessionInfo.TerminalType != TerminalType.CodexCLI || _codexHookService == null)
-                return;
-
-            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
-            if (!isResetup && sessionInfo.HookConfigured)
-                return;
-
-            try
-            {
-                var baseUrl = GetServerBaseUrl();
-                await _codexHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
-                sessionInfo.HookConfigured = true;
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogInformation($"Codex Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
-            }
-            catch (Exception ex)
-            {
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogWarning(ex, $"Codex Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
-            }
-        }
-
-        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
@@ -1066,8 +1039,6 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
@@ -1152,8 +1123,6 @@ namespace TerminalHub.Services
 
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo);

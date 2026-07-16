@@ -145,7 +145,7 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
-// CodexHookServiceを登録（Codex CLI の lifecycle hook 設定）
+// CodexHookServiceを登録（起動引数用 lifecycle hook の生成）
 builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
 
 // McpConfigServiceを登録（試験機能: 各CLIへ terminalhub MCP を繋ぐための起動オプションを用意する）
@@ -442,7 +442,7 @@ static async Task<int> RunCodexBridgeAsync(string[] args)
 
         var path = $"/api/hook/codex/{sessionId}";
         // まず HTTP、ダメなら HTTPS（Claude ブリッジと同じフォールバック）。
-        // http → https の順で試す。hook に書き込むブリッジ起動コマンド (CodexHookService.BuildBridgeCommand)
+        // http → https の順で試す。起動引数へ注入するブリッジ起動コマンド (CodexHookService.BuildBridgeCommand)
         // は --port しか渡さず、スキームを伝えていない。TerminalHub 本体は既定では HTTP のみで listen する
         // が、SessionManager.GetServerBaseUrl は「HTTPS しかなければ HTTPS を使う」構成も想定しているため、
         // HTTPS-only で起動された場合はこのフォールバックが唯一の到達手段になる。
