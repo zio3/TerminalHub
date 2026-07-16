@@ -182,7 +182,7 @@ namespace TerminalHub.Models
         public bool HookConfigured { get; set; } // Claude Code hook 設定済みかどうか
 
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool McpConfigured { get; set; } // MCP 自動登録 設定済みかどうか（プロセス内のみ・再起動でリセット→ポート追従）
+        public bool McpConfigured { get; set; } // Claude Code の MCP 自動登録済みか（プロセス内のみ）
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態

@@ -204,6 +204,18 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
+        /// <summary>
+        /// Codex 起動時に注入する TerminalHub MCP の URL を返す。
+        /// 実行中のポートに依存するローカル設定なので、.codex/config.toml には永続化しない。
+        /// </summary>
+        private string? GetCodexMcpUrl()
+        {
+            if (_appSettingsService?.GetSettings().Experimental.AutoRegisterMcp != true)
+                return null;
+
+            return GetServerBaseUrl().TrimEnd('/') + "/mcp";
+        }
+
         private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options)
         {
             switch (terminalType)
@@ -230,7 +242,7 @@ namespace TerminalHub.Services
                 // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
 
                 case TerminalType.CodexCLI:
-                    var codexArgs = TerminalConstants.BuildCodexArgs(options);
+                    var codexArgs = TerminalConstants.BuildCodexArgs(options, GetCodexMcpUrl());
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";
@@ -459,7 +471,7 @@ namespace TerminalHub.Services
                 // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: false);
+                await SetupClaudeMcpConfigIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -976,18 +988,16 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// 試験機能: セッション生成/再起動時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub の
-        /// ローカル MCP サーバー(terminalhub)を自動登録する。設定 Experimental.AutoRegisterMcp が ON の
-        /// ときのみ実行（既定OFF）。Hook セットアップと対称。失敗してもセッション処理は続行する。
+        /// 試験機能: Claude Code セッションの生成/再起動時に、作業フォルダへ TerminalHub の
+        /// ローカル MCP サーバー(terminalhub)を登録する。Codex は設定ファイルへ書かず、
+        /// BuildTerminalCommand で起動時の -c オプションとして注入する。
         /// </summary>
-        private async Task SetupMcpConfigIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
+        private async Task SetupClaudeMcpConfigIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
         {
             if (_mcpConfigService == null || _appSettingsService == null)
                 return;
 
-            // Claude Code / Codex のみサポート。
-            if (sessionInfo.TerminalType != TerminalType.ClaudeCode &&
-                sessionInfo.TerminalType != TerminalType.CodexCLI)
+            if (sessionInfo.TerminalType != TerminalType.ClaudeCode)
                 return;
 
             if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
@@ -1001,7 +1011,7 @@ namespace TerminalHub.Services
             try
             {
                 var baseUrl = GetServerBaseUrl();
-                await _mcpConfigService.SetupAsync(sessionInfo.FolderPath, sessionInfo.TerminalType, baseUrl);
+                await _mcpConfigService.SetupClaudeAsync(sessionInfo.FolderPath, baseUrl);
                 sessionInfo.McpConfigured = true;
                 var action = isResetup ? "再登録" : "登録";
                 _logger.LogInformation("MCP自動{Action}: SessionId={SessionId}, Type={Type}, BaseUrl={BaseUrl}",
@@ -1073,7 +1083,7 @@ namespace TerminalHub.Services
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupClaudeMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
@@ -1160,7 +1170,7 @@ namespace TerminalHub.Services
                 // ClaudeCode セッションの場合、Hook 設定を再セットアップ
                 await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
+                await SetupClaudeMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);

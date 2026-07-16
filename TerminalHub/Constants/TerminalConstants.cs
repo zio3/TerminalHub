@@ -75,7 +75,9 @@
 
         // BuildGeminiArgs は廃止 (GeminiCLI 起動経路は撤去済み)
 
-        public static string BuildCodexArgs(Dictionary<string, string> options)
+        public static string BuildCodexArgs(
+            Dictionary<string, string> options,
+            string? terminalHubMcpUrl = null)
         {
             var args = new List<string>();
 
@@ -94,6 +96,7 @@
             var userSuppliedWindowsSandbox = ContainsCodexConfigOverride(options, "windows.sandbox");
             var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
             var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
+            var userSuppliedTerminalHubMcpUrl = ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.url");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
@@ -213,6 +216,13 @@
                     // 旧保存形式との互換性。
                     args.Add("--search");
                 }
+            }
+
+            // TerminalHub のローカル MCP は実行中のポートに依存するため、プロジェクト設定へ
+            // 永続化せず Codex の起動時設定として渡す。手書き指定があればそちらを優先する。
+            if (!string.IsNullOrWhiteSpace(terminalHubMcpUrl) && !userSuppliedTerminalHubMcpUrl)
+            {
+                args.Add($"-c mcp_servers.terminalhub.url={terminalHubMcpUrl}");
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
