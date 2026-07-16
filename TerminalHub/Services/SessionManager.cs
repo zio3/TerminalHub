@@ -204,12 +204,28 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
+        /// <summary>
+        /// 試験機能: MCP自動登録が ON なら、Claude Code へ --mcp-config で渡す JSON を用意してパスを返す。
+        /// OFF・未対応・失敗時は null（＝オプション無しで起動する）。
+        /// ポートは起動中の実値を使うので、TerminalHub のポートが変わっても次の起動から自動で追従する。
+        /// </summary>
+        private string? ResolveClaudeMcpConfigPath()
+        {
+            if (_mcpConfigService == null || _appSettingsService == null)
+                return null;
+
+            if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
+                return null;
+
+            return _mcpConfigService.EnsureClaudeMcpConfigFile(GetServerBaseUrl());
+        }
+
         private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options)
         {
             switch (terminalType)
             {
                 case TerminalType.ClaudeCode:
-                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options);
+                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath());
                     var claudeCmdPath = GetClaudeCmdPath();
 
                     // ネイティブ版(.exe)は直接実行、npm版(.cmd)はcmd.exe経由
@@ -976,18 +992,20 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// 試験機能: セッション生成/再起動時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub の
+        /// 試験機能: セッション生成/再起動時に、Codex のフォルダへ TerminalHub の
         /// ローカル MCP サーバー(terminalhub)を自動登録する。設定 Experimental.AutoRegisterMcp が ON の
         /// ときのみ実行（既定OFF）。Hook セットアップと対称。失敗してもセッション処理は続行する。
+        ///
+        /// Claude Code はここを通らない。設定ファイルを書かず起動オプション --mcp-config で渡すため、
+        /// 経路は BuildTerminalCommand → ResolveClaudeMcpConfigPath 側にある。
         /// </summary>
         private async Task SetupMcpConfigIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
         {
             if (_mcpConfigService == null || _appSettingsService == null)
                 return;
 
-            // Claude Code / Codex のみサポート。
-            if (sessionInfo.TerminalType != TerminalType.ClaudeCode &&
-                sessionInfo.TerminalType != TerminalType.CodexCLI)
+            // 書き込み型の登録が要るのは Codex のみ。
+            if (sessionInfo.TerminalType != TerminalType.CodexCLI)
                 return;
 
             if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
