@@ -69,6 +69,11 @@ public class ExperimentalSettings
     /// (terminalhub) を繋ぐ。ONにすると起動しただけで list_sessions / send_to_session が使える。既定OFF。
     /// どちらも起動オプションで渡し、ユーザーの設定ファイルは書き換えない。
     /// Claude Code は --mcp-config <JSONパス>、Codex は -c mcp_servers.terminalhub.url=...。
+    ///
+    /// 旧名 AutoRegisterMcp（設定ファイルへ書き込む方式だった頃の名前）からの移行は行わない。
+    /// v1.0.63〜v1.0.70 で ON にしていた場合、JSON キーが変わるため一度 OFF に戻る（入れ直せばよい）。
+    /// このフラグは設定画面の「TerminalHub MCP」タブ（instructions 編集）の表示も兼ねているので、
+    /// OFF の間はそのタブも出ない（McpInstructions の値自体は別キーなので保持される）。
     /// </summary>
     public bool EnableLocalMcp { get; set; } = false;
 

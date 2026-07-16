@@ -103,14 +103,14 @@
                                 <i class="bi bi-flask me-1"></i>試験機能
                             </button>
                         </li>
-                        @* ローカルMCP タブ: ローカルMCP(EnableLocalMcp)が有効なときだけ表示する *@
+                        @* TerminalHub MCP タブ: 本機能(EnableLocalMcp)が有効なときだけ表示する *@
                         @if (enableLocalMcp)
                         {
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link @(activeTab == "localMcp" ? "active" : "")"
                                         type="button"
                                         @onclick="@(() => activeTab = "localMcp")">
-                                    <i class="bi bi-plugin me-1"></i>ローカルMCP
+                                    <i class="bi bi-plugin me-1"></i>TerminalHub MCP
                                 </button>
                             </li>
                         }
@@ -997,7 +997,7 @@
 
                                 <hr />
 
-                                @* 各CLIで TerminalHub MCP を有効化する（既定OFF・全デバイス共通） *@
+                                @* 各CLIで TerminalHub MCP を有効化する（既定OFF） *@
                                 <div class="mb-4">
                                     <h6 class="mb-2">TerminalHub MCP</h6>
                                     <div class="form-check form-switch">
@@ -1364,7 +1364,7 @@
     private bool slashAutocompleteEnabled = false;
     private bool promoteSessionOnOpenEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
-    // ローカルMCP タブ: 配布する instructions（空欄=既定テンプレを配布）
+    // TerminalHub MCP タブ: 配布する instructions（空欄=既定テンプレを配布）
     private string mcpInstructions = "";
     private bool captureRawStreamEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
@@ -1671,7 +1671,7 @@
         }
     }
 
-    // ローカルMCP: instructions を既定テンプレへ戻す（保存はダイアログの保存時）
+    // TerminalHub MCP: instructions を既定テンプレへ戻す（保存はダイアログの保存時）
     private void ResetMcpInstructions()
     {
         mcpInstructions = TerminalHub.Mcp.McpInstructionDefaults.Template;
