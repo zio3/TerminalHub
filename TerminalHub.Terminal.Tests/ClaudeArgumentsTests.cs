@@ -60,6 +60,40 @@ public sealed class ClaudeArgumentsTests
     }
 
     [Fact]
+    public void HookConfigPathを渡さなければsettingsオプションは付かない()
+    {
+        var options = new Dictionary<string, string>();
+
+        Assert.Equal("", TerminalConstants.BuildClaudeCodeArgs(options, null, null));
+        Assert.Equal("", TerminalConstants.BuildClaudeCodeArgs(options, null, "   "));
+    }
+
+    [Fact]
+    public void HookConfigPathは引用符で囲んでsettingsとして付与される()
+    {
+        // --mcp-config と同じ理由（ConPtyService は無加工連結・スペース入りパス対策）で引用符必須。
+        var options = new Dictionary<string, string>();
+
+        Assert.Equal(
+            "--settings \"C:\\Users\\John Smith\\AppData\\Local\\TerminalHub\\claude-hooks\\hooks-abc.json\"",
+            TerminalConstants.BuildClaudeCodeArgs(options, null, @"C:\Users\John Smith\AppData\Local\TerminalHub\claude-hooks\hooks-abc.json"));
+    }
+
+    [Fact]
+    public void McpConfigとHookConfigは併用でき順序はmcp設定が先()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["continue"] = "true",
+            ["extra-args"] = "--verbose"
+        };
+
+        Assert.Equal(
+            "--continue --mcp-config \"C:\\th\\mcp-config-5080.json\" --settings \"C:\\th\\claude-hooks\\hooks-abc.json\" --verbose",
+            TerminalConstants.BuildClaudeCodeArgs(options, @"C:\th\mcp-config-5080.json", @"C:\th\claude-hooks\hooks-abc.json"));
+    }
+
+    [Fact]
     public void 既存オプションの組み立ては従来どおり()
     {
         // --mcp-config 追加による退行が無いことの確認。

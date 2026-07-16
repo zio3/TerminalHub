@@ -74,5 +74,18 @@ namespace TerminalHub.Services
         {
             return Path.Combine(UserDataRoot, $"mcp-config-{port}.json");
         }
+
+        /// <summary>
+        /// Claude Code へ --settings で渡す hook 設定 JSON のフルパス。"claude-hooks\hooks-{セッションGUID}.json"。
+        ///
+        /// MCP設定（ポート毎）と違い<b>セッション毎</b>に分けるのが要点。hook の送信先 URL には
+        /// セッション GUID が入る（/api/hook/claude/{sessionId}）ため、ポート単位では共有できない。
+        /// 中身のポートは実行中の値で毎起動時に上書きされ、セッション完全削除時にファイルも消す。
+        /// dev/prod は DB が別で GUID 空間が重ならないため、ディレクトリは共有でよい。
+        /// </summary>
+        public static string GetClaudeHookConfigFilePath(Guid sessionId)
+        {
+            return Path.Combine(UserDataRoot, "claude-hooks", $"hooks-{sessionId}.json");
+        }
     }
 }
