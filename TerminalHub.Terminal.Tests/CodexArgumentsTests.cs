@@ -238,4 +238,30 @@ public sealed class CodexArgumentsTests
             "--dangerously-bypass-approvals-and-sandbox resume --last",
             TerminalConstants.BuildCodexArgs(options));
     }
+
+    [Fact]
+    public void TerminalHubMcpUrl_IsAddedBeforeResume()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["resume-last"] = "true"
+        };
+
+        Assert.Equal(
+            "-c mcp_servers.terminalhub.url=http://localhost:5081/mcp resume --last",
+            TerminalConstants.BuildCodexArgs(options, "http://localhost:5081/mcp"));
+    }
+
+    [Fact]
+    public void TerminalHubMcpUrl_DoesNotOverrideUserSuppliedValue()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["extra-args"] = "-c mcp_servers.terminalhub.url=http://localhost:9999/mcp"
+        };
+
+        Assert.Equal(
+            "-c mcp_servers.terminalhub.url=http://localhost:9999/mcp",
+            TerminalConstants.BuildCodexArgs(options, "http://localhost:5081/mcp"));
+    }
 }
