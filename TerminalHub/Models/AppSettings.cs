@@ -65,8 +65,10 @@ public class SessionDefaultsSettings
 public class ExperimentalSettings
 {
     /// <summary>
-    /// セッション生成時に TerminalHub のローカル MCP サーバー (terminalhub) を有効化する。
-    /// Claude Code はローカル設定へ登録し、Codex は起動時の -c オプションで接続する。既定OFF。
+    /// セッション生成時に、対応CLI(Claude Code / Codex)へ TerminalHub のローカル MCP サーバー
+    /// (terminalhub) を繋ぐ。ONにすると起動しただけで list_sessions / send_to_session が使える。既定OFF。
+    /// どちらも起動オプションで渡し、ユーザーの設定ファイルは書き換えない。
+    /// Claude Code は --mcp-config <JSONパス>、Codex は -c mcp_servers.terminalhub.url=...。
     /// </summary>
     public bool AutoRegisterMcp { get; set; } = false;
 

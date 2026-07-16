@@ -61,5 +61,18 @@ namespace TerminalHub.Services
                 : (isDevelopment ? "sessions-dev.db" : "sessions.db");
             return Path.Combine(UserDataRoot, fileName);
         }
+
+        /// <summary>
+        /// Claude Code へ --mcp-config で渡す JSON のフルパス。"mcp-config-{ポート}.json"。
+        ///
+        /// dev/prod ではなく<b>ポートで分ける</b>のが要点。このファイルの中身は実質ポートそのもので、
+        /// 5080(常用) と 5082(開発版) を同時に起動する運用があるため、共有すると後勝ちで
+        /// 上書きし合い、セッションが意図しない方のインスタンスへ繋がる。過去に terminalhub が
+        /// 5080/5081 の二重定義で別インスタンスへ繋がった実害があるので、同じ轍を踏まない。
+        /// </summary>
+        public static string GetMcpConfigFilePath(int port)
+        {
+            return Path.Combine(UserDataRoot, $"mcp-config-{port}.json");
+        }
     }
 }

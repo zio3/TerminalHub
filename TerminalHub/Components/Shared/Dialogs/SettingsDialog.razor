@@ -1,4 +1,4 @@
-@namespace TerminalHub.Components.Shared.Dialogs
+﻿@namespace TerminalHub.Components.Shared.Dialogs
 @using TerminalHub.Services
 @using TerminalHub.Models
 @using Microsoft.Extensions.Configuration
@@ -1003,22 +1003,24 @@
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
                                         <label class="form-check-label" for="autoRegisterMcpSwitch">
-                                            対応CLIで TerminalHub のローカル MCP を有効化する
+                                            対応CLIに TerminalHub のローカル MCP を自動で繋ぐ
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
                                         ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に
-                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）へ接続します。
+                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を繋ぎます。
                                         起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
+                                        <strong>どちらも起動オプションで渡すので、設定ファイルは書き換えません</strong>。
+                                        OFFに戻せば次の起動から繋がらなくなり、残骸も残りません。
                                     </p>
                                     <ul class="text-muted small mt-1 mb-0">
-                                        <li>Claude Code → <code>&lt;folder&gt;/.mcp.json</code> の <code>mcpServers.terminalhub</code></li>
-                                        <li>Codex → 起動時の <code>-c mcp_servers.terminalhub.url=...</code>（設定ファイルは変更しません）</li>
+                                        <li>Claude Code → <code>--mcp-config &lt;JSONパス&gt;</code>（作業フォルダにも <code>~/.claude.json</code> にも何も足しません）</li>
+                                        <li>Codex → <code>-c mcp_servers.terminalhub.url=...</code>（手書きの <code>-c</code> 指定がある場合はそちらを優先します）</li>
                                     </ul>
                                     <p class="text-muted small mt-1 mb-0">
-                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。
-                                        Codex の手書き <code>-c</code> 指定がある場合はそちらを優先します。全デバイス共通の設定です。
+                                        あなたが自分で入れた MCP サーバーはそのまま使えます（置き換えではなく追加）。
+                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。全デバイス共通の設定です。
                                     </p>
                                 </div>
 
