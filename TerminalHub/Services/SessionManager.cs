@@ -505,8 +505,8 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
-                await CleanupLegacyClaudeHooksAsync(sessionInfo);
+                // Codex セッションの場合、ConPty 起動前に hook 設定をセットアップ
+                // (Claude Code の hook は BuildTerminalCommand 内で --settings により渡す)
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
 
                 // ConPtyセッションを初期化
@@ -959,26 +959,6 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// ClaudeCode セッション初期化／再起動の直前に呼び出し、旧方式（〜v1.0.71）が
-        /// <c>.claude/settings.local.json</c> に書き残した TerminalHub 由来の hook を掃除する。
-        ///
-        /// 現行の hook 登録は起動オプション <c>--settings</c> で渡す（BuildTerminalCommand →
-        /// ResolveClaudeHookConfigPath）ため、ここでは何も追加しない。掃除が必要なのは、
-        /// hook が MCP と違って「同名上書き」ではなく<b>加算</b>だから（旧残骸は同じセッション GUID・
-        /// 同じ URL を指しているので、放置すると同じイベントが二重に飛ぶ）。
-        /// 残骸が無ければ no-op なので HookConfigured によるスキップはしない（旧バージョンで
-        /// 設定済み＝true のセッションこそ掃除対象のため、フラグでは判定できない）。
-        /// </summary>
-        private async Task CleanupLegacyClaudeHooksAsync(SessionInfo sessionInfo)
-        {
-            if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
-                return;
-
-            // 失敗はサービス側で握って警告ログ済み（最悪、旧残骸と二重発火するだけ）
-            await _claudeHookService.RemoveLegacyHooksAsync(sessionInfo.FolderPath);
-        }
-
-        /// <summary>
         /// CodexCLI セッション初期化／再起動の直前に呼び出し、
         /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
         /// Hook は常時有効（UI トグルは廃止）。
@@ -1064,8 +1044,8 @@ namespace TerminalHub.Services
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
-                await CleanupLegacyClaudeHooksAsync(sessionInfo);
+                // Codex セッションの場合、Hook 設定を再セットアップ
+                // (Claude Code の hook は BuildTerminalCommand 内で --settings により渡す)
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
@@ -1150,8 +1130,8 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
-                await CleanupLegacyClaudeHooksAsync(sessionInfo);
+                // Codex セッションの場合、Hook 設定を再セットアップ
+                // (Claude Code の hook は BuildTerminalCommand 内で --settings により渡す)
                 await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
 
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);

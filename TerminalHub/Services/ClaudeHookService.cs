@@ -17,9 +17,10 @@ namespace TerminalHub.Services;
 ///
 /// 【旧方式の残骸と二重発火】旧バージョン（〜v1.0.71）は &lt;folder&gt;/.claude/settings.local.json へ
 /// 書き込む方式だった。hook は MCP と違って「同名上書き」ではなく<b>加算</b>（--settings と
-/// settings.local.json の両方が発火する。実測確認済み）なので、残骸を放置すると同じイベントが
-/// 二重に飛ぶ。このため MCP の「残骸は放置」方針は使えず、セッション起動前に
-/// <see cref="RemoveLegacyHooksAsync"/> で TerminalHub 由来のエントリだけを掃除する。
+/// settings.local.json の両方が発火する。実測確認済み）なので、残骸が残っていると同じイベントが
+/// 二重に飛ぶ。それでも TerminalHub からは消さない（MCP の残骸と同じく、ユーザーのファイルには
+/// 書き込みも削除もしない方針）。二重通知に気づいたら利用者が settings.local.json から
+/// TerminalHub 由来のエントリ（URL に /api/hook/claude/ を含む）を消す。
 /// </summary>
 public interface IClaudeHookService
 {
@@ -38,13 +39,6 @@ public interface IClaudeHookService
     /// セッション完全削除時に、そのセッション用の hook 設定 JSON を消す（ベストエフォート）。
     /// </summary>
     void DeleteHookConfigFile(Guid sessionId);
-
-    /// <summary>
-    /// 旧方式（〜v1.0.71）が &lt;folder&gt;/.claude/settings.local.json に書き残した
-    /// TerminalHub 由来の hook エントリを削除する。放置すると --settings 側と二重発火するため、
-    /// セッション起動前に毎回呼ぶ（残骸が無ければ何もしない）。ユーザーが手書きした hook は消さない。
-    /// </summary>
-    Task RemoveLegacyHooksAsync(string folderPath);
 }
 
 /// <summary>
@@ -53,7 +47,6 @@ public interface IClaudeHookService
 public class ClaudeHookService : IClaudeHookService
 {
     private readonly ILogger<ClaudeHookService> _logger;
-    private const string SettingsFileName = ".claude/settings.local.json";
 
     // TerminalHub が登録する Claude Code hook (event, matcher) の定義。matcher=null は全マッチ。
     // - SubagentStart / SubagentStop: サブエージェントの起動・終了を agent_id で追跡。
@@ -74,10 +67,6 @@ public class ClaudeHookService : IClaudeHookService
         ("PostCompact", null),
         ("PreToolUse", "AskUserQuestion"),
     };
-
-    // 旧方式残骸のクリーンアップ対象イベント名（重複排除）
-    private static readonly string[] HookEventNames =
-        HookRegistrations.Select(r => r.Event).Distinct().ToArray();
 
     public ClaudeHookService(ILogger<ClaudeHookService> logger)
     {
@@ -151,57 +140,6 @@ public class ClaudeHookService : IClaudeHookService
         }
     }
 
-    public async Task RemoveLegacyHooksAsync(string folderPath)
-    {
-        try
-        {
-            var settingsPath = Path.Combine(folderPath, SettingsFileName);
-            if (!File.Exists(settingsPath))
-            {
-                return;
-            }
-
-            var existingJson = await File.ReadAllTextAsync(settingsPath);
-            var settings = JsonNode.Parse(existingJson)?.AsObject();
-            if (settings == null || settings["hooks"] is not JsonObject hooks)
-            {
-                return;
-            }
-
-            bool modified = false;
-            foreach (var eventName in HookEventNames)
-            {
-                if (hooks[eventName] is not JsonArray hookArray) continue;
-
-                if (RemoveTerminalHubHooksFromArray(hookArray) > 0)
-                {
-                    modified = true;
-                }
-
-                // 空になった配列はキーごと除去（modified もこの時点で true にして書き戻し対象にする）
-                if (hookArray.Count == 0)
-                {
-                    hooks.Remove(eventName);
-                    modified = true;
-                }
-            }
-
-            if (!modified)
-            {
-                return;
-            }
-
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            await File.WriteAllTextAsync(settingsPath, settings.ToJsonString(options));
-            _logger.LogInformation("旧方式の TerminalHub 由来 hook を削除（二重発火防止）: {Path}", settingsPath);
-        }
-        catch (Exception ex)
-        {
-            // 掃除に失敗してもセッションは起動させる（最悪、旧残骸と二重発火するだけ）。
-            _logger.LogWarning(ex, "旧方式 hook の削除に失敗: {FolderPath}", folderPath);
-        }
-    }
-
     /// <summary>
     /// Claude Code の type:"http" hook エントリを生成する
     /// baseUrl は呼び出し元が IServerAddressesFeature から取得した実際のバインド URL（HTTP 優先）
@@ -221,73 +159,4 @@ public class ClaudeHookService : IClaudeHookService
         };
     }
 
-    /// <summary>
-    /// TerminalHub 由来の hook エントリかを判定する
-    /// - 旧形式: type:"command" で --notify --session を含む
-    /// - 新形式: type:"http" で URL に /api/hook/claude/ を含む（TerminalHub 専用パスに限定）
-    /// </summary>
-    private static bool IsTerminalHubHook(JsonObject hookObj)
-    {
-        var type = hookObj["type"]?.GetValue<string>();
-
-        // 新形式: TerminalHub 専用の /api/hook/claude/ パスのみを対象とする。
-        // 汎用の /api/hook を含む URL（他ツール向けに手書きされた hook 等）は誤削除しない。
-        if (type == "http")
-        {
-            var url = hookObj["url"]?.GetValue<string>() ?? "";
-            if (url.Contains("/api/hook/claude/", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        // 旧形式: type:"command" で --notify --session を含む
-        var command = hookObj["command"]?.GetValue<string>() ?? "";
-        if (command.Contains("--notify") && command.Contains("--session"))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// hook 配列から TerminalHub 由来のエントリを全て取り除く。戻り値は削除件数。
-    /// 直接形式 {"type": "..."} と入れ子形式 {"hooks": [...]} の両方をチェックする。
-    /// </summary>
-    private static int RemoveTerminalHubHooksFromArray(JsonArray hookArray)
-    {
-        var indicesToRemove = new List<int>();
-        for (int i = 0; i < hookArray.Count; i++)
-        {
-            if (hookArray[i] is not JsonObject entryObj) continue;
-
-            // 形式1: 直接形式 {"type": "command"|"http", ...}
-            if (IsTerminalHubHook(entryObj))
-            {
-                indicesToRemove.Add(i);
-                continue;
-            }
-
-            // 形式2: 入れ子形式 {"hooks": [{"type": "command"|"http", ...}]}
-            if (entryObj["hooks"] is JsonArray entryHooks)
-            {
-                for (int j = 0; j < entryHooks.Count; j++)
-                {
-                    if (entryHooks[j] is JsonObject hookObj && IsTerminalHubHook(hookObj))
-                    {
-                        indicesToRemove.Add(i);
-                        break;
-                    }
-                }
-            }
-        }
-
-        // インデックスを降順でソートして削除（後ろから削除しないとインデックスがずれる）
-        foreach (var index in indicesToRemove.OrderByDescending(i => i))
-        {
-            hookArray.RemoveAt(index);
-        }
-        return indicesToRemove.Count;
-    }
 }
