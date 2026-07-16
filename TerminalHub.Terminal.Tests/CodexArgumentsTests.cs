@@ -264,4 +264,23 @@ public sealed class CodexArgumentsTests
             "-c mcp_servers.terminalhub.url=http://localhost:9999/mcp",
             TerminalConstants.BuildCodexArgs(options, "http://localhost:5081/mcp"));
     }
+
+    [Fact]
+    public void TerminalHubHooks_AreAddedBeforeUserArgsAndResume()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["extra-args"] = "-c hooks.Stop=[]",
+            ["resume-last"] = "true"
+        };
+
+        Assert.Equal(
+            "-c mcp_servers.terminalhub.url=http://localhost:5081/mcp " +
+            "-c \"hooks.Stop=[{hooks=[{type='command',command='hook-command',timeout=5}]}]\" " +
+            "-c hooks.Stop=[] resume --last",
+            TerminalConstants.BuildCodexArgs(
+                options,
+                "http://localhost:5081/mcp",
+                "-c \"hooks.Stop=[{hooks=[{type='command',command='hook-command',timeout=5}]}]\""));
+    }
 }

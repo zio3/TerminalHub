@@ -179,9 +179,6 @@ namespace TerminalHub.Models
         public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
 
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool HookConfigured { get; set; } // Codex hook 設定済みかどうか（Claude は --settings 方式へ移行したため使わない）
-
-        [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
         // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）。
