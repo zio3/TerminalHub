@@ -7,22 +7,35 @@ using TerminalHub.Models;
 namespace TerminalHub.Services;
 
 /// <summary>
-/// 試験機能: 対応CLI(Claude Code / Codex)のフォルダへ TerminalHub のローカル MCP サーバー
-/// (terminalhub) を自動登録するサービス。CodexHookService と同じく per-folder に書き、
-/// 既存設定はマージ・TerminalHub は「terminalhub」エントリのみ所有する。
+/// 試験機能: 対応CLI(Claude Code / Codex)へ TerminalHub のローカル MCP サーバー
+/// (terminalhub) を繋ぐサービス。CLI ごとに手段が異なる:
 ///
-/// 撤去はしない（書き込むところまでが責務）。自動登録を無効に戻しても、既に書いた
-/// terminalhub エントリはそのまま残るので、不要なら利用者が設定ファイルから消す。
-///
-/// - Claude Code → <c>&lt;folder&gt;/.mcp.json</c> の <c>mcpServers.terminalhub</c>（type:"http"）
-/// - Codex       → <c>&lt;folder&gt;/.codex/config.toml</c> の <c>[mcp_servers.terminalhub]</c>
+/// - Claude Code → <b>起動オプション <c>--mcp-config &lt;JSONパス&gt;</c> で渡す</b>。ユーザーの設定ファイルを
+///                 一切書き換えない。JSON は TerminalHub 自身のデータ領域
+///                 (<see cref="AppDataPaths.GetMcpConfigFilePath"/>) に置き、パスだけをコマンドラインに乗せる。
+///                 生成は <see cref="EnsureClaudeMcpConfigFile"/>、オプション付与は SessionManager/TerminalConstants 側。
+/// - Codex       → CodexHookService と同じく per-folder の <c>&lt;folder&gt;/.codex/config.toml</c> の
+///                 <c>[mcp_servers.terminalhub]</c> へ直接書き、既存 TOML はマージで温存する。
 ///                 （per-folder の config.toml を Codex が MCP 用に読むかは要検証。読まなければ無害な no-op）
+///                 <b>TODO: Codex も起動オプションで渡せることを実測で確認済み</b>
+///                 （<c>codex -c mcp_servers.terminalhub.url=&lt;URL&gt;</c>。値は TOML パースに失敗すると
+///                 リテラル文字列扱いになるため引用符不要）。Claude と同じ起動オプション方式へ移行し、
+///                 この書き込み経路は廃止する予定。
+///
+/// Codex 側は書き込み型のため撤去はしない（書き込むところまでが責務）。自動登録を無効に戻しても、
+/// 既に書いた terminalhub エントリはそのまま残るので、不要なら利用者が設定ファイルから消す。
+/// Claude 側は起動オプション方式なので、OFF にすれば次回起動から即座に繋がらなくなる（残骸なし）。
 /// </summary>
 public interface IMcpConfigService
 {
-    /// <summary>terminalhub MCP サーバーを CLI 設定へ追記（既存があれば最新値へ更新）。</summary>
+    /// <summary>terminalhub MCP サーバーを CLI 設定へ追記（既存があれば最新値へ更新）。Codex のみ対象。</summary>
     Task SetupAsync(string folderPath, TerminalType terminalType, string baseUrl);
 
+    /// <summary>
+    /// Claude Code に <c>--mcp-config</c> で渡す JSON を用意し、そのフルパスを返す。
+    /// 失敗したら null（呼び出し側はオプション無しで起動する）。
+    /// </summary>
+    string? EnsureClaudeMcpConfigFile(string baseUrl);
 }
 
 public class McpConfigService : IMcpConfigService
@@ -32,8 +45,10 @@ public class McpConfigService : IMcpConfigService
     /// <summary>登録する MCP サーバー名（＝所有マーク）。撤去時はこのキー/テーブルだけ触る。</summary>
     private const string ServerName = "terminalhub";
 
-    private const string ClaudeMcpFileName = ".mcp.json";
     private const string CodexConfigFileName = ".codex/config.toml";
+
+    /// <summary>--mcp-config 用 JSON の書き込みを直列化する（ポート毎に1ファイルを共有するため）。</summary>
+    private static readonly object _claudeConfigFileLock = new();
 
     public McpConfigService(ILogger<McpConfigService> logger)
     {
@@ -48,51 +63,72 @@ public class McpConfigService : IMcpConfigService
         var url = BuildMcpUrl(baseUrl);
         switch (terminalType)
         {
-            case TerminalType.ClaudeCode:
-                await SetupClaudeAsync(folderPath, url);
-                break;
             case TerminalType.CodexCLI:
                 await SetupCodexAsync(folderPath, url);
                 break;
             default:
-                // Claude Code / Codex のみサポート。それ以外は何もしない。
+                // Claude Code は起動オプション方式(EnsureClaudeMcpConfigFile)なのでここでは何もしない。
+                // それ以外の CLI は未対応。
                 break;
         }
     }
 
-    // ---- Claude Code (.mcp.json / JSON) ----
+    // ---- Claude Code (--mcp-config へ渡す JSON の用意) ----
 
-    private async Task SetupClaudeAsync(string folderPath, string url)
+    /// <summary>
+    /// Claude Code へ <c>--mcp-config</c> で渡す JSON を TerminalHub のデータ領域に用意し、パスを返す。
+    ///
+    /// ユーザーの設定ファイル（~/.claude.json や作業フォルダの .mcp.json）には一切書かない。
+    /// --mcp-config は既存の MCP 設定に<b>マージ</b>されるので（--strict-mcp-config を付けない限り）、
+    /// ユーザーが自分で入れた MCP サーバーはそのまま生きる。
+    ///
+    /// 中身はポートにしか依存しないため、セッション毎ではなくポート毎に1ファイルを共有する。
+    /// 同時起動したセッションが同じファイルを書いて claude に破損した JSON を読ませないよう、
+    /// ロックした上で「内容が同じなら書かない・書くときは一時ファイル＋差し替え」で更新する。
+    /// </summary>
+    public string? EnsureClaudeMcpConfigFile(string baseUrl)
     {
-        var path = Path.Combine(folderPath, ClaudeMcpFileName);
-
-        JsonObject root;
-        if (File.Exists(path))
+        try
         {
-            var existing = await File.ReadAllTextAsync(path);
-            root = JsonNode.Parse(existing)?.AsObject() ?? new JsonObject();
+            var url = BuildMcpUrl(baseUrl);
+            var port = new Uri(baseUrl).Port;
+            var path = AppDataPaths.GetMcpConfigFilePath(port);
+
+            var root = new JsonObject
+            {
+                ["mcpServers"] = new JsonObject
+                {
+                    [ServerName] = new JsonObject
+                    {
+                        ["type"] = "http",
+                        ["url"] = url
+                    }
+                }
+            };
+            var json = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+
+            lock (_claudeConfigFileLock)
+            {
+                // 既に同じ内容なら触らない（起動のたびに書き換えて claude の読み取りと競合させない）。
+                if (File.Exists(path) && File.ReadAllText(path) == json)
+                    return path;
+
+                // 一時ファイルへ書いてから差し替える。直接上書きすると、claude が読んでいる最中に
+                // 中身が空/途中の状態を晒し得る。
+                var tmp = path + ".tmp";
+                File.WriteAllText(tmp, json);
+                File.Move(tmp, path, overwrite: true);
+            }
+
+            _logger.LogInformation("MCP設定ファイルを用意(Claude/--mcp-config): {Path} url={Url}", path, url);
+            return path;
         }
-        else
+        catch (Exception ex)
         {
-            root = new JsonObject();
+            // 失敗してもセッションは起動させる（MCP が繋がらないだけ）。
+            _logger.LogWarning(ex, "MCP設定ファイルの用意に失敗(Claude): baseUrl={BaseUrl}", baseUrl);
+            return null;
         }
-
-        if (root["mcpServers"] is not JsonObject servers)
-        {
-            servers = new JsonObject();
-            root["mcpServers"] = servers;
-        }
-
-        // terminalhub エントリだけを最新値で上書き。他サーバーは温存。
-        servers[ServerName] = new JsonObject
-        {
-            ["type"] = "http",
-            ["url"] = url
-        };
-
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        await File.WriteAllTextAsync(path, root.ToJsonString(options));
-        _logger.LogInformation("MCP設定を追記(Claude): {Path} url={Url}", path, url);
     }
 
     // ---- Codex (.codex/config.toml / TOML) ----

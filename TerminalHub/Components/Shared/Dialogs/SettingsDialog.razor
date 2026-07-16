@@ -1003,21 +1003,21 @@
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
                                         <label class="form-check-label" for="autoRegisterMcpSwitch">
-                                            対応CLIのフォルダに TerminalHub のローカル MCP を自動登録する
+                                            対応CLIに TerminalHub のローカル MCP を自動で繋ぐ
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に、その作業フォルダへ
-                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を追記します。
+                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に
+                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を繋ぎます。
                                         起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
                                     </p>
                                     <ul class="text-muted small mt-1 mb-0">
-                                        <li>Claude Code → <code>&lt;folder&gt;/.mcp.json</code> の <code>mcpServers.terminalhub</code></li>
-                                        <li>Codex → <code>&lt;folder&gt;/.codex/config.toml</code> の <code>[mcp_servers.terminalhub]</code></li>
+                                        <li>Claude Code → 起動オプション <code>--mcp-config</code> で渡します。<strong>設定ファイルは書き換えません</strong>（作業フォルダにも <code>~/.claude.json</code> にも何も足しません）。OFFに戻せば次の起動から繋がらなくなり、残骸も残りません</li>
+                                        <li>Codex → 現状は <code>&lt;folder&gt;/.codex/config.toml</code> の <code>[mcp_servers.terminalhub]</code> に追記します（既存設定は温存し <code>terminalhub</code> エントリのみ管理）。<strong>Claude と同じ起動オプション方式（<code>-c mcp_servers.terminalhub.url=...</code>）へ移行予定</strong></li>
                                     </ul>
                                     <p class="text-muted small mt-1 mb-0">
-                                        既存の設定はそのまま残し、<code>terminalhub</code> エントリのみを管理します。
+                                        あなたが自分で入れた MCP サーバーはそのまま使えます（置き換えではなく追加）。
                                         Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。全デバイス共通の設定です。
                                     </p>
                                 </div>

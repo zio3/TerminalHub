@@ -32,7 +32,12 @@
         }
 
         // コマンドライン引数の構築ヘルパー
-        public static string BuildClaudeCodeArgs(Dictionary<string, string> options)
+        /// <param name="mcpConfigPath">
+        /// TerminalHub のローカル MCP(terminalhub) を繋ぐ JSON のパス。null なら付与しない。
+        /// options ではなく引数で受けるのは、これがセッションに保存される設定ではなく
+        /// 「起動時のポートに依存する一時的な値」だから（SessionInfo.Options は永続化される）。
+        /// </param>
+        public static string BuildClaudeCodeArgs(Dictionary<string, string> options, string? mcpConfigPath = null)
         {
             var args = new List<string>();
 
@@ -61,6 +66,16 @@
             if (options.ContainsKey("remote-control") && options["remote-control"] == "true")
             {
                 args.Add("--remote-control");
+            }
+
+            // ユーザー指定(extra-args/custom-args)より前に置く。--mcp-config は複数指定でマージされるので、
+            // ユーザーが自分で --mcp-config を書いていても衝突しない。
+            // パスは必ず引用符で囲む: ConPtyService はコマンドラインを無加工で連結するため、
+            // %LOCALAPPDATA% にスペースを含むユーザー名だと引用符無しでは空白で分割されて壊れる
+            // （実測で確認済み）。Codex の --add-dir と同じ流儀。
+            if (!string.IsNullOrWhiteSpace(mcpConfigPath))
+            {
+                args.Add($"--mcp-config \"{mcpConfigPath}\"");
             }
 
             if (options.TryGetValue("extra-args", out var extraArgs) && !string.IsNullOrWhiteSpace(extraArgs))
