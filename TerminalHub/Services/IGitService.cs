@@ -1,4 +1,4 @@
-using TerminalHub.Models;
+﻿using TerminalHub.Models;
 
 namespace TerminalHub.Services
 {
@@ -36,13 +36,6 @@ namespace TerminalHub.Services
         Task<bool> CreateWorktreeAsync(string sourcePath, string branchName, string worktreePath, bool detach = false);
 
         /// <summary>
-        /// Worktreeを削除
-        /// </summary>
-        /// <param name="worktreePath">削除するWorktreeのパス</param>
-        /// <returns>成功した場合true</returns>
-        Task<bool> RemoveWorktreeAsync(string worktreePath);
-
-        /// <summary>
         /// 指定されたパスがWorktreeかどうかを判定
         /// </summary>
         /// <param name="path">チェックするパス</param>
@@ -55,13 +48,6 @@ namespace TerminalHub.Services
         /// <param name="path">リポジトリのパス</param>
         /// <returns>Worktree情報のリスト</returns>
         Task<List<WorktreeInfo>> GetWorktreeListAsync(string path);
-
-        /// <summary>
-        /// 既存のWorktreeを検証
-        /// </summary>
-        /// <param name="worktreePath">検証するWorktreeのパス</param>
-        /// <returns>Worktree情報、無効な場合はnull</returns>
-        Task<WorktreeInfo?> ValidateWorktreeAsync(string worktreePath);
 
         /// <summary>
         /// 未コミットの変更ファイル一覧を取得（git status --porcelain）

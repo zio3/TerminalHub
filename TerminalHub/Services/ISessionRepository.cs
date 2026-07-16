@@ -1,4 +1,4 @@
-using TerminalHub.Models;
+﻿using TerminalHub.Models;
 
 namespace TerminalHub.Services
 {
@@ -29,7 +29,6 @@ namespace TerminalHub.Services
         // 入力履歴
         Task<List<string>> GetInputHistoryAsync(int limit = 100);
         Task AddInputHistoryAsync(string text);
-        Task ClearInputHistoryAsync();
 
         // データベース状態
         bool DatabaseExists();

@@ -1,4 +1,4 @@
-@using TerminalHub.Models
+﻿@using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Configuration
 @using Microsoft.Extensions.Localization
@@ -793,16 +793,6 @@
         };
     }
 
-    private string GetGeminiApprovalModeHelp()
-    {
-        return GeminiOptions.ApprovalMode switch
-        {
-            "default" => L["SessionOptions.Gemini.ApprovalMode.HelpDefault"],
-            "auto_edit" => L["SessionOptions.Gemini.ApprovalMode.HelpAutoEdit"],
-            "yolo" => L["SessionOptions.Gemini.ApprovalMode.HelpYolo"],
-            _ => ""
-        };
-    }
 
     private string GetApprovalPolicyHelp()
     {

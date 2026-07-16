@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text;
 
@@ -151,37 +151,6 @@ namespace TerminalHub.Services
             }
         }
 
-        public async Task<bool> RemoveWorktreeAsync(string worktreePath)
-        {
-            try
-            {
-                if (!await IsWorktreeAsync(worktreePath))
-                {
-                    _logger.LogWarning("Worktree削除: 指定されたパスはWorktreeではありません: {Path}", worktreePath);
-                    return false;
-                }
-
-                var command = $"worktree remove \"{worktreePath}\"";
-                var result = await ExecuteGitCommandAsync(worktreePath, command);
-
-                if (result.Success)
-                {
-                    _logger.LogInformation("Worktree削除成功: {Path}", worktreePath);
-                    return true;
-                }
-                else
-                {
-                    _logger.LogWarning("Worktree削除失敗: {Error}", result.Error);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Worktree削除でエラーが発生しました: {Path}", worktreePath);
-                return false;
-            }
-        }
-
         public async Task<bool> IsWorktreeAsync(string path)
         {
             try
@@ -278,73 +247,6 @@ namespace TerminalHub.Services
             {
                 _logger.LogError(ex, "Worktree一覧取得でエラーが発生しました: {Path}", path);
                 return worktrees;
-            }
-        }
-
-        public async Task<WorktreeInfo?> ValidateWorktreeAsync(string worktreePath)
-        {
-            try
-            {
-                if (!Directory.Exists(worktreePath))
-                    return null;
-
-                // Worktreeかどうかチェック
-                if (!await IsWorktreeAsync(worktreePath))
-                    return null;
-
-                // git worktree listでこのWorktreeの情報を取得
-                var result = await ExecuteGitCommandAsync(worktreePath, "worktree list --porcelain");
-                if (!result.Success || string.IsNullOrEmpty(result.Output))
-                    return null;
-
-                var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                WorktreeInfo? targetWorktree = null;
-                WorktreeInfo? currentWorktree = null;
-
-                foreach (var line in lines)
-                {
-                    if (line.StartsWith("worktree "))
-                    {
-                        var path = line.Substring("worktree ".Length).Trim();
-                        currentWorktree = new WorktreeInfo { Path = path };
-
-                        // パスが一致する場合、これが対象のWorktree
-                        if (Path.GetFullPath(path).Equals(Path.GetFullPath(worktreePath), StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetWorktree = currentWorktree;
-                        }
-                    }
-                    else if (currentWorktree != null && currentWorktree == targetWorktree)
-                    {
-                        if (line.StartsWith("HEAD "))
-                        {
-                            currentWorktree.CommitHash = line.Substring("HEAD ".Length).Trim();
-                        }
-                        else if (line.StartsWith("branch "))
-                        {
-                            currentWorktree.BranchName = line.Substring("branch ".Length).Trim();
-                        }
-                        else if (line == "detached")
-                        {
-                            currentWorktree.BranchName = "(detached HEAD)";
-                        }
-                        else if (line == "locked")
-                        {
-                            currentWorktree.IsLocked = true;
-                        }
-                        else if (line == "prunable")
-                        {
-                            currentWorktree.IsPrunable = true;
-                        }
-                    }
-                }
-
-                return targetWorktree;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Worktree検証でエラーが発生しました: {Path}", worktreePath);
-                return null;
             }
         }
 

@@ -1,4 +1,4 @@
-using TerminalHub.Models;
+﻿using TerminalHub.Models;
 using TerminalHub.Constants;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
@@ -51,7 +51,6 @@ namespace TerminalHub.Services
         void MarkSessionConnected(Guid sessionId);
 
         Task<bool> SetActiveSessionAsync(Guid sessionId);
-        Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
@@ -585,13 +584,6 @@ namespace TerminalHub.Services
             }
         }
 
-        public Guid? GetActiveSessionId()
-        {
-            lock (_lockObject)
-            {
-                return _activeSessionId;
-            }
-        }
 
         public Task SaveSessionInfoAsync(SessionInfo sessionInfo)
         {

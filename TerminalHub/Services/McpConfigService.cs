@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -8,8 +8,11 @@ namespace TerminalHub.Services;
 
 /// <summary>
 /// 試験機能: 対応CLI(Claude Code / Codex)のフォルダへ TerminalHub のローカル MCP サーバー
-/// (terminalhub) を自動登録/撤去するサービス。CodexHookService と同じく per-folder に書き、
+/// (terminalhub) を自動登録するサービス。CodexHookService と同じく per-folder に書き、
 /// 既存設定はマージ・TerminalHub は「terminalhub」エントリのみ所有する。
+///
+/// 撤去はしない（書き込むところまでが責務）。自動登録を無効に戻しても、既に書いた
+/// terminalhub エントリはそのまま残るので、不要なら利用者が設定ファイルから消す。
 ///
 /// - Claude Code → <c>&lt;folder&gt;/.mcp.json</c> の <c>mcpServers.terminalhub</c>（type:"http"）
 /// - Codex       → <c>&lt;folder&gt;/.codex/config.toml</c> の <c>[mcp_servers.terminalhub]</c>
@@ -20,8 +23,6 @@ public interface IMcpConfigService
     /// <summary>terminalhub MCP サーバーを CLI 設定へ追記（既存があれば最新値へ更新）。</summary>
     Task SetupAsync(string folderPath, TerminalType terminalType, string baseUrl);
 
-    /// <summary>TerminalHub 由来（terminalhub）エントリだけを CLI 設定から除去。</summary>
-    Task RemoveAsync(string folderPath, TerminalType terminalType);
 }
 
 public class McpConfigService : IMcpConfigService
@@ -55,19 +56,6 @@ public class McpConfigService : IMcpConfigService
                 break;
             default:
                 // Claude Code / Codex のみサポート。それ以外は何もしない。
-                break;
-        }
-    }
-
-    public async Task RemoveAsync(string folderPath, TerminalType terminalType)
-    {
-        switch (terminalType)
-        {
-            case TerminalType.ClaudeCode:
-                await RemoveClaudeAsync(folderPath);
-                break;
-            case TerminalType.CodexCLI:
-                await RemoveCodexAsync(folderPath);
                 break;
         }
     }
@@ -107,23 +95,6 @@ public class McpConfigService : IMcpConfigService
         _logger.LogInformation("MCP設定を追記(Claude): {Path} url={Url}", path, url);
     }
 
-    private async Task RemoveClaudeAsync(string folderPath)
-    {
-        var path = Path.Combine(folderPath, ClaudeMcpFileName);
-        if (!File.Exists(path)) return;
-
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(path))?.AsObject();
-        if (root?["mcpServers"] is not JsonObject servers) return;
-        if (!servers.ContainsKey(ServerName)) return;
-
-        servers.Remove(ServerName);
-        if (servers.Count == 0) root.Remove("mcpServers");
-
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        await File.WriteAllTextAsync(path, root.ToJsonString(options));
-        _logger.LogInformation("MCP設定を除去(Claude): {Path}", path);
-    }
-
     // ---- Codex (.codex/config.toml / TOML) ----
     // TOML ライブラリを持たないため、TerminalHub が所有する [mcp_servers.terminalhub] テーブルの
     // ブロックだけを行スキャンで置換/除去する。他のTOMLには手を触れない。
@@ -152,20 +123,6 @@ public class McpConfigService : IMcpConfigService
 
         await File.WriteAllTextAsync(path, string.Join("\n", lines));
         _logger.LogInformation("MCP設定を追記(Codex): {Path} url={Url}", path, url);
-    }
-
-    private async Task RemoveCodexAsync(string folderPath)
-    {
-        var path = Path.Combine(folderPath, CodexConfigFileName);
-        if (!File.Exists(path)) return;
-
-        var lines = (await File.ReadAllTextAsync(path)).Replace("\r\n", "\n").Split('\n').ToList();
-        if (!RemoveTerminalHubTomlBlock(lines)) return;
-
-        TrimTrailingBlankLines(lines);
-        if (lines.Count > 0) lines.Add("");
-        await File.WriteAllTextAsync(path, string.Join("\n", lines));
-        _logger.LogInformation("MCP設定を除去(Codex): {Path}", path);
     }
 
     /// <summary>

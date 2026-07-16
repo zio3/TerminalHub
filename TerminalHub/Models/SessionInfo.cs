@@ -283,14 +283,6 @@ namespace TerminalHub.Models
             }
         }
 
-        public void ClearStatusChangeHistory()
-        {
-            lock (_statusHistoryLock)
-            {
-                _statusChangeHistory.Clear();
-            }
-        }
-
         // 通知ベル（通知マーク）変更履歴（診断用）。
         // ベル自体は Root(Circuit=ブラウザ接続) ごとに独立管理のため「別ブラウザでは残っている」ことがある。
         // どのインスタンスが・何経由で 付けた/消した/抑止した かを記録し、意図しない再点灯の調査に使う。
@@ -450,14 +442,6 @@ namespace TerminalHub.Models
         public int HookEventLogCount
         {
             get { lock (_hookEventLogLock) { return _hookEventLog.Count; } }
-        }
-
-        public void ClearHookEventLog()
-        {
-            lock (_hookEventLogLock)
-            {
-                _hookEventLog.Clear();
-            }
         }
 
         public string GetDisplayName()

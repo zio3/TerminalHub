@@ -1716,16 +1716,6 @@
     }
 
 
-    private async Task UpdateSessionMemo(Guid sessionId, string memo)
-    {
-        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (session != null)
-        {
-            session.Memo = memo;
-            // ローカルストレージを更新
-            await SaveSessionToStorageAsync(session);
-        }
-    }
 
     private async Task RemoveSession(Guid sessionId)
     {
