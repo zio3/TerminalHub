@@ -16,14 +16,18 @@ namespace TerminalHub.Services;
 ///                 (<see cref="AppDataPaths.GetMcpConfigFilePath"/>) に置き、パスだけをコマンドラインに乗せる。
 ///                 生成はこのサービス (<see cref="EnsureClaudeMcpConfigFile"/>)、オプション付与は
 ///                 SessionManager/TerminalConstants 側。
-/// - Codex       → <c>-c mcp_servers.terminalhub.url=&lt;URL&gt;</c>。ファイルを用意する必要がないため
-///                 このサービスは関与せず、URL 生成は SessionManager、オプション付与は
-///                 TerminalConstants.BuildCodexArgs が行う（URL は <see cref="BuildMcpUrl"/> で組む）。
+/// - Codex       → <c>-c mcp_servers.terminalhub.url=&lt;URL&gt;</c>。ファイルを用意する必要がないので
+///                 このサービスは <see cref="BuildMcpUrl"/> で URL を組むだけ。呼び出しは SessionManager、
+///                 オプション付与は TerminalConstants.BuildCodexArgs が行う。
 ///
-/// どちらも起動オプションなので、OFF にすれば次回起動から即座に繋がらなくなる（残骸なし）。
-/// ただし旧バージョンが <c>&lt;folder&gt;/.codex/config.toml</c> へ書いた terminalhub エントリは残る。
-/// Codex はプロジェクト階層の config.toml も読むため（信頼済みプロジェクトのみ）、不要なら利用者が消す。
-/// 起動オプション(-c)は config.toml より優先されるので、ON の間は上書きされて無害。
+/// どちらも起動オプションなので、この機能は新しいプロジェクト設定を残さない（OFF に戻せば次の起動から繋がらない）。
+///
+/// ただし旧バージョン（〜v1.0.70）は設定ファイルへ書き込む方式だったため、その残骸は残る
+/// （Claude は <c>&lt;folder&gt;/.mcp.json</c>、Codex は <c>&lt;folder&gt;/.codex/config.toml</c>）。
+/// TerminalHub からは消さないので、不要なら利用者が消す。どちらも当時のポートを指しているため、
+/// <b>OFF にしている場合は残骸経由で古いポートへ繋ぎに行くことがある</b>。ON の間は起動オプションが
+/// 優先される（Codex: Session flags > User config / Claude: --mcp-config > .mcp.json）ので無害。
+/// 詳細は docs/mcp-session-messaging.md を参照。
 /// </summary>
 public interface IMcpConfigService
 {
