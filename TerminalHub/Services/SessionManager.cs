@@ -23,7 +23,6 @@ namespace TerminalHub.Services
         /// セッションのGit情報を非同期で取得する
         /// </summary>
         Task PopulateGitInfoForSessionAsync(Guid sessionId);
-        Task<bool> RemoveSessionAsync(Guid sessionId);
         Task<ConPtySession?> GetSessionAsync(Guid sessionId);
 
         /// <summary>
@@ -388,64 +387,6 @@ namespace TerminalHub.Services
                 
                 throw new InvalidOperationException(errorMessage, ex);
             }
-        }
-
-        public Task<bool> RemoveSessionAsync(Guid sessionId)
-        {
-            ConPtySession? sessionToDispose = null;
-            ConPtySession? sessionInfoConPtyToDispose = null;
-            SemaphoreSlim? initLockToDispose = null;
-            bool removed = false;
-
-            lock (_lockObject)
-            {
-                if (_sessions.TryRemove(sessionId, out var session))
-                {
-                    sessionToDispose = session;
-                    removed = true;
-                }
-
-                // SessionInfoを削除（ConPtySessionも破棄）
-                if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
-                {
-                    // ConPtySessionを破棄（二重Dispose防止）
-                    if (sessionInfo.ConPtySession != null &&
-                        !ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
-                    {
-                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
-                    }
-                    sessionInfo.ConPtySession = null;
-                    removed = true;
-                }
-
-                // 初期化ロックを削除
-                if (_initializationLocks.TryRemove(sessionId, out var initLock))
-                {
-                    initLockToDispose = initLock;
-                }
-
-                // アクティブセッションの更新
-                if (removed && _activeSessionId == sessionId)
-                {
-                    _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
-                }
-            }
-
-            // ロック外でDispose（デッドロック防止）
-            sessionToDispose?.Dispose();
-            sessionInfoConPtyToDispose?.Dispose();
-            initLockToDispose?.Dispose();
-
-            if (removed)
-            {
-                // 生ストリームキャプチャのライターも閉じる（ハンドルリーク防止）
-                _rawStreamCapture?.CloseSession(sessionId);
-                // --settings 用 hook 設定ファイルの後始末（残っても実害はないが溜めない）
-                _claudeHookService?.DeleteHookConfigFile(sessionId);
-                NotifySessionsChanged();
-            }
-
-            return Task.FromResult(removed);
         }
 
         public async Task<ConPtySession?> GetSessionAsync(Guid sessionId)
@@ -888,7 +829,7 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// セッション単位の初期化ロックを取得する。
-        /// 削除系メソッド（RemoveSessionAsync/ArchiveSession/DeleteSession）は _initializationLocks から
+        /// 削除系メソッド（ArchiveSession/DeleteSession）は _initializationLocks から
         /// TryRemove したセマフォをロック外で Dispose するため、取得がそれと競合すると
         /// ObjectDisposedException になる。その場合は「セッションは削除中」とみなし false を返す。
         /// </summary>
@@ -1235,6 +1176,8 @@ namespace TerminalHub.Services
 
             if (shouldNotify)
             {
+                // 生ストリームキャプチャのライターも閉じる（ConPtySession破棄後は書き込みが来ないため）
+                _rawStreamCapture?.CloseSession(sessionId);
                 NotifySessionsChanged();
             }
         }
@@ -1332,6 +1275,8 @@ namespace TerminalHub.Services
 
             if (deleted)
             {
+                // 生ストリームキャプチャのライターも閉じる（ハンドルリーク防止）
+                _rawStreamCapture?.CloseSession(sessionId);
                 // --settings 用 hook 設定ファイルの後始末（残っても実害はないが溜めない）
                 _claudeHookService?.DeleteHookConfigFile(sessionId);
                 _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
