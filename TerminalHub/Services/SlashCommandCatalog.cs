@@ -3,11 +3,6 @@ using TerminalHub.Models;
 namespace TerminalHub.Services;
 
 /// <summary>
-/// スラッシュコマンド1件（補完候補）。名前は先頭の "/" を含む。
-/// </summary>
-public record SlashCommandItem(string Name, string? Description);
-
-/// <summary>
 /// 組み込みスラッシュコマンドの暫定辞書。
 ///
 /// v1 は「組み込みコマンドのみ」対応。各CLIに標準で用意されているコマンドを
@@ -32,6 +27,7 @@ public static class SlashCommandCatalog
         new("/memory", "Edit memory files"),
         new("/clear", "Start a new conversation with empty context"),
         new("/resume", "Resume a previous conversation"),
+        new("/sessions", "List active sessions"),
         new("/branch", "Create a branching conversation fork"),
         new("/fork", "Spawn a background subagent on a directive"),
         new("/cd", "Move the session to a new working directory"),
@@ -41,46 +37,84 @@ public static class SlashCommandCatalog
         // --- モデル/設定 ---
         new("/model", "Switch the AI model"),
         new("/effort", "Set the reasoning effort level"),
+        new("/fast", "Toggle fast mode"),
         new("/config", "Open settings or set configuration"),
         new("/permissions", "Manage tool permission rules"),
+        new("/fewer-permission-prompts", "Reduce permission prompts"),
         new("/mcp", "Manage MCP server connections"),
         new("/hooks", "View hook configurations"),
         new("/keybindings", "Open the keyboard shortcuts file"),
+        new("/theme", "Switch between light and dark theme"),
+        new("/tui", "Set the terminal UI renderer (default | fullscreen)"),
+        new("/color", "Set the prompt bar color"),
+        new("/statusline", "Configure the status line UI"),
+        new("/advisor", "Enable or disable the advisor tool"),
+        new("/voices", "Configure voice settings"),
         // --- コンテキスト/履歴 ---
         new("/context", "Visualize context usage"),
         new("/compact", "Summarize the conversation to free context"),
         new("/rewind", "Rewind to a previous point"),
         new("/export", "Export the conversation as text"),
         new("/copy", "Copy the last response to the clipboard"),
+        new("/recap", "Show a recap of recent session activity"),
+        new("/prompt", "View or edit the current prompt"),
+        new("/btw", "Ask a side question outside the conversation history"),
+        new("/goal", "Set or clear a goal for the session"),
         // --- 診断/ヘルプ/アカウント ---
         new("/doctor", "Run a setup checkup and diagnostics"),
         new("/debug", "Enable debug logging"),
+        new("/heapdump", "Write a heap snapshot for memory diagnostics"),
         new("/status", "Show version, model, and account info"),
         new("/usage", "View usage and costs"),
+        new("/cost", "View usage and costs (alias of /usage)"),
+        new("/insights", "Generate a session analytics report"),
         new("/feedback", "Report a bug or share the conversation"),
         new("/release-notes", "View the changelog"),
+        new("/update", "Update Claude Code"),
+        new("/tips", "Show usage tips"),
         new("/skills", "List available skills"),
+        new("/reload-skills", "Reload skill definitions"),
         new("/plugin", "Manage plugins"),
         new("/help", "Show help and available commands"),
         new("/login", "Sign in to your account"),
         new("/logout", "Sign out"),
+        new("/passes", "Share a free week with friends"),
+        // --- 連携/リモート ---
+        new("/remote-control", "Control this session from your phone or claude.ai/code"),
+        new("/rc", "Control this session remotely (alias of /remote-control)"),
+        new("/desktop", "Continue this session in the Desktop app"),
+        new("/mobile", "Show a QR code for the mobile app"),
+        new("/ide", "Manage IDE integrations"),
+        new("/chrome", "Configure Claude in Chrome"),
+        new("/slack", "Manage the Slack integration"),
+        new("/install-github-app", "Install the Claude GitHub app"),
+        new("/install-slack-app", "Install the Claude Slack app"),
+        new("/twilio", "Configure phone/SMS integration"),
+        new("/sync", "Sync files with remote storage"),
         // --- バンドルスキル/拡張コマンド ---
         new("/code-review", "Review the diff for bugs and cleanups"),
         new("/simplify", "Review changed code for cleanup opportunities"),
         new("/security-review", "Check the diff for vulnerabilities"),
         new("/review", "Fast single-pass PR review"),
+        new("/quick-check", "Run a quick sanity check"),
+        new("/verify", "Verify code changes end-to-end"),
         new("/plan", "Enter plan mode for large changes"),
         new("/batch", "Orchestrate large-scale parallel changes"),
         new("/loop", "Run a prompt repeatedly on a schedule"),
         new("/schedule", "Create or manage scheduled routines"),
+        new("/autofix-pr", "Auto-fix CI failures in a cloud session"),
         new("/diff", "View uncommitted changes interactively"),
         new("/run", "Launch and drive your project's app"),
+        new("/search", "Search code in the repository"),
         new("/deep-research", "Fan out web searches and synthesize a report"),
+        new("/dataviz", "Design charts, graphs, and dashboards"),
+        new("/claude-api", "Load Claude API reference docs"),
+        new("/run-skill-generator", "Create or improve run-<unit> skills"),
+        new("/team-onboarding", "Create an onboarding guide for teammates"),
+        new("/agents", "Manage subagents"),
         new("/tasks", "List background subagent tasks"),
         new("/background", "Detach the session as a background agent"),
         new("/focus", "Toggle focus view"),
-        new("/ide", "Manage IDE integrations"),
-        new("/chrome", "Configure Claude in Chrome"),
     };
 
     // Codex CLI の組み込みコマンド。
@@ -169,20 +203,4 @@ public static class SlashCommandCatalog
         // TODO: Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
         _ => Empty,
     };
-
-    /// <summary>
-    /// 「名前（"/" 無し）→説明」の辞書。動的取得した名前一覧に説明を上書きする用途
-    /// （<see cref="SlashCommandProvider"/>）。値は null になり得る（説明未設定の項目）。
-    /// 参照側は TryGetValue で「未登録」と「値 null」を同じ扱い（説明なし）にする。
-    /// </summary>
-    public static IReadOnlyDictionary<string, string?> BuildDescriptionMap(TerminalType type)
-    {
-        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in ForTerminalType(type))
-        {
-            var key = item.Name.StartsWith("/") ? item.Name.Substring(1) : item.Name;
-            map[key] = item.Description;
-        }
-        return map;
-    }
 }
