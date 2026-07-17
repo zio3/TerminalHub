@@ -80,6 +80,7 @@ public static class SlashCommandCatalog
         new("/passes", "Share a free week with friends"),
         // --- 連携/リモート ---
         new("/remote-control", "Control this session from your phone or claude.ai/code"),
+        new("/rc", "Control this session remotely (alias of /remote-control)"),
         new("/desktop", "Continue this session in the Desktop app"),
         new("/mobile", "Show a QR code for the mobile app"),
         new("/ide", "Manage IDE integrations"),
