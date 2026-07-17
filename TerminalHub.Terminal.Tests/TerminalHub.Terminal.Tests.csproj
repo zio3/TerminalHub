@@ -25,6 +25,11 @@
     <Compile Include="..\TerminalHub\Services\CodexHookService.cs" Link="CodexHookService.cs" />
     <Compile Include="..\TerminalHub\Services\ConPtyWriteChunker.cs" Link="ConPtyWriteChunker.cs" />
     <Compile Include="..\TerminalHub\Services\SlashCommandMerge.cs" Link="SlashCommandMerge.cs" />
+    <!-- CLI 出力解析器（UI 非依存の純ロジック）。フィクスチャ駆動テスト用にリンク -->
+    <Compile Include="..\TerminalHub\Helpers\AnsiHelper.cs" Link="AnsiHelper.cs" />
+    <Compile Include="..\TerminalHub\Analyzers\IOutputAnalyzer.cs" Link="IOutputAnalyzer.cs" />
+    <Compile Include="..\TerminalHub\Analyzers\ClaudeCodeAnalyzer.cs" Link="ClaudeCodeAnalyzer.cs" />
+    <Compile Include="..\TerminalHub\Analyzers\CodexCliAnalyzer.cs" Link="CodexCliAnalyzer.cs" />
   </ItemGroup>
 
   <!-- Fixtures をテスト出力にコピー（実 TUI キャプチャの置き場） -->
