@@ -330,10 +330,10 @@ static async Task<int> RunNotifyModeAsync(string[] args)
 
     if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(sessionIdStr))
     {
-        // "PermissionRequest" は過去の CLI 互換のためヘルプに残置しているのみ。
-        // 実際に HookNotification.GetEventType が受理するのは
-        // Stop / UserPromptSubmit / Notification の 3 種だけで、
-        // PermissionRequest を渡しても null 扱いになる。
+        // この --event 経路は現行の hook 定義からは使われない（Claude は type:"http" で直接 POST、
+        // Codex は --source codex で上のブリッジ分岐へ入る）。旧バージョンが settings.local.json に
+        // 書いた type:"command" hook の残骸だけがここへ到達し得るため互換用に残している。
+        // イベント名は HookNotification.GetEventType が受理するもの（9種）すべて渡せる。
         Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|UserPromptSubmit|PermissionRequest> --session <sessionId> [--port <port>]");
         return 1;
     }

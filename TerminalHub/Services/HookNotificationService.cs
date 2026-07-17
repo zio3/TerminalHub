@@ -233,10 +233,6 @@ public class HookNotificationService : IHookNotificationService
     }
 
     /// <summary>
-    /// hook イベント名（notification.Event）をそのまま eventType として、セッションキーで Webhook を送る。
-    /// start/complete へのマッピングをせず「本来のイベント」を流すための共通処理。
-    /// </summary>
-    /// <summary>
     /// Webhook を投げっぱなし(fire-and-forget)で送信する。外部エンドポイントの応答遅延
     /// （例: Azure Functions のコールドスタートで 10 秒超）で hook 処理や UI 通知
     /// (OnHookNotification) がブロックされないよう、あえて await しない。HTTP 応答(204)を
@@ -249,6 +245,10 @@ public class HookNotificationService : IHookNotificationService
         _ = _appSettingsService.SendWebhookAsync(payload);
     }
 
+    /// <summary>
+    /// hook イベント名（notification.Event）をそのまま eventType として、セッションキーで Webhook を送る。
+    /// start/complete へのマッピングをせず「本来のイベント」を流すための共通処理。
+    /// </summary>
     private Task SendSessionHookWebhookAsync(SessionInfo session, HookNotification notification)
     {
         // 投げっぱなし。呼び出し元は従来どおり await できるよう即完了 Task を返す。
@@ -302,7 +302,7 @@ public class HookNotificationService : IHookNotificationService
             "SubagentStart イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, session.RunningSubagentCount);
 
-        await SendSubagentWebhookAsync(session, notification, null);
+        await SendSubagentWebhookAsync(session, notification);
     }
 
     /// <summary>
@@ -339,7 +339,7 @@ public class HookNotificationService : IHookNotificationService
             "SubagentStop イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, Removed={Removed}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, removed, session.RunningSubagentCount);
 
-        await SendSubagentWebhookAsync(session, notification, null);
+        await SendSubagentWebhookAsync(session, notification);
     }
 
     /// <summary>
@@ -347,8 +347,7 @@ public class HookNotificationService : IHookNotificationService
     /// 受信側（LED 等）が各サブエージェントを個別のキーとして扱えるようにする。
     /// eventType は本来の hook イベント名（notification.Event）をそのまま送る。
     /// </summary>
-    private Task SendSubagentWebhookAsync(
-        SessionInfo session, HookNotification notification, int? elapsedSeconds)
+    private Task SendSubagentWebhookAsync(SessionInfo session, HookNotification notification)
     {
         // agent_id が無いと個別キーにできないため送らない
         if (string.IsNullOrEmpty(notification.AgentId))
@@ -367,7 +366,7 @@ public class HookNotificationService : IHookNotificationService
             SessionId = session.SessionId,        // 親セッションの GUID（生）
             SessionName = name,
             TerminalType = session.TerminalType.ToString(),
-            ElapsedSeconds = elapsedSeconds,
+            ElapsedSeconds = null,                // サブエージェントの経過時間は追跡していない
             FolderPath = session.FolderPath,
             Tool = SourceToolName(session),
             AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
