@@ -7,7 +7,6 @@ public class AppSettings
 {
     public NotificationSettings Notifications { get; set; } = new();
     public WebhookSettings Webhook { get; set; } = new();
-    public ClaudeHookSettings ClaudeHook { get; set; } = new();
     public SpecialSettings Special { get; set; } = new();
     public SessionDisplaySettings Sessions { get; set; } = new();
     public DevToolsSettings DevTools { get; set; } = new();
@@ -118,15 +117,6 @@ public class WebhookSettings
     public bool Enabled { get; set; }
     public string Url { get; set; } = "";
     public Dictionary<string, string>? Headers { get; set; }
-}
-
-/// <summary>
-/// Claude Code Hook設定
-/// 個別イベントのトグルは実装していない (Stop / UserPromptSubmit / Notification は常に一括で有効化/削除する)。
-/// </summary>
-public class ClaudeHookSettings
-{
-    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

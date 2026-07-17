@@ -352,7 +352,8 @@ namespace TerminalHub.Services
                 await PopulateGitInfoAsync(sessionInfo);
             }
 
-            // Note: ClaudeCode の hook 設定は GetSessionAsync で遅延セットアップされる
+                // Note: hook はここではセットアップしない。GetSessionAsync の遅延初期化で
+                // BuildTerminalCommand が起動引数（Claude=--settings / Codex=-c hooks.*）として解決する。
 
                 // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
