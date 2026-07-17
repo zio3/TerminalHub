@@ -45,6 +45,7 @@ public static class SlashCommandCatalog
         new("/hooks", "View hook configurations"),
         new("/keybindings", "Open the keyboard shortcuts file"),
         new("/theme", "Switch between light and dark theme"),
+        new("/tui", "Set the terminal UI renderer (default | fullscreen)"),
         new("/color", "Set the prompt bar color"),
         new("/statusline", "Configure the status line UI"),
         new("/advisor", "Enable or disable the advisor tool"),
