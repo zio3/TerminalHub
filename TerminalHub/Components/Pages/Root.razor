@@ -1760,9 +1760,6 @@
             }
         }
 
-        // このCircuitの購読を解除（削除時と同様、破棄済みConPtySessionへの参照残留を防ぐ）
-        ConPtyConnection.UnsubscribeFromSession(sessionId);
-
         // SessionManagerでアーカイブ処理（ConPtySessionの破棄含む）
         SessionManager.ArchiveSession(sessionId);
         if (_storageService != null)
