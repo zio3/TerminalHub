@@ -21,11 +21,8 @@ public class MqttService : IHostedService, IDisposable
     private string? _currentTopicGuid;
     private volatile bool _intentionalDisconnect;
 
-    /// <summary>現在有効なワンタイムnonce</summary>
-    private string? _currentNonce;
-    private DateTime _nonceCreatedAt;
-    private readonly object _nonceLock = new();
-    private static readonly TimeSpan NonceExpiry = TimeSpan.FromSeconds(30);
+    /// <summary>ワンタイムnonce（リプレイ防止）ストア。時刻依存の期限判定は NonceStore に集約。</summary>
+    private readonly NonceStore _nonceStore = new();
 
     /// <summary>handshake時に生成されるセッション鍵（AES-256用、32byte）</summary>
     private byte[]? _sessionKey;
@@ -338,7 +335,7 @@ public class MqttService : IHostedService, IDisposable
             string encryptedSessionKey;
             try
             {
-                encryptedSessionKey = RsaEncrypt(_sessionKey, publicKeyBase64);
+                encryptedSessionKey = MqttCrypto.RsaEncrypt(_sessionKey, publicKeyBase64);
             }
             catch (Exception ex)
             {
@@ -357,7 +354,7 @@ public class MqttService : IHostedService, IDisposable
         // nonce発行は認証不要（暗号化リクエストの前提ステップ）
         if (string.Equals(envelope.Action, "nonce", StringComparison.OrdinalIgnoreCase))
         {
-            var nonce = GenerateNonce();
+            var nonce = _nonceStore.Generate(DateTime.UtcNow);
             await PublishResponseAsync(new { action = "nonce", nonce });
             _logger.LogInformation("[MQTT] nonce発行");
             return;
@@ -393,7 +390,7 @@ public class MqttService : IHostedService, IDisposable
         string plainJson;
         try
         {
-            plainJson = AesGcmDecrypt(encryptedBase64, _sessionKey);
+            plainJson = MqttCrypto.AesGcmDecrypt(encryptedBase64, _sessionKey);
         }
         catch (Exception ex)
         {
@@ -430,7 +427,7 @@ public class MqttService : IHostedService, IDisposable
         }
 
         // nonceチェック（リプレイ攻撃防止）
-        if (!ValidateAndConsumeNonce(request.Nonce))
+        if (!_nonceStore.ValidateAndConsume(request.Nonce, DateTime.UtcNow))
         {
             _logger.LogWarning("[MQTT] nonce検証失敗: action={Action}", request.Action);
             await PublishEncryptedResponseAsync(new { action = "error", message = "invalid or expired nonce" }, _sessionKey);
@@ -482,110 +479,6 @@ public class MqttService : IHostedService, IDisposable
         var match = string.Equals(settings.PasswordHash, requestPasswordHash, StringComparison.OrdinalIgnoreCase);
         _logger.LogDebug("[MQTT] パスワード検証: 一致={Match}", match);
         return match;
-    }
-
-    #endregion
-
-    #region Nonce管理
-
-    private string GenerateNonce()
-    {
-        var nonce = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        lock (_nonceLock)
-        {
-            _currentNonce = nonce;
-            _nonceCreatedAt = DateTime.UtcNow;
-        }
-        return nonce;
-    }
-
-    private bool ValidateAndConsumeNonce(string? nonce)
-    {
-        if (string.IsNullOrEmpty(nonce))
-            return false;
-
-        lock (_nonceLock)
-        {
-            if (_currentNonce == null || !string.Equals(_currentNonce, nonce, StringComparison.Ordinal))
-                return false;
-
-            if (DateTime.UtcNow - _nonceCreatedAt > NonceExpiry)
-            {
-                _currentNonce = null;
-                return false;
-            }
-
-            _currentNonce = null;
-            return true;
-        }
-    }
-
-    #endregion
-
-    #region RSA暗号化
-
-    /// <summary>
-    /// RSA-OAEP-SHA256でデータを暗号化し、Base64文字列を返す。
-    /// PKCS#1（RSA PUBLIC KEY）とPKCS#8/X.509（PUBLIC KEY）の両形式に対応。
-    /// </summary>
-    private static string RsaEncrypt(byte[] data, string publicKeyBase64)
-    {
-        using var rsa = RSA.Create();
-        var keyBytes = Convert.FromBase64String(publicKeyBase64);
-        try
-        {
-            rsa.ImportRSAPublicKey(keyBytes, out _); // PKCS#1形式
-        }
-        catch
-        {
-            rsa.ImportSubjectPublicKeyInfo(keyBytes, out _); // PKCS#8/X.509形式
-        }
-        var encrypted = rsa.Encrypt(data, RSAEncryptionPadding.OaepSHA256);
-        return Convert.ToBase64String(encrypted);
-    }
-
-    #endregion
-
-    #region AES-GCM暗号化
-
-    /// <summary>
-    /// AES-256-GCMで暗号化し、Base64文字列を返す。
-    /// フォーマット: [12byte IV][16byte Tag][暗号文]
-    /// </summary>
-    public static string AesGcmEncrypt(string plaintext, byte[] keyBytes)
-    {
-        var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
-        var iv = RandomNumberGenerator.GetBytes(12);
-        var tag = new byte[16];
-        var ciphertext = new byte[plaintextBytes.Length];
-
-        using var aes = new AesGcm(keyBytes, tag.Length);
-        aes.Encrypt(iv, plaintextBytes, ciphertext, tag);
-
-        var result = new byte[iv.Length + tag.Length + ciphertext.Length];
-        iv.CopyTo(result, 0);
-        tag.CopyTo(result, iv.Length);
-        ciphertext.CopyTo(result, iv.Length + tag.Length);
-
-        return Convert.ToBase64String(result);
-    }
-
-    /// <summary>
-    /// AES-256-GCMで復号する。
-    /// </summary>
-    public static string AesGcmDecrypt(string encryptedBase64, byte[] keyBytes)
-    {
-        var data = Convert.FromBase64String(encryptedBase64);
-
-        var iv = data[..12];
-        var tag = data[12..28];
-        var ciphertext = data[28..];
-        var plaintext = new byte[ciphertext.Length];
-
-        using var aes = new AesGcm(keyBytes, tag.Length);
-        aes.Decrypt(iv, ciphertext, tag, plaintext);
-
-        return Encoding.UTF8.GetString(plaintext);
     }
 
     #endregion
@@ -669,7 +562,7 @@ public class MqttService : IHostedService, IDisposable
 
         var responseTopic = $"{MqttConstants.TopicPrefix}/{_currentTopicGuid}/response";
         var json = JsonSerializer.Serialize(payload, JsonOptions);
-        var encrypted = AesGcmEncrypt(json, sessionKey);
+        var encrypted = MqttCrypto.AesGcmEncrypt(json, sessionKey);
         var envelopeJson = JsonSerializer.Serialize(new { encrypted }, JsonOptions);
 
         var message = new MqttApplicationMessageBuilder()

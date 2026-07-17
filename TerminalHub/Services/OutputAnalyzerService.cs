@@ -75,8 +75,10 @@ namespace TerminalHub.Services
                         // プロンプトの待ちを誤クリアする（→ send_to_session が誤送信）レースを避けるため。
                         var withinHookCooldown =
                             IsHookDriven(sessionInfo.TerminalType) &&
-                            sessionInfo.LastWaitingHookSetTime.HasValue &&
-                            (DateTime.Now - sessionInfo.LastWaitingHookSetTime.Value).TotalSeconds < WaitingHookCooldownSeconds;
+                            ProcessingCooldownPolicy.IsWithinCooldown(
+                                sessionInfo.LastWaitingHookSetTime,
+                                DateTime.Now,
+                                ProcessingCooldownPolicy.WaitingHookCooldownSeconds);
 
                         if (!withinHookCooldown)
                         {
@@ -102,30 +104,23 @@ namespace TerminalHub.Services
             }
         }
 
-        // Stop イベント後、この秒数間は OutputAnalyzer からのステータス更新をスキップ
-        private const double StopEventCooldownSeconds = 3.0;
-
-        // hook が入力待ちを立てた後、この秒数間は OutputAnalyzer の「処理中検出」による待ち解除をスキップ。
-        // プロンプト表示直前の古いスピナー出力チャンクが遅れて解析されて誤クリアするレースを避ける。
-        // 承認後の作業中に waiting が残る over-stay の解除は、ユーザー操作を挟む＝この窓より後になるので影響しない。
-        private const double WaitingHookCooldownSeconds = 1.5;
-
         private void UpdateSessionProcessingStatus(SessionInfo session, string? statusText, Guid activeSessionId, Action<Guid, string?>? updateStatus, string? matchedText = null, bool skipNotification = false)
         {
                 // ClaudeCode の場合、Stop イベント直後は OutputAnalyzer からの更新をスキップ
-                // 遅延した出力によるステータス再設定を防ぐ
-                if (IsHookDriven(session.TerminalType) && session.LastStopEventTime.HasValue)
+                // 遅延した出力によるステータス再設定を防ぐ（境界判定は ProcessingCooldownPolicy）
+                if (IsHookDriven(session.TerminalType) &&
+                    ProcessingCooldownPolicy.IsWithinCooldown(
+                        session.LastStopEventTime,
+                        DateTime.Now,
+                        ProcessingCooldownPolicy.StopEventCooldownSeconds))
                 {
-                    var timeSinceStop = (DateTime.Now - session.LastStopEventTime.Value).TotalSeconds;
-                    if (timeSinceStop < StopEventCooldownSeconds)
-                    {
-                        _logger.LogDebug(
-                            "Stop後 {Seconds:F1}秒のためステータス更新をスキップ: {SessionId}, statusText={StatusText}",
-                            timeSinceStop, session.SessionId, statusText ?? "(null)");
-                        // UIコールバックは呼ぶ（現在のステータスを表示更新）
-                        updateStatus?.Invoke(session.SessionId, session.ProcessingStatus);
-                        return;
-                    }
+                    var timeSinceStop = (DateTime.Now - session.LastStopEventTime!.Value).TotalSeconds;
+                    _logger.LogDebug(
+                        "Stop後 {Seconds:F1}秒のためステータス更新をスキップ: {SessionId}, statusText={StatusText}",
+                        timeSinceStop, session.SessionId, statusText ?? "(null)");
+                    // UIコールバックは呼ぶ（現在のステータスを表示更新）
+                    updateStatus?.Invoke(session.SessionId, session.ProcessingStatus);
+                    return;
                 }
 
                 // ステータス変更の診断ログと履歴記録（前回と異なる場合のみ）
