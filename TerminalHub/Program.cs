@@ -22,17 +22,20 @@ var logsFolder = AppDataPaths.GetLogsFolder(
 var logPath = Path.Combine(logsFolder, "terminalhub-.log");
 builder.Host.UseSerilog((context, configuration) =>
 {
+    // シンクは Async でラップする（フリーズ調査の実験を兼ねた対策）。
+    // 同期シンクだと、コンソールの QuickEdit（画面上のテキスト選択）やディスク停滞で
+    // ログを書く全スレッドが巻き添えブロックし、プロセス全体フリーズの形になる。
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Console()
-        .WriteTo.File(
+        .WriteTo.Async(a => a.Console())
+        .WriteTo.Async(a => a.File(
             logPath,
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 7,
             fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
             rollOnFileSizeLimit: true,
-            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}");
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
 });
 
 // Add services to the container.
@@ -97,6 +100,9 @@ builder.Services.AddScoped<IStorageServiceFactory, StorageServiceFactory>();
 // メモ編集履歴の自動スナップショットサービス (10分毎)
 builder.Services.AddSingleton<MemoSnapshotService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MemoSnapshotService>());
+
+// プロセス全体フリーズの診断プローブ（実験コード。原因特定後に撤去予定）
+builder.Services.AddHostedService<FreezeProbeService>();
 
 // NotificationServiceを登録
 builder.Services.AddScoped<INotificationService, NotificationService>();
