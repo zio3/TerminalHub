@@ -3,11 +3,6 @@ using TerminalHub.Models;
 namespace TerminalHub.Services;
 
 /// <summary>
-/// スラッシュコマンド1件（補完候補）。名前は先頭の "/" を含む。
-/// </summary>
-public record SlashCommandItem(string Name, string? Description);
-
-/// <summary>
 /// 組み込みスラッシュコマンドの暫定辞書。
 ///
 /// v1 は「組み込みコマンドのみ」対応。各CLIに標準で用意されているコマンドを
@@ -169,20 +164,4 @@ public static class SlashCommandCatalog
         // TODO: Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
         _ => Empty,
     };
-
-    /// <summary>
-    /// 「名前（"/" 無し）→説明」の辞書。動的取得した名前一覧に説明を上書きする用途
-    /// （<see cref="SlashCommandProvider"/>）。値は null になり得る（説明未設定の項目）。
-    /// 参照側は TryGetValue で「未登録」と「値 null」を同じ扱い（説明なし）にする。
-    /// </summary>
-    public static IReadOnlyDictionary<string, string?> BuildDescriptionMap(TerminalType type)
-    {
-        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in ForTerminalType(type))
-        {
-            var key = item.Name.StartsWith("/") ? item.Name.Substring(1) : item.Name;
-            map[key] = item.Description;
-        }
-        return map;
-    }
 }

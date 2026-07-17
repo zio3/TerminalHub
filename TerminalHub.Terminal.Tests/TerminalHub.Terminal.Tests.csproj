@@ -24,6 +24,7 @@
     <Compile Include="..\TerminalHub\Models\CodexProcessOptionsSnapshot.cs" Link="CodexProcessOptionsSnapshot.cs" />
     <Compile Include="..\TerminalHub\Services\CodexHookService.cs" Link="CodexHookService.cs" />
     <Compile Include="..\TerminalHub\Services\ConPtyWriteChunker.cs" Link="ConPtyWriteChunker.cs" />
+    <Compile Include="..\TerminalHub\Services\SlashCommandMerge.cs" Link="SlashCommandMerge.cs" />
   </ItemGroup>
 
   <!-- Fixtures をテスト出力にコピー（実 TUI キャプチャの置き場） -->

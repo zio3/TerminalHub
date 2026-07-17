@@ -11,11 +11,15 @@ namespace TerminalHub.Services;
 /// Claude Code は列挙専用フラグを持たないが、headless モード
 /// （<c>claude -p ... --output-format stream-json --verbose</c>）の最初の system init 行に
 /// <c>slash_commands</c>（名前のみの配列）が入る。これは API リクエストの前に出力されるため、
-/// init を読んだ瞬間にプロセスを落とせばトークン消費なしで「インストール済みバージョンの
-/// 実際のコマンド一覧」を取得できる（組み込み＋バンドルスキル＋プラグイン＋自作コマンドを含む）。
+/// init を読んだ瞬間にプロセスを落とせばトークン消費なしで一覧を取得できる。
 ///
-/// 説明文は init には含まれないので、<see cref="SlashCommandCatalog"/> の手元辞書を
-/// 名前一致で上書きして補う（知らない名前は名前だけ表示）。
+/// ただし headless の init に載るのは「headless で使えるコマンド」だけで、
+/// 対話 TUI 専用の組み込み（/resume・/rewind・/memory 等）は含まれない（v2.1.212 で実測）。
+/// 補完が一番役立つのはまさにその対話専用コマンドなので、候補は
+/// 「動的リスト ∪ <see cref="SlashCommandCatalog"/> の静的辞書」の和集合にする。
+/// 動的リストはバンドルスキル・プラグイン・新顔（/recap 等）を、静的辞書は対話専用組み込みを担う。
+///
+/// 説明文は init には含まれないので、静的辞書の説明を名前一致で付与する（知らない名前は名前だけ表示）。
 ///
 /// 取得は重い（別プロセス起動 ~1秒）ので、プロセス全体で1回だけ実行してキャッシュする。
 /// 取得できるまで／失敗時は <see cref="SlashCommandCatalog"/> の静的辞書へフォールバックする。
@@ -112,26 +116,11 @@ public class SlashCommandProvider
     }
 
     /// <summary>
-    /// init 行に出る名前（"/" 無し）に、手元辞書の説明を名前一致で付与する。
-    /// 説明が無いものは名前だけ（Description=null）で並べる。表示名は先頭に "/" を付ける。
+    /// init 行に出る名前（"/" 無し）と静的辞書の和集合を作り、手元辞書の説明を名前一致で付与する。
+    /// 純粋ロジックは <see cref="SlashCommandMerge.Merge"/>（テスト対象）に委譲する。
     /// </summary>
     private static IReadOnlyList<SlashCommandItem> MergeWithDescriptions(TerminalType type, IReadOnlyList<string> names)
-    {
-        var descByName = SlashCommandCatalog.BuildDescriptionMap(type);
-        var items = new List<SlashCommandItem>(names.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raw in names)
-        {
-            var name = raw.Trim();
-            if (name.Length == 0) continue;
-            var display = name.StartsWith("/") ? name : "/" + name;
-            if (!seen.Add(display)) continue; // 重複除去
-            descByName.TryGetValue(name.TrimStart('/'), out var desc);
-            items.Add(new SlashCommandItem(display, desc));
-        }
-        items.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-        return items;
-    }
+        => SlashCommandMerge.Merge(names, SlashCommandCatalog.ForTerminalType(type));
 
     /// <summary>
     /// headless の init 行から slash_commands（名前配列）を取得する。init を読み次第プロセスを落とす。
