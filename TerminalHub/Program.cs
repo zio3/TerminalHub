@@ -331,11 +331,13 @@ static async Task<int> RunNotifyModeAsync(string[] args)
     if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(sessionIdStr))
     {
         // この --event 経路は現行の hook 定義からは使われない（Claude は type:"http" で直接 POST、
-        // Codex は --source codex で上のブリッジ分岐へ入る）。残している理由は2つ:
-        // (1) 旧バージョンが settings.local.json に書いた type:"command" hook の残骸との互換
-        // (2) 最も要求の低い汎用アダプタとして: 「イベント時に固定引数でコマンドを1本起動できる」
-        //     だけの CLI（将来の Antigravity 等の hook 対応）は、HTTP 直POST も stdin JSON も
-        //     不要なこの経路で繋げる。消す前にこの用途が不要になったか確認すること。
+        // Codex は --source codex で上のブリッジ分岐へ入る）。
+        // 残している理由は「最も要求の低い汎用アダプタ」であること:
+        // 「イベント時に固定引数でコマンドを1本起動できる」だけの CLI（将来の Antigravity 等の
+        // hook 対応）は、HTTP 直POST も stdin JSON も不要なこの経路で繋げる。
+        // 消す前にこの用途が不要になったか確認すること。
+        // （旧バージョンが settings.local.json に残した type:"command" hook の残骸からも到達し得るが、
+        //  それは互換保証ではない＝残骸のために維持しているわけではない。2026-07-17 判断）
         // イベント名は HookNotification.GetEventType が受理するもの（9種）すべて渡せる。
         Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|UserPromptSubmit|PermissionRequest> --session <sessionId> [--port <port>]");
         return 1;
