@@ -249,6 +249,19 @@
     // （スナップショットに含まれているか、リプレイキャプチャのテールとして後で書き込まれるため）
     private Guid? _restoringSessionId;
 
+    // セッション切替の直列化＋世代キャンセル。
+    // SelectSession は多数の await を跨いで activeSessionId/activeSession/activeTerminal/
+    // _skipConPtyResize/_restoringSessionId という共有フィールドを書き換える。高速に A→B と
+    // 切り替えると、A の処理が await 復帰後に再開して B の状態を踏み荒らし、別セッションの画面が
+    // 混ざる（表示崩れ系の主因の一つ）。
+    // - _switchLock: 切替本体を1本に直列化する（2つの SelectSession 本体が同時に共有フィールドや
+    //   ShowAndRestore を触らないようにする）。ロック順序は常に _switchLock → _terminalWriteLock の
+    //   一方向で、逆順で取る箇所は無いためデッドロックしない。
+    // - _selectCts: 新しい切替が来たら古い切替の CancellationToken をキャンセルし、古い側を各 await の
+    //   直後で早期 return させる（既存の _emulatorResyncCts と同じ作法）。
+    private readonly SemaphoreSlim _switchLock = new(1, 1);
+    private CancellationTokenSource? _selectCts;
+
     // HookNotificationServiceイベントハンドラー
     private EventHandler<HookNotificationEventArgs>? _hookNotificationHandler;
 
@@ -1298,99 +1311,129 @@
             return;
         }
 
-        // 選択枠を即座に更新（UIのレスポンス向上）
+        // この切替を最新として登録し、進行中の古い切替をキャンセルする（既存 _emulatorResyncCts と同じ作法）。
+        // 古い切替は各 await の直後の ct チェックで早期 return し、共有フィールドを踏み荒らさない。
+        _selectCts?.Cancel();
+        _selectCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _selectCts = cts;
+        var ct = cts.Token;
+
+        // 選択枠を即座に更新（UIのレスポンス向上）。ロック待ちで見た目が固まらないよう本体より先に反映する
         activeSessionId = sessionId;
         StateHasChanged();
-        await Task.Yield(); // UIスレッドを一旦開放しレンダリングを実行
 
-        // 既存のアクティブターミナルを破棄
-        if (activeTerminal != null)
-        {
-            try
-            {
-                await activeTerminal.DisposeAsync();
-            }
-            catch (Exception)
-            {
-                // Ignore terminal disposal errors
-            }
-            activeTerminal = null;
-        }
-
-        // すべてのターミナルを非表示にする（JavaScriptで直接制御）
-        await TerminalService.HideAllTerminalsAsync();
-
-        // セッションをアクティブに
-        await SessionManager.SetActiveSessionAsync(sessionId);
-
-
-        // ディレクトリが存在しないセッションは接続を試みない
-        var sessionInfo = SessionManager.GetSessionInfo(sessionId);
-        if (sessionInfo != null && !string.IsNullOrEmpty(sessionInfo.FolderPath) && !Directory.Exists(sessionInfo.FolderPath))
-        {
-            Logger.LogWarning("セッション {SessionId} のディレクトリが存在しません: {FolderPath}", sessionId, sessionInfo.FolderPath);
-            toast?.ShowError(string.Format(L["Common.DirectoryNotFoundFormat"], sessionInfo.FolderPath));
-            activeSessionId = null;
-            return;
-        }
-
-        // 再起動後の新しいセッションを確実に取得
+        // 切替本体は直列化する。古い切替がまだ本体を実行中でも、上の Cancel で早期 return して
+        // ロックを手放すため、ここで長く待たされることはない。ロック順序は常に
+        // _switchLock → _terminalWriteLock の一方向なのでデッドロックしない。
+        await _switchLock.WaitAsync();
         try
         {
-            activeSession = await SessionManager.GetSessionAsync(sessionId);
+            // ロック取得を待つ間に、さらに新しい切替が来ていたら自分は破棄する
+            // （activeSessionId は新しい側が既に保持しているので触らない）
+            if (ct.IsCancellationRequested) return;
+
+            await Task.Yield(); // UIスレッドを一旦開放しレンダリングを実行
+            if (ct.IsCancellationRequested) return;
+
+            // 既存のアクティブターミナルを破棄
+            if (activeTerminal != null)
+            {
+                try
+                {
+                    await activeTerminal.DisposeAsync();
+                }
+                catch (Exception)
+                {
+                    // Ignore terminal disposal errors
+                }
+                activeTerminal = null;
+            }
+            if (ct.IsCancellationRequested) return;
+
+            // すべてのターミナルを非表示にする（JavaScriptで直接制御）
+            await TerminalService.HideAllTerminalsAsync();
+            if (ct.IsCancellationRequested) return;
+
+            // セッションをアクティブに
+            await SessionManager.SetActiveSessionAsync(sessionId);
+            if (ct.IsCancellationRequested) return;
+
+            // ディレクトリが存在しないセッションは接続を試みない
+            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+            if (sessionInfo != null && !string.IsNullOrEmpty(sessionInfo.FolderPath) && !Directory.Exists(sessionInfo.FolderPath))
+            {
+                Logger.LogWarning("セッション {SessionId} のディレクトリが存在しません: {FolderPath}", sessionId, sessionInfo.FolderPath);
+                toast?.ShowError(string.Format(L["Common.DirectoryNotFoundFormat"], sessionInfo.FolderPath));
+                // アクティブ指標を戻すのは、まだ自分が保持している時だけ（後続の切替を踏まないため）
+                if (activeSessionId == sessionId) activeSessionId = null;
+                return;
+            }
+
+            // 再起動後の新しいセッションを確実に取得
+            try
+            {
+                activeSession = await SessionManager.GetSessionAsync(sessionId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "セッション {SessionId} の初期化に失敗", sessionId);
+                toast?.ShowError(string.Format(L["Root.Toast.SessionInitErrorFormat"], ex.Message));
+                activeSession = null;
+            }
+            if (ct.IsCancellationRequested) return;
+
+            // セッションが存在しない、または初期化に失敗した場合
+            if (activeSession == null)
+            {
+                if (activeSessionId == sessionId) activeSessionId = null;
+                return;
+            }
+
+            // 通知フラグをクリア（インスタンスごとの通知リストから削除）
+            var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+            if (_notificationPendingSessions.Remove(sessionId))
+            {
+                Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
+                RecordBellHistory(sessionId, "OFF", null, "SelectSession(セッション選択)");
+            }
+
+            // アクティブセッション変更を即座にUIに反映
+            StateHasChanged();
+
+            // アクティブセッションIDをローカルストレージに保存
+            await SaveActiveSessionIdToStorageAsync(sessionId);
+            if (ct.IsCancellationRequested) return;
+
+            await ShowAndRestoreTerminalAsync(sessionId, "SelectSession", ct);
+            if (ct.IsCancellationRequested) return;
+
+            // ConPtySessionをConPtyConnectionServiceに登録
+            // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
+            // 注意: LastConnectionTimeは上で既に設定済み（バッファ復元時）
+            var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
+            if (latestSessionInfo?.ConPtySession != null)
+            {
+                SafeSubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
+            }
+            else
+            {
+                // ConPty session not found - continue without subscription
+            }
+
+            // チェックされたスクリプトを復元
+            if (selectedSession != null)
+            {
+                checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
+                StateHasChanged(); // UIを更新
+            }
+
+            // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
         }
-        catch (Exception ex)
+        finally
         {
-            Logger.LogError(ex, "セッション {SessionId} の初期化に失敗", sessionId);
-            toast?.ShowError(string.Format(L["Root.Toast.SessionInitErrorFormat"], ex.Message));
-            activeSession = null;
+            _switchLock.Release();
         }
-
-        // セッションが存在しない、または初期化に失敗した場合
-        if (activeSession == null)
-        {
-            activeSessionId = null;
-            return;
-        }
-
-
-        // 通知フラグをクリア（インスタンスごとの通知リストから削除）
-        var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (_notificationPendingSessions.Remove(sessionId))
-        {
-            Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
-            RecordBellHistory(sessionId, "OFF", null, "SelectSession(セッション選択)");
-        }
-
-        // アクティブセッション変更を即座にUIに反映
-        StateHasChanged();
-
-        // アクティブセッションIDをローカルストレージに保存
-        await SaveActiveSessionIdToStorageAsync(sessionId);
-
-        await ShowAndRestoreTerminalAsync(sessionId, "SelectSession");
-
-        // ConPtySessionをConPtyConnectionServiceに登録
-        // RestartSessionAsync後の新しいConPtySessionを確実に取得するため、SessionManagerから最新情報を取得
-        // 注意: LastConnectionTimeは上で既に設定済み（バッファ復元時）
-        var latestSessionInfo = SessionManager.GetSessionInfo(sessionId);
-        if (latestSessionInfo?.ConPtySession != null)
-        {
-            SafeSubscribeToSession(latestSessionInfo.SessionId, latestSessionInfo.ConPtySession);
-        }
-        else
-        {
-            // ConPty session not found - continue without subscription
-        }
-
-        // チェックされたスクリプトを復元
-        if (selectedSession != null)
-        {
-            checkedScripts = new HashSet<string>(selectedSession.CheckedScripts);
-            StateHasChanged(); // UIを更新
-        }
-
-        // シェルパネルはタブ側で自己管理するため、セッション切り替え時の再作成は不要
     }
 
     // xterm を表示・初期化し、メモリ上の状態バッファから画面を復元する。
@@ -1400,8 +1443,14 @@
     // リプレイ前のサイズ同期がフィールドの activeSession に対して Resize を撃つため、
     // この前提が崩れると別セッションの ConPTY を黙ってリサイズしてしまう。
     // callerTag はログの経路識別用（どちらの呼び出し元から来たかを追えるようにする）。
-    private async Task ShowAndRestoreTerminalAsync(Guid sessionId, string callerTag)
+    // ct は切替キャンセル用。SelectSession 経由では _switchLock で直列化されているため、
+    // ここでキャンセル bail しても共有フラグ（_skipConPtyResize/_restoringSessionId）を
+    // 別の切替と同時に触ることはなく、finally での後始末は自分の分だけになる。
+    // RecreateTerminal 経由は単発操作なので既定（キャンセルなし）で呼ぶ。
+    private async Task ShowAndRestoreTerminalAsync(Guid sessionId, string callerTag, CancellationToken ct = default)
     {
+        if (ct.IsCancellationRequested) return;
+
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
 
         // 復元中はConPTYリサイズをスキップ
@@ -1430,6 +1479,10 @@
             {
                 await TerminalService.ResizeTerminalAsync(activeTerminal);
             }
+
+            // リプレイ書き込みに入る前に、より新しい切替へ置き換わっていないか確認する。
+            // ここで bail しても _switchLock 下なので finally の後始末は自分の分だけで安全。
+            if (ct.IsCancellationRequested) return;
 
             // メモリ上の状態バッファから復元
             if (selectedSession != null && activeTerminal != null)
@@ -1617,8 +1670,12 @@
                     await _terminalWriteLock.WaitAsync();
                     try
                     {
-                        // 復元開始前に届いたチャンクはスナップショットに含まれているため書き込まない
-                        if (_restoringSessionId != sessionId)
+                        // ロック取得を待つ間にセッションが切り替わっている可能性があるため、
+                        // ここで改めて検証する。isActive はロック取得前（上流）の判定なので陳腐化している。
+                        // activeSessionId == sessionId なら activeTerminal はこのセッション用の実体
+                        // （切替時に破棄・再作成するため）で、別セッションの xterm へ誤書き込みしない。
+                        // 併せて復元中（スナップショットに含まれるチャンク）も従来どおり除外する。
+                        if (activeSessionId == sessionId && _restoringSessionId != sessionId && activeTerminal != null)
                         {
                             await TerminalService.WriteToTerminalAsync(activeTerminal, data);
                         }
@@ -2101,6 +2158,12 @@
             await _terminalWriteLock.WaitAsync();
             try
             {
+                // ロック取得を待つ間にセッションが切り替わった可能性があるため再検証する
+                // （#3 と同じ理由。BeginTerminalBufferReplay は副作用があるので bail はその手前で）。
+                if (guid != activeSessionId || activeTerminal == null)
+                {
+                    return;
+                }
                 var snapshot = session.BeginTerminalBufferReplay();
                 string tail;
                 try
@@ -3117,6 +3180,12 @@
         _emulatorResyncCts?.Cancel();
         _emulatorResyncCts?.Dispose();
         _emulatorResyncCts = null;
+
+        // 進行中のセッション切替をキャンセル
+        _selectCts?.Cancel();
+        _selectCts?.Dispose();
+        _selectCts = null;
+        _switchLock.Dispose();
 
         // ConPtyConnectionServiceのイベントハンドラーを削除
         if (_dataReceivedHandler != null)
