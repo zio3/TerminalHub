@@ -1,4 +1,4 @@
-@namespace TerminalHub.Components.Shared.Dialogs
+﻿@namespace TerminalHub.Components.Shared.Dialogs
 @using TerminalHub.Services
 @using TerminalHub.Models
 @using Microsoft.Extensions.Configuration
@@ -103,14 +103,14 @@
                                 <i class="bi bi-flask me-1"></i>試験機能
                             </button>
                         </li>
-                        @* ローカルMCP タブ: MCP自動登録(AutoRegisterMcp)が有効なときだけ表示する *@
-                        @if (autoRegisterMcpEnabled)
+                        @* TerminalHub MCP タブ: 本機能(EnableLocalMcp)が有効なときだけ表示する *@
+                        @if (enableLocalMcp)
                         {
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link @(activeTab == "localMcp" ? "active" : "")"
                                         type="button"
                                         @onclick="@(() => activeTab = "localMcp")">
-                                    <i class="bi bi-plugin me-1"></i>ローカルMCP
+                                    <i class="bi bi-plugin me-1"></i>TerminalHub MCP
                                 </button>
                             </li>
                         }
@@ -433,20 +433,6 @@
                             <input type="url" class="form-control" @bind="webHookUrl" placeholder="https://example.com/webhook" />
                         </div>
                     }
-
-                    <hr />
-
-                    <h6 class="mb-3">@L["Settings.Notifications.ClaudeHook.Header"]</h6>
-                    <p class="text-muted small mb-3">
-                        @((MarkupString)L["Settings.Notifications.ClaudeHook.HelpHtml"].Value)
-                    </p>
-
-                    <div class="mb-3">
-                        <small class="text-muted d-block">
-                            <i class="bi bi-info-circle me-1"></i>
-                            @L["Settings.Notifications.ClaudeHook.AlwaysOnNotice"]
-                        </small>
-                    </div>
 
                             </div>
                         }
@@ -997,28 +983,43 @@
 
                                 <hr />
 
-                                @* 各CLIの設定フォルダへ terminalhub MCP を自動登録する（既定OFF・全デバイス共通） *@
+                                @* 各CLIで TerminalHub MCP を有効化する（既定OFF） *@
                                 <div class="mb-4">
-                                    <h6 class="mb-2">MCP自動登録</h6>
+                                    <h6 class="mb-2">TerminalHub MCP</h6>
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" @bind="autoRegisterMcpEnabled" id="autoRegisterMcpSwitch">
-                                        <label class="form-check-label" for="autoRegisterMcpSwitch">
-                                            対応CLIのフォルダに TerminalHub のローカル MCP を自動登録する
+                                        <input class="form-check-input" type="checkbox" @bind="enableLocalMcp" id="enableLocalMcpSwitch">
+                                        <label class="form-check-label" for="enableLocalMcpSwitch">
+                                            対応CLIで TerminalHub MCP を有効化する
                                         </label>
                                     </div>
                                     <p class="text-muted small mt-2 mb-0">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        ONにすると、<strong>Claude Code / Codex</strong> のセッション作成/再起動時に、その作業フォルダへ
-                                        TerminalHub のローカル MCP サーバー（<code>terminalhub</code>）を追記します。
-                                        起動しただけで <code>list_sessions</code> / <code>send_to_session</code> が使えるようになります。
+                                        ONにすると、<strong>Claude Code / Codex</strong> が他のセッションを一覧して、
+                                        <strong>メッセージを送ったり</strong>（セッション間通信）、<strong>セッションのメモを書き換えたり</strong>
+                                        できるようになります。
                                     </p>
-                                    <ul class="text-muted small mt-1 mb-0">
-                                        <li>Claude Code → <code>&lt;folder&gt;/.mcp.json</code> の <code>mcpServers.terminalhub</code></li>
-                                        <li>Codex → <code>&lt;folder&gt;/.codex/config.toml</code> の <code>[mcp_servers.terminalhub]</code></li>
-                                    </ul>
+                                </div>
+
+                                <hr />
+
+                                @* テキスト入力欄でスラッシュコマンドの補完を出す（既定OFF・全デバイス共通） *@
+                                <div class="mb-4">
+                                    <h6 class="mb-2">スラッシュコマンド補完</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="slashAutocompleteEnabled" id="slashAutocompleteSwitch">
+                                        <label class="form-check-label" for="slashAutocompleteSwitch">
+                                            入力欄で <code>/</code> を打つとスラッシュコマンドの候補を表示する
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        入力欄の内容が <code>/</code> で始まるときだけ候補ポップアップを表示し、名前の部分一致で絞り込みます
+                                        （<kbd>↑↓</kbd> 選択 / <kbd>Tab</kbd>・<kbd>Enter</kbd> 確定 / <kbd>Esc</kbd> 閉じる）。
+                                        対応: <strong>Claude Code</strong> / <strong>Codex</strong>（Gemini は辞書を用意でき次第）。
+                                    </p>
                                     <p class="text-muted small mt-1 mb-0">
-                                        既存の設定はそのまま残し、<code>terminalhub</code> エントリのみを管理します。
-                                        Claude Code / Codex のみ対応（Gemini 等は非対応）。ポートは起動中の値を使います。全デバイス共通の設定です。
+                                        Claude Code はインストール済みバージョンの実コマンド一覧を自動取得（自作コマンド・プラグインも含む）。
+                                        Codex は組み込みコマンドの静的辞書。設定変更後、入力欄を選び直すと反映されます。
                                     </p>
                                 </div>
 
@@ -1345,10 +1346,11 @@
 
     // 開発ツール関連
     private bool devToolsEnabled = false;
-    private bool autoRegisterMcpEnabled = false;
+    private bool enableLocalMcp = false;
+    private bool slashAutocompleteEnabled = false;
     private bool promoteSessionOnOpenEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
-    // ローカルMCP タブ: 配布する instructions（空欄=既定テンプレを配布）
+    // TerminalHub MCP タブ: 配布する instructions（空欄=既定テンプレを配布）
     private string mcpInstructions = "";
     private bool captureRawStreamEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
@@ -1459,8 +1461,6 @@
             webHookEnabled = settings.Webhook.Enabled;
             webHookUrl = settings.Webhook.Url ?? "";
 
-            // Claude Hook設定
-
             // 特殊設定
             // ClaudeModeSwitchKey は過去バージョンで "plan" 等の廃止された値が
             // 保存されている可能性があるため、現在の UI が扱える値にフォールバックする。
@@ -1488,7 +1488,8 @@
 
             // 開発ツール設定
             devToolsEnabled = settings.DevTools.Enabled;
-            autoRegisterMcpEnabled = settings.Experimental.AutoRegisterMcp;
+            enableLocalMcp = settings.Experimental.EnableLocalMcp;
+            slashAutocompleteEnabled = settings.Experimental.SlashAutocompleteEnabled;
             promoteSessionOnOpenEnabled = settings.Experimental.PromoteSessionOnOpen;
             // 未設定(null/空)なら既定テンプレを表示する（textarea は WYSIWYG）
             mcpInstructions = string.IsNullOrWhiteSpace(settings.Experimental.McpInstructions)
@@ -1654,7 +1655,7 @@
         }
     }
 
-    // ローカルMCP: instructions を既定テンプレへ戻す（保存はダイアログの保存時）
+    // TerminalHub MCP: instructions を既定テンプレへ戻す（保存はダイアログの保存時）
     private void ResetMcpInstructions()
     {
         mcpInstructions = TerminalHub.Mcp.McpInstructionDefaults.Template;
@@ -1718,11 +1719,6 @@
                     Enabled = webHookEnabled,
                     Url = webHookUrl ?? ""
                 },
-                ClaudeHook = new ClaudeHookSettings
-                {
-                    // Hook は常時有効（UI トグルは廃止）。設定は常に true で永続化する。
-                    Enabled = true
-                },
                 Special = new SpecialSettings
                 {
                     ClaudeModeSwitchKey = claudeModeSwitchKey,
@@ -1743,7 +1739,8 @@
                 },
                 Experimental = new ExperimentalSettings
                 {
-                    AutoRegisterMcp = autoRegisterMcpEnabled,
+                    EnableLocalMcp = enableLocalMcp,
+                    SlashAutocompleteEnabled = slashAutocompleteEnabled,
                     PromoteSessionOnOpen = promoteSessionOnOpenEnabled,
                     // 既定テンプレそのまま(未編集) or 空なら null 保存し、将来の既定更新に追従させる。
                     // 書き換えられていればその内容を保存する。

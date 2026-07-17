@@ -1,4 +1,4 @@
-namespace TerminalHub.Models;
+﻿namespace TerminalHub.Models;
 
 /// <summary>
 /// アプリケーション全体の設定（ファイルベースで永続化）
@@ -7,7 +7,6 @@ public class AppSettings
 {
     public NotificationSettings Notifications { get; set; } = new();
     public WebhookSettings Webhook { get; set; } = new();
-    public ClaudeHookSettings ClaudeHook { get; set; } = new();
     public SpecialSettings Special { get; set; } = new();
     public SessionDisplaySettings Sessions { get; set; } = new();
     public DevToolsSettings DevTools { get; set; } = new();
@@ -16,19 +15,73 @@ public class AppSettings
     public CustomCliOptionsSettings CliOptions { get; set; } = new();
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
     public ExperimentalSettings Experimental { get; set; } = new();
+    public SessionDefaultsSettings SessionDefaults { get; set; } = new();
 }
 
 /// <summary>
-/// 試験機能設定。TerminalHub が各CLIの設定ファイルへ書き込む等の実験的挙動を、既定OFFで束ねる。
+/// セッション作成ダイアログの「前回選んだ値」（入力補助の既定値）。
+/// 従来はブラウザ localStorage に保存していたが、ブラウザごとに変えたい性質のものではない
+/// （その PC のユーザーの作業習慣）ため、ファイルベースの設定へ移した。値の発生源は
+/// 新規セッション作成ダイアログに一元化し、サブセッション側は読むだけ（書き戻さない）。
+/// null は「未保存」を意味し、各 OptionsData の初期値を維持する。
+/// Yolo（承認・サンドボックス完全バイパス）は危険なため、ここには保持しない（毎回 OFF 既定）。
+/// </summary>
+public class SessionDefaultsSettings
+{
+    /// <summary>前回選んだターミナル種別。</summary>
+    public TerminalType? LastTerminalType { get; set; }
+    /// <summary>Claude Code の権限モード（"bypass" | "auto" | "default"）。</summary>
+    public string? LastClaudePermissionMode { get; set; }
+    /// <summary>Gemini CLI の承認モード（"default" | "auto_edit" | "yolo"）。</summary>
+    public string? LastGeminiApprovalMode { get; set; }
+    /// <summary>Codex の権限プリセット（"ask-for-approval" | "recommended" | "custom"）。</summary>
+    public string? LastCodexPermissionPreset { get; set; }
+    /// <summary>Codex のサンドボックスモード（"" | "read-only" | "workspace-write" | "danger-full-access"）。</summary>
+    public string? LastCodexSandboxMode { get; set; }
+    /// <summary>Codex の承認ポリシー（"" | "untrusted" | "on-request" | "never"）。</summary>
+    public string? LastCodexApprovalPolicy { get; set; }
+    /// <summary>Codex の承認リクエスト自動レビュー。</summary>
+    public bool? LastCodexAutoReviewApprovals { get; set; }
+    /// <summary>Codex の承認審査者（"" | "user" | "auto_review"）。</summary>
+    public string? LastCodexApprovalReviewer { get; set; }
+    /// <summary>Codex の Windows サンドボックス方式（"" | "elevated" | "unelevated"）。</summary>
+    public string? LastCodexWindowsSandbox { get; set; }
+    /// <summary>Codex のコマンド用ネットワーク（"" | "true" | "false"）。</summary>
+    public string? LastCodexNetworkAccess { get; set; }
+    /// <summary>Codex の Web 検索（"" | "live" | "disabled"）。</summary>
+    public string? LastCodexWebSearchMode { get; set; }
+    /// <summary>Codex の resume --last。</summary>
+    public bool? LastCodexResumeLast { get; set; }
+    /// <summary>Codex の --no-alt-screen。未設定時は false。</summary>
+    public bool? LastCodexNoAltScreen { get; set; }
+    /// <summary>Codex の --search。</summary>
+    public bool? LastCodexSearchEnabled { get; set; }
+}
+
+/// <summary>
+/// 試験機能設定。TerminalHub と各CLIの連携などの実験的挙動を、既定OFFで束ねる。
 /// </summary>
 public class ExperimentalSettings
 {
     /// <summary>
-    /// セッション生成時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub のローカル MCP サーバー
-    /// (terminalhub) を自動登録する。ONにすると Claude=.mcp.json / Codex=.codex/config.toml に
-    /// terminalhub エントリを追記し、起動しただけで list_sessions / send_to_session が使える。既定OFF。
+    /// セッション生成時に、対応CLI(Claude Code / Codex)へ TerminalHub のローカル MCP サーバー
+    /// (terminalhub) を繋ぐ。ONにすると起動しただけで list_sessions / send_to_session が使える。既定OFF。
+    /// どちらも起動オプションで渡し、ユーザーの設定ファイルは書き換えない。
+    /// Claude Code は --mcp-config <JSONパス>、Codex は -c mcp_servers.terminalhub.url=...。
+    ///
+    /// 旧名 AutoRegisterMcp（設定ファイルへ書き込む方式だった頃の名前）からの移行は行わない。
+    /// v1.0.63〜v1.0.70 で ON にしていた場合、JSON キーが変わるため一度 OFF に戻る（入れ直せばよい）。
+    /// このフラグは設定画面の「TerminalHub MCP」タブ（instructions 編集）の表示も兼ねているので、
+    /// OFF の間はそのタブも出ない（McpInstructions の値自体は別キーなので保持される）。
     /// </summary>
-    public bool AutoRegisterMcp { get; set; } = false;
+    public bool EnableLocalMcp { get; set; } = false;
+
+    /// <summary>
+    /// テキスト入力欄でスラッシュコマンドの補完（オートコンプリート）を有効にする。
+    /// 入力全体が "/" 始まりのときだけ候補ポップアップを表示し、名前の部分一致で絞り込む。
+    /// 現状は Claude Code のみ対応（組み込みコマンド辞書）。既定OFF。
+    /// </summary>
+    public bool SlashAutocompleteEnabled { get; set; } = false;
 
     /// <summary>
     /// セッションを一覧からクリックして開いたときに、そのセッションの LastAccessedAt を
@@ -64,15 +117,6 @@ public class WebhookSettings
     public bool Enabled { get; set; }
     public string Url { get; set; } = "";
     public Dictionary<string, string>? Headers { get; set; }
-}
-
-/// <summary>
-/// Claude Code Hook設定
-/// 個別イベントのトグルは実装していない (Stop / UserPromptSubmit / Notification は常に一括で有効化/削除する)。
-/// </summary>
-public class ClaudeHookSettings
-{
-    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>
@@ -181,15 +225,7 @@ public class CustomCliOptionsSettings
     public List<UserCliOption> Antigravity { get; set; } = new();
     public List<UserCliOption> Grok { get; set; } = new();
 
-    public List<UserCliOption> ForType(TerminalType type) => type switch
-    {
-        TerminalType.ClaudeCode => ClaudeCode,
-        TerminalType.GeminiCLI => GeminiCLI,
-        TerminalType.CodexCLI => CodexCLI,
-        TerminalType.Antigravity => Antigravity,
-        TerminalType.Grok => Grok,
-        _ => new List<UserCliOption>()
-    };
+
 }
 
 /// <summary>

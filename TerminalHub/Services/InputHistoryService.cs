@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -20,16 +20,6 @@ namespace TerminalHub.Services
         {
             _repository = repository;
             _logger = logger;
-        }
-
-        public List<string> GetHistory()
-        {
-            return new List<string>(_inputHistory);
-        }
-
-        public int GetCurrentIndex()
-        {
-            return _historyIndex;
         }
 
         public void AddToHistory(string text)
@@ -105,17 +95,6 @@ namespace TerminalHub.Services
             }
 
             return null;
-        }
-
-        public void ResetIndex()
-        {
-            _historyIndex = -1;
-        }
-
-        public async Task SaveHistoryAsync()
-        {
-            // SQLiteは AddToHistory で即座に保存されるため、何もしない
-            await Task.CompletedTask;
         }
 
         public async Task LoadHistoryAsync()

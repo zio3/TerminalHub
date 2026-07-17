@@ -1,4 +1,4 @@
-@using TerminalHub.Models
+﻿@using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Configuration
 @using Microsoft.Extensions.Localization
@@ -128,54 +128,66 @@
         <div class="mb-3">
             <label class="form-label">@L["SessionOptions.Codex.Header"]</label>
 
-            <div class="mt-2">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Mode.Label"]</label>
-                <div class="btn-group d-flex" role="group">
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeAuto{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "auto")"
-                           @onchange="() => SetCodexMode(CodexMode.Auto)" autocomplete="off">
-                    <label class="btn btn-outline-success btn-sm" for="@($"codexModeAuto{UniqueId}")" title="@L["SessionOptions.Codex.Mode.AutoTitle"]">
-                        @L["SessionOptions.Codex.Mode.AutoLabel"]
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeStandard{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "standard")"
-                           @onchange="() => SetCodexMode(CodexMode.Standard)" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"codexModeStandard{UniqueId}")" title="@L["SessionOptions.Codex.Mode.StandardTitle"]">
-                        @L["SessionOptions.Codex.Mode.StandardLabel"]
-                    </label>
-
-                    <input type="radio" class="btn-check" name="@($"codexMode{UniqueId}")" id="@($"codexModeYolo{UniqueId}")"
-                           checked="@(CodexOptions.Mode == "yolo")"
-                           @onchange="() => SetCodexMode(CodexMode.Yolo)" autocomplete="off">
-                    <label class="btn btn-outline-danger btn-sm" for="@($"codexModeYolo{UniqueId}")" title="@L["SessionOptions.Codex.Mode.YoloTitle"]">
-                        @L["SessionOptions.Codex.Mode.YoloLabel"]
-                    </label>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(GetCodexModeHelp()))
-                {
-                    <div class="form-text small">@GetCodexModeHelp()</div>
-                }
-            </div>
-
-            @if (CodexOptions.Mode == "yolo")
-            {
-                <div class="alert alert-danger mt-2 py-2 small">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                    <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
-                </div>
-            }
-
-            <div class="form-check mt-3">
+            <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" @bind="CodexOptions.ResumeLast" id="@($"codexResumeLast{UniqueId}")">
                 <label class="form-check-label" for="@($"codexResumeLast{UniqueId}")">
                     @L["SessionOptions.Codex.ResumeLast"]
                 </label>
             </div>
 
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" @bind="CodexOptions.NoAltScreen" id="@($"codexNoAltScreen{UniqueId}")">
+                <label class="form-check-label" for="@($"codexNoAltScreen{UniqueId}")">
+                    @L["SessionOptions.Codex.NoAltScreen"]
+                </label>
+                <div class="form-text mt-0">@L["SessionOptions.Codex.NoAltScreen.Help"]</div>
+            </div>
+
             <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Sandbox.Label"]</label>
-                <div class="btn-group d-flex" role="group">
+                <label class="form-label small text-muted mb-2">@L["SessionOptions.Codex.Preset.Label"]</label>
+                <div class="codex-preset-grid">
+                    <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetDefault{UniqueId}")"
+                           checked="@(CodexOptions.PermissionPreset == "ask-for-approval")"
+                           @onchange='() => SetCodexPreset("ask-for-approval")' disabled="@CodexOptions.Yolo" autocomplete="off">
+                    <label class="codex-preset-card" for="@($"codexPresetDefault{UniqueId}")">
+                        <span class="codex-preset-icon"><i class="bi bi-sliders"></i></span>
+                        <span class="codex-preset-copy">
+                            <strong>@L["SessionOptions.Codex.Preset.Default.Label"]</strong>
+                            <small>@L["SessionOptions.Codex.Preset.Default.Help"]</small>
+                        </span>
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetRecommended{UniqueId}")"
+                           checked="@(CodexOptions.PermissionPreset == "recommended")"
+                           @onchange='() => SetCodexPreset("recommended")' disabled="@CodexOptions.Yolo" autocomplete="off">
+                    <label class="codex-preset-card codex-preset-card-recommended" for="@($"codexPresetRecommended{UniqueId}")">
+                        <span class="codex-preset-icon"><i class="bi bi-shield-check"></i></span>
+                        <span class="codex-preset-copy">
+                            <strong>@L["SessionOptions.Codex.Preset.Recommended.Label"]</strong>
+                            <small>@L["SessionOptions.Codex.Preset.Recommended.Help"]</small>
+                        </span>
+                    </label>
+
+                    <input type="radio" class="btn-check" name="@($"codexPreset{UniqueId}")" id="@($"codexPresetCustom{UniqueId}")"
+                           checked="@(CodexOptions.PermissionPreset == "custom")"
+                           @onchange='() => SetCodexPreset("custom")' disabled="@CodexOptions.Yolo" autocomplete="off">
+                    <label class="codex-preset-card" for="@($"codexPresetCustom{UniqueId}")">
+                        <span class="codex-preset-icon"><i class="bi bi-toggles"></i></span>
+                        <span class="codex-preset-copy">
+                            <strong>@L["SessionOptions.Codex.Preset.Custom.Label"]</strong>
+                            <small>@L["SessionOptions.Codex.Preset.Custom.Help"]</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <details class="codex-settings-section mt-3" open="@(CodexOptions.PermissionPreset == "custom")">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.PermissionDetails"]</summary>
+
+                <fieldset disabled="@CodexOptions.Yolo">
+                <div class="mt-3">
+                    <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.Sandbox.Label"]</label>
+                    <div class="btn-group d-flex" role="group">
                     <input type="radio" class="btn-check" name="@($"codexSandbox{UniqueId}")" id="@($"codexSandboxNone{UniqueId}")"
                            checked="@(string.IsNullOrEmpty(CodexOptions.SandboxMode))"
                            @onchange="() => SetCodexSandboxMode(CodexSandbox.Default)" autocomplete="off">
@@ -203,52 +215,119 @@
                     <label class="btn btn-outline-danger btn-sm" for="@($"codexSandboxFull{UniqueId}")" title="@L["SessionOptions.Codex.Sandbox.FullAccessTitle"]">
                         @L["SessionOptions.Codex.Sandbox.FullAccessLabel"]
                     </label>
-                </div>
-                <div class="form-text small">@L["SessionOptions.Codex.Sandbox.Help"]</div>
-                @if (!string.IsNullOrWhiteSpace(GetSandboxModeHelp()))
-                {
+                    </div>
                     <div class="form-text small">@GetSandboxModeHelp()</div>
-                }
-            </div>
+                </div>
 
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.ApprovalPolicy.Label"]</label>
-                <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy">
-                    <option value="">@L["Common.Unspecified"]</option>
-                    <option value="untrusted">untrusted</option>
-                    <option value="on-request">on-request</option>
-                    <option value="never">never</option>
-                </select>
-                <div class="form-text small">@L["SessionOptions.Codex.ApprovalPolicy.Help"]</div>
-                @if (!string.IsNullOrWhiteSpace(GetApprovalPolicyHelp()))
-                {
-                    <div class="form-text small">@GetApprovalPolicyHelp()</div>
-                }
-            </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.WindowsSandbox.Label"]</label>
+                        <select class="form-select form-select-sm" @bind="CodexOptions.WindowsSandbox" @bind:after="MarkCodexCustom">
+                            <option value="">@L["SessionOptions.Codex.FollowCodex"]</option>
+                            <option value="elevated">Elevated (@L["SessionOptions.Codex.Preset.Recommended.Badge"])</option>
+                            <option value="unelevated">Unelevated</option>
+                        </select>
+                        <div class="form-text small">@L["SessionOptions.Codex.WindowsSandbox.Help"]</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.NetworkAccess.Label"]</label>
+                        <select class="form-select form-select-sm" @bind="CodexOptions.NetworkAccess" @bind:after="MarkCodexCustom">
+                            <option value="">@L["SessionOptions.Codex.FollowCodex"]</option>
+                            <option value="true">@L["SessionOptions.Codex.NetworkAccess.Allow"]</option>
+                            <option value="false">@L["SessionOptions.Codex.NetworkAccess.Deny"]</option>
+                        </select>
+                        <div class="form-text small">@L["SessionOptions.Codex.NetworkAccess.Help"]</div>
+                    </div>
+                </div>
 
-            <div class="form-check mt-3">
-                <input class="form-check-input" type="checkbox" @bind="CodexOptions.SearchEnabled" id="@($"codexSearch{UniqueId}")">
-                <label class="form-check-label" for="@($"codexSearch{UniqueId}")">
-                    @L["SessionOptions.Codex.Search"]
-                </label>
-            </div>
+                <div class="row g-2 mt-1">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.ApprovalPolicy.Label"]</label>
+                        <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalPolicy" @bind:after="MarkCodexCustom">
+                            <option value="">@L["Common.Unspecified"]</option>
+                            <option value="untrusted">untrusted</option>
+                            <option value="on-request">on-request</option>
+                            <option value="never">never</option>
+                        </select>
+                        <div class="form-text small">@GetApprovalPolicyHelp()</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.ApprovalReviewer.Label"]</label>
+                        <select class="form-select form-select-sm" @bind="CodexOptions.ApprovalReviewer" @bind:after="MarkCodexCustom"
+                                disabled="@(CodexOptions.ApprovalPolicy == "never")">
+                            <option value="">@L["SessionOptions.Codex.FollowCodex"]</option>
+                            <option value="user">@L["SessionOptions.Codex.ApprovalReviewer.User"]</option>
+                            <option value="auto_review">@L["SessionOptions.Codex.ApprovalReviewer.Auto"]</option>
+                        </select>
+                        <div class="form-text small">@L["SessionOptions.Codex.AutoReviewApprovals.Help"]</div>
+                    </div>
+                </div>
 
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
-                <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
-                          rows="3" placeholder="@L["SessionOptions.Codex.AdditionalDirs.Placeholder"]"></textarea>
-                <div class="form-text small">@L["SessionOptions.Codex.AdditionalDirs.Help"]</div>
-            </div>
+                <div class="mt-3">
+                    <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.WebSearch.Label"]</label>
+                    <select class="form-select form-select-sm" @bind="CodexOptions.WebSearchMode" @bind:after="MarkCodexCustom">
+                        <option value="">@L["SessionOptions.Codex.FollowCodex"]</option>
+                        <option value="live">@L["SessionOptions.Codex.WebSearch.Live"]</option>
+                        <option value="disabled">@L["SessionOptions.Codex.WebSearch.Disabled"]</option>
+                    </select>
+                    <div class="form-text small">@L["SessionOptions.Codex.WebSearch.Help"]</div>
+                </div>
+                </fieldset>
 
-            <div class="mt-3">
-                <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
-                <input type="text" class="form-control form-control-sm" @bind="CodexOptions.ExtraArgs"
-                       placeholder="@L["SessionOptions.Codex.ExtraArgsPlaceholder"]" />
-                <div class="form-text small">@L["SessionOptions.Codex.PassToCli"]</div>
-            </div>
+                <div class="codex-yolo-panel mt-3 @(CodexOptions.Yolo ? "is-active" : "")">
+                    <div class="form-check m-0">
+                        <input class="form-check-input" type="checkbox" checked="@(CodexOptions.Yolo || showCodexYoloConfirmation)"
+                               @onchange="OnCodexYoloChanged" id="@($"codexYolo{UniqueId}")">
+                        <label class="form-check-label text-danger fw-semibold" for="@($"codexYolo{UniqueId}")">
+                            <i class="bi bi-exclamation-octagon me-1"></i>@L["SessionOptions.Codex.Yolo.Label"]
+                        </label>
+                        <code class="d-block mt-1">--dangerously-bypass-approvals-and-sandbox</code>
+                        <div class="form-text mt-0">@L["SessionOptions.Codex.Yolo.Help"]</div>
+                    </div>
+                    @if (CodexOptions.Yolo)
+                    {
+                        <div class="alert alert-danger mt-2 mb-0 py-2 small">
+                            <strong>@L["SessionOptions.Codex.YoloWarning.Label"]</strong> @L["SessionOptions.Codex.YoloWarning.Message"]
+                        </div>
+                    }
+                    else if (showCodexYoloConfirmation)
+                    {
+                        <div class="alert alert-danger mt-2 mb-0 py-2 small">
+                            <strong>@L["SessionOptions.Codex.YoloConfirm.Title"]</strong>
+                            <div class="mt-1">@L["SessionOptions.Codex.YoloWarning.Message"]</div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmCodexYolo">
+                                    @L["SessionOptions.Codex.YoloConfirm.Enable"]
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelCodexYolo">
+                                    @L["Common.Cancel"]
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </details>
 
-            <CustomCliOptionsSection Options="codexCustomOptions" States="customOptionStates"
-                                     Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
+            <details class="codex-settings-section mt-3">
+                <summary class="small fw-semibold user-select-none">@L["SessionOptions.Codex.AdvancedSettings"]</summary>
+
+                <div class="mt-3">
+                    <label class="form-label small text-muted mb-1">@L["SessionOptions.Codex.AdditionalDirs.Label"]</label>
+                    <textarea class="form-control form-control-sm" @bind="CodexOptions.AdditionalDirectories"
+                              rows="3" placeholder="@L["SessionOptions.Codex.AdditionalDirs.Placeholder"]"></textarea>
+                    <div class="form-text small">@L["SessionOptions.Codex.AdditionalDirs.Help"]</div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="form-label small text-muted mb-1">@L["SessionOptions.ExtraArgs.Label"]</label>
+                    <input type="text" class="form-control form-control-sm" @bind="CodexOptions.ExtraArgs"
+                           placeholder="@L["SessionOptions.Codex.ExtraArgsPlaceholder"]" />
+                    <div class="form-text small">@L["SessionOptions.Codex.PassToCli"]</div>
+                </div>
+
+                <CustomCliOptionsSection Options="codexCustomOptions" States="customOptionStates"
+                                         Prefix="@($"codex{UniqueId}")" OnStateChanged="OnCustomOptionToggled" />
+            </details>
         </div>
     }
     else if (SelectedType == TerminalType.Antigravity && Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true))
@@ -351,6 +430,7 @@
     [Parameter] public bool DisableContinueOption { get; set; } = false;
 
     private string UniqueId = Guid.NewGuid().ToString("N");
+    private bool showCodexYoloConfirmation;
 
     // ユーザー定義カスタムオプション (AppSettings.CliOptions から読み込む)
     private List<UserCliOption> claudeCustomOptions = new();
@@ -442,18 +522,64 @@
         await SelectedTypeChanged.InvokeAsync(newType);
     }
 
-    private enum CodexMode { Auto, Standard, Yolo }
     private enum CodexSandbox { Default, ReadOnly, WorkspaceWrite, FullAccess }
 
-    private void SetCodexMode(CodexMode mode)
+    private void SetCodexPreset(string preset)
     {
-        CodexOptions.Mode = mode switch
+        showCodexYoloConfirmation = false;
+        CodexOptions.PermissionPreset = preset;
+        CodexOptions.Yolo = false;
+
+        if (preset == "ask-for-approval")
         {
-            CodexMode.Auto => "auto",
-            CodexMode.Standard => "standard",
-            CodexMode.Yolo => "yolo",
-            _ => "auto"
-        };
+            CodexOptions.SandboxMode = "workspace-write";
+            CodexOptions.ApprovalPolicy = "on-request";
+            CodexOptions.ApprovalReviewer = "user";
+            CodexOptions.WindowsSandbox = "elevated";
+            CodexOptions.NetworkAccess = "true";
+            CodexOptions.WebSearchMode = "live";
+        }
+        else if (preset == "recommended")
+        {
+            CodexOptions.SandboxMode = "workspace-write";
+            CodexOptions.ApprovalPolicy = "on-request";
+            CodexOptions.ApprovalReviewer = "auto_review";
+            CodexOptions.WindowsSandbox = "elevated";
+            CodexOptions.NetworkAccess = "true";
+            CodexOptions.WebSearchMode = "live";
+        }
+    }
+
+    private void MarkCodexCustom()
+    {
+        CodexOptions.PermissionPreset = "custom";
+    }
+
+    private void OnCodexYoloChanged(ChangeEventArgs args)
+    {
+        var requested = args.Value is bool value && value;
+        if (!requested)
+        {
+            CodexOptions.Yolo = false;
+            CodexOptions.PermissionPreset = "custom";
+            showCodexYoloConfirmation = false;
+            return;
+        }
+
+        showCodexYoloConfirmation = true;
+    }
+
+    private void ConfirmCodexYolo()
+    {
+        CodexOptions.Yolo = true;
+        CodexOptions.PermissionPreset = "custom";
+        showCodexYoloConfirmation = false;
+    }
+
+    private void CancelCodexYolo()
+    {
+        CodexOptions.Yolo = false;
+        showCodexYoloConfirmation = false;
     }
 
     private void SetCodexSandboxMode(CodexSandbox mode)
@@ -466,6 +592,7 @@
             CodexSandbox.FullAccess => "danger-full-access",
             _ => ""
         };
+        MarkCodexCustom();
     }
 
     public Dictionary<string, string> GetOptions()
@@ -520,11 +647,16 @@
                 break;
 
             case TerminalType.CodexCLI:
-                options["mode"] = CodexOptions.Mode;
+                // 後方互換のため保存キーは従来どおり "mode"。Yolo=ON は "yolo"、それ以外は
+                // "standard"（サンドボックス/承認をそのまま渡す）。旧 "auto" は書き出さない
+                // （BuildCodexArgs は既存セッション互換のため "auto" の解釈を残している）。
+                options["mode"] = CodexOptions.Yolo ? "yolo" : "standard";
+                options["permission-preset"] = CodexOptions.PermissionPreset;
                 if (CodexOptions.ResumeLast)
                 {
                     options["resume-last"] = "true";
                 }
+                options["no-alt-screen"] = CodexOptions.NoAltScreen ? "true" : "false";
                 if (!string.IsNullOrWhiteSpace(CodexOptions.SandboxMode))
                 {
                     options["sandbox-mode"] = CodexOptions.SandboxMode;
@@ -533,9 +665,21 @@
                 {
                     options["ask-for-approval"] = CodexOptions.ApprovalPolicy;
                 }
-                if (CodexOptions.SearchEnabled)
+                if (!string.IsNullOrWhiteSpace(CodexOptions.ApprovalReviewer))
                 {
-                    options["search"] = "true";
+                    options["approvals-reviewer"] = CodexOptions.ApprovalReviewer;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.WindowsSandbox))
+                {
+                    options["windows-sandbox"] = CodexOptions.WindowsSandbox;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.NetworkAccess))
+                {
+                    options["network-access"] = CodexOptions.NetworkAccess;
+                }
+                if (!string.IsNullOrWhiteSpace(CodexOptions.WebSearchMode))
+                {
+                    options["web-search-mode"] = CodexOptions.WebSearchMode;
                 }
                 if (!string.IsNullOrWhiteSpace(CodexOptions.AdditionalDirectories))
                 {
@@ -607,11 +751,19 @@
 
     public class CodexOptionsData
     {
-        public string Mode { get; set; } = "auto"; // auto, standard, yolo
+        // 承認・サンドボックスを完全バイパス（--dangerously-bypass-approvals-and-sandbox）。
+        // ON の間はサンドボックス/承認の指定は無視される（BuildCodexArgs 側で mode=yolo として処理）。
+        public bool Yolo { get; set; } = false;
         public bool ResumeLast { get; set; } = false;
-        public string SandboxMode { get; set; } = ""; // "", read-only, workspace-write, danger-full-access
-        public string ApprovalPolicy { get; set; } = "";
-        public bool SearchEnabled { get; set; }
+        public bool NoAltScreen { get; set; } = false;
+        public string PermissionPreset { get; set; } = "recommended";
+        // 推奨プリセットの実効値。詳細を変更すると PermissionPreset は custom になる。
+        public string SandboxMode { get; set; } = "workspace-write"; // "", read-only, workspace-write, danger-full-access
+        public string ApprovalPolicy { get; set; } = "on-request";
+        public string ApprovalReviewer { get; set; } = "auto_review"; // "", user, auto_review
+        public string WindowsSandbox { get; set; } = "elevated"; // "", elevated, unelevated
+        public string NetworkAccess { get; set; } = "true"; // "", true, false
+        public string WebSearchMode { get; set; } = "live"; // "", live, disabled
         public string AdditionalDirectories { get; set; } = "";
         public string ExtraArgs { get; set; } = "";
     }
@@ -641,16 +793,6 @@
         };
     }
 
-    private string GetGeminiApprovalModeHelp()
-    {
-        return GeminiOptions.ApprovalMode switch
-        {
-            "default" => L["SessionOptions.Gemini.ApprovalMode.HelpDefault"],
-            "auto_edit" => L["SessionOptions.Gemini.ApprovalMode.HelpAutoEdit"],
-            "yolo" => L["SessionOptions.Gemini.ApprovalMode.HelpYolo"],
-            _ => ""
-        };
-    }
 
     private string GetApprovalPolicyHelp()
     {
@@ -659,17 +801,6 @@
             "untrusted" => L["SessionOptions.Codex.ApprovalPolicy.HelpUntrusted"],
             "on-request" => L["SessionOptions.Codex.ApprovalPolicy.HelpOnRequest"],
             "never" => L["SessionOptions.Codex.ApprovalPolicy.HelpNever"],
-            _ => ""
-        };
-    }
-
-    private string GetCodexModeHelp()
-    {
-        return CodexOptions.Mode switch
-        {
-            "auto" => L["SessionOptions.Codex.Mode.HelpAuto"],
-            "standard" => L["SessionOptions.Codex.Mode.HelpStandard"],
-            "yolo" => L["SessionOptions.Codex.Mode.HelpYolo"],
             _ => ""
         };
     }

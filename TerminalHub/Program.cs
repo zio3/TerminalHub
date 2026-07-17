@@ -84,7 +84,6 @@ var dbPath = AppDataPaths.GetDatabaseFilePath(
     builder.Environment.IsDevelopment(),
     builder.Configuration.GetValue<string>("Database:FileName"));
 builder.Logging.AddFilter("TerminalHub.Services.SessionDbContext", LogLevel.Debug);
-Console.WriteLine($"[DB][起動時診断] 使用するDB: Environment={builder.Environment.EnvironmentName} / FullPath={dbPath}");
 builder.Services.AddSingleton<SessionDbContext>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<SessionDbContext>>();
@@ -146,10 +145,10 @@ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 
-// CodexHookServiceを登録（Codex CLI の lifecycle hook 設定）
+// CodexHookServiceを登録（起動引数用 lifecycle hook の生成）
 builder.Services.AddSingleton<ICodexHookService, CodexHookService>();
 
-// McpConfigServiceを登録（試験機能: 各CLIへ terminalhub MCP を自動登録）
+// McpConfigServiceを登録（試験機能: 各CLIへ terminalhub MCP を繋ぐための起動オプションを用意する）
 builder.Services.AddSingleton<IMcpConfigService, McpConfigService>();
 
 // VersionCheckServiceを登録
@@ -157,6 +156,9 @@ builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
 // 生ストリームキャプチャ（VTエミュレータ検証フィクスチャ採取用のデバッグサービス）
 builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
+
+// スラッシュコマンド補完の候補ソース（headless init から動的取得＋静的辞書フォールバック）
+builder.Services.AddSingleton<SlashCommandProvider>();
 
 // MCP サーバー（セッション間メッセージング）。
 // TerminalHub 本体プロセスに HTTP MCP を同居させ、list_sessions / send_to_session / set_memo を公開する。
@@ -185,6 +187,10 @@ builder.Services
 
 
 var app = builder.Build();
+
+// dev/prod で保存先が切り替わるため、どのDBを開いたかを起動時に残す
+app.Logger.LogInformation("[DB] 使用するDB: Environment={Environment}, FullPath={DbPath}",
+    app.Environment.EnvironmentName, dbPath);
 
 // ターミナル状態バッファ（VTエミュレータ）の初期グリッドサイズを設定
 // （SessionInfo 作成時に TerminalStateBufferFactory.Create() が参照する）
@@ -253,7 +259,9 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作 JSON、--notify CLI モードや他ツール向けに維持）
+// Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作の HookNotification JSON を直接受ける）。
+// 現在の利用者は --notify --event 経路のみ。将来の hook レス CLI（Antigravity 等）が
+// 共通 HookNotification 形式で送る場合の受け皿として維持する（RunNotifyModeAsync のコメント参照）。
 app.MapPost("/api/hook", async (HookNotification notification, IHookNotificationService hookService) =>
 {
     await hookService.HandleHookNotificationAsync(notification);
@@ -308,7 +316,10 @@ app.MapMcp("/mcp");
 app.Run();
 return 0;
 
-// CLI モード: Hook 通知を送信
+// CLI モード: Hook 通知を送信。
+// ここは hook 通知ブリッジの共通入口で、--source で CLI 固有のペイロード変換へ振り分ける設計
+// （例: --source codex。将来 Antigravity 等の CLI を追加するときも --source <name> の分岐を足す）。
+// --source なしはフォールバックの汎用 --event 経路。誤って単一CLI専用へ簡略化しないこと。
 static async Task<int> RunNotifyModeAsync(string[] args)
 {
     // Codex CLI ブリッジモード: Codex の lifecycle hook(type:command) から起動され、
@@ -324,10 +335,15 @@ static async Task<int> RunNotifyModeAsync(string[] args)
 
     if (string.IsNullOrEmpty(eventType) || string.IsNullOrEmpty(sessionIdStr))
     {
-        // "PermissionRequest" は過去の CLI 互換のためヘルプに残置しているのみ。
-        // 実際に HookNotification.GetEventType が受理するのは
-        // Stop / UserPromptSubmit / Notification の 3 種だけで、
-        // PermissionRequest を渡しても null 扱いになる。
+        // この --event 経路は現行の hook 定義からは使われない（Claude は type:"http" で直接 POST、
+        // Codex は --source codex で上のブリッジ分岐へ入る）。
+        // 残している理由は「最も要求の低い汎用アダプタ」であること:
+        // 「イベント時に固定引数でコマンドを1本起動できる」だけの CLI（将来の Antigravity 等の
+        // hook 対応）は、HTTP 直POST も stdin JSON も不要なこの経路で繋げる。
+        // 消す前にこの用途が不要になったか確認すること。
+        // （旧バージョンが settings.local.json に残した type:"command" hook の残骸からも到達し得るが、
+        //  それは互換保証ではない＝残骸のために維持しているわけではない。2026-07-17 判断）
+        // イベント名は HookNotification.GetEventType が受理するもの（9種）すべて渡せる。
         Console.Error.WriteLine("Usage: TerminalHub.exe --notify --event <Stop|UserPromptSubmit|PermissionRequest> --session <sessionId> [--port <port>]");
         return 1;
     }
@@ -436,6 +452,11 @@ static async Task<int> RunCodexBridgeAsync(string[] args)
 
         var path = $"/api/hook/codex/{sessionId}";
         // まず HTTP、ダメなら HTTPS（Claude ブリッジと同じフォールバック）。
+        // http → https の順で試す。起動引数へ注入するブリッジ起動コマンド (CodexHookService.BuildBridgeCommand)
+        // は --port しか渡さず、スキームを伝えていない。TerminalHub 本体は既定では HTTP のみで listen する
+        // が、SessionManager.GetServerBaseUrl は「HTTPS しかなければ HTTPS を使う」構成も想定しているため、
+        // HTTPS-only で起動された場合はこのフォールバックが唯一の到達手段になる。
+        // 「本体は HTTP しか listen していないから https 分岐は死んでいる」と判断して消さないこと。
         foreach (var scheme in new[] { "http", "https" })
         {
             try

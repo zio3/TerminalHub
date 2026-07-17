@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using TerminalHub.Models;
@@ -478,14 +478,6 @@ namespace TerminalHub.Services
                 DELETE FROM InputHistory WHERE Id NOT IN (
                     SELECT Id FROM InputHistory ORDER BY Id DESC LIMIT 100
                 )");
-        }
-
-        public async Task ClearInputHistoryAsync()
-        {
-            await using var connection = _dbContext.CreateConnection();
-            await connection.OpenAsync();
-
-            await connection.ExecuteNonQueryAsync("DELETE FROM InputHistory");
         }
 
         private async Task<Dictionary<string, string>> GetSessionOptionsAsync(SqliteConnection connection, Guid sessionId)

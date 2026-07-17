@@ -47,6 +47,14 @@ namespace TerminalHub.Models
         public bool IsActive { get; set; }
         public TerminalType TerminalType { get; set; } = TerminalType.Terminal;
         public Dictionary<string, string> Options { get; set; } = new();
+
+        /// <summary>
+        /// 起動済み Codex プロセスへ渡した権限設定。
+        /// Options は再起動なしでも更新されるため、Hook の判定にはこちらを優先する。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public CodexProcessOptionsSnapshot? RunningCodexOptions { get; internal set; }
+
         public string Memo { get; set; } = string.Empty;
 
         // このセッションでだけ表示・送信できるカスタムコマンド（グローバル設定の Commands とは別管理）。
@@ -171,12 +179,6 @@ namespace TerminalHub.Models
         public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
 
         [System.Text.Json.Serialization.JsonIgnore]
-        public bool HookConfigured { get; set; } // Claude Code hook 設定済みかどうか
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        public bool McpConfigured { get; set; } // MCP 自動登録 設定済みかどうか（プロセス内のみ・再起動でリセット→ポート追従）
-        
-        [System.Text.Json.Serialization.JsonIgnore]
         public bool IsExpanded { get; set; } = true; // サブセッションの展開状態
 
         // スクロールバック保持用バッファ（常時有効、セッション切替時の復元用）。
@@ -272,14 +274,6 @@ namespace TerminalHub.Models
                 {
                     return _statusChangeHistory.Count;
                 }
-            }
-        }
-
-        public void ClearStatusChangeHistory()
-        {
-            lock (_statusHistoryLock)
-            {
-                _statusChangeHistory.Clear();
             }
         }
 
@@ -442,14 +436,6 @@ namespace TerminalHub.Models
         public int HookEventLogCount
         {
             get { lock (_hookEventLogLock) { return _hookEventLog.Count; } }
-        }
-
-        public void ClearHookEventLog()
-        {
-            lock (_hookEventLogLock)
-            {
-                _hookEventLog.Clear();
-            }
         }
 
         public string GetDisplayName()

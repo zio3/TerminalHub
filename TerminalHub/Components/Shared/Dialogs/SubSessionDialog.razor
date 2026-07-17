@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
 @inject ILocalStorageService LocalStorage
+@inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
 @inject IStringLocalizer<SharedResource> L
 
@@ -103,6 +104,12 @@
                                     <small class="form-text text-muted">
                                         @L["SubSession.NewBranch.Help"]
                                     </small>
+                                    @if (!string.IsNullOrWhiteSpace(branchName) && !IsValidBranchName(branchName))
+                                    {
+                                        <div class="text-danger small mt-1">
+                                            <i class="bi bi-exclamation-circle me-1"></i>@L["SubSession.NewBranch.Invalid"]
+                                        </div>
+                                    }
                                 </div>
                             }
                             else if (branchSelectionMode == BranchSelectionMode.Detached)
@@ -392,18 +399,18 @@
     private const string LAST_BRANCH_SELECTION_MODE_KEY = "lastBranchSelectionMode";
     private static readonly HashSet<string> ValidBranchSelectionModes = new() { "NewBranch", "ExistingBranch", "Detached" };
 
-    // LocalStorage: 直近の CLI モード選択 (SessionCreateDialog とキーを共有して値を流用)
-    private const string LAST_CLAUDE_PERMISSION_MODE_KEY = "lastClaudePermissionMode";
-    private const string LAST_GEMINI_APPROVAL_MODE_KEY = "lastGeminiApprovalMode";
-    private const string LAST_CODEX_MODE_KEY = "lastCodexMode";
-    private const string LAST_CODEX_SANDBOX_MODE_KEY = "lastCodexSandboxMode";
-    private const string LAST_CODEX_APPROVAL_POLICY_KEY = "lastCodexApprovalPolicy";
+    // 直近の CLI モード選択は AppSettings.SessionDefaults(ファイル) から読む
+    // (値の発生源は SessionCreateDialog に一元化。SubSession 側は読むだけで書き戻さない)。
 
     private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
-    private static readonly HashSet<string> ValidCodexModes = new() { "auto", "standard", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };
+    private static readonly HashSet<string> ValidCodexApprovalReviewers = new() { "", "user", "auto_review" };
+    private static readonly HashSet<string> ValidCodexPermissionPresets = new() { "ask-for-approval", "recommended", "custom" };
+    private static readonly HashSet<string> ValidCodexWindowsSandboxes = new() { "", "elevated", "unelevated" };
+    private static readonly HashSet<string> ValidCodexNetworkAccess = new() { "", "true", "false" };
+    private static readonly HashSet<string> ValidCodexWebSearchModes = new() { "", "live", "disabled" };
     
     // Worktree関連
     private List<WorktreeInfo>? availableWorktrees = null;
@@ -435,7 +442,9 @@
             {
                 TabType.Create => IsGitRepository && branchSelectionMode switch
                 {
-                    BranchSelectionMode.NewBranch => !string.IsNullOrWhiteSpace(branchName),
+                    // 空でないことに加えて Git のブランチ名規則も満たすこと。
+                    // 満たさないまま進めると worktree 作成が git のエラーで落ちて理由が分かりにくい
+                    BranchSelectionMode.NewBranch => IsValidBranchName(branchName),
                     BranchSelectionMode.ExistingBranch => !string.IsNullOrWhiteSpace(selectedExistingBranch) && branchWorktreeInfo == null,
                     BranchSelectionMode.Detached => true,
                     _ => false
@@ -639,44 +648,93 @@
 
     // SessionCreateDialog が保存した CLI モードの直近選択を、初期値として読むだけ。
     // SubSessionDialog 側で書き戻しはしない (値の発生源は新規セッション作成画面に一元化)。
-    private async Task LoadLastUsedCliModes()
+    private Task LoadLastUsedCliModes()
     {
         try
         {
-            var claudePerm = await LocalStorage.GetAsync<string>(LAST_CLAUDE_PERMISSION_MODE_KEY);
-            if (claudePerm != null && ValidClaudePermissionModes.Contains(claudePerm))
+            var defaults = AppSettingsService.GetSettings().SessionDefaults;
+
+            if (defaults.LastClaudePermissionMode != null && ValidClaudePermissionModes.Contains(defaults.LastClaudePermissionMode))
             {
-                claudeOptions.PermissionMode = claudePerm;
+                claudeOptions.PermissionMode = defaults.LastClaudePermissionMode;
             }
 
-            var geminiApproval = await LocalStorage.GetAsync<string>(LAST_GEMINI_APPROVAL_MODE_KEY);
-            if (geminiApproval != null && ValidGeminiApprovalModes.Contains(geminiApproval))
+            if (defaults.LastGeminiApprovalMode != null && ValidGeminiApprovalModes.Contains(defaults.LastGeminiApprovalMode))
             {
-                geminiOptions.ApprovalMode = geminiApproval;
+                geminiOptions.ApprovalMode = defaults.LastGeminiApprovalMode;
             }
 
-            var codexMode = await LocalStorage.GetAsync<string>(LAST_CODEX_MODE_KEY);
-            if (codexMode != null && ValidCodexModes.Contains(codexMode))
+            // Yolo（承認・サンドボックス完全バイパス）は危険なため「最後の選択」を復元せず、
+            // 新規サブセッションでは常に OFF 既定にする（安全側）。
+
+            var isLegacyCodexDefault = defaults.LastCodexPermissionPreset == "codex-default";
+            if (isLegacyCodexDefault)
             {
-                codexOptions.Mode = codexMode;
+                // 旧「Codex標準」は上書きなしだったため、同じ実効値をカスタムとして維持する。
+                codexOptions.PermissionPreset = "custom";
+                codexOptions.SandboxMode = "";
+                codexOptions.ApprovalPolicy = "";
+                codexOptions.ApprovalReviewer = "";
+                codexOptions.WindowsSandbox = "";
+                codexOptions.NetworkAccess = "";
+                codexOptions.WebSearchMode = "";
+            }
+            else if (defaults.LastCodexPermissionPreset != null && ValidCodexPermissionPresets.Contains(defaults.LastCodexPermissionPreset))
+            {
+                codexOptions.PermissionPreset = defaults.LastCodexPermissionPreset;
+            }
+            else if (defaults.LastCodexSandboxMode != null || defaults.LastCodexApprovalPolicy != null ||
+                     defaults.LastCodexAutoReviewApprovals != null || defaults.LastCodexSearchEnabled != null)
+            {
+                codexOptions.PermissionPreset = "custom";
+                codexOptions.WindowsSandbox = "";
+                codexOptions.NetworkAccess = "";
+                codexOptions.ApprovalReviewer = "";
+                codexOptions.WebSearchMode = "";
             }
 
-            var codexSandbox = await LocalStorage.GetAsync<string>(LAST_CODEX_SANDBOX_MODE_KEY);
-            if (codexSandbox != null && ValidCodexSandboxModes.Contains(codexSandbox))
+            if (!isLegacyCodexDefault && defaults.LastCodexSandboxMode != null && ValidCodexSandboxModes.Contains(defaults.LastCodexSandboxMode))
             {
-                codexOptions.SandboxMode = codexSandbox;
+                codexOptions.SandboxMode = defaults.LastCodexSandboxMode;
             }
 
-            var codexApproval = await LocalStorage.GetAsync<string>(LAST_CODEX_APPROVAL_POLICY_KEY);
-            if (codexApproval != null && ValidCodexApprovalPolicies.Contains(codexApproval))
+            if (!isLegacyCodexDefault && defaults.LastCodexApprovalPolicy != null && ValidCodexApprovalPolicies.Contains(defaults.LastCodexApprovalPolicy))
             {
-                codexOptions.ApprovalPolicy = codexApproval;
+                codexOptions.ApprovalPolicy = defaults.LastCodexApprovalPolicy;
             }
+
+            if (!isLegacyCodexDefault && defaults.LastCodexApprovalReviewer != null && ValidCodexApprovalReviewers.Contains(defaults.LastCodexApprovalReviewer))
+            {
+                codexOptions.ApprovalReviewer = defaults.LastCodexApprovalReviewer;
+            }
+            else if (!isLegacyCodexDefault && defaults.LastCodexAutoReviewApprovals.HasValue)
+            {
+                codexOptions.ApprovalReviewer = defaults.LastCodexAutoReviewApprovals.Value ? "auto_review" : "";
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexWindowsSandbox != null && ValidCodexWindowsSandboxes.Contains(defaults.LastCodexWindowsSandbox))
+            {
+                codexOptions.WindowsSandbox = defaults.LastCodexWindowsSandbox;
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexNetworkAccess != null && ValidCodexNetworkAccess.Contains(defaults.LastCodexNetworkAccess))
+            {
+                codexOptions.NetworkAccess = defaults.LastCodexNetworkAccess;
+            }
+            if (!isLegacyCodexDefault && defaults.LastCodexWebSearchMode != null && ValidCodexWebSearchModes.Contains(defaults.LastCodexWebSearchMode))
+            {
+                codexOptions.WebSearchMode = defaults.LastCodexWebSearchMode;
+            }
+            else if (!isLegacyCodexDefault && defaults.LastCodexSearchEnabled.HasValue)
+            {
+                codexOptions.WebSearchMode = defaults.LastCodexSearchEnabled.Value ? "live" : "";
+            }
+            codexOptions.ResumeLast = defaults.LastCodexResumeLast ?? codexOptions.ResumeLast;
+            codexOptions.NoAltScreen = defaults.LastCodexNoAltScreen ?? codexOptions.NoAltScreen;
         }
         catch
         {
             // 失敗してもデフォルト値のまま続行
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadLastBranchSelectionMode()
@@ -800,12 +858,6 @@
     private Task OnTerminalTypeChanged(TerminalType newType)
     {
         selectedTerminalType = newType;
-        return Task.CompletedTask;
-    }
-
-    private Task OnStartupCommandChanged(string newCommand)
-    {
-        startupCommand = newCommand;
         return Task.CompletedTask;
     }
 

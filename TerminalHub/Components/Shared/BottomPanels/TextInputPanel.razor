@@ -5,20 +5,112 @@
 @inject ILogger<TextInputPanel> Logger
 @inject IJSRuntime JS
 @inject IStringLocalizer<SharedResource> L
+@inject IAppSettingsService AppSettingsService
+@inject SlashCommandProvider SlashCommandProvider
 @implements IAsyncDisposable
 
+<style>
+    .slashac-popup {
+        position: absolute;
+        top: 2.2em;
+        left: 0.5rem;
+        z-index: 1000;
+        min-width: 20rem;
+        max-width: min(90%, 40rem);
+        max-height: 16rem;
+        overflow-y: auto;
+        background: var(--bs-body-bg, #1e1e1e);
+        border: 1px solid var(--bs-border-color, #444);
+        border-radius: .375rem;
+        box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .4);
+        padding: .25rem;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: .85rem;
+    }
+
+    .slashac-item {
+        display: flex;
+        align-items: baseline;
+        gap: .75rem;
+        padding: .25rem .5rem;
+        border-radius: .25rem;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .slashac-item.active {
+            background: var(--bs-primary, #0d6efd);
+        }
+
+    .slashac-name {
+        color: var(--bs-body-color, #e0e0e0);
+        flex: 0 0 auto;
+    }
+
+    .slashac-item.active .slashac-name {
+        color: #fff;
+    }
+
+    .slashac-hl {
+        font-weight: 700;
+        color: var(--bs-warning, #ffc107);
+    }
+
+    .slashac-item.active .slashac-hl {
+        color: #fff;
+        text-decoration: underline;
+    }
+
+    .slashac-desc {
+        color: var(--bs-secondary-color, #9aa0a6);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .slashac-item.active .slashac-desc {
+        color: rgba(255, 255, 255, .85);
+    }
+</style>
 <div class="p-3 h-100 d-flex flex-column">
     <div class="flex-grow-1 d-flex flex-column">
-        <textarea id="@($"inputText-{PanelId}")"
-                  class="form-control flex-grow-1"
-                  data-input-area
-                  @bind="inputText"
-                  @bind:event="oninput"
-                  @onkeydown="OnTextAreaKeyDown"
-                  @onkeydown:preventDefault="@shouldPreventDefault"
-                  placeholder="@PlaceholderText"
-                  style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
-        </textarea>
+        <div class="flex-grow-1 d-flex flex-column position-relative">
+            <textarea id="@($"inputText-{PanelId}")"
+                      class="form-control flex-grow-1"
+                      data-input-area
+                      data-slash-open="@(SlashPopupOpen ? "1" : "0")"
+                      @bind="inputText"
+                      @bind:event="oninput"
+                      @onkeydown="OnTextAreaKeyDown"
+                      @onkeydown:preventDefault="@shouldPreventDefault"
+                      @onfocus="OnSlashFocus"
+                      @onblur="OnSlashBlur"
+                      placeholder="@PlaceholderText"
+                      style="resize: none; font-family: 'Consolas', 'Monaco', monospace;">
+            </textarea>
+            @if (SlashPopupOpen)
+            {
+                <div class="slashac-popup">
+                    @for (int i = 0; i < _slashSuggestions.Count; i++)
+                    {
+                        var idx = i;
+                        var item = _slashSuggestions[i];
+                        var parts = HighlightName(item.Name);
+                        <div class="slashac-item @(idx == _slashSelectedIndex ? "active" : "")"
+                             @onclick="() => OnSlashItemClick(idx)"
+                             @onmousedown:preventDefault="true"
+                             @onmouseenter="() => _slashSelectedIndex = idx">
+                            <span class="slashac-name">@parts.Before<span class="slashac-hl">@parts.Match</span>@parts.After</span>
+                            @if (!string.IsNullOrEmpty(item.Description))
+                            {
+                                <span class="slashac-desc">@item.Description</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
 
         <div class="mt-2 d-flex justify-content-between align-items-center">
             <div class="d-none d-md-flex align-items-center gap-3">
@@ -148,6 +240,9 @@
             if (Text != value)
             {
                 Text = value;
+                // テキストが変われば Esc による一時抑止を解除し、候補を再計算する。
+                _slashDismissed = false;
+                RecomputeSlashSuggestions();
                 TextChanged.InvokeAsync(value);
             }
         }
@@ -159,8 +254,230 @@
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
 
+    // ===== スラッシュコマンド補完（スパイク） =====
+    private List<SlashCommandItem> _slashSuggestions = new();
+    private int _slashSelectedIndex = 0;
+    private bool _slashDismissed = false; // Esc で閉じた状態（テキストが変わるまで維持）
+    private bool _slashHasFocus = false;  // 入力欄がフォーカスを持っているか
+    private bool _slashEnabled = false;    // 試験機能フラグ（設定で有効化）
+    private DotNetObjectReference<TextInputPanel>? _slashDotNetRef;
+    private bool _slashRegistered = false;
+
+    // 機能ON かつ 入力欄がフォーカスを持つときだけ表示する
+    // （モーダル等に隠れて出っぱなしになるのを防ぐ）。
+    private bool SlashPopupOpen => _slashEnabled && _slashHasFocus && _slashSuggestions.Count > 0;
+
+    private TerminalType? _lastParamTerminalType;
+
+    protected override void OnInitialized()
+    {
+        // 動的取得が完了したら候補を作り直して再描画する。
+        SlashCommandProvider.Changed += OnSlashCatalogChanged;
+    }
+
+    private void OnSlashCatalogChanged()
+    {
+        // Changed は Singleton の SlashCommandProvider が別スレッド（Task.Run）から発火する。
+        // 各 Circuit の TextInputPanel が購読しているため、取得完了と Circuit 破棄（タブを閉じる等）が
+        // 競合すると、破棄済みレンダラへの InvokeAsync/StateHasChanged が ObjectDisposedException を投げる。
+        // マルチキャストの Action なので、ここで例外を外へ出すと他の購読者への配送も止まってしまう。
+        // 同期throw・非同期faultの両方を握りつぶして、他 Circuit への通知を守る（Root.razor の
+        // SafeSubscribeToSession と同じ「破棄済みは握りつぶす」方針）。
+        try
+        {
+            var task = InvokeAsync(() =>
+            {
+                RecomputeSlashSuggestions();
+                StateHasChanged();
+            });
+            // fire-and-forget の非同期fault（破棄済みCircuit等）を不観測にしないよう観測して捨てる。
+            _ = task.ContinueWith(
+                static t => { _ = t.Exception; },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Circuit は既に破棄済み。配送先が無いので無視する。
+            Logger.LogDebug("[CircuitLife] OnSlashCatalogChanged skipped: renderer already disposed");
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // BottomPanel/TextInputPanel はセッション切替でも破棄されず生存し続けるため、
+        // OnInitialized の1回読みでは設定変更や TerminalType 変化に追従できない。
+        // ただし Text は双方向バインドで毎打鍵 OnParametersSet が走るため、毎回 GetSettings() すると
+        // 打鍵ごとにディスクI/Oになる。別種のセッションを開いた（TerminalType 変化）ときだけ
+        // フラグを読み直し、候補も作り直す（旧CLIの候補が残らないように）。
+        // 同一セッション内での設定変更の反映は OnSlashFocus 側（フォーカス時＝稀）で拾う。
+        if (_lastParamTerminalType != TerminalType)
+        {
+            _lastParamTerminalType = TerminalType;
+            _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+            RecomputeSlashSuggestions();
+        }
+    }
+
+    private void OnSlashFocus()
+    {
+        _slashHasFocus = true;
+        // フォーカス時に試験機能フラグを読み直す（設定変更を再読み込み/セッション切替なしで反映）。
+        // フォーカスは打鍵ごとには発火しないので GetSettings() の頻度は問題にならない。
+        _slashEnabled = AppSettingsService.GetSettings().Experimental.SlashAutocompleteEnabled;
+        // 機能ONなら、インストール済みバージョンの実コマンド一覧をバックグラウンドで一度だけ取得する
+        // （フォーカス時＝ユーザーが入力を始める合図なので、このタイミングが自然）。
+        if (_slashEnabled) SlashCommandProvider.EnsureLoaded(TerminalType);
+        RecomputeSlashSuggestions();
+    }
+
+    private void OnSlashBlur()
+    {
+        _slashHasFocus = false;
+    }
+
+    /// <summary>
+    /// 現在の入力から補完候補を再計算する。
+    /// 発火条件は「入力全体が "/" 始まりの単一トークン（空白・改行なし）」のときだけ。
+    /// マッチは名前（"/" を除く）に対する部分一致で、前方一致を優先してランク付けする。
+    /// </summary>
+    private void RecomputeSlashSuggestions()
+    {
+        _slashSuggestions = new();
+        _slashSelectedIndex = 0;
+        if (!_slashEnabled) return;
+        if (_slashDismissed) return;
+
+        var text = Text ?? "";
+        if (text.Length < 1 || text[0] != '/') return;
+        if (text.IndexOfAny(new[] { ' ', '\t', '\r', '\n' }) >= 0) return;
+
+        var query = text.Substring(1); // "/" を除いた検索語
+        // 動的取得済みならその一覧、未取得/非対応なら静的辞書（Provider がフォールバック）。
+        var catalog = SlashCommandProvider.GetCommands(TerminalType);
+        if (catalog.Count == 0) return;
+
+        var matches = new List<(SlashCommandItem Item, int Rank)>();
+        foreach (var item in catalog)
+        {
+            var nameNoSlash = item.Name.StartsWith("/") ? item.Name.Substring(1) : item.Name;
+            if (query.Length == 0)
+            {
+                matches.Add((item, 1));
+                continue;
+            }
+            var idx = nameNoSlash.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) continue;
+            matches.Add((item, idx == 0 ? 0 : 1)); // 前方一致=0, 中間一致=1
+        }
+
+        _slashSuggestions = matches
+            .OrderBy(m => m.Rank)
+            .ThenBy(m => m.Item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(m => m.Item)
+            .Take(8)
+            .ToList();
+    }
+
+    /// <summary>候補名のうち検索語に一致する部分を強調表示するため、前/一致/後に分割する。</summary>
+    private (string Before, string Match, string After) HighlightName(string name)
+    {
+        var text = Text ?? "";
+        var query = text.StartsWith("/") ? text.Substring(1) : text;
+        if (query.Length == 0) return (name, "", "");
+
+        var slashOffset = name.StartsWith("/") ? 1 : 0;
+        var nameNoSlash = name.Substring(slashOffset);
+        var idx = nameNoSlash.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return (name, "", "");
+
+        var realIdx = idx + slashOffset;
+        return (name.Substring(0, realIdx),
+                name.Substring(realIdx, query.Length),
+                name.Substring(realIdx + query.Length));
+    }
+
+    /// <summary>JS の keydown 横取りから呼ばれる。ポップアップ表示中の制御キーを処理する。</summary>
+    [JSInvokable]
+    public void OnSlashKey(string key)
+    {
+        if (!SlashPopupOpen) return;
+        var n = _slashSuggestions.Count;
+        switch (key)
+        {
+            case "ArrowDown":
+                _slashSelectedIndex = (_slashSelectedIndex + 1) % n;
+                break;
+            case "ArrowUp":
+                _slashSelectedIndex = (_slashSelectedIndex - 1 + n) % n;
+                break;
+            case "Tab":
+            case "Enter":
+                AcceptSlashSuggestion();
+                break;
+            case "Escape":
+                _slashDismissed = true;
+                _slashSuggestions = new();
+                break;
+        }
+        StateHasChanged();
+    }
+
+    private void AcceptSlashSuggestion()
+    {
+        if (_slashSelectedIndex < 0 || _slashSelectedIndex >= _slashSuggestions.Count) return;
+        var item = _slashSuggestions[_slashSelectedIndex];
+        // 末尾スペースでポップアップは自然に閉じ、そのまま引数を打てる。
+        inputText = item.Name + " ";
+    }
+
+    private async Task OnSlashItemClick(int index)
+    {
+        _slashSelectedIndex = index;
+        AcceptSlashSuggestion();
+        StateHasChanged();
+        // クリック後はテキストエリアにフォーカスを戻す（自前ヘルパで id 指定・確実に戻す）。
+        try { await JS.InvokeVoidAsync("slashAutocomplete.focusInput", $"inputText-{PanelId}"); } catch { }
+    }
+
+    private async Task TryRegisterSlashAutocomplete()
+    {
+        if (_slashRegistered) return;
+        if (!_slashEnabled) return;
+        // catalog が空(=対象外CLI)でも横取りリスナ自体は無害（ポップアップ非表示時は data-slash-open=0）。
+        // 最初に描画されたセッションが対象外でも、切替後に後追いで効くよう TerminalType では弾かない。
+        //
+        // 二重登録レース防止: OnAfterRenderAsync は await を挟むと次レンダーの呼び出しと交錯し得るため、
+        // await より前に同期でフラグを立てて、2回目の呼び出しがこのガードで弾かれるようにする。
+        _slashRegistered = true;
+        try
+        {
+            _slashDotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("slashAutocomplete.register", $"inputText-{PanelId}", _slashDotNetRef);
+        }
+        catch
+        {
+            // 失敗時はロールバックし、作った参照も破棄して次レンダーで再試行できるようにする。
+            _slashRegistered = false;
+            _slashDotNetRef?.Dispose();
+            _slashDotNetRef = null;
+        }
+    }
+
     private async Task OnTextAreaKeyDown(KeyboardEventArgs e)
     {
+        // スラッシュ補完ポップアップ表示中は、制御キーの処理を JS 横取り（OnSlashKey）に委ねる。
+        // ここでは何もしないことで、Enter 送信や Escape 中断などの既定動作を確実に抑止する。
+        // Shift+Tab は Claude Code のモード切替に使われ得るので横取り対象から除外する。
+        if (SlashPopupOpen &&
+            (e.Key == "Enter" || (e.Key == "Tab" && !e.ShiftKey) || e.Key == "Escape" ||
+             ((e.Key == "ArrowDown" || e.Key == "ArrowUp") && !e.CtrlKey)))
+        {
+            shouldPreventDefault = false;
+            return;
+        }
+
         // Enter で送信（Shiftキーが押されていない場合）
         if (e.Key == "Enter" && !e.ShiftKey && !e.CtrlKey && !e.AltKey)
         {
@@ -361,6 +678,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // 未登録の間は毎レンダーで登録を試みる（設定ON化やセッション切替後に後追いで付くように）。
+        if (!_slashRegistered)
+        {
+            await TryRegisterSlashAutocomplete();
+        }
+
         if (firstRender && VoiceInputEnabled)
         {
             await InitVoiceInput();
@@ -482,6 +805,21 @@
 
     public async ValueTask DisposeAsync()
     {
+        SlashCommandProvider.Changed -= OnSlashCatalogChanged;
+
+        if (_slashRegistered)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("slashAutocomplete.unregister", $"inputText-{PanelId}");
+            }
+            catch
+            {
+                // JSDisconnectedException 等は無視
+            }
+        }
+        _slashDotNetRef?.Dispose();
+
         if (voiceInitialized)
         {
             try

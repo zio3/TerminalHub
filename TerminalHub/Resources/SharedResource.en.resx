@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     i18n shared resources (English - canonical)
@@ -135,11 +135,6 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook</value></data>
-  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use Claude Code's hook feature to receive notifications more reliably. Settings are automatically added to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; when a session is created.</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Enable Claude Code Hook</value></data>
-  <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>This setting is applied to &lt;code&gt;.claude/settings.local.json&lt;/code&gt; the next time each session is started/restarted. It is not applied immediately to running sessions or workspaces outside TerminalHub's management.</value></data>
-  <data name="Settings.Notifications.ClaudeHook.AlwaysOnNotice" xml:space="preserve"><value>Hooks are always enabled. They are automatically added to the config file (.claude/settings.local.json for Claude Code, .codex/hooks.json for Codex) the next time each session is started/restarted.</value></data>
 
   <!-- Settings: Sessions Tab -->
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
@@ -372,19 +367,39 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI Options</value></data>
-  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>Execution mode</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (recommended)</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>Mostly automates edits, builds, and tests</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (dangerous)</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>Fully automatic execution (dangerous). Isolated environment recommended.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>Recommended. Uses `--sandbox workspace-write --ask-for-approval on-request`. Explicit per-setting choices take precedence.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>No explicit auto-run flags; proceeds interactively.</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>Uses `--dangerously-bypass-approvals-and-sandbox` for fully automatic execution (dangerous). Per-setting sandbox and approval choices are ignored.</value></data>
+  <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>Permission preset</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>Ask for approval</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>Allow development and network access, and ask you to approve potentially unsafe actions.</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>Delegate approval</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>Recommended</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>Automate routine work while AI reviews actions that may be unsafe on your behalf.</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>Custom</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>Choose sandbox, approval, and network behavior individually.</value></data>
+  <data name="SessionOptions.Codex.FollowCodex" xml:space="preserve"><value>Use Codex setting</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Label" xml:space="preserve"><value>Windows sandbox</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Help" xml:space="preserve"><value>Elevated enforces boundaries through a dedicated low-privilege user.</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>Command network access</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Allow" xml:space="preserve"><value>Allow</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Deny" xml:space="preserve"><value>Deny</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>Controls network use by git, gh, package managers, and other commands.</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Label" xml:space="preserve"><value>Approval reviewer</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.User" xml:space="preserve"><value>Ask the user</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Auto" xml:space="preserve"><value>AI automatic review</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Label" xml:space="preserve"><value>Web search</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>Live search</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>Codex web search is independent from network access for commands.</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>Disable sandbox and approvals (dangerous)</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>Adding this launch argument allows Codex to operate across the entire computer. While enabled, all permission presets and detailed settings above are ignored.</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>Warning:</value></data>
-  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO mode should only be used in isolated environments (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>Only use this argument in an isolated environment (WSL/Docker/VM/CI).</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>This disables the sandbox and approvals</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>Understand the risk and enable</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>Resume previous session (resume --last)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>Inline display</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>Avoids the alternate screen and keeps Codex output in the terminal scrollback (--no-alt-screen).</value></data>
+  <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>Advanced settings</value></data>
+  <data name="SessionOptions.Codex.PermissionDetails" xml:space="preserve"><value>Permission details</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>Sandbox mode</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI default</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>Do not add --sandbox; use the Codex CLI default.</value></data>
@@ -401,11 +416,13 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>Treat as untrusted. Prompts for every operation.</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>Prompts only when needed (near-default behavior).</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>Never prompts (dangerous).</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>Automatically review approval requests</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>A reviewer agent evaluates actions that require approval. This uses additional model calls, and actions are not run when review fails.</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Enable web search (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>Additional directories</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>One directory per line</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>Each line is passed as --add-dir</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --no-alt-screen</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>e.g., --model gpt-5</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>Passed as-is to Codex CLI</value></data>
 
   <!-- Antigravity CLI Options -->
@@ -480,6 +497,7 @@
   <data name="SubSession.SessionName.Placeholder" xml:space="preserve"><value>Auto-named from the folder if left empty</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>New branch name</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>A new worktree will be created for this branch</value></data>
+  <data name="SubSession.NewBranch.Invalid" xml:space="preserve"><value>Not a valid Git branch name (space ~ ^ : ? * [ \ and ".." are not allowed; cannot start with "." "-" or end with "." "/"; reserved names like HEAD are not allowed)</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>Select an existing branch</value></data>
   <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>Loading branch list...</value></data>
   <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>No branches available</value></data>

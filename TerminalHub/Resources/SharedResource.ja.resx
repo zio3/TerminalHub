@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     i18n 共有リソース (日本語)
@@ -135,11 +135,6 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook 設定</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Webhook 通知を有効にする</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook 設定</value></data>
-  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Claude Code の hook 機能を使用して、より確実に通知を受け取ることができます。セッション作成時に自動的に &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に設定が追加されます。</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Enable" xml:space="preserve"><value>Claude Code Hook を有効にする</value></data>
-  <data name="Settings.Notifications.ClaudeHook.ApplyNoticeHtml" xml:space="preserve"><value>この設定は各セッションが次に起動／再起動されたタイミングで &lt;code&gt;.claude/settings.local.json&lt;/code&gt; に反映されます。既に起動中のセッションや、TerminalHub 管理外のワークスペースには即時適用されません。</value></data>
-  <data name="Settings.Notifications.ClaudeHook.AlwaysOnNotice" xml:space="preserve"><value>Hook は常に有効です。各セッションが次に起動／再起動されたタイミングで、設定ファイル（Claude Code は .claude/settings.local.json、Codex は .codex/hooks.json）に自動で追加されます。</value></data>
 
   <!-- Settings: Sessions Tab -->
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>セッション一覧の並び順</value></data>
@@ -372,19 +367,39 @@
 
   <!-- SessionOptionsSelector: Codex CLI -->
   <data name="SessionOptions.Codex.Header" xml:space="preserve"><value>Codex CLI オプション</value></data>
-  <data name="SessionOptions.Codex.Mode.Label" xml:space="preserve"><value>実行モード</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoLabel" xml:space="preserve"><value>Auto (推奨)</value></data>
-  <data name="SessionOptions.Codex.Mode.AutoTitle" xml:space="preserve"><value>編集＋ビルド/テスト等を基本自動化</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardLabel" xml:space="preserve"><value>Interactive</value></data>
-  <data name="SessionOptions.Codex.Mode.StandardTitle" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloLabel" xml:space="preserve"><value>YOLO (危険)</value></data>
-  <data name="SessionOptions.Codex.Mode.YoloTitle" xml:space="preserve"><value>全自動実行（危険）。隔離環境推奨。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpAuto" xml:space="preserve"><value>推奨。`--sandbox workspace-write --ask-for-approval on-request` で実行します。個別指定がある項目はそちらを優先します。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpStandard" xml:space="preserve"><value>明示的な自動実行フラグを付けず、対話ベースで進行します。</value></data>
-  <data name="SessionOptions.Codex.Mode.HelpYolo" xml:space="preserve"><value>`--dangerously-bypass-approvals-and-sandbox` で全自動実行します（危険）。サンドボックスと承認の個別指定は適用されません。</value></data>
+  <data name="SessionOptions.Codex.Preset.Label" xml:space="preserve"><value>権限プリセット</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Label" xml:space="preserve"><value>承認を求める</value></data>
+  <data name="SessionOptions.Codex.Preset.Default.Help" xml:space="preserve"><value>開発とネットワーク利用を許可し、安全でない可能性がある操作はユーザーに確認します。</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Label" xml:space="preserve"><value>代理で承認</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Badge" xml:space="preserve"><value>推奨</value></data>
+  <data name="SessionOptions.Codex.Preset.Recommended.Help" xml:space="preserve"><value>通常作業を自動化し、安全でない可能性がある操作は AI が代理で審査します。</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Label" xml:space="preserve"><value>カスタム</value></data>
+  <data name="SessionOptions.Codex.Preset.Custom.Help" xml:space="preserve"><value>サンドボックス、承認、ネットワークを個別に指定します。</value></data>
+  <data name="SessionOptions.Codex.FollowCodex" xml:space="preserve"><value>Codex の設定に従う</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Label" xml:space="preserve"><value>Windows サンドボックス</value></data>
+  <data name="SessionOptions.Codex.WindowsSandbox.Help" xml:space="preserve"><value>Elevated は専用の低権限ユーザーで境界を強制します。</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Label" xml:space="preserve"><value>コマンドのネットワーク</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Allow" xml:space="preserve"><value>許可</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Deny" xml:space="preserve"><value>禁止</value></data>
+  <data name="SessionOptions.Codex.NetworkAccess.Help" xml:space="preserve"><value>git、gh、パッケージマネージャーなどの通信を制御します。</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Label" xml:space="preserve"><value>承認の審査者</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.User" xml:space="preserve"><value>ユーザーへ確認</value></data>
+  <data name="SessionOptions.Codex.ApprovalReviewer.Auto" xml:space="preserve"><value>AI による自動審査</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Label" xml:space="preserve"><value>Web 検索</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Live" xml:space="preserve"><value>ライブ検索</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Disabled" xml:space="preserve"><value>無効</value></data>
+  <data name="SessionOptions.Codex.WebSearch.Help" xml:space="preserve"><value>コマンドのネットワーク設定とは独立した Codex の検索機能です。</value></data>
+  <data name="SessionOptions.Codex.Yolo.Label" xml:space="preserve"><value>サンドボックスと承認を無効にする（危険）</value></data>
+  <data name="SessionOptions.Codex.Yolo.Help" xml:space="preserve"><value>この起動引数を追加すると、Codex がコンピューター全体を操作できるようになります。ONの間は、上の権限プリセットと詳細設定はすべて無視されます。</value></data>
   <data name="SessionOptions.Codex.YoloWarning.Label" xml:space="preserve"><value>警告:</value></data>
-  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>YOLO モードは隔離環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.YoloWarning.Message" xml:space="preserve"><value>この引数は、隔離された環境（WSL/Docker/VM/CI）でのみ使用してください。</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Title" xml:space="preserve"><value>サンドボックスと承認を無効にします</value></data>
+  <data name="SessionOptions.Codex.YoloConfirm.Enable" xml:space="preserve"><value>危険性を理解して有効化</value></data>
   <data name="SessionOptions.Codex.ResumeLast" xml:space="preserve"><value>直前のセッションに接続 (resume --last)</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen" xml:space="preserve"><value>インライン表示</value></data>
+  <data name="SessionOptions.Codex.NoAltScreen.Help" xml:space="preserve"><value>代替画面を使わず、Codex の出力をターミナルのスクロール履歴に残します（--no-alt-screen）。</value></data>
+  <data name="SessionOptions.Codex.AdvancedSettings" xml:space="preserve"><value>高度な設定</value></data>
+  <data name="SessionOptions.Codex.PermissionDetails" xml:space="preserve"><value>権限の詳細設定</value></data>
   <data name="SessionOptions.Codex.Sandbox.Label" xml:space="preserve"><value>サンドボックスモード</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultLabel" xml:space="preserve"><value>CLI 既定</value></data>
   <data name="SessionOptions.Codex.Sandbox.DefaultTitle" xml:space="preserve"><value>--sandbox を付けず、Codex CLI の既定値に任せます。</value></data>
@@ -401,11 +416,13 @@
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpUntrusted" xml:space="preserve"><value>未信頼扱い。すべての操作で承認を求めます。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpOnRequest" xml:space="preserve"><value>必要なときだけ承認を求めます（デフォルトに近い挙動）。</value></data>
   <data name="SessionOptions.Codex.ApprovalPolicy.HelpNever" xml:space="preserve"><value>承認を求めません（危険）。</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Label" xml:space="preserve"><value>承認リクエストを自動レビュー</value></data>
+  <data name="SessionOptions.Codex.AutoReviewApprovals.Help" xml:space="preserve"><value>承認が必要な操作をレビューエージェントが評価します。追加の使用量が発生し、レビューに失敗した操作は実行されません。</value></data>
   <data name="SessionOptions.Codex.Search" xml:space="preserve"><value>Web 検索を有効化 (--search)</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Label" xml:space="preserve"><value>追加ディレクトリ</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Placeholder" xml:space="preserve"><value>1 行に 1 ディレクトリずつ指定</value></data>
   <data name="SessionOptions.Codex.AdditionalDirs.Help" xml:space="preserve"><value>各行を `--add-dir` として渡します</value></data>
-  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --no-alt-screen</value></data>
+  <data name="SessionOptions.Codex.ExtraArgsPlaceholder" xml:space="preserve"><value>例: --model gpt-5</value></data>
   <data name="SessionOptions.Codex.PassToCli" xml:space="preserve"><value>そのまま Codex CLI に渡します</value></data>
 
   <!-- Antigravity CLI Options -->
@@ -480,6 +497,7 @@
   <data name="SubSession.SessionName.Placeholder" xml:space="preserve"><value>未入力ならフォルダ名から自動命名</value></data>
   <data name="SubSession.NewBranch.Label" xml:space="preserve"><value>新しいブランチ名</value></data>
   <data name="SubSession.NewBranch.Help" xml:space="preserve"><value>このブランチ名で新しい Worktree が作成されます</value></data>
+  <data name="SubSession.NewBranch.Invalid" xml:space="preserve"><value>Git のブランチ名として使用できません（空白 ~ ^ : ? * [ \ や ".." は不可、先頭の "." "-" や末尾の "." "/" も不可。HEAD 等の予約名も不可）</value></data>
   <data name="SubSession.ExistingBranch.Label" xml:space="preserve"><value>既存のブランチを選択</value></data>
   <data name="SubSession.ExistingBranch.Loading" xml:space="preserve"><value>ブランチ一覧を読み込み中…</value></data>
   <data name="SubSession.ExistingBranch.Empty" xml:space="preserve"><value>利用可能なブランチがありません</value></data>

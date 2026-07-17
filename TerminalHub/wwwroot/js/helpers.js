@@ -47,7 +47,6 @@ window.terminalHubHelpers = {
                     console.log(`  - element.parentNode: ${!!termInfo.terminal.element.parentNode}`);
                     console.log(`  - rows: ${termInfo.terminal.rows}, cols: ${termInfo.terminal.cols}`);
                 }
-                console.log(`  - isFirstWrite: ${termInfo.isFirstWrite}`);
                 console.log(`  - fitAddon存在: ${!!termInfo.fitAddon}`);
             });
         } else {
@@ -57,44 +56,6 @@ window.terminalHubHelpers = {
         console.log('[診断] ===== ターミナル診断終了 =====');
     },
     
-    // ターミナルの修復を試みる
-    repairTerminal: function(sessionId) {
-        console.log(`[修復] セッション ${sessionId} の修復開始`);
-        
-        const terminalDiv = document.getElementById(`terminal-${sessionId}`);
-        if (!terminalDiv) {
-            console.log(`[修復] DOM要素が見つかりません`);
-            return;
-        }
-        
-        if (window.multiSessionTerminals && window.multiSessionTerminals[sessionId]) {
-            const termInfo = window.multiSessionTerminals[sessionId];
-            if (termInfo.terminal && termInfo.terminal.element) {
-                // xtermの要素が正しい親要素に存在するか確認
-                if (termInfo.terminal.element.parentNode !== terminalDiv) {
-                    console.log(`[修復] xterm要素を正しいDOM要素に再アタッチ`);
-                    terminalDiv.appendChild(termInfo.terminal.element);
-                }
-                
-                // リフレッシュを実行
-                console.log(`[修復] ターミナルをリフレッシュ`);
-                termInfo.terminal.refresh(0, termInfo.terminal.rows - 1);
-                
-                // fitAddonがあればfit実行
-                if (termInfo.fitAddon) {
-                    console.log(`[修復] fitAddon.fit()実行`);
-                    termInfo.fitAddon.fit();
-                }
-                
-                console.log(`[修復] 修復完了`);
-            } else {
-                console.log(`[修復] xtermインスタンスが破損しています`);
-            }
-        } else {
-            console.log(`[修復] JS側のターミナル情報が見つかりません`);
-        }
-    },
-
     // Keyboard shortcuts
     setupKeyboardShortcuts: function(dotNetRef) {
         window.terminalHubKeyHandler = function(e) {
@@ -119,14 +80,6 @@ window.terminalHubHelpers = {
             document.removeEventListener('keydown', window.terminalHubKeyHandler);
             window.terminalHubKeyHandler = null;
         }
-    },
-    
-    // Get window dimensions
-    getWindowSize: function() {
-        return {
-            width: window.innerWidth,
-            height: window.innerHeight
-        };
     },
     
     // Check if element exists
@@ -393,11 +346,6 @@ window.terminalHubHelpers = {
         document.documentElement.setAttribute('data-bs-theme', theme);
     },
 
-    // 現在のテーマ取得
-    getTheme: function() {
-        return document.documentElement.getAttribute('data-bs-theme') || 'dark';
-    },
-
     // UI 言語の切替。.AspNetCore.Culture cookie を書き込んでページを reload。
     // ASP.NET Core 標準の CookieRequestCultureProvider が読む形式 (c=xx|uic=xx)。
     setUiCulture: function(culture) {
@@ -412,5 +360,53 @@ window.terminalHubHelpers = {
             console.warn('[TerminalHub i18n] setUiCulture: cookie write failed', e);
         }
         window.location.reload();
+    }
+};
+
+// ===== スラッシュコマンド補完（スパイク） =====
+// ポップアップ表示中の制御キー（↑↓/Tab/Enter/Esc）を keydown の capture 段階で
+// 横取りして preventDefault し、.NET 側の OnSlashKey へ通知する。
+// Blazor Server の @onkeydown:preventDefault は「今まさに押した打鍵」には確実に効かない
+// （サーバー往復のため）ので、確実な横取りは JS 側で行う必要がある。
+window.slashAutocomplete = {
+    _handlers: {},
+    register: function (textareaId, dotNetRef) {
+        var ta = document.getElementById(textareaId);
+        if (!ta) return;
+        // 二重登録防止: 既に同じテキストエリアへ登録済みなら、古いリスナを外してから付け直す。
+        if (this._handlers[textareaId]) {
+            this.unregister(textareaId);
+        }
+        // 横取り対象キー。値部分は特に使わない。
+        var keys = { 'ArrowDown': 1, 'ArrowUp': 1, 'Tab': 1, 'Enter': 1, 'Escape': 1 };
+        var handler = function (e) {
+            // ポップアップが開いているときだけ横取り（.NET が data 属性で状態を伝える）。
+            if (ta.dataset.slashOpen !== '1') return;
+            if (!keys[e.key]) return;
+            // Enter は修飾キー併用時（Shift+Enter の改行など）は横取りしない。
+            if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.altKey)) return;
+            // Tab/ArrowはCtrl併用時（他機能）も尊重して素通し。
+            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') && e.ctrlKey) return;
+            // Shift+Tab は Claude Code のモード切替に使われ得るので横取りしない。
+            if (e.key === 'Tab' && e.shiftKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dotNetRef.invokeMethodAsync('OnSlashKey', e.key);
+        };
+        // capture=true で、Blazor 側のリスナより先にブラウザ既定動作を止める。
+        ta.addEventListener('keydown', handler, true);
+        this._handlers[textareaId] = { ta: ta, handler: handler };
+    },
+    unregister: function (textareaId) {
+        var h = this._handlers[textareaId];
+        if (h) {
+            h.ta.removeEventListener('keydown', h.handler, true);
+            delete this._handlers[textareaId];
+        }
+    },
+    // 候補をマウスクリックで確定した後、テキストエリアへフォーカスを戻す。
+    focusInput: function (textareaId) {
+        var ta = document.getElementById(textareaId);
+        if (ta) ta.focus();
     }
 };

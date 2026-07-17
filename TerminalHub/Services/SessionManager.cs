@@ -1,4 +1,4 @@
-using TerminalHub.Models;
+﻿using TerminalHub.Models;
 using TerminalHub.Constants;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
@@ -50,7 +50,6 @@ namespace TerminalHub.Services
         void MarkSessionConnected(Guid sessionId);
 
         Task<bool> SetActiveSessionAsync(Guid sessionId);
-        Guid? GetActiveSessionId();
         Task SaveSessionInfoAsync(SessionInfo sessionInfo);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName);
         Task<SessionInfo?> CreateWorktreeSessionAsync(Guid parentSessionId, string branchName, TerminalType terminalType, Dictionary<string, string>? options);
@@ -204,12 +203,59 @@ namespace TerminalHub.Services
             return !string.IsNullOrEmpty(configuredPath) ? configuredPath : TerminalConstants.GetDefaultClaudeCmdPath();
         }
 
-        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options)
+        /// <summary>
+        /// 試験機能: MCP が ON なら、Claude Code へ --mcp-config で渡す JSON を用意してパスを返す。
+        /// OFF・未対応・失敗時は null（＝オプション無しで起動する）。
+        /// ポートは起動中の実値を使うので、TerminalHub のポートが変わっても次の起動から自動で追従する。
+        /// </summary>
+        private string? ResolveClaudeMcpConfigPath()
+        {
+            if (_mcpConfigService == null || _appSettingsService == null)
+                return null;
+
+            if (!_appSettingsService.GetSettings().Experimental.EnableLocalMcp)
+                return null;
+
+            return _mcpConfigService.EnsureClaudeMcpConfigFile(GetServerBaseUrl());
+        }
+
+        /// <summary>
+        /// Claude Code へ --settings で渡す hook 設定 JSON を用意してパスを返す（Hook は常時有効）。
+        /// 失敗時は null（＝オプション無しで起動する。hook 通知が来ないだけでセッションは動く）。
+        /// hook URL はセッション GUID 入りなのでファイルはセッション毎。ポートは起動中の実値を
+        /// 毎回書き込むので、TerminalHub のポートが変わっても次の起動から自動で追従する。
+        /// </summary>
+        private string? ResolveClaudeHookConfigPath(Guid sessionId)
+        {
+            if (_claudeHookService == null)
+                return null;
+
+            return _claudeHookService.EnsureHookConfigFile(sessionId, GetServerBaseUrl());
+        }
+
+        /// <summary>
+        /// 試験機能: MCP が ON なら、Codex 起動時に -c で注入する TerminalHub MCP の URL を返す。
+        /// OFF・未設定時は null（＝オプション無しで起動する）。
+        /// Claude と違いファイルを用意する必要がないので URL を組むだけ。実行中のポートに依存するため
+        /// .codex/config.toml には永続化しない（起動オプションは config.toml より優先される）。
+        /// </summary>
+        private string? GetCodexMcpUrl()
+        {
+            if (_mcpConfigService == null || _appSettingsService == null)
+                return null;
+
+            if (!_appSettingsService.GetSettings().Experimental.EnableLocalMcp)
+                return null;
+
+            return _mcpConfigService.BuildMcpUrl(GetServerBaseUrl());
+        }
+
+        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options, Guid sessionId)
         {
             switch (terminalType)
             {
                 case TerminalType.ClaudeCode:
-                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options);
+                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath(), ResolveClaudeHookConfigPath(sessionId));
                     var claudeCmdPath = GetClaudeCmdPath();
 
                     // ネイティブ版(.exe)は直接実行、npm版(.cmd)はcmd.exe経由
@@ -230,7 +276,11 @@ namespace TerminalHub.Services
                 // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
 
                 case TerminalType.CodexCLI:
-                    var codexArgs = TerminalConstants.BuildCodexArgs(options);
+                    var codexHookArgs = _codexHookService?.BuildHookConfigArguments(GetServerBaseUrl());
+                    var codexArgs = TerminalConstants.BuildCodexArgs(
+                        options,
+                        GetCodexMcpUrl(),
+                        codexHookArgs);
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";
@@ -301,7 +351,8 @@ namespace TerminalHub.Services
                 await PopulateGitInfoAsync(sessionInfo);
             }
 
-            // Note: ClaudeCode の hook 設定は GetSessionAsync で遅延セットアップされる
+                // Note: hook はここではセットアップしない。GetSessionAsync の遅延初期化で
+                // BuildTerminalCommand が起動引数（Claude=--settings / Codex=-c hooks.*）として解決する。
 
                 // SessionInfoのみを登録（ConPtyセッションは遅延初期化）
                 _sessionInfos[sessionInfo.SessionId] = sessionInfo;
@@ -400,16 +451,15 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                // ClaudeCode セッションの場合、ConPty 起動前に hook 設定をセットアップ
-                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: false);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: false);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: false);
-
                 // ConPtyセッションを初期化
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
 
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, sessionInfo.Options);
+                // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
+                var terminalType = sessionInfo.TerminalType;
+                var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
                 var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
@@ -524,13 +574,6 @@ namespace TerminalHub.Services
             }
         }
 
-        public Guid? GetActiveSessionId()
-        {
-            lock (_lockObject)
-            {
-                return _activeSessionId;
-            }
-        }
 
         public Task SaveSessionInfoAsync(SessionInfo sessionInfo)
         {
@@ -858,122 +901,29 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// ClaudeCode セッション初期化／再起動の直前に呼び出し、
-        /// <c>.claude/settings.local.json</c> に hook 設定を追加する共通処理（Hook は常時有効）。
-        ///
-        /// 反映タイミング: このメソッドはセッション初期化・再作成・再起動の 3 箇所からしか
-        /// 呼ばれないので、設定トグルを切り替えた瞬間には反映されない。
-        /// 各ワークスペースは対応するセッションが次に起動／再起動された時点で追従する。
-        /// UI 側 (SettingsDialog) でもその旨を利用者に告知している。
-        /// </summary>
-        /// <param name="sessionInfo">セッション情報</param>
-        /// <param name="isResetup">再セットアップかどうか（true: 常に実行、false: HookConfigured が false の場合のみ実行）</param>
-        private async Task SetupClaudeHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
-        {
-            if (sessionInfo.TerminalType != TerminalType.ClaudeCode || _claudeHookService == null)
-                return;
-
-            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
-            // 初回セットアップの場合は既に設定済みならスキップ
-            if (!isResetup && sessionInfo.HookConfigured)
-                return;
-
-            try
-            {
-                var baseUrl = GetServerBaseUrl();
-                await _claudeHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
-                sessionInfo.HookConfigured = true;
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogInformation($"Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
-            }
-            catch (Exception ex)
-            {
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogWarning(ex, $"Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
-            }
-        }
-
-        /// <summary>
-        /// CodexCLI セッション初期化／再起動の直前に呼び出し、
-        /// <c>.codex/hooks.json</c> に hook 設定を追加する。Claude 版（SetupClaudeHookIfNeededAsync）と対称。
-        /// Hook は常時有効（UI トグルは廃止）。
-        /// </summary>
-        private async Task SetupCodexHookIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
-        {
-            if (sessionInfo.TerminalType != TerminalType.CodexCLI || _codexHookService == null)
-                return;
-
-            // Hook は常時有効（UI トグルは廃止）。聞かずに自動セットアップする。
-            if (!isResetup && sessionInfo.HookConfigured)
-                return;
-
-            try
-            {
-                var baseUrl = GetServerBaseUrl();
-                await _codexHookService.SetupHooksAsync(sessionInfo.SessionId, sessionInfo.FolderPath, baseUrl);
-                sessionInfo.HookConfigured = true;
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogInformation($"Codex Hook 設定を{action}: SessionId={{SessionId}}, BaseUrl={{BaseUrl}}", sessionInfo.SessionId, baseUrl);
-            }
-            catch (Exception ex)
-            {
-                var action = isResetup ? "再セットアップ" : "セットアップ";
-                _logger.LogWarning(ex, $"Codex Hook 設定の{action}に失敗しましたが、セッション処理は続行します: SessionId={{SessionId}}", sessionInfo.SessionId);
-            }
-        }
-
-        /// <summary>
-        /// 試験機能: セッション生成/再起動時に、対応CLI(Claude Code / Codex)のフォルダへ TerminalHub の
-        /// ローカル MCP サーバー(terminalhub)を自動登録する。設定 Experimental.AutoRegisterMcp が ON の
-        /// ときのみ実行（既定OFF）。Hook セットアップと対称。失敗してもセッション処理は続行する。
-        /// </summary>
-        private async Task SetupMcpConfigIfNeededAsync(SessionInfo sessionInfo, bool isResetup = false)
-        {
-            if (_mcpConfigService == null || _appSettingsService == null)
-                return;
-
-            // Claude Code / Codex のみサポート。
-            if (sessionInfo.TerminalType != TerminalType.ClaudeCode &&
-                sessionInfo.TerminalType != TerminalType.CodexCLI)
-                return;
-
-            if (!_appSettingsService.GetSettings().Experimental.AutoRegisterMcp)
-                return;
-
-            // Hook と同じく、プロセス内では初回のみ書く。McpConfigured は [JsonIgnore] で
-            // TerminalHub 再起動時に false へ戻るため、ポートが変わっても再起動後の初回で追従する。
-            if (!isResetup && sessionInfo.McpConfigured)
-                return;
-
-            try
-            {
-                var baseUrl = GetServerBaseUrl();
-                await _mcpConfigService.SetupAsync(sessionInfo.FolderPath, sessionInfo.TerminalType, baseUrl);
-                sessionInfo.McpConfigured = true;
-                var action = isResetup ? "再登録" : "登録";
-                _logger.LogInformation("MCP自動{Action}: SessionId={SessionId}, Type={Type}, BaseUrl={BaseUrl}",
-                    action, sessionInfo.SessionId, sessionInfo.TerminalType, baseUrl);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "MCP自動登録に失敗しましたが、セッション処理は続行します: SessionId={SessionId}", sessionInfo.SessionId);
-            }
-        }
-
-        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
         {
-            var options = sessionInfo.Options ?? new Dictionary<string, string>();
+            // 呼び出し後の設定保存で、生成するコマンドと実行時スナップショットが変わらないよう複製する。
+            var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
             var hasContinueOption = options.ContainsKey("continue");
 
             if ((removeContinueOption || sessionInfo.HasContinueErrorOccurred) && hasContinueOption)
             {
-                options = new Dictionary<string, string>(options);
                 options.Remove("continue");
             }
             return options;
+        }
+
+        private static void CaptureRunningCodexOptions(
+            SessionInfo sessionInfo,
+            TerminalType terminalType,
+            Dictionary<string, string> options)
+        {
+            sessionInfo.RunningCodexOptions = terminalType == TerminalType.CodexCLI
+                ? CodexProcessOptionsSnapshot.Capture(options)
+                : null;
         }
 
         public async Task<ConPtySession?> RecreateSessionAsync(Guid sessionId, bool removeContinueOption = false)
@@ -1007,15 +957,12 @@ namespace TerminalHub.Services
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
-                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
-
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var terminalType = sessionInfo.TerminalType;
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
@@ -1092,15 +1039,12 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                // ClaudeCode セッションの場合、Hook 設定を再セットアップ
-                await SetupClaudeHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupCodexHookIfNeededAsync(sessionInfo, isResetup: true);
-                await SetupMcpConfigIfNeededAsync(sessionInfo, isResetup: true);
-
                 var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo);
-                var (command, args) = BuildTerminalCommand(sessionInfo.TerminalType, options);
+                var terminalType = sessionInfo.TerminalType;
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成して起動
                 ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
@@ -1333,6 +1277,8 @@ namespace TerminalHub.Services
             {
                 // 生ストリームキャプチャのライターも閉じる（ハンドルリーク防止）
                 _rawStreamCapture?.CloseSession(sessionId);
+                // --settings 用 hook 設定ファイルの後始末（残っても実害はないが溜めない）
+                _claudeHookService?.DeleteHookConfigFile(sessionId);
                 _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
                 NotifySessionsChanged();
             }

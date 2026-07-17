@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -49,7 +49,7 @@ namespace TerminalHub.Services
 
         public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null)
         {
-            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, true, sessionId)); // バッファリング有効
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, sessionId));
         }
     }
 
@@ -63,7 +63,9 @@ namespace TerminalHub.Services
         private FileStream? _pipeInStream;
         private FileStream? _pipeOutStream;
         private StreamWriter? _writer;
-        private volatile bool _disposed;
+        private int _disposeState;
+        private bool IsDisposed => Volatile.Read(ref _disposeState) != 0;
+        private readonly object _pseudoConsoleLock = new();
         private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
         private Task? _readTask;
         private CancellationTokenSource? _readCancellationTokenSource;
@@ -76,9 +78,12 @@ namespace TerminalHub.Services
         // 環境変数フラグ
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         
-        // パフォーマンス最適化設定
-        private bool _enableBuffering = true; // バッファリング有効
-        private readonly SemaphoreSlim _outputSemaphore = new(1, 1);
+        // バッファ抽出と配送キューへの追加を同じロックで直列化し、ConPTYの出力順を保つ。
+        // イベントはロック外で単一ディスパッチャーが発火し、購読者からDisposeされた場合も
+        // 出力ロックへの再入によるデッドロックを防ぐ。
+        private readonly object _outputLock = new();
+        private readonly Queue<string> _pendingOutput = new();
+        private bool _isDispatchingOutput;
 
         // 書き込みの直列化用。UI・MCP(send_to_session)・RemoteLaunch など複数経路から
         // 同時に WriteAsync が呼ばれると、256文字チャンク＋Delay の隙間で入力が混ざるため排他する
@@ -119,32 +124,28 @@ namespace TerminalHub.Services
         // プロセス終了イベント
         public event EventHandler? ProcessExited;
 
-        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, bool enableBuffering = true, Guid? sessionId = null)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, Guid? sessionId = null)
         {
             _logger = logger;
             Cols = cols;
             Rows = rows;
-            _enableBuffering = enableBuffering;
             _sessionId = sessionId;
-            
-            // バッファリング用タイマーの初期化（有効時のみ）
-            if (_enableBuffering)
+
+            // バッファリング用タイマーの初期化
+            _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
+            _flushTimer.Elapsed += (sender, e) =>
             {
-                _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
-                _flushTimer.Elapsed += async (sender, e) =>
-                {
-                    if (!_disposed)
-                        await FlushOutputBuffer();
-                };
-                _flushTimer.AutoReset = true;
-            }
+                if (!IsDisposed)
+                    FlushOutputBuffer();
+            };
+            _flushTimer.AutoReset = true;
 
             InitializeConPty(command, arguments, workingDirectory);
         }
         
         public void Start()
         {
-            if (_started || _disposed)
+            if (_started || IsDisposed)
                 return;
                 
             _started = true;
@@ -152,12 +153,8 @@ namespace TerminalHub.Services
             // xterm.jsを使用する場合、初期化シーケンスは不要
             // xterm.jsが自動的にエスケープシーケンスを処理
             
-            // バッファリングが有効な場合はタイマーを開始
-            if (_enableBuffering)
-            {
-                _flushTimer?.Start();
-            }
-            
+            _flushTimer?.Start();
+
             _readCancellationTokenSource = new CancellationTokenSource();
             _readTask = Task.Run(() => ReadPipeAsync(_readCancellationTokenSource.Token));
         }
@@ -327,23 +324,21 @@ namespace TerminalHub.Services
                 
                 // ストリームの作成
                 var pipeIn = new Microsoft.Win32.SafeHandles.SafeFileHandle(hWritePipe, true);
-                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
-
+                hWritePipe = IntPtr.Zero;
                 _pipeInStream = new FileStream(pipeIn, FileAccess.Write);
+
+                var pipeOut = new Microsoft.Win32.SafeHandles.SafeFileHandle(hReadPipe, true);
+                hReadPipe = IntPtr.Zero;
                 _pipeOutStream = new FileStream(pipeOut, FileAccess.Read);
                 
                 // StreamWriterを作成（XTerm向けにUTF-8、改行コードLF）
-                // バッファサイズを65KBに増やして長い文字列の問題を解決
+                // AutoFlush は使わない。書き込みは WriteAsync の1経路だけで、そこがチャンクごとに
+                // 明示的に FlushAsync している（送出のタイミングはそちらで管理する）。
                 _writer = new StreamWriter(_pipeInStream, new UTF8Encoding(false), bufferSize: 65536)
                 {
-                    AutoFlush = true,
                     NewLine = "\n"  // LF改行（Unix形式）
                 };
                 
-                // SafeFileHandleに所有権を移したので、元のハンドルは無効化
-                hWritePipe = IntPtr.Zero;
-                hReadPipe = IntPtr.Zero;
-
                 // ハンドルのクリーンアップ
                 CloseHandle(processInfoHandle);
                 CloseHandle(threadInfoHandle);
@@ -355,6 +350,9 @@ namespace TerminalHub.Services
                 // エラー時のクリーンアップ（初期化失敗時はDisposeが呼ばれないため、ConPTY側の端もここで閉じる）
                 if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
                 if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                _writer?.Dispose();
+                _pipeInStream?.Dispose();
+                _pipeOutStream?.Dispose();
                 if (_hPipeIn != IntPtr.Zero) { CloseHandle(_hPipeIn); _hPipeIn = IntPtr.Zero; }
                 if (_hPipeOut != IntPtr.Zero) { CloseHandle(_hPipeOut); _hPipeOut = IntPtr.Zero; }
                 if (processInfoHandle != IntPtr.Zero) CloseHandle(processInfoHandle);
@@ -379,7 +377,7 @@ namespace TerminalHub.Services
         /// <param name="input">送信するデータ</param>
         public async Task WriteAsync(string input)
         {
-            if (_writer == null || _disposed)
+            if (_writer == null || IsDisposed)
                 return;
 
             // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ。
@@ -400,21 +398,34 @@ namespace TerminalHub.Services
 
             try
             {
-                if (_writer == null || _disposed)
+                if (_writer == null || IsDisposed)
                     return;
 
-                // 256文字単位で分割して送信（こまめにFlushすることで問題を解決）
-                const int CHUNK_SIZE = 256;
+                // 長い文字列を一括で流し込むと受け手（conhost の入力バッファ / CLI）が取りこぼすため、
+                // 分割して間隔を空けながら送る。CHUNK_SIZE/INTER_CHUNK_DELAY_MS は実測で調整された値で
+                // 理論的な裏付けはないが、間隔を詰めると切れが再発した経緯があるので安易に縮めないこと。
+                //
+                // ウェイトが要るのは「チャンクとチャンクの間」だけ。最後のチャンクの後に待っても
+                // 受け手に猶予を与える意味はなく、遅延にしかならない。onData 経由のキー入力は
+                // 1打鍵ごとに WriteAsync を呼ぶ（=常に1チャンク）ため、ここで待つと全打鍵が
+                // 20ms 遅れる。
+                const int INTER_CHUNK_DELAY_MS = 20;
 
-                for (int i = 0; i < input.Length; i += CHUNK_SIZE)
+                var offset = 0;
+                while (offset < input.Length)
                 {
-                    var chunk = i + CHUNK_SIZE < input.Length
-                        ? input.Substring(i, CHUNK_SIZE)
-                        : input.Substring(i);
+                    // 境界はサロゲートペアを分断しないよう調整される（ConPtyWriteChunker 参照）
+                    var length = ConPtyWriteChunker.NextChunkLength(input, offset);
+                    var isLastChunk = offset + length >= input.Length;
 
-                    await _writer.WriteAsync(chunk);
+                    await _writer.WriteAsync(input.Substring(offset, length));
                     await _writer.FlushAsync();
-                    await Task.Delay(20);
+                    offset += length;
+
+                    if (!isLastChunk)
+                    {
+                        await Task.Delay(INTER_CHUNK_DELAY_MS);
+                    }
                 }
 
                 // 統計情報を更新
@@ -439,71 +450,114 @@ namespace TerminalHub.Services
         }
 
         // バッファリング関連メソッド
-        private async Task BufferOutput(string data)
+        private void BufferOutput(string data)
         {
-            if (_disposed || _outputSemaphore == null)
+            if (IsDisposed)
                 return;
-                
-            try
-            {
-                await _outputSemaphore.WaitAsync();
-                try
-                {
-                    if (!_disposed)
-                    {
-                        _outputBuffer.Append(data);
-                        
-                        // バッファサイズが上限に達したら即座にフラッシュ
-                        if (_outputBuffer.Length >= MAX_BUFFER_SIZE)
-                        {
-                            var bufferedData = _outputBuffer.ToString();
-                            _outputBuffer.Clear();
 
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(bufferedData));
-                        }
-                    }
-                }
-                finally
-                {
-                    // 取得したら必ず解放する。イベント処理中に Dispose された場合でも
-                    // Release しないと待機側が詰まる（破棄済みなら ObjectDisposedException を外側の catch で無視）
-                    _outputSemaphore.Release();
-                }
-            }
-            catch (ObjectDisposedException)
+            bool startDispatcher = false;
+            lock (_outputLock)
             {
-                // セマフォが破棄されている場合は無視
+                if (!IsDisposed)
+                {
+                    _outputBuffer.Append(data);
+                    if (_outputBuffer.Length >= MAX_BUFFER_SIZE)
+                        startDispatcher = EnqueueBufferedOutputLocked();
+                }
             }
+
+            if (startDispatcher)
+                DispatchPendingOutput();
         }
         
-        private async Task FlushOutputBuffer()
+        private void FlushOutputBuffer()
         {
-            if (_disposed || _outputSemaphore == null)
+            if (IsDisposed)
                 return;
-                
-            try
+
+            bool startDispatcher;
+            lock (_outputLock)
             {
-                await _outputSemaphore.WaitAsync();
-                try
+                startDispatcher = !IsDisposed && EnqueueBufferedOutputLocked();
+            }
+
+            if (startDispatcher)
+                DispatchPendingOutput();
+        }
+
+        private void FlushRemainingOutput(bool waitForDispatch = false)
+        {
+            bool startDispatcher;
+            lock (_outputLock)
+            {
+                // Dispose後も既に読み取った末尾データは配送する。
+                startDispatcher = EnqueueBufferedOutputLocked();
+            }
+
+            if (startDispatcher)
+                DispatchPendingOutput();
+
+            if (waitForDispatch)
+            {
+                lock (_outputLock)
                 {
-                    if (!_disposed && _outputBuffer.Length > 0)
-                    {
-                        var data = _outputBuffer.ToString();
-                        _outputBuffer.Clear();
-                        
-                        // メインスレッドでイベントを発生
-                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
-                    }
-                }
-                finally
-                {
-                    // 取得したら必ず解放する（破棄済みなら ObjectDisposedException を外側の catch で無視）
-                    _outputSemaphore.Release();
+                    while (_isDispatchingOutput)
+                        Monitor.Wait(_outputLock);
                 }
             }
-            catch (ObjectDisposedException)
+        }
+
+        // _outputLockを保持して呼ぶこと。
+        private bool EnqueueBufferedOutputLocked()
+        {
+            if (_outputBuffer.Length == 0)
+                return false;
+
+            _pendingOutput.Enqueue(_outputBuffer.ToString());
+            _outputBuffer.Clear();
+            if (_isDispatchingOutput)
+                return false;
+
+            _isDispatchingOutput = true;
+            return true;
+        }
+
+        private void DispatchPendingOutput()
+        {
+            while (true)
             {
-                // セマフォが破棄されている場合は無視
+                string data;
+                lock (_outputLock)
+                {
+                    if (_pendingOutput.Count == 0)
+                    {
+                        _isDispatchingOutput = false;
+                        Monitor.PulseAll(_outputLock);
+                        return;
+                    }
+                    data = _pendingOutput.Dequeue();
+                }
+
+                RaiseDataReceived(data);
+            }
+        }
+
+        private void RaiseDataReceived(string data)
+        {
+            var args = new DataReceivedEventArgs(data);
+            foreach (EventHandler<DataReceivedEventArgs> handler in DataReceived?.GetInvocationList() ?? [])
+            {
+                try { handler(this, args); }
+                catch (Exception ex) { _logger.LogError(ex, "Error in ConPTY DataReceived subscriber"); }
+            }
+        }
+
+        private void RaiseProcessExited()
+        {
+            foreach (EventHandler handler in ProcessExited?.GetInvocationList() ?? [])
+            {
+                try { handler(this, EventArgs.Empty); }
+                catch (Exception ex) { _logger.LogError(ex, "Error in ConPTY ProcessExited subscriber"); }
             }
         }
 
@@ -513,7 +567,7 @@ namespace TerminalHub.Services
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
 
-            while (!cancellationToken.IsCancellationRequested && !_disposed)
+            while (!cancellationToken.IsCancellationRequested && !IsDisposed)
             {
                 try
                 {
@@ -553,16 +607,7 @@ namespace TerminalHub.Services
                         var charsRead = _utf8Decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
                         var data = new string(charBuffer, 0, charsRead);
 
-                        if (_enableBuffering)
-                        {
-                            // バッファリングが有効な場合
-                            await BufferOutput(data);
-                        }
-                        else
-                        {
-                            // 直接イベントを発生
-                            DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
-                        }
+                        BufferOutput(data);
                     }
                     else
                     {
@@ -583,28 +628,28 @@ namespace TerminalHub.Services
             }
             
             // バッファリングタイマーを即座に停止
-            if (_enableBuffering && _flushTimer != null)
+            if (_flushTimer != null)
             {
                 _flushTimer.Stop();
                 _flushTimer.Dispose();
                 _flushTimer = null;
             }
 
-            // タイマー停止で置き去りになった未フラッシュ分（フラッシュ間隔未満の最終出力）を
-            // 通知前に送出する。これが無いと短命コマンドの最終行・エラーが欠落する
-            if (_enableBuffering)
-            {
-                await FlushOutputBuffer();
-            }
+            // 終了通知より先に、短時間バッファに残った末尾出力を配送する。
+            FlushRemainingOutput(waitForDispatch: true);
 
             // プロセスが終了したことを通知
-            ProcessExited?.Invoke(this, EventArgs.Empty);
+            RaiseProcessExited();
         }
+
 
         public void Resize(int cols, int rows)
         {
-            if (_hPC != IntPtr.Zero)
+            lock (_pseudoConsoleLock)
             {
+                if (_hPC == IntPtr.Zero || IsDisposed)
+                    return;
+
                 // 0以下・short範囲外はConPTYに渡せない（shortキャストで壊れた値になる）
                 if (cols <= 0 || rows <= 0 || cols > short.MaxValue || rows > short.MaxValue)
                 {
@@ -674,10 +719,7 @@ namespace TerminalHub.Services
 
         public void Dispose()
         {
-            if (_disposed) return;
-
-            // まず破棄フラグを設定
-            _disposed = true;
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) return;
 
             // 書き込み待機を解除（_writeLock.WaitAsync で待機中の WriteAsync を抜けさせる）
             try
@@ -701,6 +743,8 @@ namespace TerminalHub.Services
             try
             {
                 _readCancellationTokenSource?.Cancel();
+                // パイプ読み取りを先に解除し、待機がタイムアウトしにくいようにする。
+                _pipeOutStream?.Dispose();
                 _readTask?.Wait(1000); // 1秒待機
             }
             catch (Exception ex)
@@ -709,7 +753,7 @@ namespace TerminalHub.Services
             }
 
             // タイマーを停止
-            if (_enableBuffering && _flushTimer != null)
+            if (_flushTimer != null)
             {
                 _flushTimer.Stop();
                 _flushTimer.Dispose();
@@ -718,11 +762,7 @@ namespace TerminalHub.Services
                 // 残りのバッファを同期的にフラッシュ
                 try
                 {
-                    if (_outputBuffer.Length > 0)
-                    {
-                        var data = _outputBuffer.ToString();
-                        DataReceived?.Invoke(this, new DataReceivedEventArgs(data));
-                    }
+                    FlushRemainingOutput();
                 }
                 catch (Exception ex)
                 {
@@ -735,8 +775,6 @@ namespace TerminalHub.Services
             _pipeInStream?.Dispose();
             _pipeOutStream?.Dispose();
             
-            // セマフォを破棄
-            _outputSemaphore?.Dispose();
             _writeLock?.Dispose();
 
             // プロセスを終了（bun など孫プロセスが残らないようプロセスツリーごと kill）
@@ -754,10 +792,13 @@ namespace TerminalHub.Services
             }
 
             // プロセスとハンドルを破棄
-            if (_hPC != IntPtr.Zero)
+            lock (_pseudoConsoleLock)
             {
-                ClosePseudoConsole(_hPC);
-                _hPC = IntPtr.Zero;
+                if (_hPC != IntPtr.Zero)
+                {
+                    ClosePseudoConsole(_hPC);
+                    _hPC = IntPtr.Zero;
+                }
             }
 
             if (_hPipeIn != IntPtr.Zero)
