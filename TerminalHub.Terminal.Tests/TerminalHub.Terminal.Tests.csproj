@@ -32,6 +32,9 @@
     <Compile Include="..\TerminalHub\Analyzers\CodexCliAnalyzer.cs" Link="CodexCliAnalyzer.cs" />
     <!-- OutputAnalyzer のクールダウン境界判定（時刻依存の純ロジック） -->
     <Compile Include="..\TerminalHub\Services\ProcessingCooldownPolicy.cs" Link="ProcessingCooldownPolicy.cs" />
+    <!-- MQTT リモート起動の暗号プリミティブと nonce ストア（セキュリティ境界の純ロジック） -->
+    <Compile Include="..\TerminalHub\Services\MqttCrypto.cs" Link="MqttCrypto.cs" />
+    <Compile Include="..\TerminalHub\Services\NonceStore.cs" Link="NonceStore.cs" />
   </ItemGroup>
 
   <!-- Fixtures をテスト出力にコピー（実 TUI キャプチャの置き場） -->
