@@ -135,8 +135,8 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
-  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>Claude Code Hook</value></data>
-  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use Claude Code's hook feature to receive notifications more reliably. Hooks are passed automatically via a launch option when a session starts, so no config files in your working folder are modified.</value></data>
+  <data name="Settings.Notifications.ClaudeHook.Header" xml:space="preserve"><value>CLI Hooks</value></data>
+  <data name="Settings.Notifications.ClaudeHook.HelpHtml" xml:space="preserve"><value>Use the hook feature of Claude Code / Codex to receive notifications more reliably. Hooks are passed automatically via launch options when a session starts, so no config files in your working folder are modified.</value></data>
   <data name="Settings.Notifications.ClaudeHook.AlwaysOnNotice" xml:space="preserve"><value>Hooks are always enabled. They are applied automatically the next time each session is started/restarted (both Claude Code and Codex receive them via launch options without modifying any files).</value></data>
 
   <!-- Settings: Sessions Tab -->
