@@ -190,8 +190,8 @@ public static class SlashCommandCatalog
         new("/exit", "Codex CLIを終了（/quit と同じ）"),
     };
 
-    // Gemini CLI の組み込みコマンドは、各CLIに自前で辞書を作らせてここへはめ込む予定。
-    // それまでは未対応（空＝補完オフ）とする。
+    // Gemini CLI は公式廃止（Antigravity へ移行済み）。enum 値はデシリアライズ互換のため
+    // 残置しているが、新規辞書は追加しない（＝補完オフ）。
 
     private static readonly SlashCommandItem[] Empty = System.Array.Empty<SlashCommandItem>();
 
@@ -200,7 +200,7 @@ public static class SlashCommandCatalog
     {
         TerminalType.ClaudeCode => ClaudeCommands,
         TerminalType.CodexCLI => CodexCommands,
-        // TODO: Gemini は各CLI提供の辞書を追加したら分岐を復活させる。
+        // Gemini は廃止済みのため分岐なし（default で空＝補完オフ）。
         _ => Empty,
     };
 }

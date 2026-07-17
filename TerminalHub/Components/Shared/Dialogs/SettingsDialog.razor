@@ -2158,7 +2158,7 @@
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
         }
-        catch { }
+        catch { /* クリップボード API 不許可/回線切断時は失敗するが致命的でないため無視 */ }
     }
 
     private async Task BrowseFavoriteFolder()

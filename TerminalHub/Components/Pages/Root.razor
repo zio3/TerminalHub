@@ -3149,7 +3149,7 @@
         // ShellPanelの破棄（BottomPanelコンポーネント経由）
         if (bottomPanel != null)
         {
-            try { await bottomPanel.DisposeAllShellPanels(); } catch { }
+            try { await bottomPanel.DisposeAllShellPanels(); } catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
         }
 
         // activeTerminalのDisposeを安全に処理
