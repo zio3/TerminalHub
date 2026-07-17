@@ -259,7 +259,9 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作 JSON、--notify CLI モードや他ツール向けに維持）
+// Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作の HookNotification JSON を直接受ける）。
+// 現在の利用者は --notify --event 経路のみ。将来の hook レス CLI（Antigravity 等）が
+// 共通 HookNotification 形式で送る場合の受け皿として維持する（RunNotifyModeAsync のコメント参照）。
 app.MapPost("/api/hook", async (HookNotification notification, IHookNotificationService hookService) =>
 {
     await hookService.HandleHookNotificationAsync(notification);
@@ -314,7 +316,10 @@ app.MapMcp("/mcp");
 app.Run();
 return 0;
 
-// CLI モード: Hook 通知を送信
+// CLI モード: Hook 通知を送信。
+// ここは hook 通知ブリッジの共通入口で、--source で CLI 固有のペイロード変換へ振り分ける設計
+// （例: --source codex。将来 Antigravity 等の CLI を追加するときも --source <name> の分岐を足す）。
+// --source なしはフォールバックの汎用 --event 経路。誤って単一CLI専用へ簡略化しないこと。
 static async Task<int> RunNotifyModeAsync(string[] args)
 {
     // Codex CLI ブリッジモード: Codex の lifecycle hook(type:command) から起動され、
