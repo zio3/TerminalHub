@@ -438,7 +438,7 @@
         AcceptSlashSuggestion();
         StateHasChanged();
         // クリック後はテキストエリアにフォーカスを戻す（自前ヘルパで id 指定・確実に戻す）。
-        try { await JS.InvokeVoidAsync("slashAutocomplete.focusInput", $"inputText-{PanelId}"); } catch { }
+        try { await JS.InvokeVoidAsync("slashAutocomplete.focusInput", $"inputText-{PanelId}"); } catch { /* フォーカス復帰失敗は無害（回線切断時含む） */ }
     }
 
     private async Task TryRegisterSlashAutocomplete()
@@ -693,14 +693,14 @@
                 await JS.InvokeVoidAsync("voiceInputManager.bindMiddlePushToTalk",
                     $"inputText-{PanelId}", dotNetRef);
             }
-            catch { }
+            catch { /* バインド失敗時は該当 Push-to-Talk が無効になるだけ。回線切断時の例外含め無視 */ }
             // スペース長押し Push-to-Talk バインド
             try
             {
                 await JS.InvokeVoidAsync("voiceInputManager.bindSpaceHoldPushToTalk",
                     $"inputText-{PanelId}", dotNetRef);
             }
-            catch { }
+            catch { /* 同上（バインド失敗＝機能縮退のみ） */ }
         }
     }
 
@@ -826,12 +826,12 @@
             {
                 await JS.InvokeVoidAsync("voiceInputManager.unbindMiddlePushToTalk", $"inputText-{PanelId}");
             }
-            catch { }
+            catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
             try
             {
                 await JS.InvokeVoidAsync("voiceInputManager.unbindSpaceHoldPushToTalk", $"inputText-{PanelId}");
             }
-            catch { }
+            catch { /* 同上 */ }
             try
             {
                 await JS.InvokeVoidAsync("voiceInputManager.dispose");

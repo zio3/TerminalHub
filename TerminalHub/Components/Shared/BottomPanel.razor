@@ -189,7 +189,7 @@
         if (_focusEditingInput)
         {
             _focusEditingInput = false;
-            try { await editingInputRef.FocusAsync(); } catch { }
+            try { await editingInputRef.FocusAsync(); } catch { /* フォーカス失敗は無害（要素未描画/回線切断時） */ }
         }
     }
 
@@ -485,7 +485,7 @@
     {
         foreach (var panel in ShellPanelRefs.Values)
         {
-            try { await panel.DisposeAsync(); } catch { }
+            try { await panel.DisposeAsync(); } catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
         }
         ShellPanelRefs.Clear();
     }

@@ -96,8 +96,6 @@
             return string.Join(" ", args);
         }
 
-        // BuildGeminiArgs は廃止 (GeminiCLI 起動経路は撤去済み)
-
         public static string BuildCodexArgs(
             Dictionary<string, string> options,
             string? terminalHubMcpUrl = null,

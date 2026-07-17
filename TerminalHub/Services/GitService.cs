@@ -450,7 +450,7 @@ namespace TerminalHub.Services
                 }
                 catch (OperationCanceledException)
                 {
-                    try { process.Kill(); } catch { }
+                    try { process.Kill(); } catch { /* 既に終了済みなら Kill は失敗する。無視して良い */ }
                     _logger.LogWarning("Gitコマンドがタイムアウトしました: git {Arguments} in {WorkingDirectory}", arguments, workingDirectory);
                     return (false, null, "タイムアウト");
                 }
