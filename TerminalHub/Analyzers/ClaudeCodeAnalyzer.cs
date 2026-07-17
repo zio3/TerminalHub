@@ -15,9 +15,11 @@ namespace TerminalHub.Analyzers
         //     ✢ Actualizing… (esc to interrupt · thinking)
         //     ✢ Pondering… (esc to interrupt · thought for 3s)
         //     * Honking… (ctrl+c to interrupt · 39s · ↓ 941 tokens · thought for 16s)
-        //     · Jitterbugging… (ctrl+c to interrupt)
         //     ✻ Docker ビルド & テスト中… (1m 24s · ↓ 0 tokens)
         //     ✻ Docker ビルド & テスト中… (running stop hook)
+        // 注意: Claude が '·'(middle dot) をスピナーに使うフレーム（例: · Jitterbugging… (ctrl+c to interrupt)）は、
+        //       '·' を区切り文字と区別できずスピナーから除外している都合上、このパターンでは拾わない。
+        //       処理中状態は他の実スピナーを持つフレームで検出される。
         private static readonly Regex ProcessingPatternFull = new Regex(
             @"[✶✽✻✼✴✵✷✸✹⋆*✢]\s*([^\r\n()]+?)\s*\((?:(?:esc|ctrl\+c) to interrupt(?:\s*·\s*[^)]+)?|[^)]+)\)",
             RegexOptions.Compiled);
