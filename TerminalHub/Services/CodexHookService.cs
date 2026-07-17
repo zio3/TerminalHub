@@ -3,7 +3,7 @@ using System.Text;
 namespace TerminalHub.Services;
 
 /// <summary>
-/// Codex CLI の lifecycle hook 設定を管理するサービス。
+/// Codex CLI の lifecycle hook 起動引数を生成するサービス。
 /// Codex は <c>type:"http"</c> をサポートせず <c>type:"command"</c> のみのため、
 /// 各 hook で TerminalHub.exe を「ブリッジ」として起動し、stdin の JSON を
 /// TerminalHub の HTTP API (/api/hook/codex/{sessionId}) へ転送させる。
