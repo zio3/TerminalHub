@@ -138,7 +138,9 @@ URLにはTopicGUIDのみ。SecretKeyは不要。
 
 | ファイル | 役割 |
 |----------|------|
-| `TerminalHub/Services/MqttService.cs` | MQTT通信、RSA/AES暗号化、セッション鍵管理 |
+| `TerminalHub/Services/MqttService.cs` | MQTT通信、セッション鍵管理、暗号/nonceの呼び出し |
+| `TerminalHub/Services/MqttCrypto.cs` | RSA-OAEP / AES-256-GCM 暗号プリミティブ |
+| `TerminalHub/Services/NonceStore.cs` | ワンタイムnonce（リプレイ防止）の発行・検証 |
 | `TerminalHub/Models/AppSettings.cs` | PasswordHashの保存 |
 | `TerminalHub/Components/Shared/Dialogs/SettingsDialog.razor` | リモート起動設定UI |
 | `TerminalHub/appsettings.json` | RSA公開鍵の配置（`Mqtt:PublicKey`） |
