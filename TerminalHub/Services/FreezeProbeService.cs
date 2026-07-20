@@ -17,7 +17,7 @@ namespace TerminalHub.Services
     ///
     /// 遅延検知時に GC.GetTotalPauseDuration の差分を添えるので、
     /// 停止時間 ≒ GCポーズ差分 なら犯人はGC、そうでなければ別要因と判定できる。
-    /// 平常時は起動時の1行以外何も出力しない。
+    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視）のみ。
     /// </summary>
     public class FreezeProbeService : IHostedService, IDisposable
     {
@@ -170,7 +170,9 @@ namespace TerminalHub.Services
             int procThreads;
             try
             {
-                procThreads = Process.GetCurrentProcess().Threads.Count;
+                // Process はハンドルを保持するので使い捨てにする（プローブ自身がハンドルを溜めないため）
+                using var proc = Process.GetCurrentProcess();
+                procThreads = proc.Threads.Count;
             }
             catch
             {
