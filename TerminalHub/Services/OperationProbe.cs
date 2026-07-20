@@ -26,6 +26,9 @@ namespace TerminalHub.Services
         // 単発の処理がこの時間を超えて完了したら、その場で遅い処理として記録する
         private static readonly TimeSpan SlowOpThreshold = TimeSpan.FromSeconds(1.0);
 
+        /// <summary>現在実行中(in-flight)の追跡数。定期ゲージでの監視用。</summary>
+        public static int InFlightCount => InFlight.Count;
+
         /// <summary>FreezeProbe 起動時に一度だけ設定する。未設定でも Track 自体は動く。</summary>
         public static void SetLogger(ILogger logger) => _logger = logger;
 

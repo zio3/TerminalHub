@@ -25,14 +25,25 @@ namespace TerminalHub.Services
         private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan StallThreshold = TimeSpan.FromSeconds(2.5);
 
+        // 定期ゲージ（蓄積リーク検出用）の出力間隔。購読者数などが増え続けないか監視する。
+        private static readonly TimeSpan GaugeInterval = TimeSpan.FromSeconds(60);
+
         private readonly ILogger<FreezeProbeService> _logger;
+        private readonly IHookNotificationService _hookNotificationService;
+        private readonly ISessionManager _sessionManager;
         private readonly CancellationTokenSource _cts = new();
         private Thread? _dedicatedThread;
         private Task? _threadPoolTask;
 
-        public FreezeProbeService(ILogger<FreezeProbeService> logger, ILoggerFactory loggerFactory)
+        public FreezeProbeService(
+            ILogger<FreezeProbeService> logger,
+            ILoggerFactory loggerFactory,
+            IHookNotificationService hookNotificationService,
+            ISessionManager sessionManager)
         {
             _logger = logger;
+            _hookNotificationService = hookNotificationService;
+            _sessionManager = sessionManager;
             // 「詰まっている間に何が実行中だったか」を撮る OperationProbe に、専用カテゴリの
             // ロガーを渡す（[OpProbe] 行として grep しやすくする）。
             OperationProbe.SetLogger(loggerFactory.CreateLogger("TerminalHub.Diagnostics.OperationProbe"));
@@ -99,6 +110,7 @@ namespace TerminalHub.Services
         {
             var sw = Stopwatch.StartNew();
             var lastCompleted = ThreadPool.CompletedWorkItemCount;
+            var lastGauge = Stopwatch.StartNew();
 
             while (!token.IsCancellationRequested)
             {
@@ -113,6 +125,14 @@ namespace TerminalHub.Services
 
                 var elapsed = sw.Elapsed;
                 sw.Restart();
+
+                // 定期ゲージ: 増え続けたらリーク。特に hook/sessions の購読者数は Circuit 破棄で
+                // 減るはずなので、単調増加＝Circuit が破棄されず購読が漏れている証拠になる。
+                if (lastGauge.Elapsed >= GaugeInterval)
+                {
+                    lastGauge.Restart();
+                    LogGauge();
+                }
 
                 // 直近tickでの完了スループット（starvation中はほぼ0まで落ちる＝全ワーカーがブロック中の証拠）
                 var completed = ThreadPool.CompletedWorkItemCount;
@@ -139,6 +159,33 @@ namespace TerminalHub.Services
                         OperationProbe.DumpInFlight());
                 }
             }
+        }
+
+        /// <summary>
+        /// 蓄積リーク検出用の定期ゲージ。単調増加する値があればそれが犯人候補。
+        /// hook購読/sessions変更購読は Circuit 破棄で減るはずなので、増え続けたら購読漏れ。
+        /// </summary>
+        private void LogGauge()
+        {
+            int procThreads;
+            try
+            {
+                procThreads = Process.GetCurrentProcess().Threads.Count;
+            }
+            catch
+            {
+                procThreads = -1; // 取得失敗時も落とさない
+            }
+
+            _logger.LogInformation(
+                "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}",
+                _hookNotificationService.SubscriberCount,
+                _sessionManager.SessionsChangedSubscriberCount,
+                _sessionManager.GetAllSessions().Count(),
+                OperationProbe.InFlightCount,
+                ThreadPool.PendingWorkItemCount,
+                ThreadPool.ThreadCount,
+                procThreads);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
