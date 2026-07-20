@@ -355,6 +355,13 @@ function getBufferLineText(line) {
     return { text, columns };
 }
 
+// ファイルパス検出の正規表現（リンクプロバイダと選択/右クリックメニューで共有）。
+// 空白・引用符・括弧・全角句読点は含めない（: は C:\ のため許容）。
+// 第1候補: スラッシュ/バックスラッシュを含むトークン全体、第2候補: 拡張子付きファイル名。
+// ここを唯一の定義とし、右クリックメニュー側もこの source から都度 RegExp を作って使う
+// （＝表示上クリック可能なパスと、右クリックで拾うパスが必ず一致する）。
+const FILE_PATH_TOKEN_REGEX = /[^\s"'`()\[\]{}<>|;,！？。、（）「」]*[\\/][^\s"'`()\[\]{}<>|;,！？。、（）「」]*|[^\s"'`()\[\]{}<>|;,！？。、（）「」]+\.[A-Za-z][A-Za-z0-9]{0,7}/g;
+
 // ファイルパス検出の設定
 // Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
 // 検出は割り切り: 「/ または \ を含むトークン（末尾まで丸ごと）」と
@@ -369,9 +376,9 @@ function setupFilePathDetection(term, sessionId) {
         return;
     }
 
-    // 空白・引用符・括弧・全角句読点は含めない（: は C:\ のため許容）。
-    // 第1候補: スラッシュ/バックスラッシュを含むトークン全体、第2候補: 拡張子付きファイル名
-    const pathRegex = /[^\s"'`()\[\]{}<>|;,！？。、（）「」]*[\\/][^\s"'`()\[\]{}<>|;,！？。、（）「」]*|[^\s"'`()\[\]{}<>|;,！？。、（）「」]+\.[A-Za-z][A-Za-z0-9]{0,7}/g;
+    // 検出パターンは FILE_PATH_TOKEN_REGEX（モジュール先頭）に一本化。ここでは lastIndex を
+    // 汚さないよう source から専用インスタンスを作る。
+    const pathRegex = new RegExp(FILE_PATH_TOKEN_REGEX.source, 'g');
 
     const linkProvider = {
         provideLinks: (bufferLineNumber, callback) => {
@@ -714,6 +721,70 @@ function showTerminalContextMenu(x, y, items) {
     window.addEventListener('blur', dismiss);
 }
 
+// 右クリック位置（clientX/Y）をバッファのセル座標 {col:0始まり, row:0始まりの絶対行} に変換する。
+// xterm にセル座標を返す公開APIが無いため、.xterm-screen の実寸から算出する。スクリーン領域の
+// 幾何は cols×rows セルで一定なので、DOM/Canvas いずれのレンダラでも成立する。範囲外なら null。
+function cellFromMouse(term, e) {
+    const screen = term.element && term.element.querySelector('.xterm-screen');
+    if (!screen) return null;
+    const rect = screen.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const cellW = rect.width / term.cols;
+    const cellH = rect.height / term.rows;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (x < 0 || y < 0) return null;
+    const col = Math.floor(x / cellW);
+    const rowInViewport = Math.floor(y / cellH);
+    if (col >= term.cols || rowInViewport >= term.rows) return null;
+    return { col, row: term.buffer.active.viewportY + rowInViewport };
+}
+
+// バッファ上の (col,row) にパスリンクのトークンがあればその文字列を返す。無ければ null。
+// リンクプロバイダ（setupFilePathDetection）と同じ正規表現・同じ除外条件を用いるため、
+// 「クリック可能なパスとして表示されているトークン」とちょうど一致する。
+function pathTokenAtCell(term, col, row) {
+    const line = term.buffer.active.getLine(row);
+    if (!line) return null;
+    const { text: lineText, columns } = getBufferLineText(line);
+    const re = new RegExp(FILE_PATH_TOKEN_REGEX.source, 'g');
+    let match;
+    while ((match = re.exec(lineText)) !== null) {
+        const text = match[0];
+        // 以下 3 つの除外は setupFilePathDetection のリンク化条件と同一に保つ
+        if (/^[\\/]+$/.test(text)) continue;                                   // 罫線的なスラッシュ列
+        if (/^[0-9a-f]{7,40}\.\.[0-9a-f]{7,40}$/i.test(text)) continue;        // コミット範囲表記
+        const before = lineText.slice(0, match.index);
+        const tokenStart = before.search(/\S+$/) === -1 ? match.index : before.search(/\S+$/);
+        const token = lineText.slice(tokenStart).split(/\s/)[0];
+        if (token.includes('://')) continue;                                   // URL は URL 検出に委譲
+        const startCol = columns[match.index];
+        const endCol = columns[match.index + text.length];                     // 次文字の開始列＝排他的終端
+        if (col >= startCol && col < endCol) return text;
+    }
+    return null;
+}
+
+// パス対象の共通コンテキストメニュー項目（コピー / 開く / フルパスをコピー）。
+// 選択テキストにもパスリンクにも同じメニューを出すため共通化する。
+function buildPathMenuItems(sessionId, text) {
+    return [
+        { label: 'コピー', action: () => copyLinkToClipboard(text) },
+        // 「開く」はリンク左クリックと同じ経路（C# 側でセッションのフォルダ基準に解決し、
+        // フォルダ=Explorer / ファイル=既定アプリ。実在しなければ警告トースト）
+        { label: '開く', action: () => activateTerminalPath(sessionId, text) },
+        {
+            label: 'フルパスをコピー',
+            action: () => {
+                if (!window.terminalHubDotNetRef) { copyLinkToClipboard(text); return; }
+                window.terminalHubDotNetRef.invokeMethodAsync('ResolveTerminalPath', sessionId, text)
+                    .then(full => copyLinkToClipboard(full || text))
+                    .catch(() => copyLinkToClipboard(text));
+            }
+        },
+    ];
+}
+
 // element へ contextmenu を登録する。attachTouchScroll と同じく、コンテナ div は
 // セッションごとに永続する一方 createMultiSessionTerminal は毎回呼ばれるため、
 // 前回のリスナーを必ず外してから付け直す（外し忘れるとセッションを開くたび多重登録される）。
@@ -723,6 +794,8 @@ function attachSelectionContextMenu(term, element, sessionId) {
     }
 
     const onContextMenu = (e) => {
+        // (1) 範囲選択があれば常にそちらを優先（対象は選択テキスト）。
+        //     パスっぽい選択のときだけ自前メニューを出し、通常文はネイティブメニューへ委譲。
         let selection = '';
         try {
             selection = (term.getSelection() || '').trim();
@@ -730,32 +803,22 @@ function attachSelectionContextMenu(term, element, sessionId) {
             return; // 破棄済み等。ネイティブメニューに任せる
         }
 
-        if (!selection) return;
-
-        const items = [
-            { label: 'コピー', action: () => copyLinkToClipboard(selection) },
-        ];
-
-        if (looksLikePath(selection)) {
-            // 「開く」はリンククリックと同じ経路（C# 側でセッションのフォルダ基準に解決し、
-            // フォルダ=Explorer / ファイル=既定アプリ。実在しなければ警告トースト）
-            items.push({ label: '開く', action: () => activateTerminalPath(sessionId, selection) });
-            items.push({
-                label: 'フルパスをコピー',
-                action: () => {
-                    if (!window.terminalHubDotNetRef) return;
-                    window.terminalHubDotNetRef.invokeMethodAsync('ResolveTerminalPath', sessionId, selection)
-                        .then(full => copyLinkToClipboard(full || selection))
-                        .catch(() => copyLinkToClipboard(selection));
-                }
-            });
+        if (selection) {
+            // パスでなければネイティブメニューの方が有用（DeepL・スペルチェック等）なので出さない
+            if (!looksLikePath(selection)) return;
+            e.preventDefault();
+            showTerminalContextMenu(e.clientX, e.clientY, buildPathMenuItems(sessionId, selection));
+            return;
         }
 
-        // パスでなければ「コピー」しか無い＝ネイティブメニューの方が有用なので出さない
-        if (items.length === 1) return;
-
+        // (2) 選択が無い場合は、右クリック位置にパスリンクがあればそれを対象にする。
+        //     「開きたいのではなくフルパスが欲しい」ケースを、リンク左クリック（＝開く）と分けて拾う。
+        const cell = cellFromMouse(term, e);
+        if (!cell) return;
+        const token = pathTokenAtCell(term, cell.col, cell.row);
+        if (!token || !looksLikePath(token)) return; // パスリンク上でなければネイティブメニュー
         e.preventDefault();
-        showTerminalContextMenu(e.clientX, e.clientY, items);
+        showTerminalContextMenu(e.clientX, e.clientY, buildPathMenuItems(sessionId, token));
     };
 
     element.addEventListener('contextmenu', onContextMenu);
