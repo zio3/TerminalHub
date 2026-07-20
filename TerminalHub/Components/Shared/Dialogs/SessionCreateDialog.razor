@@ -70,6 +70,12 @@
                             </ul>
                         </div>
                     </div>
+                    @if (!string.IsNullOrEmpty(folderErrorMessage))
+                    {
+                        <div class="alert alert-danger mt-2 mb-0 py-2 px-3" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>@folderErrorMessage
+                        </div>
+                    }
                 </div>
 
 
@@ -145,6 +151,9 @@
     // 保存先は AppSettings.SessionDefaults。値の発生源は本ダイアログに一元化する。
     private bool showCreateFolderDialog = false;
     private bool pendingSessionCreation = false;
+    // フォルダ作成に失敗したときにメインダイアログへ出すインラインエラー。
+    // 失敗を無言で握りつぶすと「押しても何も起きずダイアログが戻る」ように見えるため、理由を表示する。
+    private string? folderErrorMessage;
 
     public class SessionCreateResult
     {
@@ -403,6 +412,9 @@
 
     private async Task CreateSession()
     {
+        // 再試行時は前回のエラー表示をクリア
+        folderErrorMessage = null;
+
         // フォルダが存在するかチェック
         if (!Directory.Exists(folderPath))
         {
@@ -457,7 +469,9 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, $"Failed to create folder: {folderPath}");
-            // エラーが発生した場合もダイアログを閉じる
+            // 失敗を無言で握りつぶさず、メインダイアログにエラー理由を表示して戻す。
+            // （例: ダブルクオートを含むパスは不正文字で ArgumentException になる）
+            folderErrorMessage = string.Format(L["SessionCreate.CreateFolder.ErrorFormat"], ex.Message);
             showCreateFolderDialog = false;
             pendingSessionCreation = false;
             StateHasChanged();
@@ -508,6 +522,7 @@
         await LoadLastUsedCliModes();
         showCreateFolderDialog = false;
         pendingSessionCreation = false;
+        folderErrorMessage = null;
     }
 
     private async Task OnTerminalTypeChanged(TerminalType newType)
