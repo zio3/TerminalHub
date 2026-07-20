@@ -34,6 +34,8 @@ namespace TerminalHub.Services
 
         public async Task SaveSessionAsync(SessionInfo session)
         {
+            // 実験: DB 書き込みが ThreadPool 詰まりに絡むかの計測（FreezeProbe と連動）
+            using var _op = OperationProbe.Track("SaveSession");
             await _repository.SaveSessionAsync(session);
         }
 

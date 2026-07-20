@@ -16,6 +16,12 @@ namespace TerminalHub.Services
         /// </summary>
         event EventHandler? OnSessionsChanged;
 
+        /// <summary>
+        /// 診断用: OnSessionsChanged の購読者数。Circuit 破棄で解除されるはずで、
+        /// 増え続ける＝購読漏れ（Circuit リーク）の証拠。
+        /// </summary>
+        int SessionsChangedSubscriberCount { get; }
+
         Task<SessionInfo> CreateSessionAsync(string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options);
         Task<SessionInfo> CreateSessionAsync(Guid sessionGuid, string folderPath, string sessionName, TerminalType terminalType, Dictionary<string, string> options, bool skipGitInfo = false);
 
@@ -105,6 +111,9 @@ namespace TerminalHub.Services
         /// セッションが変更されたときに発火するイベント
         /// </summary>
         public event EventHandler? OnSessionsChanged;
+
+        // 診断用: 購読者数（GetInvocationList は宣言クラス内でのみ呼べるためここで公開する）
+        public int SessionsChangedSubscriberCount => OnSessionsChanged?.GetInvocationList()?.Length ?? 0;
 
         public SessionManager(IConPtyService conPtyService, ILogger<SessionManager> logger, IConfiguration configuration, IGitService gitService, IClaudeHookService? claudeHookService = null, IAppSettingsService? appSettingsService = null, IServer? server = null, ICodexHookService? codexHookService = null, IRawStreamCaptureService? rawStreamCapture = null, IMcpConfigService? mcpConfigService = null)
         {

@@ -17,6 +17,12 @@ public interface IHookNotificationService
     /// 通知イベントを登録する
     /// </summary>
     event EventHandler<HookNotificationEventArgs>? OnHookNotification;
+
+    /// <summary>
+    /// 診断用: OnHookNotification の購読者数。Root(Circuit)が破棄で解除するはずなので、
+    /// これが時間とともに増え続ける＝Circuit が破棄されず購読が漏れている（リーク）証拠。
+    /// </summary>
+    int SubscriberCount { get; }
 }
 
 /// <summary>
@@ -49,6 +55,9 @@ public class HookNotificationService : IHookNotificationService
 
     public event EventHandler<HookNotificationEventArgs>? OnHookNotification;
 
+    // 診断用: 購読者数（GetInvocationList は宣言クラス内でのみ呼べるためここで公開する）
+    public int SubscriberCount => OnHookNotification?.GetInvocationList()?.Length ?? 0;
+
     public HookNotificationService(
         ILogger<HookNotificationService> logger,
         ISessionManager sessionManager,
@@ -65,6 +74,9 @@ public class HookNotificationService : IHookNotificationService
 
     public async Task HandleHookNotificationAsync(HookNotification notification)
     {
+        // 実験: 多セッション同時 hook 連打での ThreadPool 詰まり調査用の計測（FreezeProbe と連動）。
+        using var _op = OperationProbe.Track($"Hook:{notification.Event}");
+
         var eventType = notification.GetEventType();
         if (eventType == null)
         {

@@ -1303,6 +1303,9 @@
 
     private async Task SelectSession(Guid sessionId, bool forceReinit = false)
     {
+        // 実験: セッション切替（_switchLock 直列化・バッファ復元）が ThreadPool 詰まりに絡むかの計測（FreezeProbe と連動）
+        using var _op = OperationProbe.Track("SelectSession");
+
         // forceReinit=true の場合は同一セッションでも再初期化を通す。
         // これにより activeSessionId を一時的に null にする「null ダンス」を避け、
         // BottomPanel（および配下の ShellPanel タブ）が破棄されないようにする。
@@ -2714,6 +2717,9 @@
         HookNotification notification,
         bool permissionRequestRequiresUserInput)
     {
+        // 実験: Circuit 側の hook 処理（再描画/InvokeAsync）が ThreadPool 詰まりに絡むかの計測（FreezeProbe と連動）
+        using var _op = OperationProbe.Track($"OnHook:{notification.Event}");
+
         var eventType = notification.GetEventType();
         if (eventType == null) return;
 
