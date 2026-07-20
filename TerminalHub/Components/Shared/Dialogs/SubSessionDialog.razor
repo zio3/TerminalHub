@@ -558,8 +558,9 @@
                         _ => ""
                     }
                     : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
+                // NewFolder は手入力なので貼り付け由来の前後クォートを剥がす（Existing はドロップダウン選択なので不要）
                 WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath :
-                               activeTab == TabType.NewFolder ? newFolderPath : null,
+                               activeTab == TabType.NewFolder ? PathInputHelper.NormalizeFolderInput(newFolderPath) : null,
                 TerminalType = selectedTerminalType,
                 Options = activeTab switch
                 {

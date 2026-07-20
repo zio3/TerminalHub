@@ -415,6 +415,11 @@
         // 再試行時は前回のエラー表示をクリア
         folderErrorMessage = null;
 
+        // 貼り付け由来の前後クォート（"C:\path\x"）を剥がす。剥がさないと Directory.Exists が
+        // false になり、相対パス扱いでベースディレクトリに連結され不正パスで失敗する。
+        // 書き戻して UI 表示・確認ダイアログ・作成・結果すべてをクリーンな値で揃える。
+        folderPath = PathInputHelper.NormalizeFolderInput(folderPath);
+
         // フォルダが存在するかチェック
         if (!Directory.Exists(folderPath))
         {
