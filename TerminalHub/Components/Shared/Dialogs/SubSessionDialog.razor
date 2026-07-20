@@ -535,6 +535,13 @@
         if (!CanProcess)
             return;
 
+        // NewFolder は手入力なので、貼り付け由来の前後クォートを剥がしてフィールドへ書き戻す。
+        // これで以降の表示・結果すべてがクリーンな値で揃う（SessionCreateDialog と同じ方式）。
+        if (activeTab == TabType.NewFolder)
+        {
+            newFolderPath = PathInputHelper.NormalizeFolderInput(newFolderPath);
+        }
+
         isProcessing = true;
         errorMessage = "";
 
@@ -558,9 +565,9 @@
                         _ => ""
                     }
                     : availableWorktrees?.FirstOrDefault(w => w.Path == selectedWorktreePath)?.BranchName ?? "",
-                // NewFolder は手入力なので貼り付け由来の前後クォートを剥がす（Existing はドロップダウン選択なので不要）
+                // NewFolder の newFolderPath は ProcessOperation 冒頭で正規化済み（Existing はドロップダウン選択）
                 WorktreePath = activeTab == TabType.Existing ? selectedWorktreePath :
-                               activeTab == TabType.NewFolder ? PathInputHelper.NormalizeFolderInput(newFolderPath) : null,
+                               activeTab == TabType.NewFolder ? newFolderPath : null,
                 TerminalType = selectedTerminalType,
                 Options = activeTab switch
                 {
