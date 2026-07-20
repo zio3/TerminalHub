@@ -322,6 +322,7 @@
   <data name="SessionCreate.CreateFolder.Title" xml:space="preserve"><value>フォルダの作成</value></data>
   <data name="SessionCreate.CreateFolder.Question" xml:space="preserve"><value>このフォルダを作成しますか？</value></data>
   <data name="SessionCreate.CreateFolder.Confirm" xml:space="preserve"><value>作成する</value></data>
+  <data name="SessionCreate.CreateFolder.ErrorFormat" xml:space="preserve"><value>フォルダを作成できませんでした: {0}</value></data>
 
   <!-- SessionOptionsSelector: common -->
   <data name="SessionOptions.TerminalType.Label" xml:space="preserve"><value>ターミナルタイプ</value></data>
