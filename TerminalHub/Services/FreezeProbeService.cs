@@ -30,9 +30,12 @@ namespace TerminalHub.Services
         private Thread? _dedicatedThread;
         private Task? _threadPoolTask;
 
-        public FreezeProbeService(ILogger<FreezeProbeService> logger)
+        public FreezeProbeService(ILogger<FreezeProbeService> logger, ILoggerFactory loggerFactory)
         {
             _logger = logger;
+            // 「詰まっている間に何が実行中だったか」を撮る OperationProbe に、専用カテゴリの
+            // ロガーを渡す（[OpProbe] 行として grep しやすくする）。
+            OperationProbe.SetLogger(loggerFactory.CreateLogger("TerminalHub.Diagnostics.OperationProbe"));
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -77,13 +80,14 @@ namespace TerminalHub.Services
                 {
                     var gcDelta = gcPause - lastGcPause;
                     _logger.LogWarning(
-                        "[FreezeProbe] 専用スレッド停止検出: 停止={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), GCポーズ差分={GcPauseSec:F1}s, Gen0/1/2={Gen0}/{Gen1}/{Gen2}, ThreadPool待機={Pending}, スレッド数={Threads}",
+                        "[FreezeProbe] 専用スレッド停止検出: 停止={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), GCポーズ差分={GcPauseSec:F1}s, Gen0/1/2={Gen0}/{Gen1}/{Gen2}, ThreadPool待機={Pending}, スレッド数={Threads}, 実行中=[{InFlight}]",
                         elapsed.TotalSeconds,
                         DateTime.Now - elapsed,
                         gcDelta.TotalSeconds,
                         GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
                         ThreadPool.PendingWorkItemCount,
-                        ThreadPool.ThreadCount);
+                        ThreadPool.ThreadCount,
+                        OperationProbe.DumpInFlight());
                 }
 
                 lastGcPause = gcPause;
@@ -94,6 +98,7 @@ namespace TerminalHub.Services
         private async Task ProbeLoopThreadPoolAsync(CancellationToken token)
         {
             var sw = Stopwatch.StartNew();
+            var lastCompleted = ThreadPool.CompletedWorkItemCount;
 
             while (!token.IsCancellationRequested)
             {
@@ -109,14 +114,29 @@ namespace TerminalHub.Services
                 var elapsed = sw.Elapsed;
                 sw.Restart();
 
+                // 直近tickでの完了スループット（starvation中はほぼ0まで落ちる＝全ワーカーがブロック中の証拠）
+                var completed = ThreadPool.CompletedWorkItemCount;
+                var completedDelta = completed - lastCompleted;
+                lastCompleted = completed;
+
                 if (elapsed > StallThreshold)
                 {
+                    // ワーカースレッドの逼迫度: max - available = 使用中ワーカー
+                    ThreadPool.GetMaxThreads(out var maxWorkers, out _);
+                    ThreadPool.GetAvailableThreads(out var availWorkers, out _);
+                    ThreadPool.GetMinThreads(out var minWorkers, out _);
+
                     _logger.LogWarning(
-                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, スレッド数={Threads}",
+                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, 実行中=[{InFlight}]",
                         elapsed.TotalSeconds,
                         DateTime.Now - elapsed,
                         ThreadPool.PendingWorkItemCount,
-                        ThreadPool.ThreadCount);
+                        completedDelta / elapsed.TotalSeconds,
+                        maxWorkers - availWorkers,
+                        maxWorkers,
+                        minWorkers,
+                        ThreadPool.ThreadCount,
+                        OperationProbe.DumpInFlight());
                 }
             }
         }

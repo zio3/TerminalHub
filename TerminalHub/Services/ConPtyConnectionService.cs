@@ -43,6 +43,8 @@ namespace TerminalHub.Services
         /// </summary>
         public void SubscribeToSession(Guid sessionId, ConPtySession conPtySession)
         {
+            // 実験: _subscriptionLock 待ちが ThreadPool 詰まりに絡むかの計測（FreezeProbe と連動）
+            using var _op = OperationProbe.Track("Subscribe");
             lock (_subscriptionLock)
             {
                 if (Volatile.Read(ref _disposeState) != 0)

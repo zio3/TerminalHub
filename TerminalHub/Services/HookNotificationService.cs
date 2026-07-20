@@ -65,6 +65,9 @@ public class HookNotificationService : IHookNotificationService
 
     public async Task HandleHookNotificationAsync(HookNotification notification)
     {
+        // 実験: 多セッション同時 hook 連打での ThreadPool 詰まり調査用の計測（FreezeProbe と連動）。
+        using var _op = OperationProbe.Track($"Hook:{notification.Event}");
+
         var eventType = notification.GetEventType();
         if (eventType == null)
         {
