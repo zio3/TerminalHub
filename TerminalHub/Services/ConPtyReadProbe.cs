@@ -1,4 +1,4 @@
-using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace TerminalHub.Services
 {
@@ -22,41 +22,78 @@ namespace TerminalHub.Services
     /// 判定: ストール時に <c>BlockedInRead</c> が <c>使用中ワーカー</c> の大半を占めていれば仮説は確定。
     /// 逆にほぼ 0 なら（＝待ちが overlapped で処理されている）容疑は晴れ、別の犯人を探す。
     ///
-    /// 設計方針: 平常時のコストは Interlocked の増減のみ。
+    /// <see cref="OperationProbe"/> を再利用しない理由: あちらは閾値(1秒)超で完了した処理を必ず
+    /// WARN に出す。読み待ちは「出力が来るまで分単位でブロックする」のが正常なので、そのまま使うと
+    /// ログが洪水になる。ここは件数を数えるだけの軽量カウンタに留める（統合しないこと）。
+    ///
+    /// 設計方針: 平常時のコストは Interlocked の増減のみ。2つのカウンタは別々のキャッシュラインに
+    /// 置く（多セッション同時出力時の false sharing で、計測が測定対象の性能を乱さないようにするため）。
     /// </summary>
     public static class ConPtyReadProbe
     {
-        private static int _activeLoops;
-        private static int _blockedInRead;
+        // 1要素で1キャッシュライン（64B）を占有する箱。配列要素は連続配置されるので、
+        // Size=64 にしておけば 2つのカウンタが同じラインに乗ることはない。
+        [StructLayout(LayoutKind.Explicit, Size = 64)]
+        private struct PaddedCounter
+        {
+            [FieldOffset(0)] public int Value;
+        }
+
+        private const int ActiveLoopsIndex = 0;
+        private const int BlockedInReadIndex = 1;
+
+        private static readonly PaddedCounter[] Counters = new PaddedCounter[2];
 
         /// <summary>走っている読みループの本数。</summary>
-        public static int ActiveLoops => Volatile.Read(ref _activeLoops);
+        public static int ActiveLoops => Volatile.Read(ref Counters[ActiveLoopsIndex].Value);
 
         /// <summary>今まさに ReadAsync 待ちで張り付いている本数（同期 FileStream ならプールスレッドを握っている）。</summary>
-        public static int BlockedInRead => Volatile.Read(ref _blockedInRead);
+        public static int BlockedInRead => Volatile.Read(ref Counters[BlockedInReadIndex].Value);
 
         /// <summary>読みループの生存期間を数える。<c>using</c> で囲んで使う。</summary>
         public static LoopScope EnterLoop()
         {
-            Interlocked.Increment(ref _activeLoops);
-            return default;
+            Interlocked.Increment(ref Counters[ActiveLoopsIndex].Value);
+            return new LoopScope(armed: true);
         }
 
         /// <summary>1回の ReadAsync 待ちを数える。<c>using</c> ブロックで await を囲んで使う。</summary>
         public static ReadScope EnterRead()
         {
-            Interlocked.Increment(ref _blockedInRead);
-            return default;
+            Interlocked.Increment(ref Counters[BlockedInReadIndex].Value);
+            return new ReadScope(armed: true);
         }
 
+        /// <summary>
+        /// <see cref="EnterLoop"/> が返すスコープ。struct は既定値を作れてしまうので、
+        /// factory を通ったものだけ減算する（default を Dispose してもカウンタを壊さない）。
+        /// </summary>
         public readonly struct LoopScope : IDisposable
         {
-            public void Dispose() => Interlocked.Decrement(ref _activeLoops);
+            private readonly bool _armed;
+
+            internal LoopScope(bool armed) => _armed = armed;
+
+            public void Dispose()
+            {
+                if (_armed) Interlocked.Decrement(ref Counters[ActiveLoopsIndex].Value);
+            }
         }
 
+        /// <summary>
+        /// <see cref="EnterRead"/> が返すスコープ。既定値を Dispose してもカウンタを壊さない
+        /// （理由は <see cref="LoopScope"/> と同じ）。
+        /// </summary>
         public readonly struct ReadScope : IDisposable
         {
-            public void Dispose() => Interlocked.Decrement(ref _blockedInRead);
+            private readonly bool _armed;
+
+            internal ReadScope(bool armed) => _armed = armed;
+
+            public void Dispose()
+            {
+                if (_armed) Interlocked.Decrement(ref Counters[BlockedInReadIndex].Value);
+            }
         }
     }
 }

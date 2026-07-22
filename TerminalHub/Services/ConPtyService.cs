@@ -567,8 +567,12 @@ namespace TerminalHub.Services
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
 
-            // 実験: この読みループが ThreadPool スレッドを何本占有しているかの計測（ConPtyReadProbe 参照）
+            // 実験: この読みループが ThreadPool スレッドを何本占有しているかの計測（ConPtyReadProbe 参照）。
+            // 開始/終了を残すのは、ゲージの ConPTY読み が下がらないときに「セッションが生きている」のか
+            // 「破棄済みなのにループが抜けられていない」のかを後からログだけで切り分けるため。
             using var _loopScope = ConPtyReadProbe.EnterLoop();
+            _logger.LogDebug("[ConPtyRead] 読みループ開始: SessionId={SessionId}, ActiveLoops={ActiveLoops}",
+                _sessionId, ConPtyReadProbe.ActiveLoops);
 
             while (!cancellationToken.IsCancellationRequested && !IsDisposed)
             {
@@ -636,6 +640,10 @@ namespace TerminalHub.Services
                 }
             }
             
+            // ここに来た時点でループは抜けている（＝プールスレッドの占有は解けた）。
+            // ActiveLoops は _loopScope の破棄でこの直後に減る。
+            _logger.LogDebug("[ConPtyRead] 読みループ終了: SessionId={SessionId}", _sessionId);
+
             // バッファリングタイマーを即座に停止
             if (_flushTimer != null)
             {
@@ -755,6 +763,16 @@ namespace TerminalHub.Services
                 // パイプ読み取りを先に解除し、待機がタイムアウトしにくいようにする。
                 _pipeOutStream?.Dispose();
                 _readTask?.Wait(1000); // 1秒待機
+
+                // 1秒で終わらなかった場合、読みループは走ったまま＝プールスレッドを握り続けている。
+                // このときゲージの ConPTY読み は実セッション数より多く出る。単調増加を「占有の蓄積」と
+                // 読み違えないよう、過大計上の可能性をここで明示的に残す（ConPtyReadProbe 参照）。
+                if (_readTask is { IsCompleted: false })
+                {
+                    _logger.LogWarning(
+                        "[ConPtyRead] 読みループが1秒以内に終了せず: SessionId={SessionId}, ActiveLoops={ActiveLoops}（以降 ConPTY読み が過大計上される可能性）",
+                        _sessionId, ConPtyReadProbe.ActiveLoops);
+                }
             }
             catch (Exception ex)
             {

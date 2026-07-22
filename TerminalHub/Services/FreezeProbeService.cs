@@ -37,6 +37,14 @@ namespace TerminalHub.Services
         private Thread? _dedicatedThread;
         private Task? _threadPoolTask;
 
+        // ストール中のピーク値。ThreadPool プローブは詰まっている間そもそも動けず、
+        // 遅延に気づくのは「明けた後」なので、そこで読む値は復帰後のスナップショットになってしまう。
+        // 詰まっている最中も回り続ける専用スレッド（starvation では無事なことを確認済み）で毎秒サンプルし、
+        // 最大値を持ち回ることで「詰まっていた瞬間の値」を遅延検出行に添える。
+        // 書き手は専用スレッドのみ、読み手は ThreadPool プローブのみ。
+        private int _peakBlockedInRead;
+        private int _peakBusyWorkers;
+
         public FreezeProbeService(
             ILogger<FreezeProbeService> logger,
             ILoggerFactory loggerFactory,
@@ -85,6 +93,9 @@ namespace TerminalHub.Services
                     return;
                 }
 
+                // ThreadPool が詰まっている間もここは回るので、ピーク採取はこのループが担う
+                SamplePeaks();
+
                 var elapsed = sw.Elapsed;
                 sw.Restart();
                 var gcPause = GC.GetTotalPauseDuration();
@@ -105,6 +116,23 @@ namespace TerminalHub.Services
 
                 lastGcPause = gcPause;
             }
+        }
+
+        /// <summary>
+        /// ストール中の値を取りこぼさないよう、専用スレッドから毎秒サンプルして最大値を更新する。
+        /// 単一書き手なので read-then-write で足りる（Interlocked は不要）。
+        /// </summary>
+        private void SamplePeaks()
+        {
+            var blocked = ConPtyReadProbe.BlockedInRead;
+            if (blocked > Volatile.Read(ref _peakBlockedInRead))
+                Volatile.Write(ref _peakBlockedInRead, blocked);
+
+            ThreadPool.GetMaxThreads(out var maxWorkers, out _);
+            ThreadPool.GetAvailableThreads(out var availWorkers, out _);
+            var busy = maxWorkers - availWorkers;
+            if (busy > Volatile.Read(ref _peakBusyWorkers))
+                Volatile.Write(ref _peakBusyWorkers, busy);
         }
 
         /// <summary>ThreadPoolプローブ: 専用スレッドが無事でここだけ遅れる = ThreadPool枯渇</summary>
@@ -148,9 +176,11 @@ namespace TerminalHub.Services
                     ThreadPool.GetAvailableThreads(out var availWorkers, out _);
                     ThreadPool.GetMinThreads(out var minWorkers, out _);
 
-                    // ConPTY読み占有: BusyWorkers の大半が ReadAsync待ちなら starvation の犯人が確定する
+                    // ConPTY読み占有: BusyWorkers の大半が ReadAsync待ちなら starvation の犯人が確定する。
+                    // 素の値はこの行を書いている「復帰後」のスナップショットなので、判定には
+                    // 専用スレッドが詰まっている最中に採ったピーク値のほうを見ること。
                     _logger.LogWarning(
-                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, ConPTY読み={BlockedInRead}/{ReadLoops}, 実行中=[{InFlight}]",
+                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, ConPTY読み={BlockedInRead}/{ReadLoops}, ストール中ピーク(ConPTY読み/使用中)={PeakBlockedInRead}/{PeakBusyWorkers}, 実行中=[{InFlight}]",
                         elapsed.TotalSeconds,
                         DateTime.Now - elapsed,
                         ThreadPool.PendingWorkItemCount,
@@ -161,8 +191,15 @@ namespace TerminalHub.Services
                         ThreadPool.ThreadCount,
                         ConPtyReadProbe.BlockedInRead,
                         ConPtyReadProbe.ActiveLoops,
+                        Volatile.Read(ref _peakBlockedInRead),
+                        Volatile.Read(ref _peakBusyWorkers),
                         OperationProbe.DumpInFlight());
                 }
+
+                // ピークは「前回このループが回ってから今まで」＝ストール区間を表すようにしたいので、
+                // 遅延の有無に関わらず毎ティックで畳む。
+                Volatile.Write(ref _peakBlockedInRead, 0);
+                Volatile.Write(ref _peakBusyWorkers, 0);
             }
         }
 
