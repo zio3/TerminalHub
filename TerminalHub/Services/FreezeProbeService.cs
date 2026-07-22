@@ -17,7 +17,9 @@ namespace TerminalHub.Services
     ///
     /// 遅延検知時に GC.GetTotalPauseDuration の差分を添えるので、
     /// 停止時間 ≒ GCポーズ差分 なら犯人はGC、そうでなければ別要因と判定できる。
-    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視）のみ。
+    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視＋ConPTY読み占有）のみ。
+    /// ConPTY読み占有（<see cref="ConPtyReadProbe"/>）は starvation の本命容疑者の計測で、
+    /// 「使用中ワーカーのうち何本が ConPTY の ReadAsync 待ちで張り付いているか」を出す。
     /// </summary>
     public class FreezeProbeService : IHostedService, IDisposable
     {
@@ -146,8 +148,9 @@ namespace TerminalHub.Services
                     ThreadPool.GetAvailableThreads(out var availWorkers, out _);
                     ThreadPool.GetMinThreads(out var minWorkers, out _);
 
+                    // ConPTY読み占有: BusyWorkers の大半が ReadAsync待ちなら starvation の犯人が確定する
                     _logger.LogWarning(
-                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, 実行中=[{InFlight}]",
+                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, ConPTY読み={BlockedInRead}/{ReadLoops}, 実行中=[{InFlight}]",
                         elapsed.TotalSeconds,
                         DateTime.Now - elapsed,
                         ThreadPool.PendingWorkItemCount,
@@ -156,6 +159,8 @@ namespace TerminalHub.Services
                         maxWorkers,
                         minWorkers,
                         ThreadPool.ThreadCount,
+                        ConPtyReadProbe.BlockedInRead,
+                        ConPtyReadProbe.ActiveLoops,
                         OperationProbe.DumpInFlight());
                 }
             }
@@ -179,15 +184,22 @@ namespace TerminalHub.Services
                 procThreads = -1; // 取得失敗時も落とさない
             }
 
+            // 使用中ワーカーも平常時から採る（ConPTY読み占有との比を時系列で追うため）
+            ThreadPool.GetMaxThreads(out var maxWorkers, out _);
+            ThreadPool.GetAvailableThreads(out var availWorkers, out _);
+
             _logger.LogInformation(
-                "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}",
+                "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}, 使用中ワーカー={BusyWorkers}, ConPTY読み={BlockedInRead}/{ReadLoops}",
                 _hookNotificationService.SubscriberCount,
                 _sessionManager.SessionsChangedSubscriberCount,
                 _sessionManager.GetAllSessions().Count(),
                 OperationProbe.InFlightCount,
                 ThreadPool.PendingWorkItemCount,
                 ThreadPool.ThreadCount,
-                procThreads);
+                procThreads,
+                maxWorkers - availWorkers,
+                ConPtyReadProbe.BlockedInRead,
+                ConPtyReadProbe.ActiveLoops);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

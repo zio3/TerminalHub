@@ -567,6 +567,9 @@ namespace TerminalHub.Services
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
 
+            // 実験: この読みループが ThreadPool スレッドを何本占有しているかの計測（ConPtyReadProbe 参照）
+            using var _loopScope = ConPtyReadProbe.EnterLoop();
+
             while (!cancellationToken.IsCancellationRequested && !IsDisposed)
             {
                 try
@@ -597,7 +600,13 @@ namespace TerminalHub.Services
                     if (_pipeOutStream == null)
                         break;
 
-                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken);
+                    // 同期モードの FileStream では、この await はプールスレッドを掴んだまま
+                    // ブロッキング読みになる。何本が同時に張り付いているかを計測する。
+                    int bytesRead;
+                    using (ConPtyReadProbe.EnterRead())
+                    {
+                        bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken);
+                    }
 
                     if (bytesRead > 0)
                     {
