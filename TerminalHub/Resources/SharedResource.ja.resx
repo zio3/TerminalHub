@@ -544,6 +544,9 @@
   <data name="GitChanges.CopyPaths" xml:space="preserve"><value>パスをコピー</value></data>
   <data name="GitChanges.Copied" xml:space="preserve"><value>コピーしました</value></data>
   <data name="GitChanges.Staged" xml:space="preserve"><value>ステージ済み</value></data>
+  <data name="GitChanges.OpenFileTooltip" xml:space="preserve"><value>既定のアプリで開く</value></data>
+  <data name="GitChanges.FileNotFoundFormat" xml:space="preserve"><value>ファイルが見つかりません: {0}</value></data>
+  <data name="GitChanges.OpenErrorFormat" xml:space="preserve"><value>ファイルを開けませんでした: {0}</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>未追跡</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>変更</value></data>
   <data name="GitChanges.Status.Added" xml:space="preserve"><value>追加</value></data>

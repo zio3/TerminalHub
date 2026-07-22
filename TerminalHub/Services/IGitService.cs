@@ -50,6 +50,14 @@ namespace TerminalHub.Services
         Task<List<WorktreeInfo>> GetWorktreeListAsync(string path);
 
         /// <summary>
+        /// リポジトリのルートパス（worktree の場合はその worktree のルート）を取得。
+        /// git status --porcelain の相対パスはルート基準のため、絶対パス化に使う
+        /// </summary>
+        /// <param name="path">リポジトリ内の任意のパス</param>
+        /// <returns>ルートの絶対パス。リポジトリでない・取得失敗時は null</returns>
+        Task<string?> GetRepositoryRootAsync(string path);
+
+        /// <summary>
         /// 未コミットの変更ファイル一覧を取得（git status --porcelain）
         /// </summary>
         /// <param name="path">リポジトリのパス</param>

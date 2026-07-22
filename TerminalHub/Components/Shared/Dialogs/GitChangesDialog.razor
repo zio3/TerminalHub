@@ -60,7 +60,16 @@
                                     {
                                         <span class="text-muted">@file.OldFilePath →</span>
                                     }
-                                    @file.FilePath
+                                    @if (EffectiveStatus(file) == 'D')
+                                    {
+                                        @* 削除済みファイルは実体が無いため開けない *@
+                                        @file.FilePath
+                                    }
+                                    else
+                                    {
+                                        <a href="" class="text-decoration-none" title="@L["GitChanges.OpenFileTooltip"]"
+                                           @onclick="() => OpenFileAsync(file)" @onclick:preventDefault>@file.FilePath</a>
+                                    }
                                     @if (file.IsStaged && !file.IsUntracked)
                                     {
                                         <i class="bi bi-check2 text-success ms-1" title="@L["GitChanges.Staged"]"></i>
@@ -69,6 +78,12 @@
                             </div>
                         }
                     </div>
+                    @if (openError != null)
+                    {
+                        <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>@openError
+                        </div>
+                    }
                 }
             </div>
             <div class="modal-footer">
@@ -110,6 +125,8 @@
             // ダイアログが開かれた時（または対象が変わった時）のみ取得する
             _loadedPath = FolderPath;
             pathsCopied = false; // 前回対象の「コピーしました」表示を持ち越さない
+            openError = null;
+            _repoRoot = null; // 対象が変わったのでルートキャッシュを破棄
             if (InitialFiles != null)
             {
                 // 親がクリック時に取得済みなら再取得しない
@@ -137,6 +154,7 @@
         var requestPath = FolderPath;
         isLoading = true;
         loadFailed = false;
+        openError = null;
         StateHasChanged();
         try
         {
@@ -197,6 +215,40 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "[GitChangesDialog] パスのコピーに失敗");
+        }
+    }
+
+    // ファイル名クリックで開けなかったときの表示（次のクリック/再読込でクリア）
+    private string? openError;
+    // git status のパスはリポジトリルート基準のため、ルートを1回だけ解決してキャッシュする
+    private string? _repoRoot;
+
+    private async Task OpenFileAsync(GitChangedFile file)
+    {
+        if (string.IsNullOrEmpty(FolderPath)) return;
+        openError = null;
+        try
+        {
+            // サブフォルダをセッションにしている場合でも正しく解決できるようルート基準にする
+            _repoRoot ??= await GitService.GetRepositoryRootAsync(FolderPath) ?? FolderPath;
+            var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(_repoRoot, file.FilePath));
+            if (!File.Exists(fullPath))
+            {
+                openError = string.Format(L["GitChanges.FileNotFoundFormat"], fullPath);
+                return;
+            }
+
+            // ターミナル内パスクリックと同じく既定のアプリで開く
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = fullPath,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[GitChangesDialog] ファイルを開けませんでした: {Path}", file.FilePath);
+            openError = string.Format(L["GitChanges.OpenErrorFormat"], file.FilePath);
         }
     }
 

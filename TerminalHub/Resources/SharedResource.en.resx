@@ -544,6 +544,9 @@
   <data name="GitChanges.CopyPaths" xml:space="preserve"><value>Copy paths</value></data>
   <data name="GitChanges.Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="GitChanges.Staged" xml:space="preserve"><value>Staged</value></data>
+  <data name="GitChanges.OpenFileTooltip" xml:space="preserve"><value>Open with default app</value></data>
+  <data name="GitChanges.FileNotFoundFormat" xml:space="preserve"><value>File not found: {0}</value></data>
+  <data name="GitChanges.OpenErrorFormat" xml:space="preserve"><value>Failed to open file: {0}</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>Untracked</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>Modified</value></data>
   <data name="GitChanges.Status.Added" xml:space="preserve"><value>Added</value></data>
