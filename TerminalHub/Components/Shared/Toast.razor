@@ -2,7 +2,9 @@
 
 @if (Messages.Any())
 {
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+    @* z-index はモーダル(1055)より前面の 1090 (Bootstrap 推奨のトースト層)。
+       Git変更ダイアログ等、モーダルを開いたままのトースト表示を隠さないため *@
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
         @foreach (var message in Messages)
         {
             <div class="toast show @GetToastClass(message.Type)" role="alert">

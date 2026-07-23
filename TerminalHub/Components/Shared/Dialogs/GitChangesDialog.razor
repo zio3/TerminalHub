@@ -112,6 +112,8 @@
     [Parameter] public EventCallback<bool> OnChangesLoaded { get; set; }
     /// <summary>親がクリック時に取得済みの変更一覧。指定があれば開いた直後の再取得を省略する（更新ボタンでは取り直す）</summary>
     [Parameter] public List<GitChangedFile>? InitialFiles { get; set; }
+    /// <summary>ファイルを開けたときの成功トースト表示（既定アプリの起動が遅く無反応に見えるのを防ぐ）</summary>
+    [Parameter] public EventCallback<string> OnShowSuccessToast { get; set; }
 
     private List<GitChangedFile> changedFiles = new();
     private bool isLoading = false;
@@ -223,9 +225,13 @@
     // git status のパスはリポジトリルート基準のため、ルートを1回だけ解決してキャッシュする
     private string? _repoRoot;
 
+    // 反応が遅いときに二重クリックで2つ開くのを防ぐ
+    private bool isOpening;
+
     private async Task OpenFileAsync(GitChangedFile file)
     {
-        if (string.IsNullOrEmpty(FolderPath)) return;
+        if (string.IsNullOrEmpty(FolderPath) || isOpening) return;
+        isOpening = true;
         openError = null;
         try
         {
@@ -244,17 +250,23 @@
                 return;
             }
 
-            // ターミナル内パスクリックと同じく既定のアプリで開く
+            // ターミナル内パスクリックと同じく既定のアプリで開く。
+            // アプリの起動が遅い・前面に来ない等で無反応に見えるため、成功もトーストで知らせる
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = fullPath,
                 UseShellExecute = true,
             });
+            await OnShowSuccessToast.InvokeAsync(string.Format(L["Root.Toast.FileOpenedFormat"], fullPath));
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "[GitChangesDialog] ファイルを開けませんでした: {Path}", file.FilePath);
             openError = string.Format(L["GitChanges.OpenErrorFormat"], file.FilePath);
+        }
+        finally
+        {
+            isOpening = false;
         }
     }
 
