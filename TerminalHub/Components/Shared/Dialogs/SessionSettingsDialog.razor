@@ -332,7 +332,8 @@
 
     /// <summary>
     /// 子セッションのとき、親セッションの専用コマンドのうち伝搬 ON のものを取得する。
-    /// 階層は親子の2段固定なので親を1段だけ辿れば十分。親が見つからなければ空。
+    /// 階層は親子の2段固定なので親を1段だけ辿れば十分。親が完全削除されていれば空。
+    /// アーカイブ済みの親からも伝搬を続ける点は Root.razor の GetInheritedCommands と揃えている。
     /// </summary>
     private List<CustomCommand> LoadInheritedCommands(SessionInfo session)
     {

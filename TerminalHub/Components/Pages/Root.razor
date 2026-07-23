@@ -2346,7 +2346,10 @@
 
     /// <summary>
     /// 親セッションの専用コマンドのうち、伝搬 ON のものを返す。
-    /// 親セッションそのもの、または親が見つからない（アーカイブ/削除済み）場合は空。
+    /// 親セッションそのもの、または親が完全削除されている場合は空。
+    /// 親がアーカイブ済みでも伝搬は続ける（ArchiveSession は IsArchived を立てるだけで
+    /// SessionManager からは消えないため、GetSessionInfo は引き続き返す）。親を片付けても
+    /// 子の worktree で作業を続けるケースがあり、そこでコマンドが消えるほうが不便なので意図的にそうしている。
     /// </summary>
     private List<CustomCommand> GetInheritedCommands(SessionInfo session)
     {
