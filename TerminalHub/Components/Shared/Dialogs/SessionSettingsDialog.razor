@@ -188,6 +188,47 @@
                     </button>
                 </div>
 
+                @if (inheritedCommands.Any())
+                {
+                    <!-- 親から伝搬されてきたコマンド。ここでは編集できない（変更は親セッションの設定で行う） -->
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1">
+                            <i class="bi bi-arrow-down-square me-1"></i>@string.Format(L["SessionSettings.Commands.InheritedFormat"], inheritedCommands.Count)
+                        </small>
+                        <ul class="list-group list-group-sm">
+                            @foreach (var inherited in inheritedCommands)
+                            {
+                                var inheritedIsKey = inherited.Type == CustomCommandType.KeySequence;
+                                var inheritedBody = inheritedIsKey
+                                    ? (KeySequencePresets.GetDisplayName(inherited.KeyName) ?? inherited.KeyName ?? "?")
+                                    : SummarizeCommandText(inherited.CommandText);
+                                <li class="list-group-item d-flex align-items-center py-1 px-2" style="background-color: var(--th-surface-raised);">
+                                    <small class="d-flex align-items-center text-muted" style="min-width: 0; flex: 1;">
+                                        @if (inheritedIsKey)
+                                        {
+                                            <i class="bi bi-keyboard me-1"></i>
+                                        }
+                                        @if (!string.IsNullOrEmpty(inherited.GroupName))
+                                        {
+                                            <span class="badge bg-secondary bg-opacity-25 text-muted me-2" style="font-weight: normal;">@inherited.GroupName</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(inherited.Title))
+                                        {
+                                            <strong>@inherited.Title</strong>
+                                            <span class="ms-2 text-truncate">@inheritedBody</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-truncate">@inheritedBody</span>
+                                        }
+                                    </small>
+                                </li>
+                            }
+                        </ul>
+                        <small class="form-text text-muted d-block">@L["SessionSettings.Commands.InheritedHelp"]</small>
+                    </div>
+                }
+
                 @if (editingSessionCommands.Any())
                 {
                     <ul class="list-group list-group-sm">
@@ -204,6 +245,10 @@
                                     @if (isKey)
                                     {
                                         <i class="bi bi-keyboard me-1 text-muted"></i>
+                                    }
+                                    @if (IsParentSession && cmd.PropagateToChildren)
+                                    {
+                                        <i class="bi bi-arrow-down-square me-1 text-primary" title="@L["Settings.Commands.Propagate"]"></i>
                                     }
                                     @if (!string.IsNullOrEmpty(cmd.GroupName))
                                     {
@@ -254,6 +299,7 @@
                    IsNew="commandEditDialogIsNew"
                    TerminalTypeLabel="@commandEditDialogTerminalLabel"
                    Command="commandEditDialogSource"
+                   ShowPropagateOption="IsParentSession"
                    OnSave="HandleSessionCommandSave" />
 
 @code {
@@ -277,6 +323,28 @@
     private int? commandEditDialogIndex = null;
     private CustomCommand? commandEditDialogSource = null;
     private string? commandEditDialogTerminalLabel = null;
+
+    // 親から伝搬されてきたコマンド（子セッションのみ。読み取り専用の表示用）
+    private List<CustomCommand> inheritedCommands = new();
+
+    // 親セッション（サブセッションを持ち得る側）かどうか。伝搬チェックはここでのみ意味を持つ。
+    private bool IsParentSession => sessionInfo != null && !sessionInfo.ParentSessionId.HasValue;
+
+    /// <summary>
+    /// 子セッションのとき、親セッションの専用コマンドのうち伝搬 ON のものを取得する。
+    /// 階層は親子の2段固定なので親を1段だけ辿れば十分。親が見つからなければ空。
+    /// </summary>
+    private List<CustomCommand> LoadInheritedCommands(SessionInfo session)
+    {
+        if (!session.ParentSessionId.HasValue)
+            return new List<CustomCommand>();
+
+        var parent = SessionManager.GetSessionInfo(session.ParentSessionId.Value);
+        if (parent == null)
+            return new List<CustomCommand>();
+
+        return parent.SessionCommands.Where(c => c.PropagateToChildren).ToList();
+    }
 
     private SessionOptionsSelector? optionsSelector;
     private SessionInfo? sessionInfo;
@@ -385,9 +453,13 @@
                     Type = c.Type,
                     KeyName = c.KeyName,
                     GroupName = c.GroupName,
-                    SendMode = c.SendMode
+                    SendMode = c.SendMode,
+                    PropagateToChildren = c.PropagateToChildren
                 })
                 .ToList();
+
+            // 子セッションなら、親から伝搬されてくるコマンドを読み取り専用で見せるために取得する
+            inheritedCommands = LoadInheritedCommands(sessionInfo);
 
             // オプションを解析
             var options = sessionInfo.Options;
@@ -670,7 +742,8 @@
                 Type = c.Type,
                 KeyName = c.KeyName,
                 GroupName = c.GroupName,
-                SendMode = c.SendMode
+                SendMode = c.SendMode,
+                PropagateToChildren = c.PropagateToChildren
             })
             .ToList();
 

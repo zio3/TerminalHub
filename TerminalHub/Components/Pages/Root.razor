@@ -2331,11 +2331,33 @@
             ? new List<CustomCommand>(commands)
             : new List<CustomCommand>();
 
-        // セッション専用コマンドはグローバル分の後ろに連結する。
+        // 親セッションから伝搬されたコマンドを、自分の専用コマンドより前に連結する。
+        // サブセッションは並列作業場なので、親で生やした共通コマンドが子にも自動で生えるようにする。
+        // 階層は親子の2段固定（子からサブセッションは作れない）ため、親を1段だけ辿れば十分で、
+        // 再帰も循環ガードも不要。重複排除もしない（同名を並べたい場合があるため）。
+        result.AddRange(GetInheritedCommands(session));
+
+        // セッション専用コマンドはその後ろに連結する。
         if (session.SessionCommands.Count > 0)
             result.AddRange(session.SessionCommands);
 
         return result;
+    }
+
+    /// <summary>
+    /// 親セッションの専用コマンドのうち、伝搬 ON のものを返す。
+    /// 親セッションそのもの、または親が見つからない（アーカイブ/削除済み）場合は空。
+    /// </summary>
+    private List<CustomCommand> GetInheritedCommands(SessionInfo session)
+    {
+        if (!session.ParentSessionId.HasValue)
+            return new List<CustomCommand>();
+
+        var parent = SessionManager.GetSessionInfo(session.ParentSessionId.Value);
+        if (parent == null)
+            return new List<CustomCommand>();
+
+        return parent.SessionCommands.Where(c => c.PropagateToChildren).ToList();
     }
 
     private string claudeModeSwitchKey = "altM";

@@ -84,6 +84,21 @@
                                           placeholder="@L["Settings.Commands.CommandBodyPlaceholder"]"></textarea>
                             </div>
                         }
+                        @if (ShowPropagateOption)
+                        {
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           id="@($"propagate-{_instanceId}")"
+                                           checked="@editPropagate"
+                                           @onchange="e => editPropagate = (bool?)e.Value ?? false" />
+                                    <label class="form-check-label" for="@($"propagate-{_instanceId}")">
+                                        <i class="bi bi-arrow-down-square me-1"></i>@L["Settings.Commands.Propagate"]
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">@L["Settings.Commands.Propagate.Help"]</small>
+                            </div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -109,6 +124,12 @@
     /// <summary>編集対象のコマンド。null なら新規作成。Save 時はこの参照を直接書き換えず、新インスタンスを返す。</summary>
     [Parameter] public CustomCommand? Command { get; set; }
     [Parameter] public EventCallback<CustomCommand> OnSave { get; set; }
+    /// <summary>
+    /// 「子セッションにも表示する」チェックボックスを出すか。
+    /// 伝搬先が存在する親セッションの専用コマンドを編集するときだけ true にする。
+    /// （グローバル設定・子セッションの編集では意味を持たないので出さない）
+    /// </summary>
+    [Parameter] public bool ShowPropagateOption { get; set; }
 
     // ラジオボタンの DOM id/name が他のダイアログ/設定タブと衝突しないようインスタンス毎にユニーク化する。
     private readonly string _instanceId = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -119,6 +140,7 @@
     private string editCommandText = "";
     private string editKeyName = KeySequencePresets.DefaultKey;
     private CustomCommandSendMode editSendMode = CustomCommandSendMode.DirectSend;
+    private bool editPropagate = false;
 
     // Command 参照が変わったタイミング (= ダイアログを別アイテムで開き直したタイミング) でのみフォームを初期化する。
     private CustomCommand? _lastLoaded;
@@ -148,6 +170,7 @@
             editCommandText = "";
             editKeyName = KeySequencePresets.DefaultKey;
             editSendMode = CustomCommandSendMode.DirectSend;
+            editPropagate = false; // 既定は伝搬しない
         }
         else
         {
@@ -157,6 +180,7 @@
             editCommandText = Command.CommandText ?? "";
             editKeyName = string.IsNullOrEmpty(Command.KeyName) ? KeySequencePresets.DefaultKey : Command.KeyName;
             editSendMode = Command.SendMode;
+            editPropagate = Command.PropagateToChildren;
         }
     }
 
@@ -186,7 +210,9 @@
                 KeyName = editKeyName,
                 CommandText = "",
                 GroupName = groupName,
-                SendMode = editSendMode
+                SendMode = editSendMode,
+                // チェックボックス非表示時は編集前の値をそのまま持ち越す（LoadFromCommand で復元済み）
+                PropagateToChildren = editPropagate
             };
         }
         else
@@ -201,7 +227,8 @@
                 Title = title,
                 CommandText = commandText,
                 GroupName = groupName,
-                SendMode = editSendMode
+                SendMode = editSendMode,
+                PropagateToChildren = editPropagate
             };
         }
 
