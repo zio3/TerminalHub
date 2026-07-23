@@ -250,6 +250,22 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<string?> GetRepositoryRootAsync(string path)
+        {
+            try
+            {
+                // --show-toplevel は / 区切りで返るため Windows 標準の \ 区切りへ正規化する
+                var result = await ExecuteGitCommandAsync(path, "rev-parse --show-toplevel");
+                var root = result.Success ? result.Output?.Trim() : null;
+                return string.IsNullOrEmpty(root) ? null : Path.GetFullPath(root);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "リポジトリルート取得でエラーが発生しました: {Path}", path);
+                return null;
+            }
+        }
+
         public async Task<List<GitChangedFile>?> GetChangedFilesAsync(string path)
         {
             try

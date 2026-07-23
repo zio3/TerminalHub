@@ -60,7 +60,16 @@
                                     {
                                         <span class="text-muted">@file.OldFilePath →</span>
                                     }
-                                    @file.FilePath
+                                    @if (EffectiveStatus(file) == 'D')
+                                    {
+                                        @* 削除済みファイルは実体が無いため開けない *@
+                                        @file.FilePath
+                                    }
+                                    else
+                                    {
+                                        <a href="" class="text-decoration-none" title="@L["GitChanges.OpenFileTooltip"]"
+                                           @onclick="() => OpenFileAsync(file)" @onclick:preventDefault>@file.FilePath</a>
+                                    }
                                     @if (file.IsStaged && !file.IsUntracked)
                                     {
                                         <i class="bi bi-check2 text-success ms-1" title="@L["GitChanges.Staged"]"></i>
@@ -69,6 +78,12 @@
                             </div>
                         }
                     </div>
+                    @if (openError != null)
+                    {
+                        <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>@openError
+                        </div>
+                    }
                 }
             </div>
             <div class="modal-footer">
@@ -97,6 +112,8 @@
     [Parameter] public EventCallback<bool> OnChangesLoaded { get; set; }
     /// <summary>親がクリック時に取得済みの変更一覧。指定があれば開いた直後の再取得を省略する（更新ボタンでは取り直す）</summary>
     [Parameter] public List<GitChangedFile>? InitialFiles { get; set; }
+    /// <summary>ファイルを開けたときの成功トースト表示（既定アプリの起動が遅く無反応に見えるのを防ぐ）</summary>
+    [Parameter] public EventCallback<string> OnShowSuccessToast { get; set; }
 
     private List<GitChangedFile> changedFiles = new();
     private bool isLoading = false;
@@ -110,6 +127,8 @@
             // ダイアログが開かれた時（または対象が変わった時）のみ取得する
             _loadedPath = FolderPath;
             pathsCopied = false; // 前回対象の「コピーしました」表示を持ち越さない
+            openError = null;
+            _repoRoot = null; // 対象が変わったのでルートキャッシュを破棄
             if (InitialFiles != null)
             {
                 // 親がクリック時に取得済みなら再取得しない
@@ -137,6 +156,7 @@
         var requestPath = FolderPath;
         isLoading = true;
         loadFailed = false;
+        openError = null;
         StateHasChanged();
         try
         {
@@ -197,6 +217,56 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "[GitChangesDialog] パスのコピーに失敗");
+        }
+    }
+
+    // ファイル名クリックで開けなかったときの表示（次のクリック/再読込でクリア）
+    private string? openError;
+    // git status のパスはリポジトリルート基準のため、ルートを1回だけ解決してキャッシュする
+    private string? _repoRoot;
+
+    // 反応が遅いときに二重クリックで2つ開くのを防ぐ
+    private bool isOpening;
+
+    private async Task OpenFileAsync(GitChangedFile file)
+    {
+        if (string.IsNullOrEmpty(FolderPath) || isOpening) return;
+        isOpening = true;
+        openError = null;
+        try
+        {
+            // サブフォルダをセッションにしている場合でも正しく解決できるようルート基準にする。
+            // ReloadAsync と同じく、await 中にダイアログが別セッションで開き直された場合は
+            // 古い応答を破棄する（キャッシュへ旧セッションのルートを混入させない）
+            var requestPath = FolderPath;
+            var repoRoot = _repoRoot ?? await GitService.GetRepositoryRootAsync(requestPath) ?? requestPath;
+            if (!IsVisible || requestPath != FolderPath)
+                return; // 古い応答: 破棄
+            _repoRoot = repoRoot;
+            var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(repoRoot, file.FilePath));
+            if (!File.Exists(fullPath))
+            {
+                openError = string.Format(L["GitChanges.FileNotFoundFormat"], fullPath);
+                return;
+            }
+
+            // ターミナル内パスクリックと同じく既定のアプリで開く。
+            // アプリの起動が遅い・前面に来ない等で無反応に見えるため、成功もトーストで知らせる
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = fullPath,
+                UseShellExecute = true,
+            });
+            await OnShowSuccessToast.InvokeAsync(string.Format(L["Root.Toast.FileOpenedFormat"], fullPath));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[GitChangesDialog] ファイルを開けませんでした: {Path}", file.FilePath);
+            openError = string.Format(L["GitChanges.OpenErrorFormat"], file.FilePath);
+        }
+        finally
+        {
+            isOpening = false;
         }
     }
 

@@ -230,7 +230,8 @@
                   BranchName="@gitChangesSession?.GitBranch"
                   InitialFiles="@gitChangesFiles"
                   OnClose="() => gitChangesSession = null"
-                  OnChangesLoaded="HandleGitChangesLoaded" />
+                  OnChangesLoaded="HandleGitChangesLoaded"
+                  OnShowSuccessToast="OnShowSuccessToast" />
 
 @code {
     [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
@@ -247,6 +248,7 @@
     [Parameter] public bool GitChangesOnBadgeClick { get; set; }
     [Parameter] public EventCallback<string> OnShowInfoToast { get; set; }
     [Parameter] public EventCallback<string> OnShowErrorToast { get; set; }
+    [Parameter] public EventCallback<string> OnShowSuccessToast { get; set; }
 
     private string filterText = string.Empty;
 
