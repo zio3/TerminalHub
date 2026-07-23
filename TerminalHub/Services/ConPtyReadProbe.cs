@@ -9,18 +9,22 @@ namespace TerminalHub.Services
     /// <see cref="OperationProbe"/> の in-flight ダンプが詰まりの最中でもほぼ空
     /// （＝計測点の外で誰かがスレッドを握っている）という強い陰性所見が出た。
     ///
-    /// 有力容疑者が ConPTY の読みループ。<c>ConPtySession</c> のパイプは
+    /// 犯人は ConPTY の読みループだった。<c>ConPtySession</c> のパイプは
     /// <c>new FileStream(pipeOut, FileAccess.Read)</c> と <c>isAsync</c> 未指定（＝同期モード）で
     /// 作られており、同期モードの FileStream の <c>ReadAsync</c> は overlapped I/O を使わず
     /// **ブロッキング読みを ThreadPool スレッドへ投げる**実装になる。つまり
-    /// 起動済みセッション1本につきプールスレッド1本が <c>ReadFile</c> で張り付き続ける。
+    /// 起動済みセッション1本につきプールスレッド1本が <c>ReadFile</c> で張り付き続けていた。
+    /// 実測でも <c>使用中ワーカー ≒ ConPTY読み + 1</c> が全域で成立し、min worker(16)到達で発症した。
     ///
-    /// この仮説を白黒つけるための2つのカウンタ:
+    /// 対策として読みループは専用スレッド上の同期 <c>Read()</c> へ移した（<c>ConPtyService</c> 参照）。
+    /// **したがって今のカウンタは ThreadPool 占有ではなく「専用スレッドが読み待ちしている本数」を数える。**
+    /// このクラスは対策の回帰監視として残している:
     /// - <see cref="ActiveLoops"/>: 走っている読みループの本数（＝起動済み ConPTY 数の実測）
-    /// - <see cref="BlockedInRead"/>: そのうち今まさに <c>ReadAsync</c> 待ちで張り付いている本数（本命）
+    /// - <see cref="BlockedInRead"/>: そのうち今まさに読み待ちで張り付いている本数
     ///
-    /// 判定: ストール時に <c>BlockedInRead</c> が <c>使用中ワーカー</c> の大半を占めていれば仮説は確定。
-    /// 逆にほぼ 0 なら（＝待ちが overlapped で処理されている）容疑は晴れ、別の犯人を探す。
+    /// 判定: **正常なら <c>ConPTY読み</c> が何本に増えても <c>使用中ワーカー</c> は連動しない**。
+    /// 連動していたら読みループが ThreadPool へ戻った（対策が外れた）サインなので、
+    /// <c>ConPtyService</c> の読みループが専用スレッドで同期 <c>Read()</c> を呼んでいるか確認すること。
     ///
     /// <see cref="OperationProbe"/> を再利用しない理由: あちらは閾値(1秒)超で完了した処理を必ず
     /// WARN に出す。読み待ちは「出力が来るまで分単位でブロックする」のが正常なので、そのまま使うと
@@ -47,7 +51,7 @@ namespace TerminalHub.Services
         /// <summary>走っている読みループの本数。</summary>
         public static int ActiveLoops => Volatile.Read(ref Counters[ActiveLoopsIndex].Value);
 
-        /// <summary>今まさに ReadAsync 待ちで張り付いている本数（同期 FileStream ならプールスレッドを握っている）。</summary>
+        /// <summary>今まさに読み待ちで張り付いている本数（専用スレッド化後は ThreadPool のワーカーではない）。</summary>
         public static int BlockedInRead => Volatile.Read(ref Counters[BlockedInReadIndex].Value);
 
         /// <summary>読みループの生存期間を数える。<c>using</c> で囲んで使う。</summary>
@@ -57,7 +61,7 @@ namespace TerminalHub.Services
             return new LoopScope(armed: true);
         }
 
-        /// <summary>1回の ReadAsync 待ちを数える。<c>using</c> ブロックで await を囲んで使う。</summary>
+        /// <summary>1回の読み待ちを数える。<c>using</c> ブロックで <c>Read()</c> を囲んで使う。</summary>
         public static ReadScope EnterRead()
         {
             Interlocked.Increment(ref Counters[BlockedInReadIndex].Value);

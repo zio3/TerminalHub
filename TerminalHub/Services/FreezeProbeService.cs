@@ -17,9 +17,13 @@ namespace TerminalHub.Services
     ///
     /// 遅延検知時に GC.GetTotalPauseDuration の差分を添えるので、
     /// 停止時間 ≒ GCポーズ差分 なら犯人はGC、そうでなければ別要因と判定できる。
-    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視＋ConPTY読み占有）のみ。
-    /// ConPTY読み占有（<see cref="ConPtyReadProbe"/>）は starvation の本命容疑者の計測で、
-    /// 「使用中ワーカーのうち何本が ConPTY の ReadAsync 待ちで張り付いているか」を出す。
+    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視＋ConPTY読み）のみ。
+    ///
+    /// ConPTY読み（<see cref="ConPtyReadProbe"/>）は、かつて starvation の犯人だった
+    /// 「読みループによる ThreadPool 占有」の回帰監視。読みループは専用スレッドへ移したので、
+    /// **正常なら ConPTY読み が何本に増えても 使用中ワーカー は連動しない**。
+    /// 逆に 使用中ワーカー ≒ ConPTY読み + 1 のように連動していたら、読みループが
+    /// ThreadPool へ戻ってしまった（対策が外れた）サイン。
     /// </summary>
     public class FreezeProbeService : IHostedService, IDisposable
     {
@@ -41,7 +45,9 @@ namespace TerminalHub.Services
         // 遅延に気づくのは「明けた後」なので、そこで読む値は復帰後のスナップショットになってしまう。
         // 詰まっている最中も回り続ける専用スレッド（starvation では無事なことを確認済み）で毎秒サンプルし、
         // 最大値を持ち回ることで「詰まっていた瞬間の値」を遅延検出行に添える。
-        // 書き手は専用スレッドのみ、読み手は ThreadPool プローブのみ。
+        // 書き手は2つある（専用スレッドが最大値を更新し、ThreadPool プローブが毎ティックで 0 に畳む）ので、
+        // 更新は CAS、畳みは Interlocked.Exchange で行う。素の read-then-write だと畳みと更新が
+        // 競合してピークを取りこぼし、「詰まっていなかった」と誤読させうる。
         private int _peakBlockedInRead;
         private int _peakBusyWorkers;
 
@@ -120,19 +126,26 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// ストール中の値を取りこぼさないよう、専用スレッドから毎秒サンプルして最大値を更新する。
-        /// 単一書き手なので read-then-write で足りる（Interlocked は不要）。
+        /// ThreadPool プローブ側が同じフィールドを 0 に畳むため、CAS で更新する。
         /// </summary>
         private void SamplePeaks()
         {
-            var blocked = ConPtyReadProbe.BlockedInRead;
-            if (blocked > Volatile.Read(ref _peakBlockedInRead))
-                Volatile.Write(ref _peakBlockedInRead, blocked);
+            UpdatePeak(ref _peakBlockedInRead, ConPtyReadProbe.BlockedInRead);
 
             ThreadPool.GetMaxThreads(out var maxWorkers, out _);
             ThreadPool.GetAvailableThreads(out var availWorkers, out _);
-            var busy = maxWorkers - availWorkers;
-            if (busy > Volatile.Read(ref _peakBusyWorkers))
-                Volatile.Write(ref _peakBusyWorkers, busy);
+            UpdatePeak(ref _peakBusyWorkers, maxWorkers - availWorkers);
+        }
+
+        /// <summary>現在値がピークを超えていれば CAS で更新する（畳み込みと競合しても取りこぼさない）。</summary>
+        private static void UpdatePeak(ref int peak, int value)
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref peak);
+                if (value <= current) return;
+                if (Interlocked.CompareExchange(ref peak, value, current) == current) return;
+            }
         }
 
         /// <summary>ThreadPoolプローブ: 専用スレッドが無事でここだけ遅れる = ThreadPool枯渇</summary>
@@ -176,7 +189,8 @@ namespace TerminalHub.Services
                     ThreadPool.GetAvailableThreads(out var availWorkers, out _);
                     ThreadPool.GetMinThreads(out var minWorkers, out _);
 
-                    // ConPTY読み占有: BusyWorkers の大半が ReadAsync待ちなら starvation の犯人が確定する。
+                    // ConPTY読みは回帰監視。専用スレッド化後は BusyWorkers に算入されないはずなので、
+                    // ピークの ConPTY読み が ピークの使用中 に迫っていたら対策が外れた疑い。
                     // 素の値はこの行を書いている「復帰後」のスナップショットなので、判定には
                     // 専用スレッドが詰まっている最中に採ったピーク値のほうを見ること。
                     _logger.LogWarning(
@@ -197,9 +211,10 @@ namespace TerminalHub.Services
                 }
 
                 // ピークは「前回このループが回ってから今まで」＝ストール区間を表すようにしたいので、
-                // 遅延の有無に関わらず毎ティックで畳む。
-                Volatile.Write(ref _peakBlockedInRead, 0);
-                Volatile.Write(ref _peakBusyWorkers, 0);
+                // 遅延の有無に関わらず毎ティックで畳む。専用スレッド側の CAS 更新と競合しても
+                // 落ちないよう Exchange で行う。
+                Interlocked.Exchange(ref _peakBlockedInRead, 0);
+                Interlocked.Exchange(ref _peakBusyWorkers, 0);
             }
         }
 
