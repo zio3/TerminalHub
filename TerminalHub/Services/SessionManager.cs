@@ -267,20 +267,24 @@ namespace TerminalHub.Services
                     var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath(), ResolveClaudeHookConfigPath(sessionId));
                     var claudeCmdPath = GetClaudeCmdPath();
 
-                    // ネイティブ版(.exe)は直接実行、npm版(.cmd)はcmd.exe経由
-                    if (claudeCmdPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // ネイティブ版: 直接実行
-                        return (claudeCmdPath, claudeArgs);
-                    }
-                    else
-                    {
-                        // npm版: cmd.exe経由で実行
-                        var args = string.IsNullOrWhiteSpace(claudeArgs)
-                            ? $"/c \"{claudeCmdPath}\""
-                            : $"/c \"{claudeCmdPath}\" {claudeArgs}";
-                        return ("cmd.exe", args);
-                    }
+                    // ネイティブ版(.exe)・npm版(.cmd)とも cmd.exe 経由で同じ形に組み立てる。
+                    //
+                    // cmd.exe /c は「引用符がちょうど2個」の条件を外れると、先頭の引用符と末尾の引用符
+                    // だけを削る旧挙動になる（cmd /? 参照）。この形だと実行対象が "…\claude.cmd\"" のように
+                    // パスの途中へ引用符が残り、「見つからない」ではなく ERROR_INVALID_NAME
+                    // （ファイル名、ディレクトリ名、またはボリューム ラベルの構文が間違っています）で落ちる。
+                    // v1.0.71 で --settings が常時付くようになり引用符が2個→4個になったことで、
+                    // npm版の Claude Code セッションが起動できなくなっていた。
+                    //
+                    // 対策は「実行ファイルパスを引用符で囲んだうえで、全体をもう一組の引用符で囲む」。
+                    // これなら引用符付きの引数がいくつ増えても壊れない（実測確認済み）。
+                    // ネイティブ版も同じ形にするのは、パスにスペースを含むユーザー名で同種の破綻を
+                    // 起こさないため（TerminalConstants.BuildClaudeCodeArgs の引用符と同じ理由）。
+                    var quotedClaudePath = $"\"{claudeCmdPath}\"";
+                    var claudeCmdArgs = string.IsNullOrWhiteSpace(claudeArgs)
+                        ? $"/c {quotedClaudePath}"
+                        : $"/c \"{quotedClaudePath} {claudeArgs}\"";
+                    return ("cmd.exe", claudeCmdArgs);
 
                 // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
 
