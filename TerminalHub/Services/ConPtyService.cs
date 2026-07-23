@@ -67,7 +67,13 @@ namespace TerminalHub.Services
         private bool IsDisposed => Volatile.Read(ref _disposeState) != 0;
         private readonly object _pseudoConsoleLock = new();
         private readonly Decoder _utf8Decoder = Encoding.UTF8.GetDecoder();
-        private Task? _readTask;
+        // 読みループは ThreadPool ではなく専用スレッドで回す。
+        // ConPTY のパイプは CreatePipe 製で overlapped 非対応のため FileStream は同期モードでしか作れず、
+        // 同期モードの FileStream.ReadAsync は「ブロッキング読みを ThreadPool へ投げる」実装になる。
+        // つまり誰が呼んでも起動済みセッション1本につきプールスレッド1本が張り付き、
+        // セッション数が min worker 数に達した時点でプール全体が枯渇する（2026-07-23 に実測で確定）。
+        // 専用スレッド上で同期 Read() を直接呼べば、ブロックするのは自前のスレッドだけになる。
+        private Thread? _readThread;
         private CancellationTokenSource? _readCancellationTokenSource;
         private bool _started = false;
 
@@ -156,7 +162,15 @@ namespace TerminalHub.Services
             _flushTimer?.Start();
 
             _readCancellationTokenSource = new CancellationTokenSource();
-            _readTask = Task.Run(() => ReadPipeAsync(_readCancellationTokenSource.Token));
+
+            // ThreadPool には載せない（理由は _readThread の宣言箇所を参照）
+            var readToken = _readCancellationTokenSource.Token;
+            _readThread = new Thread(() => ReadPipeLoop(readToken))
+            {
+                IsBackground = true,
+                Name = $"ConPtyRead-{_sessionId?.ToString("N")[..8] ?? "unknown"}",
+            };
+            _readThread.Start();
         }
 
         private IntPtr CreateEnvironmentBlock()
@@ -562,30 +576,37 @@ namespace TerminalHub.Services
         }
 
         // バックグラウンドでパイプを読み取るメソッド
-        private async Task ReadPipeAsync(CancellationToken cancellationToken)
+        /// <summary>
+        /// パイプを読み続けるループ。**専用スレッドで同期に回す**（ThreadPool には載せない）。
+        /// 同期モードの FileStream では ReadAsync も内部でプールスレッドをブロックするため、
+        /// ここでは素の Read() を呼び、ブロックするのを自前のスレッドだけに閉じ込める。
+        /// キャンセルは Read() 自体には効かないが、Dispose がパイプを閉じることで解除される。
+        /// </summary>
+        private void ReadPipeLoop(CancellationToken cancellationToken)
         {
             var byteBuffer = new byte[65536]; // 64KB
             var charBuffer = new char[65536]; // 64KB
+
+            // 計測（ConPtyReadProbe 参照）。専用スレッド化後は「ConPTY読みが増えても使用中ワーカーが
+            // 連動しない」ことが対策の効いている証拠になる。開始/終了を残すのは、ActiveLoops が
+            // 下がらないときに「セッションが生きている」のか「破棄済みなのに抜けられていない」のかを
+            // 後からログだけで切り分けるため。
+            using var _loopScope = ConPtyReadProbe.EnterLoop();
+            _logger.LogDebug("[ConPtyRead] 読みループ開始: SessionId={SessionId}, ActiveLoops={ActiveLoops}",
+                _sessionId, ConPtyReadProbe.ActiveLoops);
 
             while (!cancellationToken.IsCancellationRequested && !IsDisposed)
             {
                 try
                 {
-                    // フロー制御: 一時停止中は再開を待つ
+                    // フロー制御: 一時停止中は再開を待つ（最大30秒）
                     if (_outputPaused)
                     {
                         var resumeTask = _resumeTcs?.Task;
                         if (resumeTask != null)
                         {
-                            // キャンセルトークンと組み合わせて待機
-                            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                            linkedCts.CancelAfter(TimeSpan.FromSeconds(30)); // 最大30秒待機
-
-                            try
-                            {
-                                await resumeTask.WaitAsync(linkedCts.Token);
-                            }
-                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            // 専用スレッドなので同期待ちでよい。キャンセル時は例外で下の catch へ抜ける。
+                            if (!resumeTask.Wait(TimeSpan.FromSeconds(30), cancellationToken))
                             {
                                 // タイムアウトの場合は強制的に再開
                                 _logger.LogWarning("Flow control timeout - forcing resume");
@@ -597,7 +618,12 @@ namespace TerminalHub.Services
                     if (_pipeOutStream == null)
                         break;
 
-                    var bytesRead = await _pipeOutStream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken);
+                    // 同期 Read。ブロックするのはこの専用スレッドだけで、ThreadPool は消費しない。
+                    int bytesRead;
+                    using (ConPtyReadProbe.EnterRead())
+                    {
+                        bytesRead = _pipeOutStream.Read(byteBuffer, 0, byteBuffer.Length);
+                    }
 
                     if (bytesRead > 0)
                     {
@@ -627,6 +653,10 @@ namespace TerminalHub.Services
                 }
             }
             
+            // ここに来た時点でループは抜けている（＝プールスレッドの占有は解けた）。
+            // ActiveLoops は _loopScope の破棄でこの直後に減る。
+            _logger.LogDebug("[ConPtyRead] 読みループ終了: SessionId={SessionId}", _sessionId);
+
             // バッファリングタイマーを即座に停止
             if (_flushTimer != null)
             {
@@ -743,9 +773,20 @@ namespace TerminalHub.Services
             try
             {
                 _readCancellationTokenSource?.Cancel();
-                // パイプ読み取りを先に解除し、待機がタイムアウトしにくいようにする。
+                // 同期 Read() はキャンセルで抜けないので、パイプを閉じて読みを解除するのが必須。
+                // これで Read() が例外/0 で戻り、ループが終了できる。
                 _pipeOutStream?.Dispose();
-                _readTask?.Wait(1000); // 1秒待機
+                _readThread?.Join(1000); // 1秒待機
+
+                // 1秒で終わらなかった場合、読みループは走ったまま＝専用スレッドが残っている。
+                // このときゲージの ConPTY読み は実セッション数より多く出る。単調増加を「占有の蓄積」と
+                // 読み違えないよう、過大計上の可能性をここで明示的に残す（ConPtyReadProbe 参照）。
+                if (_readThread is { IsAlive: true })
+                {
+                    _logger.LogWarning(
+                        "[ConPtyRead] 読みループが1秒以内に終了せず: SessionId={SessionId}, ActiveLoops={ActiveLoops}（以降 ConPTY読み が過大計上される可能性）",
+                        _sessionId, ConPtyReadProbe.ActiveLoops);
+                }
             }
             catch (Exception ex)
             {

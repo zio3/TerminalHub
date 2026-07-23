@@ -17,7 +17,13 @@ namespace TerminalHub.Services
     ///
     /// 遅延検知時に GC.GetTotalPauseDuration の差分を添えるので、
     /// 停止時間 ≒ GCポーズ差分 なら犯人はGC、そうでなければ別要因と判定できる。
-    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視）のみ。
+    /// 平常時の出力は起動時の1行と、60秒毎の定期ゲージ（蓄積リーク監視＋ConPTY読み）のみ。
+    ///
+    /// ConPTY読み（<see cref="ConPtyReadProbe"/>）は、かつて starvation の犯人だった
+    /// 「読みループによる ThreadPool 占有」の回帰監視。読みループは専用スレッドへ移したので、
+    /// **正常なら ConPTY読み が何本に増えても 使用中ワーカー は連動しない**。
+    /// 逆に 使用中ワーカー ≒ ConPTY読み + 1 のように連動していたら、読みループが
+    /// ThreadPool へ戻ってしまった（対策が外れた）サイン。
     /// </summary>
     public class FreezeProbeService : IHostedService, IDisposable
     {
@@ -34,6 +40,16 @@ namespace TerminalHub.Services
         private readonly CancellationTokenSource _cts = new();
         private Thread? _dedicatedThread;
         private Task? _threadPoolTask;
+
+        // ストール中のピーク値。ThreadPool プローブは詰まっている間そもそも動けず、
+        // 遅延に気づくのは「明けた後」なので、そこで読む値は復帰後のスナップショットになってしまう。
+        // 詰まっている最中も回り続ける専用スレッド（starvation では無事なことを確認済み）で毎秒サンプルし、
+        // 最大値を持ち回ることで「詰まっていた瞬間の値」を遅延検出行に添える。
+        // 書き手は2つある（専用スレッドが最大値を更新し、ThreadPool プローブが毎ティックで 0 に畳む）ので、
+        // 更新は CAS、畳みは Interlocked.Exchange で行う。素の read-then-write だと畳みと更新が
+        // 競合してピークを取りこぼし、「詰まっていなかった」と誤読させうる。
+        private int _peakBlockedInRead;
+        private int _peakBusyWorkers;
 
         public FreezeProbeService(
             ILogger<FreezeProbeService> logger,
@@ -83,6 +99,9 @@ namespace TerminalHub.Services
                     return;
                 }
 
+                // ThreadPool が詰まっている間もここは回るので、ピーク採取はこのループが担う
+                SamplePeaks();
+
                 var elapsed = sw.Elapsed;
                 sw.Restart();
                 var gcPause = GC.GetTotalPauseDuration();
@@ -102,6 +121,30 @@ namespace TerminalHub.Services
                 }
 
                 lastGcPause = gcPause;
+            }
+        }
+
+        /// <summary>
+        /// ストール中の値を取りこぼさないよう、専用スレッドから毎秒サンプルして最大値を更新する。
+        /// ThreadPool プローブ側が同じフィールドを 0 に畳むため、CAS で更新する。
+        /// </summary>
+        private void SamplePeaks()
+        {
+            UpdatePeak(ref _peakBlockedInRead, ConPtyReadProbe.BlockedInRead);
+
+            ThreadPool.GetMaxThreads(out var maxWorkers, out _);
+            ThreadPool.GetAvailableThreads(out var availWorkers, out _);
+            UpdatePeak(ref _peakBusyWorkers, maxWorkers - availWorkers);
+        }
+
+        /// <summary>現在値がピークを超えていれば CAS で更新する（畳み込みと競合しても取りこぼさない）。</summary>
+        private static void UpdatePeak(ref int peak, int value)
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref peak);
+                if (value <= current) return;
+                if (Interlocked.CompareExchange(ref peak, value, current) == current) return;
             }
         }
 
@@ -146,8 +189,12 @@ namespace TerminalHub.Services
                     ThreadPool.GetAvailableThreads(out var availWorkers, out _);
                     ThreadPool.GetMinThreads(out var minWorkers, out _);
 
+                    // ConPTY読みは回帰監視。専用スレッド化後は BusyWorkers に算入されないはずなので、
+                    // ピークの ConPTY読み が ピークの使用中 に迫っていたら対策が外れた疑い。
+                    // 素の値はこの行を書いている「復帰後」のスナップショットなので、判定には
+                    // 専用スレッドが詰まっている最中に採ったピーク値のほうを見ること。
                     _logger.LogWarning(
-                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, 実行中=[{InFlight}]",
+                        "[FreezeProbe] ThreadPool遅延検出: 遅延={StallSec:F1}s (開始≒{StallStart:HH:mm:ss.fff}), ThreadPool待機={Pending}, 完了スループット={Throughput:F0}/s, 使用中ワーカー={BusyWorkers}/{MaxWorkers}(min={MinWorkers}), スレッド数={Threads}, ConPTY読み={BlockedInRead}/{ReadLoops}, ストール中ピーク(ConPTY読み/使用中)={PeakBlockedInRead}/{PeakBusyWorkers}, 実行中=[{InFlight}]",
                         elapsed.TotalSeconds,
                         DateTime.Now - elapsed,
                         ThreadPool.PendingWorkItemCount,
@@ -156,8 +203,18 @@ namespace TerminalHub.Services
                         maxWorkers,
                         minWorkers,
                         ThreadPool.ThreadCount,
+                        ConPtyReadProbe.BlockedInRead,
+                        ConPtyReadProbe.ActiveLoops,
+                        Volatile.Read(ref _peakBlockedInRead),
+                        Volatile.Read(ref _peakBusyWorkers),
                         OperationProbe.DumpInFlight());
                 }
+
+                // ピークは「前回このループが回ってから今まで」＝ストール区間を表すようにしたいので、
+                // 遅延の有無に関わらず毎ティックで畳む。専用スレッド側の CAS 更新と競合しても
+                // 落ちないよう Exchange で行う。
+                Interlocked.Exchange(ref _peakBlockedInRead, 0);
+                Interlocked.Exchange(ref _peakBusyWorkers, 0);
             }
         }
 
@@ -179,15 +236,22 @@ namespace TerminalHub.Services
                 procThreads = -1; // 取得失敗時も落とさない
             }
 
+            // 使用中ワーカーも平常時から採る（ConPTY読み占有との比を時系列で追うため）
+            ThreadPool.GetMaxThreads(out var maxWorkers, out _);
+            ThreadPool.GetAvailableThreads(out var availWorkers, out _);
+
             _logger.LogInformation(
-                "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}",
+                "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}, 使用中ワーカー={BusyWorkers}, ConPTY読み={BlockedInRead}/{ReadLoops}",
                 _hookNotificationService.SubscriberCount,
                 _sessionManager.SessionsChangedSubscriberCount,
                 _sessionManager.GetAllSessions().Count(),
                 OperationProbe.InFlightCount,
                 ThreadPool.PendingWorkItemCount,
                 ThreadPool.ThreadCount,
-                procThreads);
+                procThreads,
+                maxWorkers - availWorkers,
+                ConPtyReadProbe.BlockedInRead,
+                ConPtyReadProbe.ActiveLoops);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
