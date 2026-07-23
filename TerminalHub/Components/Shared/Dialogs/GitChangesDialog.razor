@@ -229,9 +229,15 @@
         openError = null;
         try
         {
-            // サブフォルダをセッションにしている場合でも正しく解決できるようルート基準にする
-            _repoRoot ??= await GitService.GetRepositoryRootAsync(FolderPath) ?? FolderPath;
-            var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(_repoRoot, file.FilePath));
+            // サブフォルダをセッションにしている場合でも正しく解決できるようルート基準にする。
+            // ReloadAsync と同じく、await 中にダイアログが別セッションで開き直された場合は
+            // 古い応答を破棄する（キャッシュへ旧セッションのルートを混入させない）
+            var requestPath = FolderPath;
+            var repoRoot = _repoRoot ?? await GitService.GetRepositoryRootAsync(requestPath) ?? requestPath;
+            if (!IsVisible || requestPath != FolderPath)
+                return; // 古い応答: 破棄
+            _repoRoot = repoRoot;
+            var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(repoRoot, file.FilePath));
             if (!File.Exists(fullPath))
             {
                 openError = string.Format(L["GitChanges.FileNotFoundFormat"], fullPath);
