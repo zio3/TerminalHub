@@ -340,7 +340,8 @@
     /// <summary>
     /// 現在の入力から補完候補を再計算する。
     /// 発火条件は「入力全体が "/" 始まりの単一トークン（空白・改行なし）」のときだけ。
-    /// マッチは名前（"/" を除く）に対する部分一致で、前方一致を優先してランク付けする。
+    /// 絞り込み・並べ替え（部分一致のランク付け、MCP ツール由来の除外、件数上限）は
+    /// 純粋ロジックの <see cref="SlashCommandFilter.Filter"/>（テスト対象）に委譲する。
     /// </summary>
     private void RecomputeSlashSuggestions()
     {
@@ -358,26 +359,7 @@
         var catalog = SlashCommandProvider.GetCommands(TerminalType);
         if (catalog.Count == 0) return;
 
-        var matches = new List<(SlashCommandItem Item, int Rank)>();
-        foreach (var item in catalog)
-        {
-            var nameNoSlash = item.Name.StartsWith("/") ? item.Name.Substring(1) : item.Name;
-            if (query.Length == 0)
-            {
-                matches.Add((item, 1));
-                continue;
-            }
-            var idx = nameNoSlash.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) continue;
-            matches.Add((item, idx == 0 ? 0 : 1)); // 前方一致=0, 中間一致=1
-        }
-
-        _slashSuggestions = matches
-            .OrderBy(m => m.Rank)
-            .ThenBy(m => m.Item.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(m => m.Item)
-            .Take(8)
-            .ToList();
+        _slashSuggestions = SlashCommandFilter.Filter(catalog, query).ToList();
     }
 
     /// <summary>候補名のうち検索語に一致する部分を強調表示するため、前/一致/後に分割する。</summary>
