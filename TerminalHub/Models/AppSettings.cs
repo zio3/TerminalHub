@@ -211,6 +211,12 @@ public class CustomCommand
     public string? GroupName { get; set; }
     /// <summary>Text 型のときの送信方法。KeySequence 型では無視する。</summary>
     public CustomCommandSendMode SendMode { get; set; } = CustomCommandSendMode.DirectSend;
+    /// <summary>
+    /// セッション専用コマンドを子セッション（サブセッション）にも表示するか。
+    /// 親セッション（ParentSessionId が null）のコマンドでのみ意味を持つ。
+    /// グローバルコマンドでは未使用。
+    /// </summary>
+    public bool PropagateToChildren { get; set; } = false;
 }
 
 /// <summary>
