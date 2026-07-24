@@ -1989,6 +1989,36 @@
     }
 
     /// <summary>
+    /// 確定した実寸を「次回の ConPTY 初期サイズ」として設定に保存する。
+    /// リサイズはドラッグ中に何度も走るため、値が変わったときだけ書き込む
+    /// （設定はファイル保存なので毎回書くと無駄な I/O になる）。
+    /// 保存に失敗しても表示には影響しないので握りつぶす（次回また記録される）。
+    /// </summary>
+    private void RememberTerminalSize(int cols, int rows)
+    {
+        if (cols <= 0 || rows <= 0) return;
+
+        try
+        {
+            var settings = AppSettingsService.GetSettings();
+            if (settings.SessionDefaults.LastTerminalCols == cols &&
+                settings.SessionDefaults.LastTerminalRows == rows)
+            {
+                return; // 変化なし
+            }
+
+            settings.SessionDefaults.LastTerminalCols = cols;
+            settings.SessionDefaults.LastTerminalRows = rows;
+            AppSettingsService.SaveSettings(settings);
+            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", cols, rows);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "[Resize] 初期サイズの記録に失敗（無害・次回再記録される）");
+        }
+    }
+
+    /// <summary>
     /// ConPTY へのリサイズを即時適用する。
     /// Claude Code 等の TUI はリサイズ(WINCH)や更新のたびに ESC[H アンカーで全画面を再描画するため、
     /// サイズさえ一致していれば再描画は上書きで無害。逆にサイズ不一致の期間があると
@@ -2022,6 +2052,12 @@
         // ConPtyにリサイズを通知（activeSession と selectedSession.ConPtySession は同一インスタンス。
         // 以前は両方に Resize を呼んでいたため ResizePseudoConsole が2回走り多重化の原因になっていた）
         activeSession.Resize(cols, rows);
+
+        // 確定した実寸を次回の ConPTY 初期サイズとして覚えておく（SessionManager.ResolveInitialSize が読む）。
+        // 既定の 120x30 のまま子プロセスを起動すると実寸（166x80 前後）が確定するまで誤った桁数で
+        // 描画され、claude -c のように起動直後へ大量の履歴を描くケースでは折り返しのズレが焼き付く。
+        // ここは実寸が ConPTY に適用される唯一の合流点なので、記録もここで行う。
+        RememberTerminalSize(cols, rows);
 
         // 行数「増加」時は xterm をエミュレータ状態から再同期する（デバウンス付き）。
         // conhost は行数増加でスクロール履歴から行を引き戻してビューポートに含め、TUI の
