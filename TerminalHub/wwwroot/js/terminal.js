@@ -263,6 +263,43 @@ class FlowControlManager {
 // グローバルフロー制御マネージャー
 window.flowControlManager = new FlowControlManager();
 
+// WebGL コンテキスト生存数トラッカー（診断用・加算のみ）。
+// xterm の WebglAddon はターミナルごとに WebGL コンテキストを1個持つ。開いたターミナルが
+// 増えてブラウザの同時 WebGL コンテキスト上限（ソフト上限。実測で ~20 本あたりから）を超えると、
+// 古いものから webglcontextlost で失われ、そのターミナルの描画が固まる。ここで生存数と各イベント
+// (load / contextlost / contextrestored / dispose) を Serilog へ橋渡しし、実機で普段使い中に捕捉する。
+// 描画挙動は一切変えない純粋な計測。
+class WebglContextTracker {
+    constructor() {
+        this.liveCount = 0;   // 現在生きている WebGL コンテキスト数
+        this.dotNetRef = null; // Root(Blazor) への橋渡し用（回線ごとに最新へ更新）
+    }
+    setDotNetRef(ref) { if (ref) this.dotNetRef = ref; }
+    _total() {
+        return window.multiSessionTerminals ? Object.keys(window.multiSessionTerminals).length : 0;
+    }
+    // deltaLive: 生存数の増減（load=+1, 喪失/破棄=-1, 生イベントの観測のみ=0）
+    event(sessionId, eventType, deltaLive) {
+        if (deltaLive) this.liveCount = Math.max(0, this.liveCount + deltaLive);
+        const sid = (sessionId || '').substring(0, 8);
+        const total = this._total();
+        const msg = `[WebGL] ${eventType} session=${sid} live=${this.liveCount} total=${total}`;
+        if (eventType.indexOf('contextlost') === 0 || eventType.indexOf('contextrestored') === 0) {
+            console.warn(msg);
+        } else {
+            console.log(msg);
+        }
+        try {
+            if (this.dotNetRef) {
+                this.dotNetRef.invokeMethodAsync('ReportWebglEvent', sessionId || '', eventType, this.liveCount, total)
+                    .catch(() => { /* 回線切断時などは無視 */ });
+            }
+        } catch (e) { /* 橋渡し失敗は無視 */ }
+    }
+    status() { return { liveCount: this.liveCount, total: this._total() }; }
+}
+window.webglContextTracker = new WebglContextTracker();
+
 // ターミナル内リンクの動作モード（true = 開かずにURLをコピーする）。
 // モバイル全画面（ホーム画面ショートカット等）では遷移すると戻れなくなるため、
 // デバイス別設定として Blazor 側から setTerminalLinkCopyMode で反映される。
@@ -1042,31 +1079,58 @@ window.terminalFunctions = {
             // WebglAddonをロード（GPU描画。xterm.js 6.0 で廃止された CanvasAddon の後継）
             // WebGLコンテキストは GPU リセットやスリープ復帰、コンテキスト数上限超過で失われることがある。
             // onContextLoss でアドオンを破棄すると xterm.js が自動的に DOM レンダラーへフォールバックする。
+            let loadedWebglAddon = null; // 下の multiSessionTerminals へ載せて cleanup 時に計測減算する
             if (typeof WebglAddon !== 'undefined' && WebglAddon.WebglAddon) {
                 try {
                     const webglAddon = new WebglAddon.WebglAddon();
                     webglAddon.onContextLoss(() => {
                         console.warn('[WebglAddon] WebGLコンテキスト喪失を検出。アドオンを破棄しDOMレンダラーへフォールバック');
+                        // 計測: このセッションのコンテキストが失われた（生存数 -1）。二重減算を避けるため
+                        // multiSessionTerminals 側の参照が残っている時だけ数える。
+                        const info = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
+                        if (info && info.webglAddon) {
+                            window.webglContextTracker.event(sessionId, 'contextlost', -1);
+                            info.webglAddon = null;
+                        }
                         try { webglAddon.dispose(); } catch (e) { /* 破棄失敗は無視 */ }
                     });
                     term.loadAddon(webglAddon);
+                    loadedWebglAddon = webglAddon;
+                    window.webglContextTracker.event(sessionId, 'load', +1);
                     console.log('[WebglAddon] WebglAddon loaded successfully');
+
+                    // 生の canvas イベントも監視（ブラウザが復帰したときの webglcontextrestored は
+                    // アドオン破棄後には onContextLoss 経由で拾えないため、ここで観測する。計測は増減しない）。
+                    try {
+                        element.querySelectorAll('canvas').forEach(cv => {
+                            cv.addEventListener('webglcontextlost', () => {
+                                window.webglContextTracker.event(sessionId, 'contextlost-raw', 0);
+                            }, false);
+                            cv.addEventListener('webglcontextrestored', () => {
+                                window.webglContextTracker.event(sessionId, 'contextrestored-raw', 0);
+                            }, false);
+                        });
+                    } catch (e) { /* リスナー登録失敗は無視 */ }
                 } catch (error) {
                     console.error('[WebglAddon] Failed to load WebglAddon:', error);
                 }
             }
-            
+
             window.multiSessionTerminals[sessionId] = {
                 terminal: term,
                 fitAddon: fitAddon,
                 // コンテナ要素。cleanupTerminal がタッチリスナー解除と DOM クリアに使う。
                 // id から組み立てると命名規則（terminal-{guid}）に依存し、シェルパネルで外れる。
-                container: element
+                container: element,
+                // 生きている WebglAddon の参照（診断計測用）。喪失/破棄で null にして二重減算を防ぐ。
+                webglAddon: loadedWebglAddon
             };
 
             // フロー制御マネージャーにdotNetRefを設定
             if (dotNetRef) {
                 window.flowControlManager.setDotNetRef(sessionId, dotNetRef);
+                // WebGL 計測イベントの Serilog 橋渡し先（Root は回線ごとに1つ。最新へ更新）
+                window.webglContextTracker.setDotNetRef(dotNetRef);
             }
             
             // console.log(`[JS] ターミナル作成成功: sessionId=${sessionId}`);
@@ -1177,6 +1241,12 @@ window.terminalFunctions = {
 
         // ターミナルインスタンスのクリーンアップ
         if (terminalInfo) {
+            // 計測: まだ生きている WebGL コンテキストを手放す（喪失で既に null 済みなら数えない）。
+            // term.dispose() がアドオンも破棄するので、ここでは生存数の減算のみ行う。
+            if (terminalInfo.webglAddon) {
+                window.webglContextTracker.event(sessionId, 'dispose', -1);
+                terminalInfo.webglAddon = null;
+            }
             if (terminalInfo.terminal) {
                 try {
                     terminalInfo.terminal.dispose();

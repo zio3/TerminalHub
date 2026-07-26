@@ -2154,6 +2154,21 @@
         }
     }
 
+    /// <summary>
+    /// 診断用: WebGL コンテキストの生存数と各イベント（load / contextlost / contextrestored / dispose）を
+    /// JS(terminal.js の webglContextTracker)から受けて Serilog に INF で記録する。
+    /// 「特定ターミナルだけ数秒凍結→ジャンプ」の原因が WebGL コンテキスト上限超過の eviction であることを、
+    /// F12 コンソールに頼らず実機ログで捕捉するための計測。liveContexts が上限付近に達したところで
+    /// contextlost が出るはず。描画挙動には影響しない純粋な観測。
+    /// </summary>
+    [JSInvokable]
+    public void ReportWebglEvent(string sessionId, string eventType, int liveContexts, int totalTerminals)
+    {
+        Logger.LogInformation(
+            "[WebGL] {EventType} session={SessionId} 生存WebGL={LiveContexts} 総ターミナル={TotalTerminals}",
+            eventType, sessionId, liveContexts, totalTerminals);
+    }
+
     private async Task DestroyTerminal(Guid sessionId, bool showAlert = true)
     {
         try
