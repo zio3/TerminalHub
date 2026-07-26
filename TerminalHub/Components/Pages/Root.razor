@@ -2086,10 +2086,13 @@
         {
             // ライブ出力と交錯すると1行ズレ・重複が起きるため、書き込みロック下で
             // スナップショット→テールの順に書き込む（スナップショット以降のライブ出力はテールで届く）
-            // 診断: 再同期は \x1bc(全リセット)+バッファ全量書き直し。この保持時間が「表示が止まって
-            // 下までスクロールし直す」現象の freeze 実長。バッファが育つほど長くなる想定を実測で確認する。
-            var _resyncHold = System.Diagnostics.Stopwatch.StartNew();
+            // 診断: 再同期は \x1bc(全リセット)+バッファ全量書き直し。ロック「保持」時間が「表示が止まって
+            // 下までスクロールし直す」現象(②)の freeze 実長。バッファが育つほど長くなる想定を実測で確認する。
+            // 待機と保持は分けて計測する（待機が長ければ①の別処理がロックを握っていた＝誤帰属を防ぐ）。
+            var _resyncWait = System.Diagnostics.Stopwatch.StartNew();
             await _terminalWriteLock.WaitAsync();
+            _resyncWait.Stop();
+            var _resyncHold = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // ロック取得を待つ間にセッションが切り替わった可能性があるため再検証する
@@ -2113,8 +2116,8 @@
                 {
                     await TerminalService.WriteToTerminalAsync(activeTerminal, tail);
                 }
-                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 所要{HoldMs}ms（この間ロック保持＝前面ストリーム停止・下端へスクロール） session={SessionId}",
-                    snapshot.Content.Length, tail.Length, _resyncHold.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
+                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 保持{HoldMs}ms 待機{WaitMs}ms（保持中は前面ストリーム停止・下端へスクロール） session={SessionId}",
+                    snapshot.Content.Length, tail.Length, _resyncHold.ElapsedMilliseconds, _resyncWait.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
             }
             finally
             {
