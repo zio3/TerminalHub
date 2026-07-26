@@ -1671,7 +1671,17 @@
                 if (!capturedByReplay)
                 {
                     // リプレイ（切替復元/リサイズ再同期）と交錯しないよう書き込みを直列化する
+                    // 診断: live 書き込みがロック取得に長く待たされた＝別処理（リサイズ再同期/リプレイ）が
+                    // ロックを握って前面ストリームを止めていた、を捕まえる（「表示だけ止まる」の疑い検証）。
+                    var _liveLockWait = System.Diagnostics.Stopwatch.StartNew();
                     await _terminalWriteLock.WaitAsync();
+                    _liveLockWait.Stop();
+                    if (_liveLockWait.ElapsedMilliseconds >= 300)
+                    {
+                        Logger.LogInformation(
+                            "[WriteStall] live書き込みがロック待ち {WaitMs}ms（前面ストリーム停止の疑い） session={SessionId} bytes={Bytes}",
+                            _liveLockWait.ElapsedMilliseconds, sessionId.ToString().Substring(0, 8), data.Length);
+                    }
                     try
                     {
                         // ロック取得を待つ間にセッションが切り替わっている可能性があるため、
@@ -1975,7 +1985,7 @@
                 // 期間はフレーム下端があふれ、上端行がフレームごとにスクロールバックへ漏れて多重化する
                 // （実キャプチャで確認: デバウンスするとドラッグ中ずっと不一致が続き、漏れが蓄積した）。
                 // ミスマッチ時間を最小化するため即時適用。同サイズは ConPtySession.Resize 側でガード済み。
-                ApplyConPtyResize(guid, cols, rows, shortId);
+                ApplyConPtyResize(guid, cols, rows, shortId, source);
             }
             else if (guid != activeSessionId)
             {
@@ -1994,7 +2004,7 @@
     /// サイズさえ一致していれば再描画は上書きで無害。逆にサイズ不一致の期間があると
     /// フレーム下端があふれて上端行がスクロールバックへ漏れるため、不一致時間の最小化が最重要。
     /// </summary>
-    private void ApplyConPtyResize(Guid guid, int cols, int rows, string shortId)
+    private void ApplyConPtyResize(Guid guid, int cols, int rows, string shortId, string source = "")
     {
         if (activeSession == null)
         {
@@ -2007,8 +2017,9 @@
             return;
         }
 
-        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} session={SessionId}",
-            activeSession.Cols, activeSession.Rows, cols, rows, shortId);
+        // source を併記: 「見続けているだけなのに行数増加リサイズが起きる」トリガーを特定する。
+        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} src={Source} session={SessionId}",
+            activeSession.Cols, activeSession.Rows, cols, rows, string.IsNullOrEmpty(source) ? "(none)" : source, shortId);
 
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
 
@@ -2075,6 +2086,9 @@
         {
             // ライブ出力と交錯すると1行ズレ・重複が起きるため、書き込みロック下で
             // スナップショット→テールの順に書き込む（スナップショット以降のライブ出力はテールで届く）
+            // 診断: 再同期は \x1bc(全リセット)+バッファ全量書き直し。この保持時間が「表示が止まって
+            // 下までスクロールし直す」現象の freeze 実長。バッファが育つほど長くなる想定を実測で確認する。
+            var _resyncHold = System.Diagnostics.Stopwatch.StartNew();
             await _terminalWriteLock.WaitAsync();
             try
             {
@@ -2099,8 +2113,8 @@
                 {
                     await TerminalService.WriteToTerminalAsync(activeTerminal, tail);
                 }
-                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 session={SessionId}",
-                    snapshot.Content.Length, tail.Length, guid.ToString().Substring(0, 8));
+                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 所要{HoldMs}ms（この間ロック保持＝前面ストリーム停止・下端へスクロール） session={SessionId}",
+                    snapshot.Content.Length, tail.Length, _resyncHold.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
             }
             finally
             {
