@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:TERMINALHUB_SESSION_PROOF)",
+      "PowerShell(echo $env:TERMINALHUB_SESSION_PROOF)",
+      "PowerShell(Write-Output $env:TERMINALHUB_SESSION_PROOF)",
+      "Bash(echo $TERMINALHUB_SESSION_PROOF)",
+      "Bash(printenv TERMINALHUB_SESSION_PROOF)"
+    ]
+  }
+}
