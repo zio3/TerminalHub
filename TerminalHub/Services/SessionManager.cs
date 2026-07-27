@@ -51,6 +51,12 @@ namespace TerminalHub.Services
         bool UpdateMemo(Guid sessionId, string memo);
 
         /// <summary>
+        /// セッションの自己紹介カード(「何ができるか」の自己申告)をインメモリで更新する。
+        /// MCP の set_card から呼ぶ用途。永続化は呼び出し側で別途行う。対象が見つかれば true。
+        /// </summary>
+        bool UpdateCard(Guid sessionId, string card);
+
+        /// <summary>
         /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
         /// </summary>
         void MarkSessionConnected(Guid sessionId);
@@ -549,6 +555,17 @@ namespace TerminalHub.Services
             info.Memo = memo ?? string.Empty;
             // 開いている一覧を再描画させる（Root.razor が OnSessionsChanged を購読し StateHasChanged する）。
             NotifySessionsChanged();
+            return true;
+        }
+
+        public bool UpdateCard(Guid sessionId, string card)
+        {
+            if (!_sessionInfos.TryGetValue(sessionId, out var info))
+                return false;
+
+            info.Card = card ?? string.Empty;
+            // カードは現状 UI に表示していないため再描画通知は不要。
+            // 表示するようになったら UpdateMemo と同様に NotifySessionsChanged() を呼ぶこと。
             return true;
         }
 

@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 8;
+        private const int CurrentSchemaVersion = 9;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -250,6 +250,27 @@ namespace TerminalHub.Services
 
                 await SetSchemaVersionAsync(8);
                 _logger.LogInformation("[DB][マイグレーション] v8 適用完了");
+            }
+
+            if (currentVersion < 9)
+            {
+                // v9: 自己紹介カード（セッションの「何ができるか」自己申告・A2A Agent Card のローカル版）を保持する Card カラムを追加
+                _logger.LogInformation("[DB][マイグレーション] v9 適用開始: Sessions に Card カラムを追加");
+                await using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+
+                if (!await ColumnExistsAsync(connection, "Sessions", "Card"))
+                {
+                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN Card TEXT");
+                    _logger.LogInformation("[DB][マイグレーション] v9: Card カラムを追加");
+                }
+                else
+                {
+                    _logger.LogInformation("[DB][マイグレーション] v9: Card カラムは既存のためスキップ");
+                }
+
+                await SetSchemaVersionAsync(9);
+                _logger.LogInformation("[DB][マイグレーション] v9 適用完了");
             }
 
             _logger.LogInformation("[DB][マイグレーション] 完了");

@@ -101,6 +101,7 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 | `terminalType` | string | 種別 |
 | `folderPath` | string | 作業フォルダ |
 | `status` | string | 送信可否を表す。`ready`（受付中=送信可。作業中でも相手CLIのキューに積まれる） / `waiting_user_input`（ユーザーの許可/選択待ち=送信不可） / `not_ready`（ConPTY未接続=起動が必要・送信不可） |
+| `hasCard` | bool | 自己紹介カードの有無（本文は含めない。`get_card` で取得）。カード持ちだけ読みに行くための当たり付け用 |
 
 ### `send_to_session`
 
@@ -126,6 +127,39 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 - 宛先セッションが見つからない
 - 宛先が **ユーザーの許可/選択待ち（`waiting_user_input`）** → submit の Enter が承認プロンプトを誤確定させる恐れがあるため送信しない。`ready` になってから再試行（単なる作業中は `ready` 扱いで送信可＝相手CLIのキューに積まれる）
 - 宛先が **未起動（`not_ready` / ConPTY 未接続）** → 自動起動はしない。ユーザーに起動を依頼し、`ready` を確認してから再送
+
+### `set_card` / `get_card`
+
+セッションの **自己紹介カード**（「何ができるか」の短い自己申告。A2A Agent Card のローカル版）。
+memo=「今なにをしているか」（動的）に対し、card=「何ができるか」（静的・長命）という姉妹機能。
+
+**`set_card`** — 自分のカードを設定する
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `sessionId` | string | **自分自身の** セッション GUID（`TERMINALHUB_SESSION_ID`）。表示名は不可 |
+| `card` | string | カード本文（数行の短文想定）。空文字でクリア。全体書き換え（部分更新なし） |
+
+- **自分のみ設定可**。ただしサーバーは MCP 接続から呼び出し元セッションを特定できないため、
+  技術的な強制ではなく**仕様上の契約**（GUID のみ受け付け・instructions で自分の GUID を要求）で担保する
+- 永続化はセッションと同じライフサイクル（SQLite の `Sessions.Card`。セッションが消えればカードも消える）
+
+**`get_card`** — 指定 GUID のカードを取得する（誰のものでも読める）
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `sessionId` | string | 対象セッションの GUID（`list_sessions` で確認） |
+
+**信頼モデル（A2A Agent Card と同じ）**: カードは自己申告＝「本人がそう名乗っている」以上の保証はしない。
+古い可能性がある前提で、**宛先の当たりを付ける用途に限定**する（書いてある≠今も動く）。
+詳細な真実は各プロジェクトの CLAUDE.md / メモリ側が正。
+
+**A2A との用語対応**: TerminalHub の card は A2A Agent Card の `description`/`skills` に相当する。
+A2A の `capabilities` フィールドは**プロトコル機能宣言**（streaming / pushNotifications 等）で
+別物のため、用語衝突を避けて capabilities という名前は使っていない。
+
+想定運用: 各セッションが起動時や役割変更時に自分で `set_card` しておき、
+他のセッションは `list_sessions` → `get_card` で相手を選んで `send_to_session` する。
 
 ---
 

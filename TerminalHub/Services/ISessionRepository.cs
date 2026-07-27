@@ -13,6 +13,7 @@ namespace TerminalHub.Services
         Task SaveSessionAsync(SessionInfo session);
         Task UpdateLastAccessedAtAsync(Guid sessionId, DateTime time);
         Task UpdateMemoAsync(Guid sessionId, string memo);
+        Task UpdateCardAsync(Guid sessionId, string card);
         Task UpdateArchivedStateAsync(Guid sessionId, bool isArchived, DateTime? archivedAt);
         Task DeleteSessionAsync(Guid sessionId);
         Task<int> GetSessionCountAsync();

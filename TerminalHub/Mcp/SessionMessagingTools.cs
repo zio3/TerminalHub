@@ -28,7 +28,8 @@ namespace TerminalHub.Mcp
             string name,
             string terminalType,
             string folderPath,
-            string status);
+            string status,
+            bool hasCard);
 
         /// <summary>
         /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
@@ -40,7 +41,8 @@ namespace TerminalHub.Mcp
         [Description(
             "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
             "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
-            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。")]
+            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。" +
+            "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -80,7 +82,10 @@ namespace TerminalHub.Mcp
                     name,
                     s.TerminalType.ToString(),
                     folder,
-                    status));
+                    status,
+                    // カード本文は一覧に含めない(GUID 指定の get_card で読む)。有無だけ知らせて
+                    // 「カード持ちのセッションだけ get_card する」を可能にし、N 回の空振りを省く。
+                    !string.IsNullOrEmpty(s.Card)));
             }
             return result;
         }
@@ -184,6 +189,83 @@ namespace TerminalHub.Mcp
             sessionManager.UpdateMemo(info.SessionId, text);
 
             return new SendResult(true, $"メモを設定しました: {info.GetDisplayName()}");
+        }
+
+        // ---- 自己紹介カード（「何ができるか」の自己申告・A2A Agent Card のローカル版） ----
+        //
+        // 設計（壁打ちで確定）:
+        // - memo の姉妹機能。memo=「今なにをしているか」(動的) / card=「何ができるか」(静的・長命)。
+        // - 用語: A2A の Agent Card の description/skills に相当するものを card と呼ぶ。
+        //   A2A の capabilities フィールドはプロトコル機能宣言(streaming 等)で別物のため、
+        //   用語衝突を避けて capabilities という名前は使わない。
+        // - set は「自分のみ」。ただしサーバーは MCP 接続から呼び出し元セッションを特定できないため、
+        //   技術的な強制ではなく仕様上の契約（GUID のみ受け付け・説明文で自分の GUID を要求）で担保する。
+        //   カードは自己申告＝「本人がそう名乗っている」以上の保証はしない、という A2A と同じ信頼モデル。
+        // - get は誰のカードでも読める（宛先選びの当たりを付ける用途）。
+
+        /// <summary>get_card の結果。</summary>
+        public record CardResult(bool success, string? name, string? card, string message);
+
+        [McpServerTool(Name = "set_card")]
+        [Description(
+            "自分のセッションの自己紹介カード(「何ができるか」の短い自己申告。他エージェントが宛先選びに使う)を設定する。" +
+            "sessionId には必ず自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値。" +
+            "空なら list_sessions を自分の作業フォルダ・種別で絞り込んで特定)を渡すこと。" +
+            "他セッションのカードは書き換えてはならない(カードは自己申告制)。" +
+            "全体書き換え(部分更新なし)・空文字でクリア。数行の短文を想定(宛先選びの広告であって詳細ドキュメントではない)。")]
+        public static async Task<SendResult> SetCard(
+            ISessionManager sessionManager,
+            ISessionRepository sessionRepository,
+            [Description("自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値)。表示名は不可。")]
+            string sessionId,
+            [Description("設定するカード本文(「何ができるか」の数行の短文)。空文字でクリア。既存の内容は全体上書きされる。")]
+            string card)
+        {
+            // 自分のみ設定可の建前上、他セッションを名指ししやすい表示名指定は受け付けない(GUID のみ)。
+            if (!Guid.TryParse(sessionId, out var guid))
+                return new SendResult(false,
+                    $"sessionId が GUID ではありません: {sessionId}。" +
+                    $"自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID)を渡してください。");
+
+            var info = sessionManager.GetSessionInfo(guid);
+            if (info == null)
+                return new SendResult(false, $"対象セッションが見つかりません: {sessionId}");
+
+            var text = card ?? string.Empty;
+
+            // 永続化(SQLite)。set_memo と同じく Singleton の ISessionRepository で直接更新する
+            // (LocalStorage モード時の制約も set_memo と同じ)。
+            await sessionRepository.UpdateCardAsync(info.SessionId, text);
+
+            // インメモリの SessionInfo.Card を更新する。
+            sessionManager.UpdateCard(info.SessionId, text);
+
+            return new SendResult(true, $"自己紹介カードを設定しました: {info.GetDisplayName()}");
+        }
+
+        [McpServerTool(Name = "get_card")]
+        [Description(
+            "指定セッションの自己紹介カード(そのセッションが自己申告した「何ができるか」)を取得する。誰のカードでも読める。" +
+            "カードは自己申告であり古い可能性がある前提で、宛先の当たりを付ける用途に限定すること(書いてある≠今も動く)。" +
+            "sessionId は list_sessions で得た GUID(自分のカードは TERMINALHUB_SESSION_ID)。")]
+        public static CardResult GetCard(
+            ISessionManager sessionManager,
+            [Description("対象セッションのGUID。")]
+            string sessionId)
+        {
+            if (!Guid.TryParse(sessionId, out var guid))
+                return new CardResult(false, null, null,
+                    $"sessionId が GUID ではありません: {sessionId}。list_sessions で GUID を確認してください。");
+
+            var info = sessionManager.GetSessionInfo(guid);
+            if (info == null)
+                return new CardResult(false, null, null, $"対象セッションが見つかりません: {sessionId}");
+
+            var card = info.Card ?? string.Empty;
+            return new CardResult(true, info.GetDisplayName(), card,
+                card.Length == 0
+                    ? "自己紹介カードは未設定です(このセッションはまだ自己申告していない)。"
+                    : "取得しました(自己申告・古い可能性あり)。");
         }
     }
 }
