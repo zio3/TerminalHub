@@ -102,6 +102,7 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 | `folderPath` | string | 作業フォルダ |
 | `status` | string | 送信可否を表す。`ready`（受付中=送信可。作業中でも相手CLIのキューに積まれる） / `waiting_user_input`（ユーザーの許可/選択待ち=送信不可） / `not_ready`（ConPTY未接続=起動が必要・送信不可） |
 | `hasCard` | bool | 自己紹介カードの有無（本文は含めない。`get_card` で取得）。カード持ちだけ読みに行くための当たり付け用 |
+| `memo` | string | セッションのメモ（UI の一覧に出るのと同じ短い札）。worktree レーン運用ではディスパッチャが「タスク無し」＝空きレーンを判別するのに使う（`docs/worktree-lane-operation.md` 参照） |
 
 ### `send_to_session`
 

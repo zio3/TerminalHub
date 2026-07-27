@@ -34,8 +34,9 @@ public static class McpInstructionDefaults
         `list_sessions` / `get_card` / `send_to_session` は自由に使ってよい。
 
         ## ツール
-        - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態・カード有無）を取得する。
+        - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態・カード有無・メモ）を取得する。
           宛先を探すのに使う。`hasCard=true` のセッションだけ `get_card` すれば無駄撃ちしない。
+          `memo` は各セッションの短い札（「今なにをしているか」やレーン運用の空き/予約表示）。
         - `send_to_session`: 既存のセッションへメッセージを1件投函する。宛先は GUID か表示名で指定する。
           新しいセッションの起動（spawn）はしない。あくまで「今あるセッションに送る」だけ。
         - `set_memo`: 自分のセッションのメモ（一覧に表示される短い注釈）を設定する。
