@@ -1,3 +1,4 @@
+using Serilog;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -41,8 +42,12 @@ namespace TerminalHub.Services
                     return path;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                // 握り潰し自体は妥当（診断機能が本流を壊さない）だが、無言だと保存失敗が不可視になり
+                // 「証拠を残す」という目的に反するため、失敗の事実だけはログに残す（レビュー指摘 #173）
+                Log.Error(ex, "[RawRing] ダンプ保存に失敗: session={SessionId} reason={Reason}",
+                    session.SessionId.ToString().Substring(0, 8), reason);
                 return null;
             }
         }
