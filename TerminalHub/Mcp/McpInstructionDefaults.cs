@@ -17,15 +17,23 @@ public static class McpInstructionDefaults
     public const string Template = """
         # TerminalHub ローカルMCP の使い方
 
-        あなたは TerminalHub が管理する複数ターミナルセッションの1つで動いています。
-        この MCP サーバーは、それらのセッション同士を疎につなぐための最小限のツールを提供します。
+        この MCP サーバーは、TerminalHub が管理する複数ターミナルセッションを疎につなぐための
+        最小限のツールを提供します。接続元は通常それらのセッションの1つですが、
+        外部クライアント（Claude Desktop など、TerminalHub のセッションを持たない接続）からも使えます。
 
         ## 自己識別
-        あなた自身のセッション GUID は、環境変数 `TERMINALHUB_SESSION_ID` に入っている。
-        自分自身を対象にしたいとき（例: 自分のメモ更新）は、この値を target に渡す。
+        あなたが TerminalHub のセッション内で動いている場合、自身のセッション GUID は
+        環境変数 `TERMINALHUB_SESSION_ID` に入っている。自分自身を対象にしたいとき
+        （例: 自分のメモ更新）は、この値を target に渡す。
         ただし CLI によっては tool 実行シェルへ独自の環境変数を渡さない設定があり（例: Codex の
         shell_environment_policy）、その場合 `TERMINALHUB_SESSION_ID` は空に見える。空だったときは、
-        `list_sessions` を自分の作業フォルダ・種別で絞り込み、一致する1件のセッション GUID を自分として使えばよい。
+        `list_sessions` を自分の作業フォルダ・種別で絞り込み、確実に1件へ絞り込めた場合のみ
+        その GUID を自分として使う。
+        **外部クライアント（Claude Desktop 等）から接続している場合、あなたに対応するセッションは
+        存在しない。** 1件に絞り込めないときも含め、自分を特定できないときは「セッションを持たない
+        外部クライアント」として振る舞い、`set_memo` / `set_card` は使わないこと
+        （他セッションを自分と誤認して書き換えるのを防ぐ）。`list_sessions` / `get_card` /
+        `send_to_session` は自由に使ってよい。
 
         ## ツール
         - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態・カード有無）を取得する。
