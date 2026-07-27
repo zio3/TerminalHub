@@ -231,6 +231,13 @@ namespace TerminalHub.Models
 
         public int TerminalBufferSize => _terminalBuffer.Size;
 
+        /// <summary>
+        /// 直近の生チャンクを境界つきで保持する診断リング（xterm 崩れの事後調査用）。
+        /// エミュレータ方式以外のバッファでは null。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public TerminalHub.Terminal.RawChunkRing? TerminalRawRing => _terminalBuffer.RawRing;
+
         // ステータス変更履歴（診断用、Queue で O(1) eviction）
         [System.Text.Json.Serialization.JsonIgnore]
         private readonly Queue<StatusChangeEntry> _statusChangeHistory = new();

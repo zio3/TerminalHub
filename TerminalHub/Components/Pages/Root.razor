@@ -2123,6 +2123,14 @@
             {
                 _terminalWriteLock.Release();
             }
+
+            // 再同期＝xterm への注入の瞬間は表示崩れ（分断シーケンスの孤児化）が起きうる容疑区間なので、
+            // 生チャンクリングをこのタイミングで自動保存し、後からリングが流れて証拠を失うのを防ぐ
+            var dumpPath = RawRingDump.WriteDump(session, "resync");
+            if (dumpPath != null)
+            {
+                Logger.LogInformation("[RawRing] 再同期時の生チャンクリングを保存: {Path}", dumpPath);
+            }
         }
         catch (JSDisconnectedException)
         {

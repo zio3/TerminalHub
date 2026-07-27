@@ -47,4 +47,10 @@ public interface ITerminalStateBuffer
 
     /// <summary>現在保持しているデータ量の目安（文字数）。診断・UI 表示用。</summary>
     int Size { get; }
+
+    /// <summary>
+    /// 直近の生チャンクを境界つきで保持する診断リング（xterm 崩れの事後調査用）。
+    /// エミュレータ方式のみ提供し、それ以外は null。
+    /// </summary>
+    RawChunkRing? RawRing => null;
 }

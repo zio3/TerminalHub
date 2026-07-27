@@ -13,6 +13,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
     private readonly VtParser _parser;
     private readonly object _lock = new();
     private readonly List<ReplaySnapshot> _activeReplays = new();
+    private readonly RawChunkRing _rawRing = new();
     private bool _hasData;
 
     public EmulatedStateBuffer(int cols = 120, int rows = 30)
@@ -24,6 +25,9 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
     /// <summary>内部グリッド（テスト・診断用）。ロック外で触らないこと。</summary>
     public TerminalGrid Grid => _grid;
 
+    /// <summary>直近の生チャンク＋リプレイ/Clear/Resize マーカーの診断リング（xterm 崩れの事後調査用）。</summary>
+    public RawChunkRing RawRing => _rawRing;
+
     public bool Append(string data)
     {
         if (string.IsNullOrEmpty(data))
@@ -34,6 +38,9 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         {
             _hasData = true;
             _parser.Feed(data);
+            // Feed 直後の Pending（＝このチャンクがシーケンス途中で終わったか）を添えて記録する。
+            // これが非空のチャンクの直後にリプレイ注入マーカーが挟まっていたら、断片の孤児化が疑われる
+            _rawRing.Add(data, _parser.Pending);
 
             if (_activeReplays.Count == 0)
             {
@@ -67,6 +74,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
             // 単独の書き込み末尾になると JSON 化で化けるのを避けるため）
             snapshot.Tail.Append(_parser.Pending);
             _activeReplays.Add(snapshot);
+            _rawRing.Mark($"BeginReplay snapshot={snapshot.Content.Length}文字 pending種付け={_parser.Pending.Length}文字");
             return snapshot;
         }
     }
@@ -76,7 +84,9 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         lock (_lock)
         {
             _activeReplays.Remove(snapshot);
-            return snapshot.Tail.ToString();
+            var tail = snapshot.Tail.ToString();
+            _rawRing.Mark($"EndReplay tail={tail.Length}文字");
+            return tail;
         }
     }
 
@@ -86,6 +96,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         {
             _grid.Reset();
             _hasData = false;
+            _rawRing.Mark("Clear");
         }
     }
 
@@ -94,6 +105,7 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         lock (_lock)
         {
             _grid.Resize(cols, rows);
+            _rawRing.Mark($"Resize {cols}x{rows}");
         }
     }
 
