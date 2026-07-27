@@ -8,7 +8,8 @@ namespace TerminalHub.Mcp
     /// <summary>
     /// セッション間メッセージング用の MCP ツール群。
     /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)・
-    /// メッセージ送信(send_to_session)・メモ設定(set_memo)を提供する最小構成。
+    /// メッセージ送信(send_to_session)・メモ/カード設定(set_memo/set_card/get_card)・
+    /// 依頼の状況札(get_context/update_context)を提供する最小構成。
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
@@ -18,7 +19,7 @@ namespace TerminalHub.Mcp
     ///   書き込み系(set_memo/set_card)は proof の検証で本人のみに機構的に制限する。
     /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
     ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
-    ///   SessionProof のようなセッション属性は除く）。
+    ///   SessionProof、および依頼IDで引く状況札=ContextSummary は例外として持つ）。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -179,14 +180,28 @@ namespace TerminalHub.Mcp
 
             // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
             // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
-            await conpty.WriteAsync(deliveredMessage);
-            if (submit)
+            try
             {
-                // テキスト送信後、Enter 送信前に待機する。
-                // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
-                // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
-                await Task.Delay(200);
-                await conpty.WriteAsync("\r");
+                await conpty.WriteAsync(deliveredMessage);
+                if (submit)
+                {
+                    // テキスト送信後、Enter 送信前に待機する。
+                    // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
+                    // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
+                    await Task.Delay(200);
+                    await conpty.WriteAsync("\r");
+                }
+            }
+            catch
+            {
+                // 書き込み自体の失敗（ConPTY切断等）では、発行したばかりの札を片付ける。
+                // submitted は終端状態でなく TTL 掃除の対象外のため、残すと永続の孤児になる。
+                // DeleteAsync は例外を投げない（送信エラー本体を握り潰さない）。
+                if (issuedContextId != null)
+                {
+                    await contextRepository.DeleteAsync(issuedContextId);
+                }
+                throw;
             }
 
             return new SendResult(true,

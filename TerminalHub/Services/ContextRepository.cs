@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -32,6 +33,12 @@ namespace TerminalHub.Services
         /// </summary>
         Task<bool> UpdateAsync(string contextId, string summary, string? status,
             string? updatedBySessionId, string? updatedByName);
+
+        /// <summary>
+        /// 札を削除する（send_to_session が発行直後に送信失敗した際の後片付け用）。
+        /// 呼び出し元の例外処理を単純に保つため、失敗しても例外を投げずログに残す。
+        /// </summary>
+        Task DeleteAsync(string contextId);
     }
 
     public class ContextRepository : IContextRepository
@@ -83,12 +90,15 @@ namespace TerminalHub.Services
             if (!await reader.ReadAsync())
                 return null;
 
+            // RoundtripKind: 保存は "o" 形式の UTC(Z終端)。既定の Parse は Z をローカル時刻へ
+            // 変換してしまい、get_context が返す updatedAt がオフセット付き表記に化けるため、
+            // Kind=Utc のまま往復させる。
             return new ContextRecord(
                 reader.GetString(0),
                 reader.GetString(1),
                 reader.GetString(2),
-                DateTime.Parse(reader.GetString(3)),
-                DateTime.Parse(reader.GetString(4)),
+                DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                DateTime.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetString(6));
         }
@@ -128,6 +138,27 @@ namespace TerminalHub.Services
                     ("@updatedByName", updatedByName));
             }
             return affected > 0;
+        }
+
+        public async Task DeleteAsync(string contextId)
+        {
+            try
+            {
+                await _dbContext.InitializeAsync();
+                await using var connection = _dbContext.CreateConnection();
+                await connection.OpenAsync();
+
+                await connection.ExecuteNonQueryAsync(
+                    "DELETE FROM Contexts WHERE ContextId = @contextId",
+                    ("@contextId", contextId));
+            }
+            catch (Exception ex)
+            {
+                // 後片付けの失敗で送信エラー本体を握り潰さないため例外は投げない。
+                // ただし不可視化しない（レビュー指摘 #173 の教訓）。残った札は submitted のまま
+                // TTL 対象外になるが、実害は「使われない行が1件残る」だけ。
+                _logger.LogWarning(ex, "[Context] 札の後片付けに失敗: {ContextId}", contextId);
+            }
         }
 
         private async Task PruneAsync(SqliteConnection connection)
