@@ -13,8 +13,9 @@ namespace TerminalHub.Mcp
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
     /// - 集約なし: 結果待ち(wait)/読み取り(read)はしない。完了は TerminalHub 本体の LED/通知で人間が気づく。
-    /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID を注入しており、CLI/エージェントは
-    ///   それを読めば自分のセッション GUID が分かる。set_memo で自分自身を対象にできる。
+    /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
+    ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
+    ///   書き込み系(set_memo/set_card)は proof の検証で本人のみに機構的に制限する。
     /// - サーバーは状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
@@ -152,29 +153,23 @@ namespace TerminalHub.Mcp
 
         [McpServerTool(Name = "set_memo")]
         [Description(
-            "指定した既存セッションのメモ(TerminalHub のセッション一覧に表示される短い注釈)を設定する。" +
+            "自分のセッションのメモ(TerminalHub のセッション一覧に表示される短い注釈)を設定する。" +
             "「今なにをしているか」等のステータスを書いておくと、一覧から一目で分かる。既存のメモは上書きされる(空文字でクリア)。" +
-            "自分自身のメモを更新するには、環境変数 TERMINALHUB_SESSION_ID の値を target に渡す。" +
-            "target はセッションGUIDか表示名(完全一致)。")]
+            "proof には環境変数 TERMINALHUB_SESSION_PROOF の値を渡す(あなたが本人であることの証明。本文やメッセージには書かないこと)。" +
+            "その環境変数が無いなら、あなたはセッションを持たない外部クライアントなのでこのツールは使えない(メモは TerminalHub の UI からも編集できる)。")]
         public static async Task<SendResult> SetMemo(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("対象。セッションGUID(自分自身なら環境変数 TERMINALHUB_SESSION_ID の値)、または表示名(完全一致・大文字小文字無視)。")]
-            string target,
+            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
+            string proof,
             [Description("設定するメモ本文。空文字にするとメモをクリアする。")]
             string memo)
         {
-            // 宛先解決: send_to_session と同じく GUID 優先 → 表示名の完全一致。
-            SessionInfo? info = null;
-            if (Guid.TryParse(target, out var guid))
-            {
-                info = sessionManager.GetSessionInfo(guid);
-            }
-            info ??= sessionManager.GetActiveSessions()
-                .FirstOrDefault(s => string.Equals(s.GetDisplayName(), target, StringComparison.OrdinalIgnoreCase));
-
+            // proof が本人証明と宛先特定を兼ねる。GUID/表示名の自己申告は受け付けない
+            // （誤認・詐称による他セッションの書き換えを機構的に不可能にする）。
+            var info = sessionManager.ResolveBySessionProof(proof);
             if (info == null)
-                return new SendResult(false, $"対象セッションが見つかりません: {target}");
+                return new SendResult(false, ProofRejectedMessage);
 
             var text = memo ?? string.Empty;
 
@@ -191,6 +186,15 @@ namespace TerminalHub.Mcp
             return new SendResult(true, $"メモを設定しました: {info.GetDisplayName()}");
         }
 
+        /// <summary>
+        /// proof 検証に失敗したときの共通メッセージ。proof の値そのものはエコーしない
+        /// （エラーメッセージ経由で会話ログへ漏れるのを防ぐ）。
+        /// </summary>
+        private const string ProofRejectedMessage =
+            "本人証明(proof)が一致しません。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡してください。" +
+            "この環境変数が存在しないなら、あなたはセッションを持たない外部クライアントであり、このツールは使えません。" +
+            "値はセッション再起動のたびに変わるため、古い値を記憶から使い回している場合は環境変数を読み直してください。";
+
         // ---- 自己紹介カード（「何ができるか」の自己申告・A2A Agent Card のローカル版） ----
         //
         // 設計（壁打ちで確定）:
@@ -198,8 +202,10 @@ namespace TerminalHub.Mcp
         // - 用語: A2A の Agent Card の description/skills に相当するものを card と呼ぶ。
         //   A2A の capabilities フィールドはプロトコル機能宣言(streaming 等)で別物のため、
         //   用語衝突を避けて capabilities という名前は使わない。
-        // - set は「自分のみ」。ただしサーバーは MCP 接続から呼び出し元セッションを特定できないため、
-        //   技術的な強制ではなく仕様上の契約（GUID のみ受け付け・説明文で自分の GUID を要求）で担保する。
+        // - set は「自分のみ」。当初は GUID 自己申告＋説明文の「仕様上の契約」だったが、
+        //   ConPTY 起動時に注入する本人証明(TERMINALHUB_SESSION_PROOF)の検証に格上げした。
+        //   proof はそのセッションの子プロセスだけが知る値なので、誤認・詐称による
+        //   他セッションの書き換えは機構的に不可能。
         //   カードは自己申告＝「本人がそう名乗っている」以上の保証はしない、という A2A と同じ信頼モデル。
         // - get は誰のカードでも読める（宛先選びの当たりを付ける用途）。
 
@@ -209,28 +215,22 @@ namespace TerminalHub.Mcp
         [McpServerTool(Name = "set_card")]
         [Description(
             "自分のセッションの自己紹介カード(「何ができるか」の短い自己申告。他エージェントが宛先選びに使う)を設定する。" +
-            "sessionId には必ず自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値)を渡すこと。" +
-            "その環境変数が空なら、あなたはセッションを持たない外部クライアントの可能性が高いので、" +
-            "自分を推測で特定せず、このツールを使わないこと。" +
-            "他セッションのカードは書き換えてはならない(カードは自己申告制)。" +
+            "proof には環境変数 TERMINALHUB_SESSION_PROOF の値を渡す(あなたが本人であることの証明。本文やメッセージには書かないこと)。" +
+            "その環境変数が無いなら、あなたはセッションを持たない外部クライアントなのでこのツールは使えない。" +
+            "他セッションのカードは書き換えられない(proof は自分のセッションの分しか知り得ない=自己申告制の機構的担保)。" +
             "全体書き換え(部分更新なし)・空文字でクリア。数行の短文を想定(宛先選びの広告であって詳細ドキュメントではない)。")]
         public static async Task<SendResult> SetCard(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値)。表示名は不可。")]
-            string sessionId,
+            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
+            string proof,
             [Description("設定するカード本文(「何ができるか」の数行の短文)。空文字でクリア。既存の内容は全体上書きされる。")]
             string card)
         {
-            // 自分のみ設定可の建前上、他セッションを名指ししやすい表示名指定は受け付けない(GUID のみ)。
-            if (!Guid.TryParse(sessionId, out var guid))
-                return new SendResult(false,
-                    $"sessionId が GUID ではありません: {sessionId}。" +
-                    $"自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID)を渡してください。");
-
-            var info = sessionManager.GetSessionInfo(guid);
+            // proof が本人証明と宛先特定を兼ねる。GUID の自己申告は受け付けない。
+            var info = sessionManager.ResolveBySessionProof(proof);
             if (info == null)
-                return new SendResult(false, $"対象セッションが見つかりません: {sessionId}");
+                return new SendResult(false, ProofRejectedMessage);
 
             var text = card ?? string.Empty;
 

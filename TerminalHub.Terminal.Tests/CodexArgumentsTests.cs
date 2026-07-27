@@ -295,6 +295,32 @@ public sealed class CodexArgumentsTests
     }
 
     [Fact]
+    public void SessionProofEnv_IsInjectedViaShellEnvironmentPolicySet()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["resume-last"] = "true"
+        };
+
+        Assert.Equal(
+            "-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF=abc123def456 resume --last",
+            TerminalConstants.BuildCodexArgs(options, sessionProof: "abc123def456"));
+    }
+
+    [Fact]
+    public void SessionProofEnv_DoesNotOverrideUserSuppliedValue()
+    {
+        var options = new Dictionary<string, string>
+        {
+            ["extra-args"] = "-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF=user-value"
+        };
+
+        Assert.Equal(
+            "-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF=user-value",
+            TerminalConstants.BuildCodexArgs(options, sessionProof: "abc123def456"));
+    }
+
+    [Fact]
     public void TerminalHubHooks_AreAddedBeforeUserArgsAndResume()
     {
         var options = new Dictionary<string, string>

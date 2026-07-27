@@ -100,7 +100,8 @@
             Dictionary<string, string> options,
             string? terminalHubMcpUrl = null,
             string? terminalHubHookArgs = null,
-            Guid? sessionId = null)
+            Guid? sessionId = null,
+            string? sessionProof = null)
         {
             var args = new List<string>();
 
@@ -123,6 +124,9 @@
             var userSuppliedSessionIdEnv = ContainsCodexConfigOverride(
                 options,
                 "shell_environment_policy.set.TERMINALHUB_SESSION_ID");
+            var userSuppliedSessionProofEnv = ContainsCodexConfigOverride(
+                options,
+                "shell_environment_policy.set.TERMINALHUB_SESSION_PROOF");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
@@ -260,6 +264,14 @@
             if (sessionId.HasValue && !userSuppliedSessionIdEnv)
             {
                 args.Add($"-c shell_environment_policy.set.TERMINALHUB_SESSION_ID={sessionId.Value}");
+            }
+
+            // 本人証明も同じ理由で明示注入する（MCP 書き込み系ツールの proof 認証に必要）。
+            // 変数名に KEY/SECRET/TOKEN を含めないのは Codex の ignore_default_excludes
+            // （該当語を含む変数の自動除外）を踏まないため。
+            if (!string.IsNullOrEmpty(sessionProof) && !userSuppliedSessionProofEnv)
+            {
+                args.Add($"-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF={sessionProof}");
             }
 
             // TerminalHub の lifecycle hook もプロジェクト設定へ永続化せず、起動時だけ注入する。

@@ -57,6 +57,14 @@ namespace TerminalHub.Models
 
         public string Memo { get; set; } = string.Empty;
 
+        // 本人証明（TERMINALHUB_SESSION_PROOF）。ConPTY 起動ごとに生成するランダム値で、
+        // そのセッションの子プロセスだけが環境変数として知っている。MCP の書き込み系ツール
+        // (set_memo/set_card) はこの値で「呼び出し元が本人か」を機構的に検証する
+        // （GUID 自己申告の「仕様上の契約」からの格上げ）。永続化しない（再起動で変わる）。
+        // 名前に KEY/SECRET/TOKEN を含めないのは Codex の ignore_default_excludes 対策。
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? SessionProof { get; set; }
+
         // 自己紹介カード（「何ができるか」の自己申告・A2A Agent Card のローカル版）。
         // memo=「今なにをしているか」(動的) に対し、こちらは「何ができるか」(静的・長命)。
         // MCP の set_card/get_card で読み書きし、セッションと同じライフサイクルで永続化する。

@@ -57,6 +57,12 @@ namespace TerminalHub.Services
         bool UpdateCard(Guid sessionId, string card);
 
         /// <summary>
+        /// 本人証明(TERMINALHUB_SESSION_PROOF)からセッションを特定する。一致がなければ null。
+        /// MCP の書き込み系ツール（将来的には send のエンベロープも）の本人検証はここに一点集約する。
+        /// </summary>
+        SessionInfo? ResolveBySessionProof(string? proof);
+
+        /// <summary>
         /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
         /// </summary>
         void MarkSessionConnected(Guid sessionId);
@@ -265,7 +271,19 @@ namespace TerminalHub.Services
             return _mcpConfigService.BuildMcpUrl(GetServerBaseUrl());
         }
 
-        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options, Guid sessionId)
+        /// <summary>
+        /// ConPTY 起動ごとに本人証明(TERMINALHUB_SESSION_PROOF)を新規生成して SessionInfo に保持する。
+        /// この値は子プロセスだけが環境変数として知り、MCP の書き込み系ツールの本人検証に使う。
+        /// 再起動のたびに作り直す（永続化しない）。
+        /// </summary>
+        private static string RotateSessionProof(SessionInfo sessionInfo)
+        {
+            var proof = Guid.NewGuid().ToString("N");
+            sessionInfo.SessionProof = proof;
+            return proof;
+        }
+
+        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options, Guid sessionId, string? sessionProof = null)
         {
             switch (terminalType)
             {
@@ -300,7 +318,8 @@ namespace TerminalHub.Services
                         options,
                         GetCodexMcpUrl(),
                         codexHookArgs,
-                        sessionId);
+                        sessionId,
+                        sessionProof);
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";
@@ -478,11 +497,12 @@ namespace TerminalHub.Services
                 // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
                 var terminalType = sessionInfo.TerminalType;
                 var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                var sessionProof = RotateSessionProof(sessionInfo);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
-                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
+                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行
@@ -557,6 +577,16 @@ namespace TerminalHub.Services
             // 開いている一覧を再描画させる（Root.razor が OnSessionsChanged を購読し StateHasChanged する）。
             NotifySessionsChanged();
             return true;
+        }
+
+        public SessionInfo? ResolveBySessionProof(string? proof)
+        {
+            if (string.IsNullOrWhiteSpace(proof))
+                return null;
+
+            return _sessionInfos.Values.FirstOrDefault(s =>
+                !string.IsNullOrEmpty(s.SessionProof) &&
+                string.Equals(s.SessionProof, proof, StringComparison.Ordinal));
         }
 
         public bool UpdateCard(Guid sessionId, string card)
@@ -992,11 +1022,12 @@ namespace TerminalHub.Services
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
                 var terminalType = sessionInfo.TerminalType;
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                var sessionProof = RotateSessionProof(sessionInfo);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
@@ -1074,11 +1105,12 @@ namespace TerminalHub.Services
                 var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
                 var options = PrepareSessionOptions(sessionInfo);
                 var terminalType = sessionInfo.TerminalType;
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId);
+                var sessionProof = RotateSessionProof(sessionInfo);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成して起動
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
