@@ -28,7 +28,8 @@ namespace TerminalHub.Mcp
             string name,
             string terminalType,
             string folderPath,
-            string status);
+            string status,
+            bool hasCard);
 
         /// <summary>
         /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
@@ -40,7 +41,8 @@ namespace TerminalHub.Mcp
         [Description(
             "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
             "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
-            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。")]
+            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。" +
+            "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -80,7 +82,10 @@ namespace TerminalHub.Mcp
                     name,
                     s.TerminalType.ToString(),
                     folder,
-                    status));
+                    status,
+                    // カード本文は一覧に含めない(GUID 指定の get_card で読む)。有無だけ知らせて
+                    // 「カード持ちのセッションだけ get_card する」を可能にし、N 回の空振りを省く。
+                    !string.IsNullOrEmpty(s.Card)));
             }
             return result;
         }

@@ -28,7 +28,8 @@ public static class McpInstructionDefaults
         `list_sessions` を自分の作業フォルダ・種別で絞り込み、一致する1件のセッション GUID を自分として使えばよい。
 
         ## ツール
-        - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態）を取得する。宛先を探すのに使う。
+        - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態・カード有無）を取得する。
+          宛先を探すのに使う。`hasCard=true` のセッションだけ `get_card` すれば無駄撃ちしない。
         - `send_to_session`: 既存のセッションへメッセージを1件投函する。宛先は GUID か表示名で指定する。
           新しいセッションの起動（spawn）はしない。あくまで「今あるセッションに送る」だけ。
         - `set_memo`: セッションのメモ（一覧に表示される短い注釈）を設定する。`TERMINALHUB_SESSION_ID` を
