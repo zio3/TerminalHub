@@ -12,8 +12,8 @@ TerminalHub 本体プロセスに HTTP MCP サーバーを同居させ、**別�
 |---|---|
 | spawn なし | 子セッションは作らない。宛先は **既存セッションのみ**（暴走ガード不要） |
 | 集約なし | 結果待ち(wait)・読み取り(read)はしない。投げっぱなし。完了は TerminalHub 本体の LED/通知で人間が気づく |
-| エンベロープ/自己識別なし | 本文だけ送る。送信元明示や応答要否は将来「呼び出し元フラグ」で足す |
-| サーバーは状態を持たない | 渡されたフラグ（`submit` 等）に素直に従うだけ |
+| エンベロープなし | 本文だけ送る。送信元明示や応答要否は将来「呼び出し元フラグ」で足す（自己識別・本人証明は導入済み → 後述の proof） |
+| サーバーは会話状態を持たない | 渡されたフラグ（`submit` 等）に素直に従うだけ。メッセージの追跡・キューは持たない（本人検証用の proof のようなセッション属性は除く） |
 
 長文は本文に直接流さず、**ファイルに書いて絶対パスだけ送る**運用を推奨（ターミナル入力の化け・切り捨てを避けるため）。
 
@@ -137,12 +137,15 @@ memo=「今なにをしているか」（動的）に対し、card=「何がで�
 
 | 引数 | 型 | 説明 |
 |---|---|---|
-| `sessionId` | string | **自分自身の** セッション GUID（`TERMINALHUB_SESSION_ID`）。表示名は不可 |
+| `proof` | string | **本人証明**（環境変数 `TERMINALHUB_SESSION_PROOF` の値）。proof が本人検証と宛先特定を兼ねる |
 | `card` | string | カード本文（数行の短文想定）。空文字でクリア。全体書き換え（部分更新なし） |
 
-- **自分のみ設定可**。ただしサーバーは MCP 接続から呼び出し元セッションを特定できないため、
-  技術的な強制ではなく**仕様上の契約**（GUID のみ受け付け・instructions で自分の GUID を要求）で担保する
-- 永続化はセッションと同じライフサイクル（SQLite の `Sessions.Card`。セッションが消えればカードも消える）
+- **自分のみ設定可（機構的担保）**。proof は ConPTY 起動ごとに生成されるランダム値で、
+  そのセッションの子プロセスだけが環境変数として知っている。proof の提示＝本人であり、
+  他セッションのカードは書き換えようがない（当初の「GUID 自己申告＋仕様上の契約」から格上げ）
+- 永続化はセッションと同じライフサイクル（SQLite の `Sessions.Card`。セッションが消えればカードも消える）。
+  proof 自体は永続化せず、再起動のたびに変わる
+- `set_memo` も同じ proof 認証（自分のメモのみ。他セッションのメモは UI から人間が編集する）
 
 **`get_card`** — 指定 GUID のカードを取得する（誰のものでも読める）
 
@@ -176,10 +179,13 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
 ## 注意点
 
 - **Codex の tool シェルへの環境変数透過**: Codex は `shell_environment_policy` 次第（`inherit=core` 等）で
-  ConPTY が注入した `TERMINALHUB_SESSION_ID` を tool 実行シェルへ渡さないことがある。このため Codex 起動時に
-  `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=<GUID>` を注入して確実に届けている
+  ConPTY が注入した環境変数を tool 実行シェルへ渡さないことがある。このため Codex 起動時に
+  `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=<GUID>` と
+  `-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF=<値>` を注入して確実に届けている
   （`set` はフィルタ後に変数を足す仕組みでユーザーのポリシー設定と衝突しない。同キーの手書き指定があればそちらを優先）。
   hook ブリッジ（`$env:TERMINALHUB_SESSION_ID` 参照）の空振り対策も兼ねる。
+  なお `TERMINALHUB_SESSION_PROOF` という変数名に KEY/SECRET/TOKEN を含めないのは、
+  Codex の `ignore_default_excludes`（該当語を含む変数の自動除外）を踏まないための意図的な選択。
 - **ConPTY 制約**: 実際の送信テスト（ターミナルへの書き込み）は実機で行うこと。
 - **antiforgery**: 既存の `/api/hook`（JSON POST）は `UseAntiforgery` 下でも通っている実績があり、MCP の POST も通る見込み。もし `/mcp` への POST が 400 になる場合は `app.MapMcp("/mcp").DisableAntiforgery()` にする。
 - **セキュリティ**: ローカル利用前提。無認証で `/mcp` を公開するため、localhost 以外へバインドを広げる際は再評価すること。
