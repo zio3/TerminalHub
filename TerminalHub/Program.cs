@@ -20,6 +20,8 @@ var logsFolder = AppDataPaths.GetLogsFolder(
     builder.Environment.IsDevelopment(),
     builder.Configuration.GetValue<string>("Logging:FolderName"));
 var logPath = Path.Combine(logsFolder, "terminalhub-.log");
+// 生チャンクリングの自動ダンプ保存先（logs[-dev]\raw-ring\。xterm 崩れ調査用）
+RawRingDump.LogsFolder = logsFolder;
 builder.Host.UseSerilog((context, configuration) =>
 {
     // シンクは Async でラップする（フリーズ調査の実験を兼ねた対策）。
@@ -314,6 +316,28 @@ app.MapPost("/api/hook/codex/{sessionId:guid}",
     };
     await hookService.HandleHookNotificationAsync(notification);
     return Results.NoContent();
+});
+
+// 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
+// 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
+app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>
+{
+    var lines = sessionManager.GetAllSessions()
+        .Select(s => $"{s.SessionId}  entries={s.TerminalRawRing?.Count ?? 0}  {s.GetDisplayName()}");
+    return Results.Text(string.Join(Environment.NewLine, lines), "text/plain; charset=utf-8");
+});
+app.MapGet("/api/debug/raw-ring/{sessionId:guid}", (Guid sessionId, ISessionManager sessionManager) =>
+{
+    var session = sessionManager.GetSessionInfo(sessionId);
+    var ring = session?.TerminalRawRing;
+    if (session == null || ring == null)
+    {
+        return Results.NotFound($"セッションが見つかりません: {sessionId}");
+    }
+    // ブラウザで見るだけでなく証拠として残るよう、取得時にもファイルへ保存する
+    var savedPath = RawRingDump.WriteDump(session, "manual");
+    var header = savedPath != null ? $"# saved: {savedPath}{Environment.NewLine}" : string.Empty;
+    return Results.Text(header + ring.DumpText(), "text/plain; charset=utf-8");
 });
 
 // MCP エンドポイント（/mcp）。Claude Code 等の MCP クライアントがここへ接続する。
