@@ -126,8 +126,9 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
    - Webhook 通知の詳細ペイロード仕様は本ファイル末尾の「Webhook通知」セクション参照
 
 7. **MCP サーバー（セッション間メッセージング）**
-   - `SessionMessagingTools`: `list_sessions` / `send_to_session` / `set_memo` / `set_card` / `get_card` を公開。`SessionManager`(Singleton) に直結するため **HTTP トランスポート一択**（stdio だと別プロセスで共有状態に届かない）。エンドポイントは `/mcp`
+   - `SessionMessagingTools`: `list_sessions` / `send_to_session` / `set_memo` / `set_card` / `get_card` / `get_context` / `update_context` を公開。`SessionManager`(Singleton) に直結するため **HTTP トランスポート一択**（stdio だと別プロセスで共有状態に届かない）。エンドポイントは `/mcp`
    - 自己紹介カード（card）: セッションの「何ができるか」の自己申告（A2A Agent Card のローカル版・memo の姉妹機能）。詳細は `docs/mcp-session-messaging.md`
+   - ContextSummary（context）: 依頼単位の「状況札」。`send_to_session` の `contextId="new"` で発行し、受信箱を持たない外部クライアントが `get_context` のポーリングで結果を受け取れる（A2A の contextId/TaskState に対応）。詳細は `docs/mcp-session-messaging.md`
    - instructions は接続セッションごとに設定から動的に読み込む（TerminalHub 再起動不要。CLI 側の `/clear` 等で再接続時に反映）
 
 8. **CLI モード（`--notify`）**: `TerminalHub.exe --notify` で hook 通知を HTTP/HTTPS で本体へ送信。`--source codex` で Codex ネイティブ JSON を stdin 経由で `/api/hook/codex/{sessionId}` へ転送するブリッジになる（Program.cs の `RunNotifyModeAsync` / `RunCodexBridgeAsync`）
