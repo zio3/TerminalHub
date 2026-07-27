@@ -16,7 +16,9 @@ namespace TerminalHub.Mcp
     /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
     ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
     ///   書き込み系(set_memo/set_card)は proof の検証で本人のみに機構的に制限する。
-    /// - サーバーは状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ。
+    /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
+    ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
+    ///   SessionProof のようなセッション属性は除く）。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
