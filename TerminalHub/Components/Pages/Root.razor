@@ -170,6 +170,7 @@
                     <BottomPanel @ref="bottomPanel"
                                  TerminalType="@bottomPanelSession.TerminalType"
                                  CurrentSessionId="@bottomPanelSession.SessionId"
+                                 PerSessionInputText="@perSessionInputText"
                                  ClaudeModeSwitchKey="@claudeModeSwitchKey"
                                  VoiceInputEnabled="@voiceInputEnabled"
                                  PlaceholderText="@GetPlaceholderText(bottomPanelSession.TerminalType)"
@@ -208,6 +209,7 @@
     private bool showGitInfo = false; // Git情報を表示
     private bool gitChangesOnBadgeClick = false; // Gitバッジクリックで変更ファイル一覧を表示
     private bool hideInputPanel = false; // 入力パネルを非表示
+    private bool perSessionInputText = true; // 入力テキストの下書きをセッションごとに保持（既定ON）
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
     private double sessionListScale = 1.0; // セッションリスト表示倍率
     private int terminalFontSize = 14; // ターミナルフォントサイズ
@@ -560,6 +562,7 @@
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
                 gitChangesOnBadgeClick = appSettings.Sessions.GitChangesOnBadgeClick;
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
+                perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
                 // PC とモバイルで別々のフォントサイズ等を持てるようにするため。
                 var localDisplay = await LocalStorageService.LoadDisplaySettingsAsync();
@@ -1018,12 +1021,13 @@
         StateHasChanged();
     }
 
-    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool hideInputPanel) settings)
+    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool hideInputPanel, bool perSessionInputText) settings)
     {
         showTerminalType = settings.showTerminalType;
         showGitInfo = settings.showGitInfo;
         gitChangesOnBadgeClick = settings.gitChangesOnBadgeClick;
         hideInputPanel = settings.hideInputPanel;
+        perSessionInputText = settings.perSessionInputText;
         StateHasChanged();
     }
 

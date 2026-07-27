@@ -155,6 +155,9 @@
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
   <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>Show terminal only</value></data>
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>Hide the bottom input panel to use more space for the terminal.</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSession" xml:space="preserve"><value>Keep input text per session</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSessionSub" xml:space="preserve"><value>Don't overwrite your draft</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSessionHelp" xml:space="preserve"><value>When on, each session keeps its own in-progress input text, so switching sessions won't overwrite your draft. When off, all sessions share a single input box, letting you carry a draft across sessions (previous behavior).</value></data>
 
   <!-- Settings: Export/Import Tab -->
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>Export</value></data>

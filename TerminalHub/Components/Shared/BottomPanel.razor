@@ -131,6 +131,8 @@
     [Parameter] public object? DotNetRef { get; set; }
     [Parameter] public Dictionary<string, ShellPanel> ShellPanelRefs { get; set; } = new();
     [Parameter] public Guid? CurrentSessionId { get; set; }
+    /// <summary>入力テキストの下書きをセッションごとに保持するか（true=セッション固定, false=全セッション共有）。</summary>
+    [Parameter] public bool PerSessionInputText { get; set; } = true;
 
     // TextInputPanelのイベント
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
@@ -397,14 +399,26 @@
         };
     }
 
+    /// <summary>
+    /// テキストバッファの鍵。PerSessionInputText が true のときはセッションIDを混ぜ、
+    /// セッションごとに独立した下書きにする。false（共有）時は panelId のみ＝従来動作。
+    /// CurrentSessionId が無い一瞬は panelId にフォールバック（無害）。
+    /// </summary>
+    private string TextKey(string panelId)
+    {
+        return PerSessionInputText && CurrentSessionId.HasValue
+            ? $"{panelId}@{CurrentSessionId.Value}"
+            : panelId;
+    }
+
     private string GetTextInputPanelText(string panelId)
     {
-        return textInputPanelTexts.TryGetValue(panelId, out var text) ? text : "";
+        return textInputPanelTexts.TryGetValue(TextKey(panelId), out var text) ? text : "";
     }
 
     private void SetTextInputPanelText(string panelId, string text)
     {
-        textInputPanelTexts[panelId] = text;
+        textInputPanelTexts[TextKey(panelId)] = text;
     }
 
     private string GetMemoBody(Guid memoId)

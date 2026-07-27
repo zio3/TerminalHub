@@ -139,6 +139,13 @@ public class SessionDisplaySettings
     /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（ShowGitInfo が有効な場合のみ意味を持つ）。既定 false。</summary>
     public bool GitChangesOnBadgeClick { get; set; }
     public bool HideInputPanel { get; set; }
+    /// <summary>
+    /// 入力テキスト欄の下書きをセッションごとに保持するか。既定 true（＝セッション固定）。
+    /// true: セッションを切り替えても各セッションの書きかけが温存され、上書きされない。
+    /// false: 全セッションで1つのバッファを共有（従来動作）。別セッションから集めて送りたいときに使う。
+    /// BottomPanel のテキストタブ（既定タブ・追加タブとも）に一律で効く。
+    /// </summary>
+    public bool PerSessionInputText { get; set; } = true;
 }
 
 /// <summary>
