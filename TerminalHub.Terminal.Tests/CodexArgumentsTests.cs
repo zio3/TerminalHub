@@ -266,6 +266,35 @@ public sealed class CodexArgumentsTests
     }
 
     [Fact]
+    public void SessionIdEnv_IsInjectedViaShellEnvironmentPolicySet()
+    {
+        var sessionId = Guid.Parse("f49cfab0-13ff-46df-8d89-da9ab2d34edc");
+        var options = new Dictionary<string, string>
+        {
+            ["resume-last"] = "true"
+        };
+
+        // tool 実行シェルへ届くよう set で明示注入し、resume より前に置かれること
+        Assert.Equal(
+            "-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=f49cfab0-13ff-46df-8d89-da9ab2d34edc resume --last",
+            TerminalConstants.BuildCodexArgs(options, sessionId: sessionId));
+    }
+
+    [Fact]
+    public void SessionIdEnv_DoesNotOverrideUserSuppliedValue()
+    {
+        var sessionId = Guid.Parse("f49cfab0-13ff-46df-8d89-da9ab2d34edc");
+        var options = new Dictionary<string, string>
+        {
+            ["extra-args"] = "-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=user-value"
+        };
+
+        Assert.Equal(
+            "-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=user-value",
+            TerminalConstants.BuildCodexArgs(options, sessionId: sessionId));
+    }
+
+    [Fact]
     public void TerminalHubHooks_AreAddedBeforeUserArgsAndResume()
     {
         var options = new Dictionary<string, string>

@@ -99,7 +99,8 @@
         public static string BuildCodexArgs(
             Dictionary<string, string> options,
             string? terminalHubMcpUrl = null,
-            string? terminalHubHookArgs = null)
+            string? terminalHubHookArgs = null,
+            Guid? sessionId = null)
         {
             var args = new List<string>();
 
@@ -119,6 +120,9 @@
             var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
             var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
             var userSuppliedTerminalHubMcpUrl = ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.url");
+            var userSuppliedSessionIdEnv = ContainsCodexConfigOverride(
+                options,
+                "shell_environment_policy.set.TERMINALHUB_SESSION_ID");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
@@ -245,6 +249,17 @@
             if (!string.IsNullOrWhiteSpace(terminalHubMcpUrl) && !userSuppliedTerminalHubMcpUrl)
             {
                 args.Add($"-c mcp_servers.terminalhub.url={terminalHubMcpUrl}");
+            }
+
+            // Codex は shell_environment_policy 次第で tool 実行シェルへ環境変数を渡さない
+            // （inherit=core 等）。ConPTY が注入した TERMINALHUB_SESSION_ID が tool シェルから
+            // 空に見える環境があるため、shell_environment_policy.set で明示注入して確実に届ける。
+            // set はフィルタ(inherit/include_only)の後に変数を足す仕組みなので、ユーザー自身の
+            // ポリシー設定と衝突しない。手書き指定があればそちらを優先する。
+            // hook ブリッジ($env:TERMINALHUB_SESSION_ID 参照)の空振り対策も兼ねる。
+            if (sessionId.HasValue && !userSuppliedSessionIdEnv)
+            {
+                args.Add($"-c shell_environment_policy.set.TERMINALHUB_SESSION_ID={sessionId.Value}");
             }
 
             // TerminalHub の lifecycle hook もプロジェクト設定へ永続化せず、起動時だけ注入する。
