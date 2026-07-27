@@ -209,8 +209,9 @@ namespace TerminalHub.Mcp
         [McpServerTool(Name = "set_card")]
         [Description(
             "自分のセッションの自己紹介カード(「何ができるか」の短い自己申告。他エージェントが宛先選びに使う)を設定する。" +
-            "sessionId には必ず自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値。" +
-            "空なら list_sessions を自分の作業フォルダ・種別で絞り込んで特定)を渡すこと。" +
+            "sessionId には必ず自分自身のセッションGUID(環境変数 TERMINALHUB_SESSION_ID の値)を渡すこと。" +
+            "その環境変数が空なら、あなたはセッションを持たない外部クライアントの可能性が高いので、" +
+            "自分を推測で特定せず、このツールを使わないこと。" +
             "他セッションのカードは書き換えてはならない(カードは自己申告制)。" +
             "全体書き換え(部分更新なし)・空文字でクリア。数行の短文を想定(宛先選びの広告であって詳細ドキュメントではない)。")]
         public static async Task<SendResult> SetCard(
