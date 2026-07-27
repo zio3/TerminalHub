@@ -155,6 +155,9 @@
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>入力パネルを非表示</value></data>
   <data name="Settings.Sessions.InputPanel.HideSub" xml:space="preserve"><value>ターミナルのみ表示</value></data>
   <data name="Settings.Sessions.InputPanel.HideHelp" xml:space="preserve"><value>下部の入力パネルを非表示にして、ターミナル領域を広く使えます。</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSession" xml:space="preserve"><value>入力テキストをセッションごとに保持</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSessionSub" xml:space="preserve"><value>書きかけを上書きしない</value></data>
+  <data name="Settings.Sessions.InputPanel.PerSessionHelp" xml:space="preserve"><value>ONのとき、セッションを切り替えても各セッションの書きかけテキストがそのまま残ります。OFFにすると全セッションで1つの入力欄を共有し、書きかけを別セッションへ持ち回れます（従来動作）。</value></data>
 
   <!-- Settings: Export/Import Tab -->
   <data name="Settings.Export.Export.Header" xml:space="preserve"><value>エクスポート</value></data>
