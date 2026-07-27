@@ -57,6 +57,11 @@ namespace TerminalHub.Models
 
         public string Memo { get; set; } = string.Empty;
 
+        // capabilities カード（「何ができるか」の自己申告・A2A Agent Card のローカル版）。
+        // memo=「今なにをしているか」(動的) に対し、こちらは「何ができるか」(静的・長命)。
+        // MCP の set_capabilities/get_capabilities で読み書きし、セッションと同じライフサイクルで永続化する。
+        public string Capabilities { get; set; } = string.Empty;
+
         // このセッションでだけ表示・送信できるカスタムコマンド（グローバル設定の Commands とは別管理）。
         // クイック送信バーではグローバル分の後ろに連結して表示する。DB には JSON で永続化。
         public List<CustomCommand> SessionCommands { get; set; } = new();
