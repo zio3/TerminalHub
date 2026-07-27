@@ -254,19 +254,19 @@ namespace TerminalHub.Services
 
             if (currentVersion < 9)
             {
-                // v9: capabilities カード（セッションの「何ができるか」自己申告）を保持する Capabilities カラムを追加
-                _logger.LogInformation("[DB][マイグレーション] v9 適用開始: Sessions に Capabilities カラムを追加");
+                // v9: 自己紹介カード（セッションの「何ができるか」自己申告・A2A Agent Card のローカル版）を保持する Card カラムを追加
+                _logger.LogInformation("[DB][マイグレーション] v9 適用開始: Sessions に Card カラムを追加");
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                if (!await ColumnExistsAsync(connection, "Sessions", "Capabilities"))
+                if (!await ColumnExistsAsync(connection, "Sessions", "Card"))
                 {
-                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN Capabilities TEXT");
-                    _logger.LogInformation("[DB][マイグレーション] v9: Capabilities カラムを追加");
+                    await connection.ExecuteNonQueryAsync("ALTER TABLE Sessions ADD COLUMN Card TEXT");
+                    _logger.LogInformation("[DB][マイグレーション] v9: Card カラムを追加");
                 }
                 else
                 {
-                    _logger.LogInformation("[DB][マイグレーション] v9: Capabilities カラムは既存のためスキップ");
+                    _logger.LogInformation("[DB][マイグレーション] v9: Card カラムは既存のためスキップ");
                 }
 
                 await SetSchemaVersionAsync(9);

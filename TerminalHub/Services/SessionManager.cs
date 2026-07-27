@@ -51,10 +51,10 @@ namespace TerminalHub.Services
         bool UpdateMemo(Guid sessionId, string memo);
 
         /// <summary>
-        /// セッションの capabilities カード(「何ができるか」の自己申告)をインメモリで更新する。
-        /// MCP の set_capabilities から呼ぶ用途。永続化は呼び出し側で別途行う。対象が見つかれば true。
+        /// セッションの自己紹介カード(「何ができるか」の自己申告)をインメモリで更新する。
+        /// MCP の set_card から呼ぶ用途。永続化は呼び出し側で別途行う。対象が見つかれば true。
         /// </summary>
-        bool UpdateCapabilities(Guid sessionId, string capabilities);
+        bool UpdateCard(Guid sessionId, string card);
 
         /// <summary>
         /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
@@ -558,13 +558,13 @@ namespace TerminalHub.Services
             return true;
         }
 
-        public bool UpdateCapabilities(Guid sessionId, string capabilities)
+        public bool UpdateCard(Guid sessionId, string card)
         {
             if (!_sessionInfos.TryGetValue(sessionId, out var info))
                 return false;
 
-            info.Capabilities = capabilities ?? string.Empty;
-            // capabilities は現状 UI に表示していないため再描画通知は不要。
+            info.Card = card ?? string.Empty;
+            // カードは現状 UI に表示していないため再描画通知は不要。
             // 表示するようになったら UpdateMemo と同様に NotifySessionsChanged() を呼ぶこと。
             return true;
         }
