@@ -13,7 +13,7 @@ TerminalHub 本体プロセスに HTTP MCP サーバーを同居させ、**別�
 | spawn なし | 子セッションは作らない。宛先は **既存セッションのみ**（暴走ガード不要） |
 | 集約なし | 結果待ち(wait)・読み取り(read)はしない。投げっぱなし。完了は TerminalHub 本体の LED/通知で人間が気づく |
 | エンベロープなし | 本文だけ送る。送信元明示や応答要否は将来「呼び出し元フラグ」で足す（自己識別・本人証明は導入済み → 後述の proof） |
-| サーバーは会話状態を持たない | 渡されたフラグ（`submit` 等）に素直に従うだけ。メッセージの追跡・キューは持たない（本人検証用の proof のようなセッション属性は除く） |
+| サーバーは会話状態を持たない | 渡されたフラグ（`submit` 等）に素直に従うだけ。メッセージの追跡・キューは持たない（本人検証用の proof、および依頼IDで引く**状況札 = ContextSummary** は例外として持つ → 後述） |
 
 長文は本文に直接流さず、**ファイルに書いて絶対パスだけ送る**運用を推奨（ターミナル入力の化け・切り捨てを避けるため）。
 
@@ -115,6 +115,7 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 | `target` | string | （必須） | 宛先。セッション GUID、または表示名（完全一致・大文字小文字無視） |
 | `message` | string | （必須） | 送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨 |
 | `submit` | bool | `true` | 末尾に Enter(`\r`) を送って実行を確定するか。`false` なら入力欄に流し込むだけ |
+| `contextId` | string? | なし | ContextSummary（後述）の紐づけ。`"new"`=発行して紐づけ（結果で ID が返る） / 既存 ID=続報として紐づけ / 未指定=従来どおり |
 
 **返り値**: `SendResult`
 
@@ -164,6 +165,44 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
 
 想定運用: 各セッションが起動時や役割変更時に自分で `set_card` しておき、
 他のセッションは `list_sessions` → `get_card` で相手を選んで `send_to_session` する。
+
+### `get_context` / `update_context` — ContextSummary（依頼の状況札）
+
+**受信箱を持たない相手のための pull 経路**。`send_to_session` は push 型で、返信を受け取るには
+自分がセッション（＝ターミナルという受信箱）を持っている必要がある。TerminalHub のセッションを
+持たない外部 MCP クライアント（Claude Desktop、TerminalHub 外の CLI 等）が依頼の結果を
+受け取れるように、依頼単位の「状況札」を ID で引けるようにする。
+
+- `send_to_session` に `contextId="new"` を渡すと、サーバーが**推測不能な ID** を発行して
+  ContextSummary を作成し、ツール結果で返す。届く本文の末尾には
+  `[contextId: xxx — 状況・結果は update_context で共有]` が**サーバーによって自動付与**される
+  （送信者の手書きに任せると書き忘れ事故が起きるため。改行ではなくスペース連結なのは
+  TUI が改行を送信確定と誤解釈する事故を避けるため）
+- **`update_context(contextId, summary, status?, proof?)`**: 受け手が状況・結果を書く。summary は
+  **要約1枚の全体上書き**（履歴は積まれない）。長い成果物はファイルに書いてパスを載せる。
+  status は `submitted / working / completed / failed / canceled`（**A2A TaskState 準拠**）。
+  **セッション内から書くときは proof（`TERMINALHUB_SESSION_PROOF`）を渡す**と、
+  「どのセッションが書いたか」が検証済みで記録される（`updatedBy`）。proof 無しでも書けるが
+  **無記名**になる（外部クライアント用。アクセス制御ではなく検証済み署名として機能する。
+  proof が不一致の場合は無記名として通さずエラー＝古い値の使い回しに気づかせる）
+- **`get_context(contextId)`**: 依頼側がポーリングして読む。サーバーからの通知は無い。
+  `updatedBy` で「本当に依頼先セッションが書いた結果か」を確認できる（null は無記名）
+- **contextId は capability 兼用**（知っている＝読み書きできる。proof と同じ哲学で認証を別途作らない）
+- 永続化: SQLite の `Contexts` テーブル（スキーマ v10）。終端状態（completed/failed/canceled）から
+  **14日で自動削除**＋総数上限500（超過分は終端状態の古い順に削除。進行中は消さない）
+
+**A2A との対応**: この contextId は A2A の `contextId`（最初のメッセージ送信時にサーバーが生成して
+返す会話束の ID）に対応し、status は TaskState に対応する（1 context = 1 タスクの簡約。
+Task オブジェクトは作らない）。モデルのコンテキストウィンドウとは無関係。
+
+**作らないもの**（設計判断・滑り込み防止）: ID なしの一覧（capability モデルを崩す）、
+claim / 担当割当（1対1依頼専用。「誰かやって」型はディスパッチャ側ルールの仕事）、
+サーバー発の完了通知（集約ロジックの復活）、リトライ・期限監視（クライアント側の責務）。
+
+**典型フロー（外部クライアント）**:
+1. Desktop が `send_to_session(target=<レーン>, message="仕様は C:\work\spec.md", contextId="new")` → ID が返る
+2. 受け手は本文末尾の contextId を見て作業し、`update_context` で status/summary を更新
+3. Desktop は `get_context(id)` をポーリングして完了・結果を取得（受信箱ゼロで往復が完結）
 
 ---
 

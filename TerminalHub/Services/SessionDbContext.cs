@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 9;
+        private const int CurrentSchemaVersion = 10;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -273,6 +273,15 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v9 適用完了");
             }
 
+            if (currentVersion < 10)
+            {
+                // v10: ContextSummary（依頼の状況札）テーブルを追加
+                _logger.LogInformation("[DB][マイグレーション] v10 適用開始: Contexts テーブル追加");
+                await CreateContextsTableAsync();
+                await SetSchemaVersionAsync(10);
+                _logger.LogInformation("[DB][マイグレーション] v10 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -465,6 +474,32 @@ namespace TerminalHub.Services
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_memo_snapshots_memo ON SessionMemoSnapshots(MemoId, SavedAt DESC);
+            ";
+
+            await connection.ExecuteNonQueryAsync(sql);
+        }
+
+        private async Task CreateContextsTableAsync()
+        {
+            // v10 マイグレーション: ContextSummary（依頼の状況札）テーブル。
+            // send_to_session の contextId="new" でサーバーが発行し、get_context/update_context で
+            // 読み書きする。ContextId は推測不能な値で capability を兼ねる（知っている=読み書きできる）。
+            // セッションには紐づかない（外部クライアントも依頼主になれる）ため FK なし。
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var sql = @"
+                CREATE TABLE IF NOT EXISTS Contexts (
+                    ContextId TEXT PRIMARY KEY,
+                    Status TEXT NOT NULL,
+                    Summary TEXT NOT NULL DEFAULT '',
+                    CreatedAt TEXT NOT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    UpdatedBySessionId TEXT,
+                    UpdatedByName TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_contexts_updated ON Contexts(UpdatedAt);
             ";
 
             await connection.ExecuteNonQueryAsync(sql);

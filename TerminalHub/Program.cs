@@ -97,6 +97,7 @@ builder.Services.AddSingleton<SessionDbContext>(sp =>
 builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
 builder.Services.AddSingleton<ISessionMemoSnapshotRepository, SessionMemoSnapshotRepository>();
 builder.Services.AddSingleton<ISessionMemoRepository, SessionMemoRepository>();
+builder.Services.AddSingleton<IContextRepository, ContextRepository>();
 builder.Services.AddScoped<IStorageServiceFactory, StorageServiceFactory>();
 
 // メモ編集履歴の自動スナップショットサービス (10分毎)
