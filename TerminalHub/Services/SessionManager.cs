@@ -299,7 +299,8 @@ namespace TerminalHub.Services
                     var codexArgs = TerminalConstants.BuildCodexArgs(
                         options,
                         GetCodexMcpUrl(),
-                        codexHookArgs);
+                        codexHookArgs,
+                        sessionId);
                     var codexArgsString = string.IsNullOrWhiteSpace(codexArgs)
                         ? "/k codex"
                         : $"/k codex {codexArgs}";

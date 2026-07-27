@@ -175,6 +175,11 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
 
 ## 注意点
 
+- **Codex の tool シェルへの環境変数透過**: Codex は `shell_environment_policy` 次第（`inherit=core` 等）で
+  ConPTY が注入した `TERMINALHUB_SESSION_ID` を tool 実行シェルへ渡さないことがある。このため Codex 起動時に
+  `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=<GUID>` を注入して確実に届けている
+  （`set` はフィルタ後に変数を足す仕組みでユーザーのポリシー設定と衝突しない。同キーの手書き指定があればそちらを優先）。
+  hook ブリッジ（`$env:TERMINALHUB_SESSION_ID` 参照）の空振り対策も兼ねる。
 - **ConPTY 制約**: 実際の送信テスト（ターミナルへの書き込み）は実機で行うこと。
 - **antiforgery**: 既存の `/api/hook`（JSON POST）は `UseAntiforgery` 下でも通っている実績があり、MCP の POST も通る見込み。もし `/mcp` への POST が 400 になる場合は `app.MapMcp("/mcp").DisableAntiforgery()` にする。
 - **セキュリティ**: ローカル利用前提。無認証で `/mcp` を公開するため、localhost 以外へバインドを広げる際は再評価すること。

@@ -23,17 +23,14 @@ public static class McpInstructionDefaults
 
         ## 自己識別
         あなたが TerminalHub のセッション内で動いている場合、自身のセッション GUID は
-        環境変数 `TERMINALHUB_SESSION_ID` に入っている。自分自身を対象にしたいとき
-        （例: 自分のメモ更新）は、この値を target に渡す。
-        ただし CLI によっては tool 実行シェルへ独自の環境変数を渡さない設定があり（例: Codex の
-        shell_environment_policy）、その場合 `TERMINALHUB_SESSION_ID` は空に見える。空だったときは、
-        `list_sessions` を自分の作業フォルダ・種別で絞り込み、確実に1件へ絞り込めた場合のみ
-        その GUID を自分として使う。
-        **外部クライアント（Claude Desktop 等）から接続している場合、あなたに対応するセッションは
-        存在しない。** 1件に絞り込めないときも含め、自分を特定できないときは「セッションを持たない
-        外部クライアント」として振る舞い、`set_memo` / `set_card` は使わないこと
-        （他セッションを自分と誤認して書き換えるのを防ぐ）。`list_sessions` / `get_card` /
-        `send_to_session` は自由に使ってよい。
+        環境変数 `TERMINALHUB_SESSION_ID` に入っている（Codex には tool 実行シェルへも届くよう
+        起動引数で注入している）。自分自身を対象にしたいとき（例: 自分のメモ更新）は、
+        この値を target に渡す。
+        **`TERMINALHUB_SESSION_ID` が空に見えるなら、あなたは対応するセッションを持たない
+        外部クライアント（Claude Desktop 等）である可能性が高い。** その場合は自分を推測で
+        特定しようとせず、「セッションを持たない外部クライアント」として振る舞い、
+        `set_memo` / `set_card` は使わないこと（他セッションを自分と誤認して書き換えるのを防ぐ）。
+        `list_sessions` / `get_card` / `send_to_session` は自由に使ってよい。
 
         ## ツール
         - `list_sessions`: 現在のセッション一覧（表示名・種別・フォルダ・状態・カード有無）を取得する。
@@ -56,8 +53,8 @@ public static class McpInstructionDefaults
         - 大きな仕様・設計・長文を渡すときは、本文をそのまま送らず、ファイルに書いて「そのパスだけ」を
           send_to_session で送ると軽くて確実（受け手にファイルを読ませる）。ただしこれは好みの問題なので、
           直接送りたければ直接送ってよい。
-        - 返信がほしいときは、本文に自分のセッションID（`TERMINALHUB_SESSION_ID`、取れなければ list_sessions で
-          特定した自分の GUID）を書いておくこと。サーバーは送信元を相手に伝えない（エンベロープなし）ので、
+        - 返信がほしいときは、本文に自分のセッションID（`TERMINALHUB_SESSION_ID`）を書いておくこと。
+          サーバーは送信元を相手に伝えない（エンベロープなし）ので、
           相手はそれを見て send_to_session で返信できる。「終わったらこの ID に一言返して」等と添えるとよい。
         - 送り先は必ず既存セッション。存在しない相手には送れない。
 
