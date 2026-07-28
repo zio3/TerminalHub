@@ -53,4 +53,11 @@ public interface ITerminalStateBuffer
     /// エミュレータ方式のみ提供し、それ以外は null。
     /// </summary>
     RawChunkRing? RawRing => null;
+
+    /// <summary>
+    /// 現在の端末サイズ（列・行）。リングを単体で再現するとき、再生側の xterm を同じサイズに
+    /// 合わせるために要る（幅が違うと折り返し位置がずれ、偽の「表示崩れ」が出る）。
+    /// サイズの概念を持たない方式では 0。
+    /// </summary>
+    (int Cols, int Rows) Size2D => (0, 0);
 }

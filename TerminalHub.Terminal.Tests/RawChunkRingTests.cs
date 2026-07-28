@@ -109,6 +109,18 @@ public class RawChunkRingTests
         Assert.Contains(notes, n => n == "Clear");
     }
 
+    // リングを単体で再現するとき、再生側の xterm を同じ列数に合わせないと折り返しがずれて
+    // 本物と別種の崩れが出る。エクスポートにサイズを同梱するための取得口が生きていることを守る。
+    [Fact]
+    public void Size2D_reports_current_grid_size_for_export()
+    {
+        ITerminalStateBuffer buf = new EmulatedStateBuffer(206, 94);
+        Assert.Equal((206, 94), buf.Size2D);
+
+        buf.Resize(120, 30);
+        Assert.Equal((120, 30), buf.Size2D);
+    }
+
     [Fact]
     public void DumpText_flags_split_chunk_and_shows_markers()
     {

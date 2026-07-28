@@ -363,6 +363,8 @@
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
+    // 診断用（実験モード）: リング実経路再生の要求ハンドラ
+    private Action<Guid, bool>? _rawRingReplayHandler;
 
     // StateHasChanged()デバウンス用
     private DateTime _lastStateChangedTime = DateTime.MinValue;
@@ -489,6 +491,17 @@
             _ = InvokeWithCircuitCultureAsync(() => { OnSessionsChanged(); return Task.CompletedTask; });
         };
         SessionManager.OnSessionsChanged += _sessionsChangedHandler;
+
+        // 診断用（実験モード）: リング実経路再生の要求を購読（ホットリロード対策で既存を解除）
+        if (_rawRingReplayHandler != null)
+        {
+            SessionManager.OnRawRingReplayRequested -= _rawRingReplayHandler;
+        }
+        _rawRingReplayHandler = (sessionId, paced) =>
+        {
+            _ = InvokeWithCircuitCultureAsync(() => ReplayFromRawRingAsync(sessionId, paced));
+        };
+        SessionManager.OnRawRingReplayRequested += _rawRingReplayHandler;
 
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
@@ -2148,6 +2161,94 @@
     }
 
     /// <summary>
+    /// 診断用（実験モード）: 生チャンクリングの内容を「ライブ出力と同一の実経路」
+    /// （チャンクごとに1回の JS interop = SignalR 配送）・「記録どおりのチャンク境界」で
+    /// xterm へ再生する。POST /api/debug/raw-ring/{guid}/replay から発火する。
+    ///
+    /// 目的: ローカル直書き実験（ブラウザ内で term.write 直接＝シロ確認済み）との差分で、
+    /// 経路(SignalR/interop/terminal.js)起因の決定論的な表示崩れを単離する。
+    /// ここで崩れが再現すれば経路確定、しなければ非決定論（配送欠落）側の証拠になる。
+    ///
+    /// エミュレータ・リングには一切書かない（記録を汚さない）。再生後の xterm はリング内容に
+    /// なるため、通常表示へはセッション切替（エミュレータからのリプレイ）で戻す。
+    /// 再生中はライブ出力が書き込みロック待ちになるので、アイドル中のセッションで使うこと。
+    /// paced=true は記録された到達時刻の間隔（上限2秒/チャンク）も再現する。リングの記録期間
+    /// ぶんロックを保持し続ける点に注意（実験専用）。
+    /// </summary>
+    private async Task ReplayFromRawRingAsync(Guid guid, bool paced)
+    {
+        if (guid != activeSessionId || activeTerminal == null)
+        {
+            // 対象を前面表示している Circuit だけが再生する（複数ブラウザ接続時は各自が判定）
+            return;
+        }
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        var ring = session?.TerminalRawRing;
+        if (session == null || ring == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var entries = ring.Snapshot();
+            int chunks = 0;
+            long chars = 0;
+            await _terminalWriteLock.WaitAsync();
+            // ロック取得**後**に計測を始める。取得前から回すとライブ出力との競合待ちが
+            // 「保持時間」に混ざり、再生がどれだけライブを止めたのかが読めなくなる
+            // （PR #172 で同じ誤りを指摘済み）
+            var hold = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                if (guid != activeSessionId || activeTerminal == null)
+                {
+                    return;
+                }
+                // ESC c (RIS) で全リセットしてから、リングのチャンクを1つずつ実経路で流す。
+                // ライブ経路(L1698付近)と同じ WriteToTerminalAsync ＝ チャンクごとに1回の interop 呼び出し。
+                await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc");
+                DateTime? prevTime = null;
+                foreach (var e in entries)
+                {
+                    if (e.Note != null)
+                    {
+                        continue; // マーカー（BeginReplay 等）はデータではないのでスキップ
+                    }
+                    if (paced && prevTime.HasValue)
+                    {
+                        // 記録された到達間隔を再現する（アイドル区間で無駄に待たないよう上限2秒）
+                        var gapMs = (int)Math.Clamp((e.TimestampUtc - prevTime.Value).TotalMilliseconds, 0, 2000);
+                        if (gapMs > 1)
+                        {
+                            await Task.Delay(gapMs);
+                        }
+                    }
+                    prevTime = e.TimestampUtc;
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, e.Data);
+                    chunks++;
+                    chars += e.Data.Length;
+                }
+            }
+            finally
+            {
+                _terminalWriteLock.Release();
+            }
+            Logger.LogInformation(
+                "[RawRingReplay] 実経路リング再生完了: {Chunks}チャンク {Chars}文字 保持{HoldMs}ms pacing={Pacing} session={SessionId}（表示を戻すにはセッション切替）",
+                chunks, chars, hold.ElapsedMilliseconds, paced ? "real" : "burst", guid.ToString().Substring(0, 8));
+        }
+        catch (JSDisconnectedException)
+        {
+            // 回線切断時は何もしない
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[RawRingReplay] 実経路リング再生に失敗: session={SessionId}", guid);
+        }
+    }
+
+    /// <summary>
     /// フロー制御: クライアント側のバッファが溜まりすぎた時に呼ばれる
     /// ConPTYからの出力読み取りを一時停止する
     /// </summary>
@@ -3205,6 +3306,11 @@
         {
             SessionManager.OnSessionsChanged -= _sessionsChangedHandler;
             _sessionsChangedHandler = null;
+        }
+        if (_rawRingReplayHandler != null)
+        {
+            SessionManager.OnRawRingReplayRequested -= _rawRingReplayHandler;
+            _rawRingReplayHandler = null;
         }
 
         // ShellPanelの破棄（BottomPanelコンポーネント経由）

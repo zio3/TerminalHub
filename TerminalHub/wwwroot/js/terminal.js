@@ -936,7 +936,14 @@ window.terminalFunctions = {
             },
             cols: 120,  // 固定列数
             rows: 30,   // 固定行数
-            convertEol: true,
+            // convertEol は **false** にすること（初期コミットから true だったが表示崩れの原因だった）。
+            // true は裸の LF を CRLF として扱う＝桁を0へ戻す。ところが Claude Code 等の TUI は
+            // 「\e[<行>;3H \e[K \n」の形で「桁3を保ったまま次の行へ」を意図して裸 LF を使う。
+            // true だと行頭のインデントが失われ、「先頭の空白が詰まる」形で崩れる（2026-07-29 特定）。
+            // サーバー側エミュレータ（TerminalGrid.LineFeed）は素の VT どおり桁に触らないので、
+            // true のままだとライブ表示とセッション切替時のリプレイで結果が食い違う
+            // （＝崩れてもリロード/切替で直る、というあの症状の正体）。両者は必ず揃えること。
+            convertEol: false,
             // xterm.js 6.0 で windowsMode は廃止。ConPTY 前提の Windows ヒューリスティクスは windowsPty で指定する。
             // buildNumber 未指定（= reflow無効・非空白終端行を折返し扱い）で旧 windowsMode: true 相当の挙動を維持。
             windowsPty: { backend: 'conpty' },

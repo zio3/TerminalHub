@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>RawChunkRing 再現プレイヤー</title>
+<!--
+  生チャンクリングのエクスポート（/api/debug/raw-ring/{GUID}/export）を読み込み、
+  記録どおりのチャンク境界・到達間隔・端末サイズで xterm へ流し直す単体再現ツール。
+
+  TerminalHub 本体のセッションには一切触らない（ここで書くのはこのページ内の xterm だけ）。
+  目的は「表示崩れがデータ/境界/タイミング由来か、それとも本体の配送経路や描画由来か」を
+  分離すること。本体と同じ xterm バージョン・同じ Terminal オプションで開くのが要点で、
+  ここを揃えないと再現にならない（wwwroot/js/terminal.js の createMultiSessionTerminal と対応）。
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.9.0/lib/addon-unicode11.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+<style>
+  body { background:#141414; color:#d4d4d4; font-family:'Segoe UI',system-ui,sans-serif; margin:0; padding:12px; }
+  h1 { font-size:15px; margin:0 0 8px; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:8px; font-size:13px; }
+  .bar label { display:flex; gap:4px; align-items:center; }
+  button { background:#2d2d2d; color:#d4d4d4; border:1px solid #444; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:13px; }
+  button:hover:not(:disabled) { background:#3a3a3a; }
+  button:disabled { opacity:.45; cursor:default; }
+  input[type=number] { width:64px; background:#1e1e1e; color:#d4d4d4; border:1px solid #444; border-radius:4px; padding:3px 5px; }
+  #meta { font-size:12px; color:#9a9a9a; margin-bottom:8px; white-space:pre-wrap; }
+  #drop { border:1px dashed #555; border-radius:6px; padding:10px; text-align:center; color:#888; font-size:13px; margin-bottom:8px; }
+  #drop.over { border-color:#3b8eea; color:#3b8eea; }
+  #term { width:100%; overflow:auto; }
+  #pos { font-family:Consolas,monospace; color:#9a9a9a; }
+  /* コマ送りで「いま入ったバイト」を見るための欄。崩れた瞬間の犯人チャンクを目視で特定する */
+  #last { font-family:Consolas,monospace; font-size:12px; color:#23d18b; background:#1a1a1a;
+          border:1px solid #333; border-radius:4px; padding:6px; margin-bottom:8px;
+          max-height:96px; overflow:auto; white-space:pre-wrap; word-break:break-all; display:none; }
+  .warn { color:#f5f543; }
+  .err { color:#f14c4c; }
+</style>
+</head>
+<body>
+<h1>RawChunkRing 再現プレイヤー</h1>
+
+<div id="drop">
+  エクスポート JSON をここへドロップ、または
+  <input type="file" id="file" accept=".json,application/json" />
+  <br />取得元: <code>GET /api/debug/raw-ring/{GUID}/export</code>
+</div>
+
+<div class="bar">
+  <label>再生:
+    <select id="mode">
+      <option value="real">real（記録どおりの間隔）</option>
+      <option value="burst">burst（一括）</option>
+      <option value="x">倍速</option>
+    </select>
+  </label>
+  <label>倍率 <input type="number" id="speed" value="10" min="1" max="1000" /></label>
+  <label><input type="checkbox" id="webgl" checked /> WebGL レンダラ</label>
+  <label><input type="checkbox" id="uni11" checked /> Unicode11</label>
+  <label><input type="checkbox" id="applyResize" checked /> 途中の Resize を適用</label>
+  <label><input type="checkbox" id="merge" /> チャンク境界を無視して連結</label>
+  <!--
+    xterm の Terminal オプションのうち、崩れ方に効きうるものを切れるようにする。
+    既定は本体（terminal.js）と同じ値にしてあり、この状態が本体の再現になる。
+    convertEol だけは本体が false（2026-07-29 に崩れの原因として特定して外した）。
+    **on にすると当時の崩れを再現できる**: 裸の LF を CRLF にするため、
+    「\e[<行>;3H \e[K \n」で桁を保ったまま下へ行きたい TUI の行頭インデントが消える。
+  -->
+  <label><input type="checkbox" id="convertEol" /> convertEol（on で旧挙動＝崩れを再現）</label>
+  <label><input type="checkbox" id="winPty" checked /> windowsPty(conpty)</label>
+  <label><input type="checkbox" id="edScroll" checked /> scrollOnEraseInDisplay</label>
+  <button id="play" disabled>再生</button>
+  <button id="stop" disabled>一時停止</button>
+  <button id="reset" disabled>頭出し</button>
+  <button id="dump" disabled>バッファをコピー</button>
+</div>
+
+<div class="bar">
+  <button id="step" disabled>コマ送り ▶</button>
+  <label>× <input type="number" id="stepSize" value="1" min="1" max="500" /> チャンク</label>
+  <label>ここまで一気に: <input type="number" id="seekTo" min="0" placeholder="seq" /></label>
+  <button id="seek" disabled>移動</button>
+  <span id="pos">-</span>
+</div>
+
+<div id="meta">まだ何も読み込んでいません。</div>
+<div id="last"></div>
+<div id="term"></div>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+let data = null;      // 読み込んだエクスポート
+let term = null;      // xterm インスタンス
+let webglAddon = null;
+let abort = false;
+
+// ---- 読み込み ------------------------------------------------------------
+
+function loadJson(text, sourceName) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    setMeta('JSON として読めません: ' + e.message, 'err');
+    return;
+  }
+  // 形式チェックは緩めにする（版が上がっても entries さえあれば再生はできる）
+  if (!parsed || !Array.isArray(parsed.entries)) {
+    setMeta('entries 配列がありません。RawChunkRing のエクスポートではないようです。', 'err');
+    return;
+  }
+  if (parsed.format && parsed.format !== 'terminalhub-rawring/1') {
+    setMeta('未知の format: ' + parsed.format + '（そのまま再生を試みます）', 'warn');
+  }
+  data = parsed;
+
+  const chunks = parsed.entries.filter(e => e.note == null);
+  const markers = parsed.entries.filter(e => e.note != null);
+  const pending = chunks.filter(e => e.pending);
+  const spanMs = chunks.length ? chunks[chunks.length - 1].offsetMs - chunks[0].offsetMs : 0;
+
+  setMeta([
+    `${sourceName}`,
+    `セッション: ${parsed.sessionName || '?'} (${(parsed.sessionId || '').substring(0, 8)}) / ${parsed.terminalType || '?'}`,
+    `端末サイズ: ${parsed.cols}x${parsed.rows}  ※再生はこのサイズで行う（幅が違うと折り返しがずれて別種の崩れが出る）`,
+    `チャンク ${chunks.length} 件 / ${(parsed.totalChars || 0).toLocaleString()} 文字 / 記録幅 ${(spanMs / 1000).toFixed(1)} 秒`,
+    `マーカー ${markers.length} 件${markers.length ? '（' + summarizeMarkers(markers) + '）' : ''}`,
+    `PENDING（シーケンス途中で切れたチャンク）: ${pending.length} 件${pending.length ? ' ← 孤児フラグメントの容疑あり' : ''}`,
+  ].join('\n'), pending.length ? 'warn' : null);
+
+  setButtons(false);
+  resetPlayback();
+}
+
+function summarizeMarkers(markers) {
+  const counts = {};
+  for (const m of markers) {
+    const kind = String(m.note).split(' ')[0];
+    counts[kind] = (counts[kind] || 0) + 1;
+  }
+  return Object.entries(counts).map(([k, v]) => `${k}×${v}`).join(', ');
+}
+
+function setMeta(text, cls) {
+  const el = $('meta');
+  el.textContent = text;
+  el.className = cls || '';
+}
+
+$('file').addEventListener('change', ev => {
+  const f = ev.target.files && ev.target.files[0];
+  if (f) f.text().then(t => loadJson(t, f.name));
+});
+
+const drop = $('drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) f.text().then(t => loadJson(t, f.name));
+});
+
+// ---- ターミナル ----------------------------------------------------------
+
+// 本体（wwwroot/js/terminal.js の createMultiSessionTerminal）と同じオプションで開く。
+// ここを揃えないと「本体では崩れるがここでは崩れない」の比較が成立しない。
+function buildTerminal() {
+  if (term) {
+    term.dispose();
+    term = null;
+    webglAddon = null;
+  }
+  const host = $('term');
+  host.innerHTML = '';
+
+  term = new Terminal({
+    cursorBlink: false,
+    fontSize: 14,
+    fontFamily: "TermMix, 'Cascadia Mono', Consolas, monospace",
+    scrollback: 5000,
+    scrollOnInput: true,
+    scrollOnOutput: false,
+    scrollOnEraseInDisplay: $('edScroll').checked,
+    theme: {
+      background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#d4d4d4',
+      black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510',
+      blue: '#2472c8', magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5',
+      brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b',
+      brightYellow: '#f5f543', brightBlue: '#3b8eea', brightMagenta: '#d670d6',
+      brightCyan: '#29b8db', brightWhite: '#e5e5e5'
+    },
+    cols: data.cols || 120,
+    rows: data.rows || 30,
+    convertEol: $('convertEol').checked,
+    windowsPty: $('winPty').checked ? { backend: 'conpty' } : undefined,
+    allowProposedApi: true
+  });
+
+  if ($('uni11').checked && window.Unicode11Addon) {
+    term.loadAddon(new Unicode11Addon.Unicode11Addon());
+    term.unicode.activeVersion = '11';
+  }
+  term.open(host);
+  if ($('webgl').checked && window.WebglAddon) {
+    try {
+      webglAddon = new WebglAddon.WebglAddon();
+      term.loadAddon(webglAddon);
+    } catch (e) {
+      console.warn('WebGL アドオンを読めませんでした', e);
+      webglAddon = null;
+    }
+  }
+  $('dump').disabled = false;
+}
+
+// レンダラ/Unicode の切替はターミナルを作り直す必要がある（アドオンの後付け剥がしは不安定）
+for (const id of ['webgl', 'uni11', 'convertEol', 'winPty', 'edScroll']) {
+  $(id).addEventListener('change', () => { if (data) resetPlayback(); });
+}
+
+// ---- 再生 ----------------------------------------------------------------
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 再生位置。コマ送り・シーク・再生はすべてこの1つの位置を進める形で共有する
+// （別々に持つと「コマ送りで見つけた位置から続きを再生」ができなくなる）
+let pos = 0;
+let prevOffset = null;
+let running = false;
+
+function resetPlayback() {
+  buildTerminal();
+  // 本体の再生と同じく、頭を RIS（ESC c）で揃えてから流す
+  term.write('\x1bc');
+  pos = 0;
+  prevOffset = null;
+  abort = false;
+  $('last').style.display = 'none';
+  updatePos();
+}
+
+function updatePos(lastEntry) {
+  const total = data ? data.entries.length : 0;
+  const cur = data && pos > 0 ? data.entries[pos - 1] : null;
+  $('pos').textContent = data
+    ? `${pos} / ${total}` + (cur ? `  seq=${cur.seq}  t=${(cur.offsetMs / 1000).toFixed(2)}s` : '')
+    : '-';
+  if (lastEntry) {
+    const el = $('last');
+    el.style.display = 'block';
+    el.textContent = lastEntry.note != null
+      ? `#${lastEntry.seq} ---- ${lastEntry.note} ----`
+      : `#${lastEntry.seq} len=${(lastEntry.data || '').length}` +
+        (lastEntry.pending ? `  **PENDING=${escapeCtl(lastEntry.pending)}**` : '') +
+        `\n${escapeCtl(lastEntry.data || '')}`;
+  }
+}
+
+// サーバー側 RawChunkRing.Escape と同じ見え方にする（ダンプと突き合わせるため）
+function escapeCtl(s) {
+  let out = '';
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (ch === '\x1b') out += '\\e';
+    else if (ch === '\r') out += '\\r';
+    // サーバー側と同じく \n の後には実改行も入れる（複数行チャンクの見え方を揃えるため）
+    else if (ch === '\n') out += '\\n\n';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\x07') out += '\\a';
+    else if (ch === '\\') out += '\\\\';
+    else if (c < 0x20 || c === 0x7f) out += '\\x' + c.toString(16).padStart(2, '0');
+    else out += ch;
+  }
+  return out;
+}
+
+/** entries[pos] を1件消化して pos を進める。マーカーなら Resize だけ適用する。 */
+function advanceOne() {
+  const e = data.entries[pos];
+  pos++;
+  if (e.note != null) {
+    // Resize マーカーは記録どおりに再現する（折り返し位置が変わるので再現の要）
+    const m = $('applyResize').checked && /^Resize (\d+)x(\d+)$/.exec(e.note);
+    if (m) term.resize(Number(m[1]), Number(m[2]));
+  } else {
+    term.write(e.data || '');
+    prevOffset = e.offsetMs;
+  }
+  return e;
+}
+
+async function play() {
+  if (!data || running) return;
+  running = true;
+  abort = false;
+  setButtons(true);
+
+  // 頭から再生し直す場合だけ作り直す。コマ送りで進めた続きからならそのまま流す
+  if (pos === 0) resetPlayback();
+
+  const mode = $('mode').value;
+  const speed = Math.max(1, Number($('speed').value) || 1);
+
+  if ($('merge').checked) {
+    // 境界の影響を消した対照実験。ここで崩れなければ「境界が効いている」と言える
+    const joined = data.entries.filter(e => e.note == null).map(e => e.data || '').join('');
+    term.write(joined);
+    pos = data.entries.length;
+    updatePos();
+    finish('merged');
+    return;
+  }
+
+  const started = performance.now();
+  while (pos < data.entries.length) {
+    if (abort) break;
+    const next = data.entries[pos];
+    if (mode !== 'burst' && next.note == null && prevOffset != null) {
+      const divisor = mode === 'x' ? speed : 1;
+      // 上限は本体の再生と揃えて 2 秒/チャンク（無音区間で待たされないように）
+      const wait = Math.min(2000, Math.max(0, next.offsetMs - prevOffset)) / divisor;
+      if (wait >= 1) await sleep(wait);
+    }
+    if (abort) break;
+    advanceOne();
+    // 一時停止に反応できるよう定期的に制御を返す
+    if (mode === 'burst' && pos % 200 === 0) await sleep(0);
+  }
+  updatePos(pos > 0 ? data.entries[pos - 1] : null);
+  finish(`${Math.round(performance.now() - started)}ms`);
+}
+
+function finish(note) {
+  running = false;
+  setButtons(false);
+  $('meta').textContent +=
+    `\n${abort ? '一時停止' : '再生完了'}: ${pos}/${data.entries.length} 件まで消化 (${note})`;
+}
+
+function setButtons(isRunning) {
+  $('play').disabled = isRunning;
+  $('stop').disabled = !isRunning;
+  $('step').disabled = isRunning;
+  $('seek').disabled = isRunning;
+  $('reset').disabled = isRunning;
+}
+
+$('play').addEventListener('click', play);
+$('stop').addEventListener('click', () => { abort = true; });
+$('reset').addEventListener('click', () => { if (data) resetPlayback(); });
+
+// コマ送り: 1チャンクずつ入れて、いま入ったバイトを下の欄に出す。
+// 崩れた瞬間に止めれば、犯人チャンクがそこに表示されている。
+$('step').addEventListener('click', () => {
+  if (!data || running) return;
+  if (pos === 0) resetPlayback();
+  const n = Math.max(1, Number($('stepSize').value) || 1);
+  let last = null;
+  for (let i = 0; i < n && pos < data.entries.length; i++) last = advanceOne();
+  updatePos(last);
+});
+
+// 崩れる直前まで一気に進めてから、そこからコマ送りに切り替えるための移動。
+// 指定は seq（ダンプの #番号）で行う＝人間可読ダンプと同じ座標系で狙える。
+$('seek').addEventListener('click', () => {
+  if (!data || running) return;
+  const targetSeq = Number($('seekTo').value);
+  if (!Number.isFinite(targetSeq)) return;
+  resetPlayback();
+  let last = null;
+  while (pos < data.entries.length && data.entries[pos].seq <= targetSeq) last = advanceOne();
+  updatePos(last);
+});
+
+// バッファの中身をテキストで取り出す。画面の見た目（描画）と突き合わせて
+// 「バッファが壊れている」のか「描画だけ古い」のかを切り分けるために使う。
+$('dump').addEventListener('click', async () => {
+  if (!term) return;
+  const b = term.buffer.active;
+  const lines = [];
+  for (let i = 0; i < b.length; i++) {
+    const l = b.getLine(i);
+    lines.push(l ? l.translateToString(true) : '');
+  }
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    $('meta').textContent += `\nバッファ ${b.length} 行をクリップボードへコピーしました。`;
+  } catch {
+    console.log(text);
+    $('meta').textContent += '\nクリップボードが使えないため、バッファを DevTools コンソールへ出力しました。';
+  }
+});
+</script>
+</body>
+</html>
