@@ -57,6 +57,16 @@ namespace TerminalHub.Services
         bool UpdateCard(Guid sessionId, string card);
 
         /// <summary>
+        /// 診断用（実験モード）: 生チャンクリングの内容を実経路(JS interop=SignalR)で xterm へ
+        /// 再生する要求。デバッグエンドポイントから発行し、対象セッションを前面表示している
+        /// Circuit(Root.razor) が拾って再生する。docs/raw-chunk-ring.md 参照。
+        /// </summary>
+        event Action<Guid>? OnRawRingReplayRequested;
+
+        /// <summary>OnRawRingReplayRequested を発火する（デバッグエンドポイント用）。</summary>
+        void RequestRawRingReplay(Guid sessionId);
+
+        /// <summary>
         /// 本人証明(TERMINALHUB_SESSION_PROOF)からセッションを特定する。一致がなければ null。
         /// MCP の書き込み系ツール（将来的には send のエンベロープも）の本人検証はここに一点集約する。
         /// </summary>
@@ -587,6 +597,13 @@ namespace TerminalHub.Services
             return _sessionInfos.Values.FirstOrDefault(s =>
                 !string.IsNullOrEmpty(s.SessionProof) &&
                 string.Equals(s.SessionProof, proof, StringComparison.Ordinal));
+        }
+
+        public event Action<Guid>? OnRawRingReplayRequested;
+
+        public void RequestRawRingReplay(Guid sessionId)
+        {
+            OnRawRingReplayRequested?.Invoke(sessionId);
         }
 
         public bool UpdateCard(Guid sessionId, string card)

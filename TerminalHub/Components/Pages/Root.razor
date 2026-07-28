@@ -363,6 +363,8 @@
 
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
+    // 診断用（実験モード）: リング実経路再生の要求ハンドラ
+    private Action<Guid>? _rawRingReplayHandler;
 
     // StateHasChanged()デバウンス用
     private DateTime _lastStateChangedTime = DateTime.MinValue;
@@ -489,6 +491,17 @@
             _ = InvokeWithCircuitCultureAsync(() => { OnSessionsChanged(); return Task.CompletedTask; });
         };
         SessionManager.OnSessionsChanged += _sessionsChangedHandler;
+
+        // 診断用（実験モード）: リング実経路再生の要求を購読（ホットリロード対策で既存を解除）
+        if (_rawRingReplayHandler != null)
+        {
+            SessionManager.OnRawRingReplayRequested -= _rawRingReplayHandler;
+        }
+        _rawRingReplayHandler = sessionId =>
+        {
+            _ = InvokeWithCircuitCultureAsync(() => ReplayFromRawRingAsync(sessionId));
+        };
+        SessionManager.OnRawRingReplayRequested += _rawRingReplayHandler;
 
         // JavaScript interopはOnAfterRenderAsyncで実行
         return Task.CompletedTask;
@@ -2148,6 +2161,78 @@
     }
 
     /// <summary>
+    /// 診断用（実験モード）: 生チャンクリングの内容を「ライブ出力と同一の実経路」
+    /// （チャンクごとに1回の JS interop = SignalR 配送）・「記録どおりのチャンク境界」で
+    /// xterm へ再生する。POST /api/debug/raw-ring/{guid}/replay から発火する。
+    ///
+    /// 目的: ローカル直書き実験（ブラウザ内で term.write 直接＝シロ確認済み）との差分で、
+    /// 経路(SignalR/interop/terminal.js)起因の決定論的な表示崩れを単離する。
+    /// ここで崩れが再現すれば経路確定、しなければ非決定論（配送欠落）側の証拠になる。
+    ///
+    /// エミュレータ・リングには一切書かない（記録を汚さない）。再生後の xterm はリング内容に
+    /// なるため、通常表示へはセッション切替（エミュレータからのリプレイ）で戻す。
+    /// 再生中はライブ出力が書き込みロック待ちになるので、アイドル中のセッションで使うこと。
+    /// </summary>
+    private async Task ReplayFromRawRingAsync(Guid guid)
+    {
+        if (guid != activeSessionId || activeTerminal == null)
+        {
+            // 対象を前面表示している Circuit だけが再生する（複数ブラウザ接続時は各自が判定）
+            return;
+        }
+        var session = sessions.FirstOrDefault(s => s.SessionId == guid);
+        var ring = session?.TerminalRawRing;
+        if (session == null || ring == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var entries = ring.Snapshot();
+            var hold = System.Diagnostics.Stopwatch.StartNew();
+            int chunks = 0;
+            long chars = 0;
+            await _terminalWriteLock.WaitAsync();
+            try
+            {
+                if (guid != activeSessionId || activeTerminal == null)
+                {
+                    return;
+                }
+                // ESC c (RIS) で全リセットしてから、リングのチャンクを1つずつ実経路で流す。
+                // ライブ経路(L1698付近)と同じ WriteToTerminalAsync ＝ チャンクごとに1回の interop 呼び出し。
+                await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc");
+                foreach (var e in entries)
+                {
+                    if (e.Note != null)
+                    {
+                        continue; // マーカー（BeginReplay 等）はデータではないのでスキップ
+                    }
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, e.Data);
+                    chunks++;
+                    chars += e.Data.Length;
+                }
+            }
+            finally
+            {
+                _terminalWriteLock.Release();
+            }
+            Logger.LogInformation(
+                "[RawRingReplay] 実経路リング再生完了: {Chunks}チャンク {Chars}文字 保持{HoldMs}ms session={SessionId}（表示を戻すにはセッション切替）",
+                chunks, chars, hold.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
+        }
+        catch (JSDisconnectedException)
+        {
+            // 回線切断時は何もしない
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[RawRingReplay] 実経路リング再生に失敗: session={SessionId}", guid);
+        }
+    }
+
+    /// <summary>
     /// フロー制御: クライアント側のバッファが溜まりすぎた時に呼ばれる
     /// ConPTYからの出力読み取りを一時停止する
     /// </summary>
@@ -3205,6 +3290,11 @@
         {
             SessionManager.OnSessionsChanged -= _sessionsChangedHandler;
             _sessionsChangedHandler = null;
+        }
+        if (_rawRingReplayHandler != null)
+        {
+            SessionManager.OnRawRingReplayRequested -= _rawRingReplayHandler;
+            _rawRingReplayHandler = null;
         }
 
         // ShellPanelの破棄（BottomPanelコンポーネント経由）

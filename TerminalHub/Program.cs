@@ -340,6 +340,23 @@ app.MapGet("/api/debug/raw-ring/{sessionId:guid}", (Guid sessionId, ISessionMana
     var header = savedPath != null ? $"# saved: {savedPath}{Environment.NewLine}" : string.Empty;
     return Results.Text(header + ring.DumpText(), "text/plain; charset=utf-8");
 });
+// 診断用（実験モード）: リングの内容を「実経路」(per-chunk の JS interop = SignalR)・
+// 「記録どおりのチャンク境界」で xterm へ再生する。ローカル直書き実験（term.write 直接=シロ）との
+// 差分で、経路起因の決定論的な表示崩れを単離するのが目的。対象セッションを前面表示している
+// ブラウザで再生される。エミュレータ・リングには書かない（記録を汚さない）。
+app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, ISessionManager sessionManager) =>
+{
+    var session = sessionManager.GetSessionInfo(sessionId);
+    if (session?.TerminalRawRing == null)
+    {
+        return Results.NotFound($"セッションが見つかりません: {sessionId}");
+    }
+    sessionManager.RequestRawRingReplay(sessionId);
+    return Results.Text(
+        "リング再生要求を発行しました。対象セッションを前面表示しているブラウザで再生されます" +
+        "（前面でない場合は何も起きません）。終了後はセッション切替で通常表示に戻せます。",
+        "text/plain; charset=utf-8");
+});
 
 // MCP エンドポイント（/mcp）。Claude Code 等の MCP クライアントがここへ接続する。
 app.MapMcp("/mcp");
