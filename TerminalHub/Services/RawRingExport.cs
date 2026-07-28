@@ -22,6 +22,10 @@ namespace TerminalHub.Services
 
         private static readonly JsonSerializerOptions SerializerOptions = new()
         {
+            // 読み手は rawring-replay.html（JS）なので camelCase で出す。
+            // 既定のままだと C# のプロパティ名そのまま（PascalCase）で出力され、
+            // プレイヤーが entries/cols/data を見つけられず1件も読み込めない。
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             // 生データには制御文字・日本語・記号が入る。既定のエスケープだと肥大するうえ
             // 目視での突き合わせができないので、非 ASCII はそのまま出す（JSON 文字列としては合法）
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,

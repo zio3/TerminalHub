@@ -2192,10 +2192,13 @@
         try
         {
             var entries = ring.Snapshot();
-            var hold = System.Diagnostics.Stopwatch.StartNew();
             int chunks = 0;
             long chars = 0;
             await _terminalWriteLock.WaitAsync();
+            // ロック取得**後**に計測を始める。取得前から回すとライブ出力との競合待ちが
+            // 「保持時間」に混ざり、再生がどれだけライブを止めたのかが読めなくなる
+            // （PR #172 で同じ誤りを指摘済み）
+            var hold = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 if (guid != activeSessionId || activeTerminal == null)

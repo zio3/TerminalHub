@@ -268,7 +268,8 @@ function escapeCtl(s) {
     const c = ch.codePointAt(0);
     if (ch === '\x1b') out += '\\e';
     else if (ch === '\r') out += '\\r';
-    else if (ch === '\n') out += '\\n';
+    // サーバー側と同じく \n の後には実改行も入れる（複数行チャンクの見え方を揃えるため）
+    else if (ch === '\n') out += '\\n\n';
     else if (ch === '\t') out += '\\t';
     else if (ch === '\x07') out += '\\a';
     else if (ch === '\\') out += '\\\\';
