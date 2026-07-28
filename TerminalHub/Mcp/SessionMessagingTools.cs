@@ -32,7 +32,8 @@ namespace TerminalHub.Mcp
             string terminalType,
             string folderPath,
             string status,
-            bool hasCard);
+            bool hasCard,
+            string memo);
 
         /// <summary>
         /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
@@ -45,7 +46,8 @@ namespace TerminalHub.Mcp
             "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
             "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
             "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。" +
-            "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。")]
+            "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。" +
+            "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -88,7 +90,10 @@ namespace TerminalHub.Mcp
                     status,
                     // カード本文は一覧に含めない(GUID 指定の get_card で読む)。有無だけ知らせて
                     // 「カード持ちのセッションだけ get_card する」を可能にし、N 回の空振りを省く。
-                    !string.IsNullOrEmpty(s.Card)));
+                    !string.IsNullOrEmpty(s.Card),
+                    // メモは短い札(UI の一覧に出るのと同じもの)なので本文ごと返す。
+                    // ディスパッチャが worktree レーンの空き(「タスク無し」等)を判別する用途。
+                    s.Memo ?? ""));
             }
             return result;
         }
