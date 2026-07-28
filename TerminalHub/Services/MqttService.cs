@@ -101,7 +101,7 @@ public class MqttService : IHostedService, IDisposable
         var factory = new MqttClientFactory();
         _mqttClient = factory.CreateMqttClient();
 
-        var mqttHost = _configuration.GetValue<string>("Mqtt:Host") ?? "vps3.zio3.net";
+        var mqttHost = _configuration.GetValue<string>("Mqtt:Host") ?? "mqtt.zio3.net";
         var mqttPort = _configuration.GetValue<int>("Mqtt:Port", 1883);
         var mqttUsername = _configuration.GetValue<string>("Mqtt:Username");
         var mqttPassword = _configuration.GetValue<string>("Mqtt:Password");
@@ -204,7 +204,7 @@ public class MqttService : IHostedService, IDisposable
 
         var delays = new[] { 5, 10, 20, 30, 30, 30, 30, 30, 30, 30, 30, 30 };
 
-        var mqttHost = _configuration.GetValue<string>("Mqtt:Host") ?? "vps3.zio3.net";
+        var mqttHost = _configuration.GetValue<string>("Mqtt:Host") ?? "mqtt.zio3.net";
         var mqttPort = _configuration.GetValue<int>("Mqtt:Port", 1883);
         var mqttUsername = _configuration.GetValue<string>("Mqtt:Username");
         var mqttPassword = _configuration.GetValue<string>("Mqtt:Password");
