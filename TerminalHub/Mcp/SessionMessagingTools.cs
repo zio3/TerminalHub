@@ -8,7 +8,8 @@ namespace TerminalHub.Mcp
     /// <summary>
     /// セッション間メッセージング用の MCP ツール群。
     /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)・
-    /// メッセージ送信(send_to_session)・メモ設定(set_memo)を提供する最小構成。
+    /// メッセージ送信(send_to_session)・メモ/カード設定(set_memo/set_card/get_card)・
+    /// 依頼の状況札(get_context/update_context)を提供する最小構成。
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
@@ -18,7 +19,7 @@ namespace TerminalHub.Mcp
     ///   書き込み系(set_memo/set_card)は proof の検証で本人のみに機構的に制限する。
     /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
     ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
-    ///   SessionProof のようなセッション属性は除く）。
+    ///   SessionProof、および依頼IDで引く状況札=ContextSummary は例外として持つ）。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -38,8 +39,9 @@ namespace TerminalHub.Mcp
         /// <summary>
         /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
         /// 呼び出し側（エージェント）にリトライ判断を委ねる。
+        /// contextId は contextId="new" で送信したときだけ発行された ID が入る。
         /// </summary>
-        public record SendResult(bool success, string message);
+        public record SendResult(bool success, string message, string? contextId = null);
 
         [McpServerTool(Name = "list_sessions")]
         [Description(
@@ -105,15 +107,21 @@ namespace TerminalHub.Mcp
             "相手がユーザーの許可/選択待ち(waiting)のときは送らず success=false を返す(承認プロンプトを誤確定させないため。待ち解消後に再試行)。" +
             "単なる作業中(busy)は送信可(AI CLI がプロンプトをキューに積む)。" +
             "宛先が未起動のときも success=false(自動起動しない・ユーザーに起動を依頼し、自動リトライはしない)。" +
-            "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。")]
+            "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
+            "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
+            "受け手には本文末尾に contextId が自動付与され、あなたは get_context をポーリングして結果を受け取れる" +
+            "(返信を受け取るセッションを持たない外部クライアント向けの依頼経路)。既存の contextId を渡すと同じ札への続報になる。")]
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
+            IContextRepository contextRepository,
             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
             string target,
             [Description("送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨。")]
             string message,
             [Description("末尾にEnterを送って実行を確定するか(既定 true)。false なら入力欄に流し込むだけ。")]
-            bool submit = true)
+            bool submit = true,
+            [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
+            string? contextId = null)
         {
             // 宛先解決: GUID を優先し、ダメなら表示名の完全一致で探す。
             SessionInfo? info = null;
@@ -143,19 +151,64 @@ namespace TerminalHub.Mcp
                     $"ユーザーに「TerminalHub で『{info.GetDisplayName()}』を開いて起動してください」と依頼し、" +
                     $"status=ready になったのを確認してから再送してください。自動でリトライしないこと。");
 
-            // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
-            // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
-            await conpty.WriteAsync(message);
-            if (submit)
+            // ContextSummary の紐づけ。作成は全チェック通過後（＝実際に送るときだけ）に行い、
+            // 送信失敗時に孤児レコードを残さない。受け手への ID 伝達はサーバーが定型文で担う
+            // （送信者の手書きに任せると書き忘れ事故が起きるため）。改行ではなくスペース連結に
+            // しているのは、TUI CLI が本文中の改行を送信確定と誤解釈する事故を避けるため。
+            string? issuedContextId = null;
+            var deliveredMessage = message;
+            if (!string.IsNullOrWhiteSpace(contextId))
             {
-                // テキスト送信後、Enter 送信前に待機する。
-                // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
-                // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
-                await Task.Delay(200);
-                await conpty.WriteAsync("\r");
+                string effectiveId;
+                if (string.Equals(contextId, "new", StringComparison.OrdinalIgnoreCase))
+                {
+                    effectiveId = Guid.NewGuid().ToString("N");
+                    await contextRepository.CreateAsync(effectiveId);
+                    issuedContextId = effectiveId;
+                }
+                else
+                {
+                    // 既存 ID の続報。タイポで紐づけが静かに失われるのを防ぐため存在確認する。
+                    var existing = await contextRepository.GetAsync(contextId);
+                    if (existing == null)
+                        return new SendResult(false,
+                            $"contextId が見つかりません: {contextId}。新規発行なら contextId=\"new\" を指定してください。");
+                    effectiveId = contextId;
+                }
+                deliveredMessage = $"{message} [contextId: {effectiveId} — 状況・結果は update_context で共有]";
             }
 
-            return new SendResult(true, $"送信しました: {info.GetDisplayName()} (submit={submit})");
+            // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
+            // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
+            try
+            {
+                await conpty.WriteAsync(deliveredMessage);
+                if (submit)
+                {
+                    // テキスト送信後、Enter 送信前に待機する。
+                    // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
+                    // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
+                    await Task.Delay(200);
+                    await conpty.WriteAsync("\r");
+                }
+            }
+            catch
+            {
+                // 書き込み自体の失敗（ConPTY切断等）では、発行したばかりの札を片付ける。
+                // submitted は終端状態でなく TTL 掃除の対象外のため、残すと永続の孤児になる。
+                // DeleteAsync は例外を投げない（送信エラー本体を握り潰さない）。
+                if (issuedContextId != null)
+                {
+                    await contextRepository.DeleteAsync(issuedContextId);
+                }
+                throw;
+            }
+
+            return new SendResult(true,
+                issuedContextId != null
+                    ? $"送信しました: {info.GetDisplayName()} (submit={submit})。contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。"
+                    : $"送信しました: {info.GetDisplayName()} (submit={submit})",
+                issuedContextId);
         }
 
         [McpServerTool(Name = "set_memo")]
@@ -274,6 +327,108 @@ namespace TerminalHub.Mcp
                 card.Length == 0
                     ? "自己紹介カードは未設定です(このセッションはまだ自己申告していない)。"
                     : "取得しました(自己申告・古い可能性あり)。");
+        }
+
+        // ---- ContextSummary（依頼の状況札・A2A の contextId に対応） ----
+        //
+        // 設計（壁打ちで確定。docs/mcp-session-messaging.md 参照）:
+        // - send_to_session（push・受信箱がある相手用）の欠けていた片割れ。受信箱を持たない
+        //   外部クライアント（Claude Desktop 等）が依頼の結果を pull で受け取るための仕組み。
+        // - サーバーが持つのは「contextId → status＋要約1枚」だけ。追記ログ・claim・担当割当・
+        //   完了通知・一覧（ID なし列挙）は作らない（調整ロジックはクライアント側）。
+        // - contextId は capability 兼用（知っている=読み書きできる）。A2A の contextId と同じく
+        //   最初の送信時にサーバーが発行して返す。status の語彙は A2A TaskState をそのまま使う。
+
+        private static readonly string[] AllowedContextStatuses =
+            { "submitted", "working", "completed", "failed", "canceled" };
+
+        /// <summary>
+        /// get_context の結果。updatedBy は最終書き込み者の検証済みセッション名
+        /// （proof 付きで書かれた場合のみ。null なら無記名＝外部クライアント等の書き込み）。
+        /// </summary>
+        public record ContextSummaryResult(
+            bool success,
+            string? contextId,
+            string? status,
+            string? summary,
+            string? updatedAt,
+            string? updatedBy,
+            string message);
+
+        [McpServerTool(Name = "get_context")]
+        [Description(
+            "ContextSummary(依頼の状況札)を取得する。contextId は A2A の contextId に対応する依頼単位の ID" +
+            "(モデルのコンテキストウィンドウとは無関係)。send_to_session の contextId=\"new\" で発行される。" +
+            "依頼側はこれをポーリングして進捗・結果を受け取る(サーバーからの通知は無い)。" +
+            "ID を知っていれば誰でも読める(ID が読み書きの資格を兼ねる)。" +
+            "updatedBy は最終書き込み者の検証済みセッション名(null なら無記名の書き込み)。")]
+        public static async Task<ContextSummaryResult> GetContext(
+            IContextRepository contextRepository,
+            [Description("対象の contextId。")]
+            string contextId)
+        {
+            var record = await contextRepository.GetAsync(contextId ?? "");
+            if (record == null)
+                return new ContextSummaryResult(false, null, null, null, null, null,
+                    $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
+
+            return new ContextSummaryResult(true, record.ContextId, record.Status, record.Summary,
+                record.UpdatedAt.ToString("o"),
+                record.UpdatedByName,
+                record.Summary.Length == 0 ? "取得しました(要約はまだ書かれていません)。" : "取得しました。");
+        }
+
+        [McpServerTool(Name = "update_context")]
+        [Description(
+            "ContextSummary(依頼の状況札)の要約を全体上書きし、任意で status を更新する。" +
+            "依頼を受けた側が「今どうなっているか・結果」を書く用途(依頼側は get_context で読む)。" +
+            "summary は要約1枚(履歴は積まれない)。長い成果物はファイルに書いてパスを載せる。" +
+            "status は submitted / working / completed / failed / canceled (A2A TaskState 準拠)。" +
+            "完了時は status=completed と結果の要約をセットで書くこと。" +
+            "セッション内から書くときは proof(環境変数 TERMINALHUB_SESSION_PROOF)を必ず渡すこと" +
+            "(「どのセッションが書いたか」が検証済みで記録され、依頼側が信頼できる)。" +
+            "proof 無しでも書けるが無記名になる(外部クライアント用)。")]
+        public static async Task<SendResult> UpdateContext(
+            ISessionManager sessionManager,
+            IContextRepository contextRepository,
+            [Description("対象の contextId(受け取ったメッセージ末尾に付与されている)。")]
+            string contextId,
+            [Description("状況・結果の要約(全体上書き)。長いものはファイルパスを書く。")]
+            string summary,
+            [Description("状態。submitted / working / completed / failed / canceled のいずれか。省略時は状態を変えず要約だけ更新。")]
+            string? status = null,
+            [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。セッション内から書くなら必ず渡す。外部クライアント(環境変数なし)は省略可=無記名。")]
+            string? proof = null)
+        {
+            if (!string.IsNullOrEmpty(status) &&
+                !AllowedContextStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
+                return new SendResult(false,
+                    $"status が不正です: {status}。使えるのは {string.Join(" / ", AllowedContextStatuses)} のみ。");
+
+            // 書き込み元の検証(任意)。proof が正しければ「どのセッションが書いたか」を検証済みで記録する。
+            // proof が渡されたのに一致しない場合は、無記名として黙って通さずエラーにする
+            // (古い proof の使い回し等に気づかせる。無記名で書きたいなら proof を渡さなければよい)。
+            SessionInfo? writer = null;
+            if (!string.IsNullOrWhiteSpace(proof))
+            {
+                writer = sessionManager.ResolveBySessionProof(proof);
+                if (writer == null)
+                    return new SendResult(false, ProofRejectedMessage);
+            }
+
+            var updated = await contextRepository.UpdateAsync(
+                contextId ?? "",
+                summary ?? string.Empty,
+                status?.ToLowerInvariant(),
+                writer?.SessionId.ToString(),
+                writer?.GetDisplayName());
+            if (!updated)
+                return new SendResult(false,
+                    $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
+
+            return new SendResult(true,
+                $"ContextSummary を更新しました(status={status ?? "変更なし"}, " +
+                $"記名={(writer != null ? writer.GetDisplayName() : "無記名")})。");
         }
     }
 }
