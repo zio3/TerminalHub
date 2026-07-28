@@ -29,6 +29,11 @@
   #drop { border:1px dashed #555; border-radius:6px; padding:10px; text-align:center; color:#888; font-size:13px; margin-bottom:8px; }
   #drop.over { border-color:#3b8eea; color:#3b8eea; }
   #term { width:100%; overflow:auto; }
+  #pos { font-family:Consolas,monospace; color:#9a9a9a; }
+  /* コマ送りで「いま入ったバイト」を見るための欄。崩れた瞬間の犯人チャンクを目視で特定する */
+  #last { font-family:Consolas,monospace; font-size:12px; color:#23d18b; background:#1a1a1a;
+          border:1px solid #333; border-radius:4px; padding:6px; margin-bottom:8px;
+          max-height:96px; overflow:auto; white-space:pre-wrap; word-break:break-all; display:none; }
   .warn { color:#f5f543; }
   .err { color:#f14c4c; }
 </style>
@@ -56,11 +61,21 @@
   <label><input type="checkbox" id="applyResize" checked /> 途中の Resize を適用</label>
   <label><input type="checkbox" id="merge" /> チャンク境界を無視して連結</label>
   <button id="play" disabled>再生</button>
-  <button id="stop" disabled>停止</button>
+  <button id="stop" disabled>一時停止</button>
+  <button id="reset" disabled>頭出し</button>
   <button id="dump" disabled>バッファをコピー</button>
 </div>
 
+<div class="bar">
+  <button id="step" disabled>コマ送り ▶</button>
+  <label>× <input type="number" id="stepSize" value="1" min="1" max="500" /> チャンク</label>
+  <label>ここまで一気に: <input type="number" id="seekTo" min="0" placeholder="seq" /></label>
+  <button id="seek" disabled>移動</button>
+  <span id="pos">-</span>
+</div>
+
 <div id="meta">まだ何も読み込んでいません。</div>
+<div id="last"></div>
 <div id="term"></div>
 
 <script>
@@ -106,8 +121,8 @@ function loadJson(text, sourceName) {
     `PENDING（シーケンス途中で切れたチャンク）: ${pending.length} 件${pending.length ? ' ← 孤児フラグメントの容疑あり' : ''}`,
   ].join('\n'), pending.length ? 'warn' : null);
 
-  $('play').disabled = false;
-  buildTerminal();
+  setButtons(false);
+  resetPlayback();
 }
 
 function summarizeMarkers(markers) {
@@ -195,79 +210,161 @@ function buildTerminal() {
 
 // レンダラ/Unicode の切替はターミナルを作り直す必要がある（アドオンの後付け剥がしは不安定）
 for (const id of ['webgl', 'uni11']) {
-  $(id).addEventListener('change', () => { if (data) buildTerminal(); });
+  $(id).addEventListener('change', () => { if (data) resetPlayback(); });
 }
 
 // ---- 再生 ----------------------------------------------------------------
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function play() {
-  if (!data) return;
-  abort = false;
-  $('play').disabled = true;
-  $('stop').disabled = false;
+// 再生位置。コマ送り・シーク・再生はすべてこの1つの位置を進める形で共有する
+// （別々に持つと「コマ送りで見つけた位置から続きを再生」ができなくなる）
+let pos = 0;
+let prevOffset = null;
+let running = false;
 
+function resetPlayback() {
   buildTerminal();
   // 本体の再生と同じく、頭を RIS（ESC c）で揃えてから流す
   term.write('\x1bc');
+  pos = 0;
+  prevOffset = null;
+  abort = false;
+  $('last').style.display = 'none';
+  updatePos();
+}
+
+function updatePos(lastEntry) {
+  const total = data ? data.entries.length : 0;
+  const cur = data && pos > 0 ? data.entries[pos - 1] : null;
+  $('pos').textContent = data
+    ? `${pos} / ${total}` + (cur ? `  seq=${cur.seq}  t=${(cur.offsetMs / 1000).toFixed(2)}s` : '')
+    : '-';
+  if (lastEntry) {
+    const el = $('last');
+    el.style.display = 'block';
+    el.textContent = lastEntry.note != null
+      ? `#${lastEntry.seq} ---- ${lastEntry.note} ----`
+      : `#${lastEntry.seq} len=${(lastEntry.data || '').length}` +
+        (lastEntry.pending ? `  **PENDING=${escapeCtl(lastEntry.pending)}**` : '') +
+        `\n${escapeCtl(lastEntry.data || '')}`;
+  }
+}
+
+// サーバー側 RawChunkRing.Escape と同じ見え方にする（ダンプと突き合わせるため）
+function escapeCtl(s) {
+  let out = '';
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (ch === '\x1b') out += '\\e';
+    else if (ch === '\r') out += '\\r';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\x07') out += '\\a';
+    else if (ch === '\\') out += '\\\\';
+    else if (c < 0x20 || c === 0x7f) out += '\\x' + c.toString(16).padStart(2, '0');
+    else out += ch;
+  }
+  return out;
+}
+
+/** entries[pos] を1件消化して pos を進める。マーカーなら Resize だけ適用する。 */
+function advanceOne() {
+  const e = data.entries[pos];
+  pos++;
+  if (e.note != null) {
+    // Resize マーカーは記録どおりに再現する（折り返し位置が変わるので再現の要）
+    const m = $('applyResize').checked && /^Resize (\d+)x(\d+)$/.exec(e.note);
+    if (m) term.resize(Number(m[1]), Number(m[2]));
+  } else {
+    term.write(e.data || '');
+    prevOffset = e.offsetMs;
+  }
+  return e;
+}
+
+async function play() {
+  if (!data || running) return;
+  running = true;
+  abort = false;
+  setButtons(true);
+
+  // 頭から再生し直す場合だけ作り直す。コマ送りで進めた続きからならそのまま流す
+  if (pos === 0) resetPlayback();
 
   const mode = $('mode').value;
   const speed = Math.max(1, Number($('speed').value) || 1);
-  const applyResize = $('applyResize').checked;
-  const merge = $('merge').checked;
-  const entries = data.entries;
 
-  if (merge) {
+  if ($('merge').checked) {
     // 境界の影響を消した対照実験。ここで崩れなければ「境界が効いている」と言える
-    const joined = entries.filter(e => e.note == null).map(e => e.data || '').join('');
+    const joined = data.entries.filter(e => e.note == null).map(e => e.data || '').join('');
     term.write(joined);
-    finish(entries.length, joined.length, 'merged');
+    pos = data.entries.length;
+    updatePos();
+    finish('merged');
     return;
   }
 
-  let prevOffset = null;
-  let chunks = 0, chars = 0;
   const started = performance.now();
-
-  for (const e of entries) {
+  while (pos < data.entries.length) {
     if (abort) break;
-
-    if (e.note != null) {
-      // Resize マーカーは記録どおりに再現する（折り返し位置が変わるので再現の要）
-      const m = applyResize && /^Resize (\d+)x(\d+)$/.exec(e.note);
-      if (m) {
-        term.resize(Number(m[1]), Number(m[2]));
-      }
-      continue;
-    }
-
-    if (mode !== 'burst' && prevOffset != null) {
+    const next = data.entries[pos];
+    if (mode !== 'burst' && next.note == null && prevOffset != null) {
       const divisor = mode === 'x' ? speed : 1;
       // 上限は本体の再生と揃えて 2 秒/チャンク（無音区間で待たされないように）
-      const wait = Math.min(2000, Math.max(0, e.offsetMs - prevOffset)) / divisor;
+      const wait = Math.min(2000, Math.max(0, next.offsetMs - prevOffset)) / divisor;
       if (wait >= 1) await sleep(wait);
     }
-    prevOffset = e.offsetMs;
-
-    const d = e.data || '';
-    term.write(d);
-    chunks++;
-    chars += d.length;
+    if (abort) break;
+    advanceOne();
+    // 一時停止に反応できるよう定期的に制御を返す
+    if (mode === 'burst' && pos % 200 === 0) await sleep(0);
   }
-
-  finish(chunks, chars, `${Math.round(performance.now() - started)}ms`);
+  updatePos(pos > 0 ? data.entries[pos - 1] : null);
+  finish(`${Math.round(performance.now() - started)}ms`);
 }
 
-function finish(chunks, chars, note) {
-  $('play').disabled = false;
-  $('stop').disabled = true;
-  const el = $('meta');
-  el.textContent += `\n再生${abort ? '中断' : '完了'}: ${chunks} チャンク / ${chars.toLocaleString()} 文字 (${note})`;
+function finish(note) {
+  running = false;
+  setButtons(false);
+  $('meta').textContent +=
+    `\n${abort ? '一時停止' : '再生完了'}: ${pos}/${data.entries.length} 件まで消化 (${note})`;
+}
+
+function setButtons(isRunning) {
+  $('play').disabled = isRunning;
+  $('stop').disabled = !isRunning;
+  $('step').disabled = isRunning;
+  $('seek').disabled = isRunning;
+  $('reset').disabled = isRunning;
 }
 
 $('play').addEventListener('click', play);
 $('stop').addEventListener('click', () => { abort = true; });
+$('reset').addEventListener('click', () => { if (data) resetPlayback(); });
+
+// コマ送り: 1チャンクずつ入れて、いま入ったバイトを下の欄に出す。
+// 崩れた瞬間に止めれば、犯人チャンクがそこに表示されている。
+$('step').addEventListener('click', () => {
+  if (!data || running) return;
+  if (pos === 0) resetPlayback();
+  const n = Math.max(1, Number($('stepSize').value) || 1);
+  let last = null;
+  for (let i = 0; i < n && pos < data.entries.length; i++) last = advanceOne();
+  updatePos(last);
+});
+
+// 崩れる直前まで一気に進めてから、そこからコマ送りに切り替えるための移動。
+// 指定は seq（ダンプの #番号）で行う＝人間可読ダンプと同じ座標系で狙える。
+$('seek').addEventListener('click', () => {
+  if (!data || running) return;
+  const targetSeq = Number($('seekTo').value);
+  if (!Number.isFinite(targetSeq)) return;
+  resetPlayback();
+  let last = null;
+  while (pos < data.entries.length && data.entries[pos].seq <= targetSeq) last = advanceOne();
+  updatePos(last);
+});
 
 // バッファの中身をテキストで取り出す。画面の見た目（描画）と突き合わせて
 // 「バッファが壊れている」のか「描画だけ古い」のかを切り分けるために使う。
