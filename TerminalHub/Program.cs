@@ -344,17 +344,21 @@ app.MapGet("/api/debug/raw-ring/{sessionId:guid}", (Guid sessionId, ISessionMana
 // 「記録どおりのチャンク境界」で xterm へ再生する。ローカル直書き実験（term.write 直接=シロ）との
 // 差分で、経路起因の決定論的な表示崩れを単離するのが目的。対象セッションを前面表示している
 // ブラウザで再生される。エミュレータ・リングには書かない（記録を汚さない）。
-app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, ISessionManager sessionManager) =>
+// ?pacing=real を付けると、記録された到達時刻の間隔（上限2秒/チャンク）も再現しながら流す。
+// タイミング依存（レース・xterm の書き込みキュー消化との交錯等）の崩れを検証する用途。
+app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, string? pacing, ISessionManager sessionManager) =>
 {
     var session = sessionManager.GetSessionInfo(sessionId);
     if (session?.TerminalRawRing == null)
     {
         return Results.NotFound($"セッションが見つかりません: {sessionId}");
     }
-    sessionManager.RequestRawRingReplay(sessionId);
+    var paced = string.Equals(pacing, "real", StringComparison.OrdinalIgnoreCase);
+    sessionManager.RequestRawRingReplay(sessionId, paced);
     return Results.Text(
-        "リング再生要求を発行しました。対象セッションを前面表示しているブラウザで再生されます" +
-        "（前面でない場合は何も起きません）。終了後はセッション切替で通常表示に戻せます。",
+        $"リング再生要求を発行しました（pacing={(paced ? "real=記録間隔を再現" : "burst=一括")}）。" +
+        "対象セッションを前面表示しているブラウザで再生されます（前面でない場合は何も起きません）。" +
+        "終了後はセッション切替で通常表示に戻せます。",
         "text/plain; charset=utf-8");
 });
 

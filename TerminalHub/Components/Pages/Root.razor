@@ -364,7 +364,7 @@
     // SessionManagerイベントハンドラー
     private EventHandler? _sessionsChangedHandler;
     // 診断用（実験モード）: リング実経路再生の要求ハンドラ
-    private Action<Guid>? _rawRingReplayHandler;
+    private Action<Guid, bool>? _rawRingReplayHandler;
 
     // StateHasChanged()デバウンス用
     private DateTime _lastStateChangedTime = DateTime.MinValue;
@@ -497,9 +497,9 @@
         {
             SessionManager.OnRawRingReplayRequested -= _rawRingReplayHandler;
         }
-        _rawRingReplayHandler = sessionId =>
+        _rawRingReplayHandler = (sessionId, paced) =>
         {
-            _ = InvokeWithCircuitCultureAsync(() => ReplayFromRawRingAsync(sessionId));
+            _ = InvokeWithCircuitCultureAsync(() => ReplayFromRawRingAsync(sessionId, paced));
         };
         SessionManager.OnRawRingReplayRequested += _rawRingReplayHandler;
 
@@ -2172,8 +2172,10 @@
     /// エミュレータ・リングには一切書かない（記録を汚さない）。再生後の xterm はリング内容に
     /// なるため、通常表示へはセッション切替（エミュレータからのリプレイ）で戻す。
     /// 再生中はライブ出力が書き込みロック待ちになるので、アイドル中のセッションで使うこと。
+    /// paced=true は記録された到達時刻の間隔（上限2秒/チャンク）も再現する。リングの記録期間
+    /// ぶんロックを保持し続ける点に注意（実験専用）。
     /// </summary>
-    private async Task ReplayFromRawRingAsync(Guid guid)
+    private async Task ReplayFromRawRingAsync(Guid guid, bool paced)
     {
         if (guid != activeSessionId || activeTerminal == null)
         {
@@ -2203,12 +2205,23 @@
                 // ESC c (RIS) で全リセットしてから、リングのチャンクを1つずつ実経路で流す。
                 // ライブ経路(L1698付近)と同じ WriteToTerminalAsync ＝ チャンクごとに1回の interop 呼び出し。
                 await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc");
+                DateTime? prevTime = null;
                 foreach (var e in entries)
                 {
                     if (e.Note != null)
                     {
                         continue; // マーカー（BeginReplay 等）はデータではないのでスキップ
                     }
+                    if (paced && prevTime.HasValue)
+                    {
+                        // 記録された到達間隔を再現する（アイドル区間で無駄に待たないよう上限2秒）
+                        var gapMs = (int)Math.Clamp((e.TimestampUtc - prevTime.Value).TotalMilliseconds, 0, 2000);
+                        if (gapMs > 1)
+                        {
+                            await Task.Delay(gapMs);
+                        }
+                    }
+                    prevTime = e.TimestampUtc;
                     await TerminalService.WriteToTerminalAsync(activeTerminal, e.Data);
                     chunks++;
                     chars += e.Data.Length;
@@ -2219,8 +2232,8 @@
                 _terminalWriteLock.Release();
             }
             Logger.LogInformation(
-                "[RawRingReplay] 実経路リング再生完了: {Chunks}チャンク {Chars}文字 保持{HoldMs}ms session={SessionId}（表示を戻すにはセッション切替）",
-                chunks, chars, hold.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
+                "[RawRingReplay] 実経路リング再生完了: {Chunks}チャンク {Chars}文字 保持{HoldMs}ms pacing={Pacing} session={SessionId}（表示を戻すにはセッション切替）",
+                chunks, chars, hold.ElapsedMilliseconds, paced ? "real" : "burst", guid.ToString().Substring(0, 8));
         }
         catch (JSDisconnectedException)
         {

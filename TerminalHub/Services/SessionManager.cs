@@ -59,12 +59,13 @@ namespace TerminalHub.Services
         /// <summary>
         /// 診断用（実験モード）: 生チャンクリングの内容を実経路(JS interop=SignalR)で xterm へ
         /// 再生する要求。デバッグエンドポイントから発行し、対象セッションを前面表示している
-        /// Circuit(Root.razor) が拾って再生する。docs/raw-chunk-ring.md 参照。
+        /// Circuit(Root.razor) が拾って再生する。paced=true なら記録された到達時刻の間隔も
+        /// 再現しながら流す（タイミング依存の崩れ検証用）。docs/raw-chunk-ring.md 参照。
         /// </summary>
-        event Action<Guid>? OnRawRingReplayRequested;
+        event Action<Guid, bool>? OnRawRingReplayRequested;
 
         /// <summary>OnRawRingReplayRequested を発火する（デバッグエンドポイント用）。</summary>
-        void RequestRawRingReplay(Guid sessionId);
+        void RequestRawRingReplay(Guid sessionId, bool paced);
 
         /// <summary>
         /// 本人証明(TERMINALHUB_SESSION_PROOF)からセッションを特定する。一致がなければ null。
@@ -599,11 +600,11 @@ namespace TerminalHub.Services
                 string.Equals(s.SessionProof, proof, StringComparison.Ordinal));
         }
 
-        public event Action<Guid>? OnRawRingReplayRequested;
+        public event Action<Guid, bool>? OnRawRingReplayRequested;
 
-        public void RequestRawRingReplay(Guid sessionId)
+        public void RequestRawRingReplay(Guid sessionId, bool paced)
         {
-            OnRawRingReplayRequested?.Invoke(sessionId);
+            OnRawRingReplayRequested?.Invoke(sessionId, paced);
         }
 
         public bool UpdateCard(Guid sessionId, string card)
