@@ -502,8 +502,11 @@ namespace TerminalHub.Services
                 }
 
                 // ConPtyセッションを初期化
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                // エミュレータも同じサイズで始める。ここを揃えないと、ConPTY だけ実寸で起動して
+                // エミュレータは既定の 120x30 のまま解釈することになり、折り返しがズレた状態が
+                // 切替時リプレイの正本に焼き付く（ConPTY より先に呼ぶ＝ITerminalStateBuffer の約束）
+                sessionInfo.ResizeTerminalBuffer(cols, rows);
 
                 // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
                 var terminalType = sessionInfo.TerminalType;
@@ -1065,8 +1068,8 @@ namespace TerminalHub.Services
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
                 var terminalType = sessionInfo.TerminalType;
                 var sessionProof = RotateSessionProof(sessionInfo);
@@ -1148,8 +1151,8 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo);
                 var terminalType = sessionInfo.TerminalType;
                 var sessionProof = RotateSessionProof(sessionInfo);

@@ -2017,27 +2017,67 @@
 
     /// <summary>
     /// 確定した実寸を「次回の ConPTY 初期サイズ」として設定に保存する。
-    /// リサイズはドラッグ中に何度も走るため、値が変わったときだけ書き込む
-    /// （設定はファイル保存なので毎回書くと無駄な I/O になる）。
+    /// ドラッグ中は中間サイズが毎フレーム流れてくるので、**デバウンスしてから**書き込む。
+    /// 呼び出し元の <see cref="ApplyConPtyResize"/> は「デバウンス禁止」の即時パスであり、
+    /// そこに設定ファイルの同期全書き込み（AppSettingsService.SaveSettings）を載せると、
+    /// ドラッグ1回で数十回のブロッキング I/O が即時パスへ挟まる。記録したいのは
+    /// 「落ち着いた後の実寸」だけなので、遅らせて最後の1回だけ書けば足りる。
     /// 保存に失敗しても表示には影響しないので握りつぶす（次回また記録される）。
     /// </summary>
+    private CancellationTokenSource? _rememberSizeCts;
+    private (int Cols, int Rows)? _pendingRememberSize;
+    private const int RememberSizeDebounceMs = 1000;
+
     private void RememberTerminalSize(int cols, int rows)
     {
         if (cols <= 0 || rows <= 0) return;
 
+        _pendingRememberSize = (cols, rows);
+        var previousCts = _rememberSizeCts;
+        previousCts?.Cancel();
+        previousCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _rememberSizeCts = cts;
+        _ = SaveTerminalSizeAfterDelayAsync(cts);
+    }
+
+    private async Task SaveTerminalSizeAfterDelayAsync(CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(RememberSizeDebounceMs, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // ドラッグ継続中。より新しいサイズに置き換えられた
+        }
+
+        FlushRememberedTerminalSize();
+    }
+
+    /// <summary>
+    /// 保留中の実寸を設定へ書き出す。デバウンス満了時のほか、破棄時にも呼ぶ
+    /// （リサイズ直後にタブを閉じた場合、取り消すと記録が落ちてしまうため）。
+    /// </summary>
+    private void FlushRememberedTerminalSize()
+    {
+        var pending = _pendingRememberSize;
+        if (pending == null) return;
+        _pendingRememberSize = null;
+
         try
         {
             var settings = AppSettingsService.GetSettings();
-            if (settings.SessionDefaults.LastTerminalCols == cols &&
-                settings.SessionDefaults.LastTerminalRows == rows)
+            if (settings.SessionDefaults.LastTerminalCols == pending.Value.Cols &&
+                settings.SessionDefaults.LastTerminalRows == pending.Value.Rows)
             {
                 return; // 変化なし
             }
 
-            settings.SessionDefaults.LastTerminalCols = cols;
-            settings.SessionDefaults.LastTerminalRows = rows;
+            settings.SessionDefaults.LastTerminalCols = pending.Value.Cols;
+            settings.SessionDefaults.LastTerminalRows = pending.Value.Rows;
             AppSettingsService.SaveSettings(settings);
-            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", cols, rows);
+            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
         }
         catch (Exception ex)
         {
@@ -3309,6 +3349,12 @@
         _emulatorResyncCts?.Cancel();
         _emulatorResyncCts?.Dispose();
         _emulatorResyncCts = null;
+
+        // 実寸の記録は「取り消す」のではなく書き切る（リサイズ直後に閉じた分を落とさない）
+        _rememberSizeCts?.Cancel();
+        _rememberSizeCts?.Dispose();
+        _rememberSizeCts = null;
+        FlushRememberedTerminalSize();
 
         // 進行中のセッション切替をキャンセル
         _selectCts?.Cancel();
