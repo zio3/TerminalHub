@@ -109,6 +109,17 @@ public sealed class EmulatedStateBuffer : ITerminalStateBuffer
         }
     }
 
+    public (int Cols, int Rows) Size2D
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return (_grid.Cols, _grid.Rows);
+            }
+        }
+    }
+
     public int Size
     {
         get

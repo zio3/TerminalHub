@@ -246,6 +246,10 @@ namespace TerminalHub.Models
 
         public int TerminalBufferSize => _terminalBuffer.Size;
 
+        /// <summary>現在の端末サイズ（列・行）。リングの単体再現時に再生側を同サイズへ合わせるために使う。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public (int Cols, int Rows) TerminalBufferSize2D => _terminalBuffer.Size2D;
+
         /// <summary>
         /// 直近の生チャンクを境界つきで保持する診断リング（xterm 崩れの事後調査用）。
         /// エミュレータ方式以外のバッファでは null。

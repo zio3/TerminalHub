@@ -36,6 +36,37 @@
 
 制御文字は `\e` `\r` `\n` `\t` `\a` `\xNN` にエスケープされて出力される。
 
+## 単体再現: エクスポートと再現プレイヤー
+
+`GET /api/debug/raw-ring/{GUID}/export` で、リングを**機械可読・無損失**の JSON として落とせる
+（人間可読ダンプと違いエスケープしないので、そのまま流し直せる）。中身:
+
+- `cols` / `rows`: **端末サイズ**。再現の要。幅が違うと折り返し位置がずれ、本物と別種の崩れが出る
+- `entries[]`: `seq`・`offsetMs`（先頭からの経過ミリ秒＝到達間隔）・`data`・`pending`・`note`（マーカー）
+
+これを **`http://localhost:<port>/rawring-replay.html`** に読ませると、記録どおりのサイズ・
+チャンク境界・到達間隔で xterm へ流し直せる。TerminalHub のセッションには一切触らない
+（書き込むのはページ内の xterm だけ）ので、崩れたセッションを保存しておけば後から何度でも回せる。
+
+プレイヤー側で切り替えられる対照条件:
+
+| 切替 | 何が分かるか |
+|---|---|
+| WebGL レンダラ on/off | 崩れが描画由来か（off で消えるなら WebGL 側） |
+| 途中の Resize を適用 on/off | 折り返し変化が効いているか |
+| チャンク境界を無視して連結 | 崩れが**境界**由来か（連結して消えるなら境界が効いている） |
+| real / burst / 倍速 | 崩れが**タイミング**由来か |
+| 「バッファをコピー」 | 見た目が崩れているとき、**バッファ自体が壊れているか描画だけ古いか**の切り分け |
+
+再生側は本体（`wwwroot/js/terminal.js`）と同じ xterm バージョン・同じ `Terminal` オプション
+（`windowsPty` / `convertEol` / `scrollOnEraseInDisplay` / `scrollback:5000` / `allowProposedApi`）で開く。
+ここを揃えないと「本体では崩れるがプレイヤーでは崩れない」の比較が成立しないので、
+本体側のオプションを変えたらプレイヤーも合わせること。
+
+> 注意: 記録区間の**途中で** Resize が起きていると、JSON 直下の `cols`/`rows` は区間**末尾**の
+> サイズになる（区間の頭のサイズは Resize マーカーからしか辿れない）。先頭に Resize マーカーが
+> あるダンプならそれが頭のサイズなので、プレイヤーの「途中の Resize を適用」を on にしておけばよい。
+
 ## 実験モード: リングの実経路再生
 
 `POST /api/debug/raw-ring/{GUID}/replay` で、リングの内容を**ライブ出力と同一の実経路**
@@ -55,6 +86,10 @@
 | どちらも崩れない | - | - | - | 非決定論（配送欠落等）を疑う → 連番検知へ |
 
 注意:
+- **見る側の端末サイズを記録時に合わせること**。違うと折り返しがずれて別種の崩れが出る。
+  再生要求のレスポンスに合わせるべきサイズが入るので、そこを見て窓を調整する
+- **ブラウザを2つ繋いだまま実験しないこと**。窓のサイズが違うと ConPTY のサイズを取り合って
+  リサイズが連発し、実験そのものが汚れる（リングの Resize マーカー連打で後から判別できる）
 - エミュレータ・リングには書かない（記録を汚さない）。再生後の xterm はリング内容になるため、
   **通常表示へ戻すにはセッション切替**（エミュレータからのリプレイ）を行う
 - 再生中はライブ出力が書き込みロック待ちになる。**アイドル中のセッションで使う**こと
@@ -64,6 +99,8 @@
 - リング本体: `TerminalHub.Terminal/RawChunkRing.cs`（UI 非依存・単体テスト可）
 - 組み込み: `EmulatedStateBuffer.Append/BeginReplay/EndReplay/Clear/Resize`
 - ダンプ保存: `TerminalHub/Services/RawRingDump.cs`（保存先は Program.cs 起動時に設定）
+- エクスポート: `TerminalHub/Services/RawRingExport.cs`
+- 再現プレイヤー: `TerminalHub/wwwroot/rawring-replay.html`（静的・本体のセッションには触らない）
 - エンドポイント: `Program.cs`（`/api/debug/raw-ring`）
 - テスト: `TerminalHub.Terminal.Tests/RawChunkRingTests.cs`
   （リング動作＋孤児フラグメント現象の再現・防御経路の回帰）
