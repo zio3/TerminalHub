@@ -60,6 +60,16 @@
   <label><input type="checkbox" id="uni11" checked /> Unicode11</label>
   <label><input type="checkbox" id="applyResize" checked /> 途中の Resize を適用</label>
   <label><input type="checkbox" id="merge" /> チャンク境界を無視して連結</label>
+  <!--
+    xterm の Terminal オプションのうち、崩れ方に効きうるものを切れるようにする。
+    既定は本体（terminal.js）と同じ値にしてあり、この状態が本体の再現になる。
+    convertEol だけは本体が false（2026-07-29 に崩れの原因として特定して外した）。
+    **on にすると当時の崩れを再現できる**: 裸の LF を CRLF にするため、
+    「\e[<行>;3H \e[K \n」で桁を保ったまま下へ行きたい TUI の行頭インデントが消える。
+  -->
+  <label><input type="checkbox" id="convertEol" /> convertEol（on で旧挙動＝崩れを再現）</label>
+  <label><input type="checkbox" id="winPty" checked /> windowsPty(conpty)</label>
+  <label><input type="checkbox" id="edScroll" checked /> scrollOnEraseInDisplay</label>
   <button id="play" disabled>再生</button>
   <button id="stop" disabled>一時停止</button>
   <button id="reset" disabled>頭出し</button>
@@ -175,7 +185,7 @@ function buildTerminal() {
     scrollback: 5000,
     scrollOnInput: true,
     scrollOnOutput: false,
-    scrollOnEraseInDisplay: true,
+    scrollOnEraseInDisplay: $('edScroll').checked,
     theme: {
       background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#d4d4d4',
       black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510',
@@ -186,8 +196,8 @@ function buildTerminal() {
     },
     cols: data.cols || 120,
     rows: data.rows || 30,
-    convertEol: true,
-    windowsPty: { backend: 'conpty' },
+    convertEol: $('convertEol').checked,
+    windowsPty: $('winPty').checked ? { backend: 'conpty' } : undefined,
     allowProposedApi: true
   });
 
@@ -209,7 +219,7 @@ function buildTerminal() {
 }
 
 // レンダラ/Unicode の切替はターミナルを作り直す必要がある（アドオンの後付け剥がしは不安定）
-for (const id of ['webgl', 'uni11']) {
+for (const id of ['webgl', 'uni11', 'convertEol', 'winPty', 'edScroll']) {
   $(id).addEventListener('change', () => { if (data) resetPlayback(); });
 }
 
