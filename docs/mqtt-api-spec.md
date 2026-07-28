@@ -22,7 +22,7 @@ claude/{TopicGUID}/response  — TerminalHub → クライアント
 ```
 
 - `TopicGUID`: TerminalHubの設定画面で有効化時に自動生成されるGUID
-- ブローカー: `vps3.zio3.net:1883`（TCP）
+- ブローカー: `mqtt.zio3.net:1883`（TCP）
 - ACL: `ClaudeLauncher` ユーザーは `claude/#` 配下のみアクセス可能
 
 ## アクセスURL
