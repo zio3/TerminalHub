@@ -502,8 +502,11 @@ namespace TerminalHub.Services
                 }
 
                 // ConPtyセッションを初期化
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                // エミュレータも同じサイズで始める。ここを揃えないと、ConPTY だけ実寸で起動して
+                // エミュレータは既定の 120x30 のまま解釈することになり、折り返しがズレた状態が
+                // 切替時リプレイの正本に焼き付く（ConPTY より先に呼ぶ＝ITerminalStateBuffer の約束）
+                sessionInfo.ResizeTerminalBuffer(cols, rows);
 
                 // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
                 var terminalType = sessionInfo.TerminalType;
@@ -980,6 +983,35 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// ConPTY の初期サイズを決める。
+        ///
+        /// 既定の 120x30 で子プロセスを起動すると、ブラウザの実寸（実測で 166x80 前後）が
+        /// 確定するまでの間、CLI が誤った桁数で描画する。通常起動ならプロンプトだけなので
+        /// 描き直しで消えるが、claude -c のように起動直後へ大量の履歴を描くケースでは
+        /// 折り返しがズレたまま焼き付き、行頭に前の行の残骸が残る
+        /// （ウィンドウをリサイズすると直る、という症状になる）。
+        ///
+        /// そこで前回確定した実寸（アプリ全体で1つ。ターミナルは右側の1枠を使い回すため
+        /// セッション横断で共通）を初期サイズに使い、不一致期間そのものを無くす。
+        /// 未計測（初回起動）だけは従来どおり設定既定へフォールバックする。
+        /// </summary>
+        private (int Cols, int Rows) ResolveInitialSize()
+        {
+            var defaultCols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
+            var defaultRows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+
+            var last = _appSettingsService?.GetSettings().SessionDefaults;
+            var cols = last?.LastTerminalCols ?? defaultCols;
+            var rows = last?.LastTerminalRows ?? defaultRows;
+
+            // 壊れた値が保存されていても起動を壊さない
+            if (cols <= 0 || cols > short.MaxValue) cols = defaultCols;
+            if (rows <= 0 || rows > short.MaxValue) rows = defaultRows;
+
+            return (cols, rows);
+        }
+
+        /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
@@ -1036,8 +1068,8 @@ namespace TerminalHub.Services
                 // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
                 sessionInfo.ClearRunningSubagents();
 
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
                 var terminalType = sessionInfo.TerminalType;
                 var sessionProof = RotateSessionProof(sessionInfo);
@@ -1119,8 +1151,8 @@ namespace TerminalHub.Services
                     sessionInfo.HasContinueErrorOccurred = false;
                 }
 
-                var cols = _configuration.GetValue<int>("SessionSettings:DefaultCols", TerminalConstants.DefaultCols);
-                var rows = _configuration.GetValue<int>("SessionSettings:DefaultRows", TerminalConstants.DefaultRows);
+                var (cols, rows) = ResolveInitialSize();
+                sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo);
                 var terminalType = sessionInfo.TerminalType;
                 var sessionProof = RotateSessionProof(sessionInfo);

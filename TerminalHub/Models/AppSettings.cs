@@ -30,6 +30,18 @@ public class SessionDefaultsSettings
 {
     /// <summary>前回選んだターミナル種別。</summary>
     public TerminalType? LastTerminalType { get; set; }
+
+    // ConPTY の初期サイズ。既定の 120x30 のまま子プロセスを起動すると、ブラウザの実寸
+    // （実測で 166x80 前後）が確定するまでの間、CLI が誤った桁数で描画してしまう。
+    // 通常起動ならプロンプトだけなので描き直しで消えるが、claude -c のように
+    // 起動直後へ大量の履歴を描くケースでは折り返しがズレたまま焼き付き、
+    // 行頭に前の行の残骸が残る（ウィンドウをリサイズすると直る、という症状になる）。
+    // ターミナルは右側の1枠を使い回すためサイズはセッション横断で共通。よって
+    // アプリ全体で「最後に確定した実寸」を1つ覚え、次回の起動時サイズに使う。
+    /// <summary>最後に確定したターミナルの桁数。未計測なら null（設定既定へフォールバック）。</summary>
+    public int? LastTerminalCols { get; set; }
+    /// <summary>最後に確定したターミナルの行数。未計測なら null（設定既定へフォールバック）。</summary>
+    public int? LastTerminalRows { get; set; }
     /// <summary>Claude Code の権限モード（"bypass" | "auto" | "default"）。</summary>
     public string? LastClaudePermissionMode { get; set; }
     /// <summary>Gemini CLI の承認モード（"default" | "auto_edit" | "yolo"）。</summary>
