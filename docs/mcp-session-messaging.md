@@ -123,6 +123,7 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 |---|---|---|
 | `success` | bool | 送信できたか |
 | `message` | string | 結果メッセージ |
+| `contextId` | string? | `contextId="new"` で送信したときだけ発行された ID が入る（それ以外は null）。以降のポーリングはこの ID で `get_context` する |
 
 **`success=false` になるケース**（いずれも例外にせず結果で返し、呼び出し側にリトライ判断を委ねる）
 
