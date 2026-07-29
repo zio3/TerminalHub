@@ -174,8 +174,13 @@
                                     var isKey = cmd.Type == CustomCommandType.KeySequence;
                                     var isInsert = !isKey && cmd.SendMode == CustomCommandSendMode.InsertToInput;
                                     var label = GetCommandLabel(cmd);
+                                    // ドロップダウン内はラベルが text-truncate で切れるうえ、単独ボタンと違って
+                                    // 実行内容が一切見えない。押す前に何が送られるか分かるよう本文を出す。
+                                    // KeySequence はキーボードアイコンとキー名で自明なので付けない。
+                                    var itemTooltip = isKey ? null : cmd.CommandText;
                                     <li>
                                         <button class="dropdown-item d-flex align-items-center" type="button"
+                                                title="@itemTooltip"
                                                 @onclick="() => OnCustomCommandClick(idx)">
                                             @if (isKey)
                                             {

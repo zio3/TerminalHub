@@ -183,6 +183,8 @@
   <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>Insert into input</value></data>
   <data name="Settings.Commands.Propagate" xml:space="preserve"><value>Also show in sub-sessions</value></data>
   <data name="Settings.Commands.Propagate.Help" xml:space="preserve"><value>Shows this command in the quick-send bar of sub-sessions created from this session, including sub-sessions with a different terminal type.</value></data>
+  <data name="Settings.Commands.CreatedByAgent" xml:space="preserve"><value>Registered by this session itself via MCP. Editing it makes it a normal command, after which MCP can no longer delete it.</value></data>
+  <data name="Settings.Commands.DuplicateTitle" xml:space="preserve"><value>"{0}" already exists in this session. Please use a different name.</value></data>
   <data name="Settings.Commands.CommandBody" xml:space="preserve"><value>Command</value></data>
   <data name="Settings.Commands.CommandBodyPlaceholder" xml:space="preserve"><value>Multi-line OK. With Insert mode, this gets put into the textarea.</value></data>
   <data name="Settings.Commands.AddNew" xml:space="preserve"><value>Add new</value></data>

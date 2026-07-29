@@ -183,6 +183,8 @@
   <data name="Settings.Commands.SendMode.Insert" xml:space="preserve"><value>入力欄に挿入</value></data>
   <data name="Settings.Commands.Propagate" xml:space="preserve"><value>子セッションにも表示する</value></data>
   <data name="Settings.Commands.Propagate.Help" xml:space="preserve"><value>このセッションから作成したサブセッションのクイック送信バーにも、同じコマンドを表示します。ターミナル種別が違うサブセッションにも表示されます。</value></data>
+  <data name="Settings.Commands.CreatedByAgent" xml:space="preserve"><value>このセッション自身が MCP から登録したコマンドです。編集すると通常のコマンドになり、以降 MCP からは削除できなくなります。</value></data>
+  <data name="Settings.Commands.DuplicateTitle" xml:space="preserve"><value>「{0}」は既にこのセッションにあります。別の名前にしてください。</value></data>
   <data name="Settings.Commands.CommandBody" xml:space="preserve"><value>コマンド</value></data>
   <data name="Settings.Commands.CommandBodyPlaceholder" xml:space="preserve"><value>複数行 OK。挿入モードなら textarea に流し込まれます。</value></data>
   <data name="Settings.Commands.AddNew" xml:space="preserve"><value>新規追加</value></data>

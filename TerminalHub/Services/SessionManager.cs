@@ -56,6 +56,9 @@ namespace TerminalHub.Services
         /// </summary>
         bool UpdateCard(Guid sessionId, string card);
 
+        /// <summary>セッション専用コマンドを差し替え、一覧を再描画させる（MCP からの追加・削除で使う）。</summary>
+        bool UpdateSessionCommands(Guid sessionId, List<CustomCommand> commands);
+
         /// <summary>
         /// 診断用（実験モード）: 生チャンクリングの内容を実経路(JS interop=SignalR)で xterm へ
         /// 再生する要求。デバッグエンドポイントから発行し、対象セッションを前面表示している
@@ -608,6 +611,17 @@ namespace TerminalHub.Services
         public void RequestRawRingReplay(Guid sessionId, bool paced)
         {
             OnRawRingReplayRequested?.Invoke(sessionId, paced);
+        }
+
+        public bool UpdateSessionCommands(Guid sessionId, List<CustomCommand> commands)
+        {
+            if (!_sessionInfos.TryGetValue(sessionId, out var info))
+                return false;
+
+            info.SessionCommands = commands ?? new List<CustomCommand>();
+            // クイック送信バーは一覧の再描画に乗って更新されるので、メモと同じ通知でよい。
+            NotifySessionsChanged();
+            return true;
         }
 
         public bool UpdateCard(Guid sessionId, string card)

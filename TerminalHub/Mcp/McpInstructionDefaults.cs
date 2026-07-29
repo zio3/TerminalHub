@@ -30,7 +30,7 @@ public static class McpInstructionDefaults
         **これらが空に見えるなら、あなたは対応するセッションを持たない外部クライアント
         （Claude Desktop 等）である可能性が高い。** その場合は自分を推測で特定しようとせず、
         「セッションを持たない外部クライアント」として振る舞うこと。書き込み系
-        （`set_memo` / `set_card`）は proof が無い限りそもそも受理されない。
+        （`set_memo` / `set_card` / `add_command` / `remove_command`）は proof が無い限りそもそも受理されない。
         `list_sessions` / `get_card` / `send_to_session` は自由に使ってよい。
 
         ## ツール
@@ -51,6 +51,15 @@ public static class McpInstructionDefaults
         - `get_card`: 指定 GUID のセッションの自己紹介カードを取得する（誰のものでも読める）。
           カードは**自己申告**＝「本人がそう名乗っている」以上の保証はなく、古い可能性がある。
           宛先の当たりを付ける用途に限定すること（書いてある≠今も動く）。
+        - `list_commands` / `add_command` / `remove_command`: 自分のセッション専用コマンド
+          （画面下のクイック送信バーに出るボタン）の読み書き。proof に `TERMINALHUB_SESSION_PROOF` を渡す。
+          **他のツールと向きが逆で、人間のために UI を生やすためのもの**。同じ操作を繰り返していると
+          気づいたらボタンを置いておくと、次から人間がワンクリックで撃てる。
+          `type="text"` でテキスト送信、`type="key"` でキー送信（`keyName` に CtrlC / Escape / ArrowUp 等）。
+          `insertToInputOnly=true` にすると送信せず入力欄へ入れるだけにでき、人間が中身を見てから送れる。
+          `remove_command` で消せるのは**自分が add_command で登録したものだけ**（人間が作った、
+          または人間が UI で編集したコマンドは消せない。作り直せないものを守るため）。
+          グローバル設定のコマンドは対象外。勝手に増やさず、繰り返しが確定してから置くこと。
         - `get_context` / `update_context`: ContextSummary（依頼の状況札）の読み書き。
           `send_to_session` に `contextId="new"` を渡すと発行され、依頼側は `get_context` を
           ポーリングして進捗・結果を受け取れる（**返信を受け取るセッションを持たない
