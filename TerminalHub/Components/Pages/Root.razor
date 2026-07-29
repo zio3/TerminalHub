@@ -1529,7 +1529,15 @@
                     // 実寸が ConPTY に適用される合流点は ApplyConPtyResize とここの2つある。
                     // むしろセッションを開く通常のフローではこちらだけが通り（ApplyConPtyResize は
                     // 同サイズガードで早期 return する）、ここで記録しないと保存値が永久に null のままになる。
-                    RememberTerminalSize(size.Cols, size.Rows);
+                    //
+                    // ただし記録するのは復元対象がまだアクティブなときだけにする。上の await をまたぐ間に
+                    // 別の切替や再作成が割り込むと activeSession が別セッションを指しうる（この関数の冒頭の
+                    // 注意書き参照）。リサイズ自体は次の切替で自己修正されるが、保存値は
+                    // ResolveInitialSize が以降の全新規セッションに使うため、取り違えが永続化してしまう。
+                    if (activeSessionId == sessionId)
+                    {
+                        RememberTerminalSize(size.Cols, size.Rows);
+                    }
                 }
 
                 // スナップショット生成と同時にライブ出力のテール記録を開始し、
@@ -2021,8 +2029,11 @@
 
     /// <summary>
     /// 確定した実寸を「次回の ConPTY 初期サイズ」として設定に保存する。
+    /// 呼び出し元は <see cref="ApplyConPtyResize"/> と SelectSession のリプレイ前サイズ同期の2箇所
+    /// （実寸が ConPTY に適用される合流点はこの2つ。通常のセッション選択では前者は同サイズガードで
+    /// 早期 return するため、後者だけが通る）。
     /// ドラッグ中は中間サイズが毎フレーム流れてくるので、**デバウンスしてから**書き込む。
-    /// 呼び出し元の <see cref="ApplyConPtyResize"/> は「デバウンス禁止」の即時パスであり、
+    /// <see cref="ApplyConPtyResize"/> は「デバウンス禁止」の即時パスであり、
     /// そこに設定ファイルの同期全書き込み（AppSettingsService.SaveSettings）を載せると、
     /// ドラッグ1回で数十回のブロッキング I/O が即時パスへ挟まる。記録したいのは
     /// 「落ち着いた後の実寸」だけなので、遅らせて最後の1回だけ書けば足りる。
@@ -2086,7 +2097,9 @@
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(ex, "[Resize] 初期サイズの記録に失敗（無害・次回再記録される）");
+            // 失敗も既定のログ設定で見えるようにする。Debug のままだと「記録されないのに誰も気づけない」
+            // という、この修正が潰したはずの状態を失敗側で再現してしまう（PR #171 の根本原因がそれ）
+            Logger.LogWarning(ex, "[Resize] 初期サイズの記録に失敗（表示には無害・次回再記録される）");
         }
     }
 
