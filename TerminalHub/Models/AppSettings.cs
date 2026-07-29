@@ -236,6 +236,14 @@ public class CustomCommand
     /// グローバルコマンドでは未使用。
     /// </summary>
     public bool PropagateToChildren { get; set; } = false;
+
+    /// <summary>
+    /// MCP 経由でセッション自身（AI）が登録したコマンドか。
+    /// **MCP の remove_command はこれが true のものしか消せない**。人間が作ったコマンドは
+    /// 失うと復旧が難しいのに対し、AI が作ったものは同じ手順で作り直せる、という非対称性による。
+    /// 人間が UI で編集したら false に落とす（手を入れた時点で人間のものとして扱う）。
+    /// </summary>
+    public bool CreatedByAgent { get; set; } = false;
 }
 
 /// <summary>

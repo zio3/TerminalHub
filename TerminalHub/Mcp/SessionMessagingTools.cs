@@ -430,5 +430,159 @@ namespace TerminalHub.Mcp
                 $"ContextSummary を更新しました(status={status ?? "変更なし"}, " +
                 $"記名={(writer != null ? writer.GetDisplayName() : "無記名")})。");
         }
+
+        // ---- セッション専用コマンド（クイック送信バーのボタン） ----
+        //
+        // 設計（壁打ちで確定）:
+        // - **セッション専用のみ**。グローバル(設定のコマンド)は読み書きとも対象外。
+        //   全セッション・全CLIに出る共有物なので、人間がローカルで試してから手動で持っていく運用に任せる。
+        // - **全体上書きにしない**（card とはここが違う）。人間も UI から編集する共有リストなので、
+        //   上書きだと人間の編集を踏み潰す。add / remove / list に分ける。
+        // - **remove は AI が登録したものだけ**。人間が作ったコマンドは失うと復旧が難しいのに対し、
+        //   AI が作ったものは同じ手順で作り直せる、という非対称性に基づく安全弁。
+        // - Title はセッション専用リスト内で一意（remove が Title 指定のため）。
+        //   グローバルや親からの伝搬と同名になるのは許す（既存の表示仕様が重複を許している）。
+
+        /// <summary>list_commands の返却項目。</summary>
+        public record CommandSummary(
+            string title,
+            string type,
+            string body,
+            string? groupName,
+            bool propagateToChildren,
+            bool createdByAgent);
+
+        [McpServerTool(Name = "list_commands"), Description(
+            "自分のセッション専用コマンド(クイック送信バーのボタン)の一覧を取得する。" +
+            "createdByAgent=true は自分(AI)が登録したもので、remove_command で消せる。" +
+            "false は人間が作った/編集したもので、消せない。" +
+            "グローバル設定のコマンドはここには含まれない(MCP の対象外)。")]
+        public static IEnumerable<CommandSummary> ListCommands(
+            ISessionManager sessionManager,
+            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
+            string proof)
+        {
+            var info = sessionManager.ResolveBySessionProof(proof);
+            if (info == null)
+                return Array.Empty<CommandSummary>();
+
+            return info.SessionCommands.Select(c => new CommandSummary(
+                title: c.Title ?? string.Empty,
+                type: c.Type == CustomCommandType.KeySequence ? "key" : "text",
+                body: c.Type == CustomCommandType.KeySequence ? (c.KeyName ?? string.Empty) : c.CommandText,
+                groupName: string.IsNullOrWhiteSpace(c.GroupName) ? null : c.GroupName,
+                propagateToChildren: c.PropagateToChildren,
+                createdByAgent: c.CreatedByAgent)).ToList();
+        }
+
+        [McpServerTool(Name = "add_command"), Description(
+            "自分のセッション専用コマンド(クイック送信バーのボタン)を追加する。登録すると即座に UI に現れる。" +
+            "繰り返す操作を人間がワンクリックで撃てるようにしておく用途。" +
+            "type=\"text\" ならテキスト送信、type=\"key\" ならキー送信(keyName にプリセット名)。" +
+            "追加したコマンドは remove_command で消せる(人間が編集すると消せなくなる)。")]
+        public static async Task<SendResult> AddCommand(
+            ISessionManager sessionManager,
+            ISessionRepository sessionRepository,
+            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
+            string proof,
+            [Description("ボタンに出す名前。セッション専用コマンドの中で一意にすること(remove_command の指定に使う)。")]
+            string title,
+            [Description("種別。\"text\"=テキスト送信 / \"key\"=キー送信。")]
+            string type,
+            [Description("type=\"text\" のとき送る本文。type=\"key\" では無視される。")]
+            string? commandText = null,
+            [Description("type=\"key\" のときのプリセット名(CtrlC / Escape / ArrowUp / ShiftTab 等)。type=\"text\" では無視される。")]
+            string? keyName = null,
+            [Description("同名を指定すると1つのドロップダウンにまとめられる。単独ボタンにするなら省略。")]
+            string? groupName = null,
+            [Description("type=\"text\" のとき、送信せず入力欄へ流し込むだけにするなら true(人間が内容を確認してから送れる)。")]
+            bool insertToInputOnly = false,
+            [Description("サブセッションにも同じボタンを出すなら true。親セッションでのみ意味を持つ。")]
+            bool propagateToChildren = false)
+        {
+            var info = sessionManager.ResolveBySessionProof(proof);
+            if (info == null)
+                return new SendResult(false, ProofRejectedMessage);
+
+            if (string.IsNullOrWhiteSpace(title))
+                return new SendResult(false, "title は必須です（remove_command の指定に使うため）。");
+
+            var isKey = string.Equals(type, "key", StringComparison.OrdinalIgnoreCase);
+            if (!isKey && !string.Equals(type, "text", StringComparison.OrdinalIgnoreCase))
+                return new SendResult(false, $"type が不正です: {type}。\"text\" か \"key\" のいずれかを指定してください。");
+
+            if (isKey && !KeySequencePresets.Contains(keyName))
+                return new SendResult(false,
+                    $"keyName が不正です: {keyName ?? "(未指定)"}。使えるのは " +
+                    string.Join(" / ", KeySequencePresets.All.Select(kv => kv.Key)) + " です。");
+
+            if (!isKey && string.IsNullOrEmpty(commandText))
+                return new SendResult(false, "type=\"text\" では commandText が必須です。");
+
+            var commands = new List<CustomCommand>(info.SessionCommands);
+            if (commands.Any(c => string.Equals(c.Title, title, StringComparison.Ordinal)))
+                return new SendResult(false,
+                    $"同じ title のコマンドが既にあります: {title}。別の名前にするか、先に remove_command してください。");
+
+            commands.Add(new CustomCommand
+            {
+                Title = title,
+                CommandText = isKey ? string.Empty : (commandText ?? string.Empty),
+                Type = isKey ? CustomCommandType.KeySequence : CustomCommandType.Text,
+                KeyName = isKey ? keyName : null,
+                GroupName = string.IsNullOrWhiteSpace(groupName) ? null : groupName,
+                SendMode = (!isKey && insertToInputOnly)
+                    ? CustomCommandSendMode.InsertToInput
+                    : CustomCommandSendMode.DirectSend,
+                PropagateToChildren = propagateToChildren,
+                CreatedByAgent = true,
+            });
+
+            await sessionRepository.UpdateSessionCommandsAsync(info.SessionId, commands);
+            sessionManager.UpdateSessionCommands(info.SessionId, commands);
+
+            // 子セッションで伝搬を立てても効かない。黙って無視すると「登録できたのに効かない」に
+            // 気づけないので、成功メッセージに但し書きを添える。
+            var note = (propagateToChildren && info.ParentSessionId.HasValue)
+                ? " ただしこのセッションはサブセッションなので、伝搬フラグは効きません（親セッションで登録してください）。"
+                : string.Empty;
+
+            return new SendResult(true, $"コマンドを追加しました: {title}。{note}");
+        }
+
+        [McpServerTool(Name = "remove_command"), Description(
+            "自分のセッション専用コマンドを title 指定で削除する。" +
+            "**自分(AI)が add_command で登録したものだけ消せる**。人間が作ったコマンドや、" +
+            "人間が UI で編集したコマンドは消せない(失うと復旧が難しいため)。")]
+        public static async Task<SendResult> RemoveCommand(
+            ISessionManager sessionManager,
+            ISessionRepository sessionRepository,
+            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
+            string proof,
+            [Description("削除するコマンドの title。")]
+            string title)
+        {
+            var info = sessionManager.ResolveBySessionProof(proof);
+            if (info == null)
+                return new SendResult(false, ProofRejectedMessage);
+
+            var target = info.SessionCommands
+                .FirstOrDefault(c => string.Equals(c.Title, title, StringComparison.Ordinal));
+            if (target == null)
+                return new SendResult(false, $"そのコマンドが見つかりません: {title}。list_commands で確認してください。");
+
+            if (!target.CreatedByAgent)
+                return new SendResult(false,
+                    $"「{title}」は人間が作った(または編集した)コマンドなので削除できません。" +
+                    "消す必要があるなら、人間に UI から操作してもらってください。");
+
+            var commands = info.SessionCommands
+                .Where(c => !ReferenceEquals(c, target)).ToList();
+
+            await sessionRepository.UpdateSessionCommandsAsync(info.SessionId, commands);
+            sessionManager.UpdateSessionCommands(info.SessionId, commands);
+
+            return new SendResult(true, $"コマンドを削除しました: {title}");
+        }
     }
 }

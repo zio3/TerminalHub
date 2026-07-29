@@ -229,6 +229,13 @@
                     </div>
                 }
 
+                @if (!string.IsNullOrEmpty(sessionCommandError))
+                {
+                    <div class="alert alert-warning py-1 px-2 mb-2" role="alert">
+                        <small>@sessionCommandError</small>
+                    </div>
+                }
+
                 @if (editingSessionCommands.Any())
                 {
                     <ul class="list-group list-group-sm">
@@ -249,6 +256,11 @@
                                     @if (IsParentSession && cmd.PropagateToChildren)
                                     {
                                         <i class="bi bi-arrow-down-square me-1 text-primary" title="@L["Settings.Commands.Propagate"]"></i>
+                                    }
+                                    @if (cmd.CreatedByAgent)
+                                    {
+                                        <i class="bi bi-robot me-1 text-info"
+                                           title="このセッション自身が MCP から登録したコマンドです。編集すると通常のコマンドになり、以降 MCP からは削除できなくなります。"></i>
                                     }
                                     @if (!string.IsNullOrEmpty(cmd.GroupName))
                                     {
@@ -318,6 +330,8 @@
     // セッション専用コマンドの編集用バッファ（保存時に sessionInfo へ書き戻す）
     private bool showSessionCommandsDialog = false;
     private List<CustomCommand> editingSessionCommands = new();
+    /// <summary>専用コマンド編集時のエラー（title 重複など）。null なら非表示。</summary>
+    private string? sessionCommandError;
     private bool commandEditDialogVisible = false;
     private bool commandEditDialogIsNew = false;
     private int? commandEditDialogIndex = null;
@@ -455,7 +469,10 @@
                     KeyName = c.KeyName,
                     GroupName = c.GroupName,
                     SendMode = c.SendMode,
-                    PropagateToChildren = c.PropagateToChildren
+                    PropagateToChildren = c.PropagateToChildren,
+                    // ダイアログを開いて保存しただけでフラグが消えないよう引き継ぐ。
+                    // 落とすのは「その項目を編集したとき」だけ（OnCommandSaved 参照）。
+                    CreatedByAgent = c.CreatedByAgent
                 })
                 .ToList();
 
@@ -693,13 +710,33 @@
 
     private async Task HandleSessionCommandSave(CustomCommand command)
     {
-        if (commandEditDialogIndex is int idx && idx >= 0 && idx < editingSessionCommands.Count)
+        var editingIndex = (commandEditDialogIndex is int i && i >= 0 && i < editingSessionCommands.Count)
+            ? i : (int?)null;
+
+        // title はセッション専用コマンドの中で一意にする。MCP の remove_command が title 指定であり、
+        // 重複すると人間からもどちらを消しているのか分からなくなるため、UI 側でも同じ規則で弾く。
+        // （グローバルや親から伝搬されたコマンドとの同名は従来どおり許す）
+        if (!string.IsNullOrEmpty(command.Title) &&
+            editingSessionCommands
+                .Where((c, idx) => idx != editingIndex &&
+                    string.Equals(c.Title, command.Title, StringComparison.Ordinal))
+                .Any())
         {
-            editingSessionCommands[idx] = command; // 編集：既存位置に上書き
+            sessionCommandError = $"「{command.Title}」は既にこのセッションにあります。別の名前にしてください。";
+            return;
+        }
+        sessionCommandError = null;
+
+        if (editingIndex is int idx2)
+        {
+            // 人間が手を入れた時点で「人間のもの」に変える。AI が作ったものは同じ手順で作り直せるが、
+            // 人間が調整したものは失うと戻せないため、MCP の remove_command から守る。
+            command.CreatedByAgent = false;
+            editingSessionCommands[idx2] = command; // 編集：既存位置に上書き
         }
         else
         {
-            editingSessionCommands.Add(command); // 新規：末尾に追加
+            editingSessionCommands.Add(command); // 新規：末尾に追加（UI 発なので CreatedByAgent は既定の false）
         }
         // ダイアログ側が Close を呼び OnSessionCommandDialogVisibleChanged 経由で state クリア
         await PersistSessionCommandsAsync(); // 即時保存
@@ -744,7 +781,10 @@
                 KeyName = c.KeyName,
                 GroupName = c.GroupName,
                 SendMode = c.SendMode,
-                PropagateToChildren = c.PropagateToChildren
+                PropagateToChildren = c.PropagateToChildren,
+                // ここで落とすと、別のコマンドを1つ追加/削除しただけで既存の AI 登録が
+                // すべて人間扱いになってしまう。落とすのは編集した項目だけ（HandleSessionCommandSave）
+                CreatedByAgent = c.CreatedByAgent
             })
             .ToList();
 

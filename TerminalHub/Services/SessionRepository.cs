@@ -247,6 +247,22 @@ namespace TerminalHub.Services
                 ("@card", card));
         }
 
+        /// <summary>
+        /// セッション専用コマンドだけを更新する。MCP からの追加・削除で使う。
+        /// 行全体の upsert にしないのは、MCP は Circuit の外から動くため、
+        /// その時点の SessionInfo で他の列まで書き戻すと取りこぼしを生みうるから。
+        /// </summary>
+        public async Task UpdateSessionCommandsAsync(Guid sessionId, List<CustomCommand> commands)
+        {
+            await using var connection = _dbContext.CreateConnection();
+            await connection.OpenAsync();
+
+            await connection.ExecuteNonQueryAsync(@"
+                UPDATE Sessions SET SessionCommands = @sessionCommands WHERE SessionId = @sessionId",
+                ("@sessionId", sessionId.ToString()),
+                ("@sessionCommands", SerializeSessionCommands(commands)));
+        }
+
         public async Task UpdateArchivedStateAsync(Guid sessionId, bool isArchived, DateTime? archivedAt)
         {
             await using var connection = _dbContext.CreateConnection();
