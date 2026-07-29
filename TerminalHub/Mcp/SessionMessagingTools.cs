@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using ModelContextProtocol.Server;
 using TerminalHub.Models;
 using TerminalHub.Services;
@@ -9,14 +9,18 @@ namespace TerminalHub.Mcp
     /// セッション間メッセージング用の MCP ツール群。
     /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)・
     /// メッセージ送信(send_to_session)・メモ/カード設定(set_memo/set_card/get_card)・
-    /// 依頼の状況札(get_context/update_context)を提供する最小構成。
+    /// 依頼の状況札(get_context/update_context)・セッション専用コマンド
+    /// (list_commands/add_command/remove_command)を提供する最小構成。
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
     /// - 集約なし: 結果待ち(wait)/読み取り(read)はしない。完了は TerminalHub 本体の LED/通知で人間が気づく。
     /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
     ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
-    ///   書き込み系(set_memo/set_card)は proof の検証で本人のみに機構的に制限する。
+    ///   書き込み系(set_memo/set_card/add_command/remove_command)は proof の検証で
+    ///   本人のみに機構的に制限する。
+    /// - セッション専用コマンドだけは向きが逆で、セッションが人間のために UI(クイック送信バーの
+    ///   ボタン)を生やす。グローバル設定のコマンドは対象外＝共有物には触らせない。
     /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
     ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
     ///   SessionProof、および依頼IDで引く状況札=ContextSummary は例外として持つ）。
@@ -506,6 +510,9 @@ namespace TerminalHub.Mcp
 
             if (string.IsNullOrWhiteSpace(title))
                 return new SendResult(false, "title は必須です（remove_command の指定に使うため）。");
+            // 前後の空白は落とす。残すと "Foo" と "Foo " が別物になり、重複判定も
+            // remove_command の完全一致も人間の目には説明できない挙動になる。
+            title = title.Trim();
 
             var isKey = string.Equals(type, "key", StringComparison.OrdinalIgnoreCase);
             if (!isKey && !string.Equals(type, "text", StringComparison.OrdinalIgnoreCase))
@@ -516,8 +523,8 @@ namespace TerminalHub.Mcp
                     $"keyName が不正です: {keyName ?? "(未指定)"}。使えるのは " +
                     string.Join(" / ", KeySequencePresets.All.Select(kv => kv.Key)) + " です。");
 
-            if (!isKey && string.IsNullOrEmpty(commandText))
-                return new SendResult(false, "type=\"text\" では commandText が必須です。");
+            if (!isKey && string.IsNullOrWhiteSpace(commandText))
+                return new SendResult(false, "type=\"text\" では commandText が必須です（空白だけも不可）。");
 
             var commands = new List<CustomCommand>(info.SessionCommands);
             if (commands.Any(c => string.Equals(c.Title, title, StringComparison.Ordinal)))
@@ -538,6 +545,10 @@ namespace TerminalHub.Mcp
                 CreatedByAgent = true,
             });
 
+            // 永続化(SQLite)。set_memo と同様、MCP は非Circuitコンテキストなので Singleton の
+            // ISessionRepository で直接更新する。
+            // 注意: ストレージが LocalStorage モード(真実の保存先がブラウザ側)のときは、この SQLite への
+            // UPDATE が対象行なしで空振りし、インメモリ更新＋UI反映のみ効いてリロード後に消えることがある(既定は SQLite)。
             await sessionRepository.UpdateSessionCommandsAsync(info.SessionId, commands);
             sessionManager.UpdateSessionCommands(info.SessionId, commands);
 
@@ -566,23 +577,29 @@ namespace TerminalHub.Mcp
             if (info == null)
                 return new SendResult(false, ProofRejectedMessage);
 
-            var target = info.SessionCommands
-                .FirstOrDefault(c => string.Equals(c.Title, title, StringComparison.Ordinal));
+            var key = (title ?? string.Empty).Trim();
+
+            // リストは1回だけ読んで、判定も除去も同じスナップショットに対して行う。
+            // 2回読むと、その間に別の書き込みで差し替わったとき参照が一致せず、
+            // 何も消していないのに成功を返す（＝静かに効かない）ことがある。
+            var snapshot = info.SessionCommands.ToList();
+            var target = snapshot.FirstOrDefault(c => string.Equals(c.Title, key, StringComparison.Ordinal));
             if (target == null)
-                return new SendResult(false, $"そのコマンドが見つかりません: {title}。list_commands で確認してください。");
+                return new SendResult(false, $"そのコマンドが見つかりません: {key}。list_commands で確認してください。");
 
             if (!target.CreatedByAgent)
                 return new SendResult(false,
-                    $"「{title}」は人間が作った(または編集した)コマンドなので削除できません。" +
+                    $"「{key}」は人間が作った(または編集した)コマンドなので削除できません。" +
                     "消す必要があるなら、人間に UI から操作してもらってください。");
 
-            var commands = info.SessionCommands
-                .Where(c => !ReferenceEquals(c, target)).ToList();
+            var commands = snapshot
+                .Where(c => !string.Equals(c.Title, key, StringComparison.Ordinal)).ToList();
 
+            // LocalStorage モードでの空振り注意は add_command 側のコメント参照。
             await sessionRepository.UpdateSessionCommandsAsync(info.SessionId, commands);
             sessionManager.UpdateSessionCommands(info.SessionId, commands);
 
-            return new SendResult(true, $"コマンドを削除しました: {title}");
+            return new SendResult(true, $"コマンドを削除しました: {key}");
         }
     }
 }

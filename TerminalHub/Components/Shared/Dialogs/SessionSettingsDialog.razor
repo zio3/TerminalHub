@@ -259,8 +259,7 @@
                                     }
                                     @if (cmd.CreatedByAgent)
                                     {
-                                        <i class="bi bi-robot me-1 text-info"
-                                           title="このセッション自身が MCP から登録したコマンドです。編集すると通常のコマンドになり、以降 MCP からは削除できなくなります。"></i>
+                                        <i class="bi bi-robot me-1 text-info" title="@L["Settings.Commands.CreatedByAgent"]"></i>
                                     }
                                     @if (!string.IsNullOrEmpty(cmd.GroupName))
                                     {
@@ -332,6 +331,11 @@
     private List<CustomCommand> editingSessionCommands = new();
     /// <summary>専用コマンド編集時のエラー（title 重複など）。null なら非表示。</summary>
     private string? sessionCommandError;
+    /// <summary>
+    /// 編集バッファを読み込んだ時点の title 一覧。ダイアログを開いている間に MCP
+    /// （add_command）から増えたコマンドを検出し、保存時に取り込むために使う。
+    /// </summary>
+    private HashSet<string> loadedSessionCommandTitles = new(StringComparer.Ordinal);
     private bool commandEditDialogVisible = false;
     private bool commandEditDialogIsNew = false;
     private int? commandEditDialogIndex = null;
@@ -475,6 +479,10 @@
                     CreatedByAgent = c.CreatedByAgent
                 })
                 .ToList();
+            loadedSessionCommandTitles = editingSessionCommands
+                .Where(c => !string.IsNullOrEmpty(c.Title))
+                .Select(c => c.Title!)
+                .ToHashSet(StringComparer.Ordinal);
 
             // 子セッションなら、親から伝搬されてくるコマンドを読み取り専用で見せるために取得する
             inheritedCommands = LoadInheritedCommands(sessionInfo);
@@ -722,7 +730,7 @@
                     string.Equals(c.Title, command.Title, StringComparison.Ordinal))
                 .Any())
         {
-            sessionCommandError = $"「{command.Title}」は既にこのセッションにあります。別の名前にしてください。";
+            sessionCommandError = string.Format(L["Settings.Commands.DuplicateTitle"], command.Title);
             return;
         }
         sessionCommandError = null;
@@ -770,6 +778,24 @@
     {
         if (sessionInfo == null)
             return;
+
+        // ダイアログを開いている間に MCP(add_command) から増えたコマンドを取り込む。
+        // 編集バッファは開いた時点のスナップショットなので、そのまま書き戻すと
+        // その間の追加を黙って消してしまう（過去に b03f90d で同種の消失を修正している）。
+        // 逆方向（開いている間の remove_command）は復活する形になるが、消えるより安全側であり、
+        // 対象は AI が登録したもの＝同じ手順で作り直せるものに限られる。
+        var externallyAdded = sessionInfo.SessionCommands
+            .Where(c => c.CreatedByAgent
+                && !string.IsNullOrEmpty(c.Title)
+                && !loadedSessionCommandTitles.Contains(c.Title!)
+                && !editingSessionCommands.Any(e => string.Equals(e.Title, c.Title, StringComparison.Ordinal)))
+            .ToList();
+        if (externallyAdded.Count > 0)
+        {
+            editingSessionCommands.AddRange(externallyAdded);
+            foreach (var c in externallyAdded)
+                loadedSessionCommandTitles.Add(c.Title!);
+        }
 
         // editingSessionCommands をディープコピーして実セッションへ反映（以降の編集で相互に壊さないため）
         sessionInfo.SessionCommands = editingSessionCommands
