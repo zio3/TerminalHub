@@ -1526,6 +1526,10 @@
                     // 必ずエミュレータ → ConPTY の順（再送データより先に画面を空にするため）
                     selectedSession.ResizeTerminalBuffer(size.Cols, size.Rows);
                     activeSession.Resize(size.Cols, size.Rows);
+                    // 実寸が ConPTY に適用される合流点は ApplyConPtyResize とここの2つある。
+                    // むしろセッションを開く通常のフローではこちらだけが通り（ApplyConPtyResize は
+                    // 同サイズガードで早期 return する）、ここで記録しないと保存値が永久に null のままになる。
+                    RememberTerminalSize(size.Cols, size.Rows);
                 }
 
                 // スナップショット生成と同時にライブ出力のテール記録を開始し、
@@ -2077,7 +2081,8 @@
             settings.SessionDefaults.LastTerminalCols = pending.Value.Cols;
             settings.SessionDefaults.LastTerminalRows = pending.Value.Rows;
             AppSettingsService.SaveSettings(settings);
-            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
+            // デバウンス後に1回だけなので Information でよい（効いているかを実機で確認できるようにする）
+            Logger.LogInformation("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
         }
         catch (Exception ex)
         {
@@ -2124,7 +2129,8 @@
         // 確定した実寸を次回の ConPTY 初期サイズとして覚えておく（SessionManager.ResolveInitialSize が読む）。
         // 既定の 120x30 のまま子プロセスを起動すると実寸（166x80 前後）が確定するまで誤った桁数で
         // 描画され、claude -c のように起動直後へ大量の履歴を描くケースでは折り返しのズレが焼き付く。
-        // ここは実寸が ConPTY に適用される唯一の合流点なので、記録もここで行う。
+        // 実寸が ConPTY に適用される合流点はここと SelectSession のリプレイ前サイズ同期の2つ。
+        // 両方で記録する（このパスは同サイズガードで早期 return するため、通らないことも多い）。
         RememberTerminalSize(cols, rows);
 
         // 行数「増加」時は xterm をエミュレータ状態から再同期する（デバウンス付き）。
