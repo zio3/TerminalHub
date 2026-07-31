@@ -303,6 +303,8 @@ namespace TerminalHub.Services
             {
                 case TerminalType.ClaudeCode:
                     var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath(), ResolveClaudeHookConfigPath(sessionId));
+                    // ネイティブ版(.exe)・npm版(.cmd)とも cmd.exe 経由で同じ形に組み立てる。
+                    // 引用符の二重掛けが必要な理由（v1.0.71 の起動不能回帰）は ExecuteQuoted のコメント参照。
                     return TerminalCommandLine.ExecuteQuoted(GetClaudeCmdPath(), claudeArgs);
 
                 // GeminiCLI は廃止: 既存セッションは default 分岐で通常ターミナルとして起動する
