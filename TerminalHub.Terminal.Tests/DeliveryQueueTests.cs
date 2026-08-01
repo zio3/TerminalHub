@@ -12,7 +12,7 @@ public sealed class DeliveryQueueTests
     private static readonly DateTime Origin = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static DeliveryItem Item(Guid target, string text, DateTime? at = null) =>
-        new(target, text, Submit: true, at ?? Origin, ContextId: null,
+        new(target, text, at ?? Origin, ContextId: null,
             RequesterSessionId: null, IsSystemCallback: false);
 
     [Fact]

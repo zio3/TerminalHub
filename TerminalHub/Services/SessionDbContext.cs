@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 11;
+        private const int CurrentSchemaVersion = 12;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -307,6 +307,16 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v11 適用完了");
             }
 
+            if (currentVersion < 12)
+            {
+                // v12: 配送記録（Deliveries）テーブルを追加。
+                // エンベロープの #ID から「本当に TerminalHub を通ったか・どこからどこへか」を検証する台帳。
+                _logger.LogInformation("[DB][マイグレーション] v12 適用開始: Deliveries テーブル追加");
+                await CreateDeliveriesTableAsync();
+                await SetSchemaVersionAsync(12);
+                _logger.LogInformation("[DB][マイグレーション] v12 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -527,6 +537,33 @@ namespace TerminalHub.Services
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_contexts_updated ON Contexts(UpdatedAt);
+            ";
+
+            await connection.ExecuteNonQueryAsync(sql);
+        }
+
+        /// <summary>
+        /// v12: 配送記録テーブル。send_to_session の各配送に発行される deliveryId
+        /// （エンベロープの #ID）から From/To を引く台帳。全行が追記のみ（更新なし）。
+        /// From は proof 検証済みの送信元で、NULL = 無記名（外部クライアントの可能性を含む）。
+        /// </summary>
+        private async Task CreateDeliveriesTableAsync()
+        {
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var sql = @"
+                CREATE TABLE IF NOT EXISTS Deliveries (
+                    DeliveryId TEXT PRIMARY KEY,
+                    FromSessionId TEXT,
+                    FromName TEXT,
+                    ToSessionId TEXT NOT NULL,
+                    ToName TEXT NOT NULL,
+                    ContextId TEXT,
+                    SentAt TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_deliveries_sentat ON Deliveries(SentAt);
             ";
 
             await connection.ExecuteNonQueryAsync(sql);

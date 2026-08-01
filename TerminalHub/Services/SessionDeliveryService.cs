@@ -23,12 +23,12 @@ public enum DeliveryOutcome
 public interface ISessionDeliveryService
 {
     /// <summary>
-    /// 宛先セッションへ1件送る。宛先が入力待ちなら積んで、ready になってから配送する。
+    /// 宛先セッションへ1件送る（本文＋Enter＝確定送信のみ。「流し込むだけ」は提供しない）。
+    /// 宛先が入力待ちなら積んで、ready になってから配送する。
     /// </summary>
     Task<DeliveryOutcome> SendAsync(
         SessionInfo target,
         string text,
-        bool submit,
         string? contextId = null,
         Guid? requesterSessionId = null);
 
@@ -153,7 +153,6 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public async Task<DeliveryOutcome> SendAsync(
         SessionInfo target,
         string text,
-        bool submit,
         string? contextId = null,
         Guid? requesterSessionId = null)
     {
@@ -162,7 +161,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             return DeliveryOutcome.Rejected;
 
         var item = new DeliveryItem(
-            target.SessionId, text, submit, DateTime.UtcNow, contextId, requesterSessionId,
+            target.SessionId, text, DateTime.UtcNow, contextId, requesterSessionId,
             IsSystemCallback: false);
 
         return await EnqueueOrWriteAsync(target, item);
@@ -252,11 +251,10 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         try
         {
             await conpty.WriteAsync(item.Text);
-            if (item.Submit)
-            {
-                await Task.Delay(SubmitDelay);
-                await conpty.WriteAsync("\r");
-            }
+            // 常に Enter で確定する。「流し込むだけ(submit=false)」は実利用ゼロで廃止した
+            // （入力欄に置いて人間が確認する用途はセッション専用コマンドの insertToInputOnly が担う）。
+            await Task.Delay(SubmitDelay);
+            await conpty.WriteAsync("\r");
             return WriteResult.Delivered;
         }
         catch (Exception ex)
@@ -464,7 +462,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         }
 
         var item = new DeliveryItem(
-            requesterSessionId, text, Submit: true, DateTime.UtcNow,
+            requesterSessionId, text, DateTime.UtcNow,
             ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
 
         await EnqueueOrWriteAsync(requester, item);
