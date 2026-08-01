@@ -85,6 +85,39 @@ public sealed class McpConnectionKeyTests
     }
 
     [Fact]
+    public void BuildCodexArgs_ユーザーがterminalhub定義を全体代入していたらURLもキーも注入しない()
+    {
+        // ドット記法(url=)ではなくインラインテーブルの全体代入でも自前定義は成立する。
+        // 見落とすと、こちらの URL＋秘密キーの後にユーザーの代入が重なり、設定衝突や
+        // 「自前 URL に秘密ヘッダーが混ざる」事故になる(レビュー指摘)。
+        var actual = TerminalConstants.BuildCodexArgs(
+            new Dictionary<string, string>
+            {
+                ["extra-args"] = "-c mcp_servers.terminalhub={url=\"http://localhost:9999/mcp\"}"
+            },
+            terminalHubMcpUrl: "http://localhost:5081/mcp",
+            terminalHubMcpConnectionKey: "abc123");
+
+        Assert.DoesNotContain("5081", actual);
+        Assert.DoesNotContain("abc123", actual);
+    }
+
+    [Fact]
+    public void BuildCodexArgs_ユーザーがMcpServersごと全体代入していたらURLもキーも注入しない()
+    {
+        var actual = TerminalConstants.BuildCodexArgs(
+            new Dictionary<string, string>
+            {
+                ["custom-args"] = "-c mcp_servers={terminalhub={url=\"http://localhost:9999/mcp\"}}"
+            },
+            terminalHubMcpUrl: "http://localhost:5081/mcp",
+            terminalHubMcpConnectionKey: "abc123");
+
+        Assert.DoesNotContain("5081", actual);
+        Assert.DoesNotContain("abc123", actual);
+    }
+
+    [Fact]
     public void BuildCodexArgs_ユーザーが別名ヘッダを足しているだけならキーは注入する()
     {
         // 別のヘッダ（X-Custom 等）の追加はドット記法同士でマージされ衝突しないので、注入を止めない。

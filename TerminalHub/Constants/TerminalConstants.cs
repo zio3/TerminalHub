@@ -132,7 +132,16 @@
             var userSuppliedWindowsSandbox = ContainsCodexConfigOverride(options, "windows.sandbox");
             var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
             var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
-            var userSuppliedTerminalHubMcpUrl = ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.url");
+            // terminalhub サーバー定義の自前指定はドット記法(url=)だけでなく、
+            // インラインテーブルの全体代入(mcp_servers.terminalhub={...} / mcp_servers={...})でも
+            // 成立する。全体代入を見落とすと、こちらの URL＋接続キーを注入した後に
+            // ユーザーの代入が重なり、マージのされ方次第で設定衝突や
+            // 「自前 URL にこちらの秘密ヘッダーが混ざる」事故になるため、まとめて自前定義扱いにする
+            // (URL もキーも注入しない=安全側)。
+            var userSuppliedTerminalHubMcpUrl =
+                ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.url") ||
+                ContainsCodexConfigOverride(options, "mcp_servers.terminalhub") ||
+                ContainsCodexConfigOverride(options, "mcp_servers");
             var userSuppliedTerminalHubMcpHeaders =
                 ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.http_headers") ||
                 ContainsCodexConfigOverride(options, $"mcp_servers.terminalhub.http_headers.{McpSessionKeyHeader}");
