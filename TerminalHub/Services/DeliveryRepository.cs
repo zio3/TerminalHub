@@ -27,6 +27,15 @@ namespace TerminalHub.Services
     {
         Task CreateAsync(DeliveryRecord record);
         Task<DeliveryRecord?> GetAsync(string deliveryId);
+
+        /// <summary>
+        /// 記録を削除する（受理されなかった送信の後片付け用）。
+        /// 誰も ID を参照できない記録を残すと、Rejected を量産して総数上限の掃除を走らせ、
+        /// **真正な記録を押し出す**攻撃に使える（押し出された配送は get_delivery で
+        /// 「偽装か期限切れ」と誤判定される）ため、書いていないことが確定した記録は消す。
+        /// 後片付けの失敗で本流を壊さないよう、例外は投げずログに残す。
+        /// </summary>
+        Task DeleteAsync(string deliveryId);
     }
 
     public class DeliveryRepository : IDeliveryRepository
@@ -90,6 +99,26 @@ namespace TerminalHub.Services
                 // RoundtripKind: 保存は "o" 形式の UTC。既定の Parse はローカルへ変換してしまう
                 // （ContextRepository と同じ理由）。
                 DateTime.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+        }
+
+        public async Task DeleteAsync(string deliveryId)
+        {
+            try
+            {
+                await _dbContext.InitializeAsync();
+                await using var connection = _dbContext.CreateConnection();
+                await connection.OpenAsync();
+
+                await connection.ExecuteNonQueryAsync(
+                    "DELETE FROM Deliveries WHERE DeliveryId = @deliveryId",
+                    ("@deliveryId", deliveryId));
+            }
+            catch (Exception ex)
+            {
+                // 後片付けの失敗で送信エラー本体を握り潰さない（ContextRepository.DeleteAsync と同じ方針）。
+                // 残っても TTL で消える追記のみの行が1件残るだけ。
+                _logger.LogWarning(ex, "[Delivery] 記録の後片付けに失敗: {DeliveryId}", deliveryId);
+            }
         }
 
         private async Task PruneAsync(SqliteConnection connection)

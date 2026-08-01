@@ -68,4 +68,16 @@ public sealed class DeliveryRepositoryTests : IDisposable
         // 見つからない = 偽装（手書きエンベロープ）か期限切れ、と判定する根拠。
         Assert.Null(await _repository.GetAsync("nosuchid0000"));
     }
+
+    [Fact]
+    public async Task 削除した記録は見つからない()
+    {
+        // Rejected（一度も書いていない）の後片付け経路。参照不能な記録を残すと
+        // 総数上限の掃除で真正な記録を押し出す攻撃に使えるため、消せることが要件。
+        await _repository.CreateAsync(Record("del000000001"));
+
+        await _repository.DeleteAsync("del000000001");
+
+        Assert.Null(await _repository.GetAsync("del000000001"));
+    }
 }

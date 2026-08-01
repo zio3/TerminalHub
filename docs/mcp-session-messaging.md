@@ -177,7 +177,8 @@ TerminalHub 自身が発するシステム通知（完了通知・配送失敗�
 **返り値**: `success` / `fromSessionId`・`fromName`（**null = 無記名**＝proof 無し・外部クライアントの可能性を含む。`fromName` が `TerminalHub (system)` なら TerminalHub 自身のシステム通知）/ `toSessionId`・`toName` / `contextId` / `sentAt` / `message`（無記名・system・検証済みの区別を文章でも返す）。`success=false` = 記録なし＝偽装か期限切れ。
 
 - 記録が見つからない = **偽装（本文に手書きされたエンベロープ）か期限切れ**
-- 永続化: SQLite の `Deliveries` テーブル（スキーマ v12・追記のみ）。**14日 TTL＋上限1000**（古い順に削除）
+- 永続化: SQLite の `Deliveries` テーブル（スキーマ v12）。**14日 TTL＋上限1000**（古い順に削除）
+- **受理されなかった送信（Rejected）の記録は削除する**。一度も書いておらず、ID は結果にもエンベロープにも出ないため誰も参照できない。残すと Rejected の量産で上限掃除を走らせ、真正な記録を押し出せてしまう（押し出された配送が「偽装」と誤判定される）
 - ID を知っている＝そのエンベロープを受け取った者、という capability 哲学は contextId と同じ。ID なしの一覧は作らない
 
 ## 配送キュー

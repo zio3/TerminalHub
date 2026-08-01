@@ -194,9 +194,8 @@ namespace TerminalHub.Mcp
             // （スラッシュ例外と組めば "/context\r指示" でも同じ）。ESC・Ctrl+C 等の他の C0 制御文字も
             // キー操作の注入に使えるため一括で拒否する（タブも TUI の補完等を起こすので含める）。
             // 複数行の内容はファイルに書いてパスを送る、という既存の推奨運用がそのまま逃げ道になる。
-            if (!string.IsNullOrEmpty(message) && message.Any(c => c < ' ' || c == '\x7f'))
+            if (MessageTextGuard.TryFindControlChar(message, out var bad))
             {
-                var bad = message.First(c => c < ' ' || c == '\x7f');
                 return new SendResult(false,
                     $"本文に制御文字(U+{(int)bad:X4})が含まれているため送信できません。" +
                     "改行を含む内容は本文で送らず、ファイルに書いて絶対パスだけを送ってください" +
@@ -295,6 +294,13 @@ namespace TerminalHub.Mcp
                 // TTL 掃除の対象外のため、残すと永続の孤児になる。
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
+
+                // 配送記録も片付ける。Rejected は「一度も書いていない」ことが確定しており
+                // （Failed と違い部分配送の可能性がない）、この ID は結果にもエンベロープにも
+                // 出ないので誰も参照できない。残すと、Rejected を量産して総数上限の掃除を
+                // 走らせ、**真正な記録を押し出す**攻撃に使える（押し出された配送は
+                // get_delivery で「偽装か期限切れ」と誤判定される）。
+                await deliveryRepository.DeleteAsync(deliveryId);
 
                 // ここに来る原因は待ち行列の上限だけ（未起動は手前で別メッセージにして弾いている）。
                 return new SendResult(false,

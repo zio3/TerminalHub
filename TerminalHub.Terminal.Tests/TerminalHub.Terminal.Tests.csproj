@@ -33,6 +33,7 @@
     <Compile Include="..\TerminalHub\Services\SlashCommandFilter.cs" Link="SlashCommandFilter.cs" />
     <Compile Include="..\TerminalHub\Services\TerminalCommandLine.cs" Link="TerminalCommandLine.cs" />
     <Compile Include="..\TerminalHub\Services\DeliveryQueue.cs" Link="DeliveryQueue.cs" />
+    <Compile Include="..\TerminalHub\Services\MessageTextGuard.cs" Link="MessageTextGuard.cs" />
     <!-- 依頼の状況札。status 遷移の判定が SQL の条件付き UPDATE に載っているため、実 SQLite で検証する -->
     <Compile Include="..\TerminalHub\Services\ContextRepository.cs" Link="ContextRepository.cs" />
     <Compile Include="..\TerminalHub\Services\DeliveryRepository.cs" Link="DeliveryRepository.cs" />
