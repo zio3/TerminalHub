@@ -309,6 +309,11 @@ namespace TerminalHub.Mcp
                     $"許可/選択待ちを解消してもらってから送り直してください。");
             }
 
+            // ここから先は記録を残すことが確定（Delivered / Queued / Failed=部分配送の可能性あり）。
+            // 総数上限の掃除はこの時点で行う。INSERT 直後にやると、Rejected の一時的な +1 が
+            // 引き金になって真正な最古の記録が先に押し出され、Rejected 側を消しても戻らない。
+            await deliveryRepository.PruneToCapAsync();
+
             if (outcome == DeliveryOutcome.Failed)
             {
                 // **札は消さない**。本文は contextId 入りのエンベロープごと相手の入力欄へ

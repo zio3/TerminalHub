@@ -491,6 +491,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 requester.GetDisplayName(),
                 ContextId: null,
                 DateTime.UtcNow));
+            // システム通知の記録は常に残る（Rejected のような取り消しが無い）ので、
+            // ここで総数上限の掃除を行ってよい。PruneToCapAsync は例外を投げない。
+            await _deliveryRepository.PruneToCapAsync();
             idPart = $"#{deliveryId}";
         }
         catch (Exception ex)

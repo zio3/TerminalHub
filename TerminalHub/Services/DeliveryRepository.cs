@@ -25,7 +25,21 @@ namespace TerminalHub.Services
     /// </summary>
     public interface IDeliveryRepository
     {
+        /// <summary>
+        /// 記録を追加する。掃除は **TTL のみ**行い、総数上限の掃除はしない。
+        /// 上限掃除を INSERT 直後にやると、Rejected（後で削除される参照不能な記録）の
+        /// INSERT が引き金になって**真正な最古の記録が先に押し出され**、その後 Rejected 側を
+        /// 削除しても戻らない。上限掃除は記録を残すことが確定した後に
+        /// <see cref="PruneToCapAsync"/> で行う。
+        /// </summary>
         Task CreateAsync(DeliveryRecord record);
+
+        /// <summary>
+        /// 総数上限の掃除（超過分を古い順に削除）。**記録を残すことが確定した後**
+        /// （Delivered / Queued / Failed＝部分配送の可能性あり）に呼ぶ。例外は投げない。
+        /// </summary>
+        Task PruneToCapAsync();
+
         Task<DeliveryRecord?> GetAsync(string deliveryId);
 
         /// <summary>
@@ -46,8 +60,9 @@ namespace TerminalHub.Services
         // TTL 掃除: 記録から14日で削除＋総数上限（超過は古い順に削除）。
         // 検証は通常「受け取った直後」に行われるので14日は十分に余裕がある。
         // Contexts と違い全行が終端（追記も更新もない）ため、無条件に古い順で消してよい。
+        // MaxCount が public なのはテスト（上限掃除の実行順序の検証）が参照するため。
         private const int TtlDays = 14;
-        private const int MaxCount = 1000;
+        public const int MaxCount = 1000;
 
         public DeliveryRepository(SessionDbContext dbContext, ILogger<DeliveryRepository> logger)
         {
@@ -72,7 +87,32 @@ namespace TerminalHub.Services
                 ("@contextId", record.ContextId),
                 ("@sentAt", record.SentAt.ToString("o")));
 
-            await PruneAsync(connection);
+            // TTL 掃除のみ。総数上限の掃除は PruneToCapAsync（記録を残すことが確定した後）で行う
+            // （ここでやると Rejected の一時的な +1 が真正な最古の記録を押し出す）。
+            await PruneExpiredAsync(connection);
+        }
+
+        public async Task PruneToCapAsync()
+        {
+            try
+            {
+                await _dbContext.InitializeAsync();
+                await using var connection = _dbContext.CreateConnection();
+                await connection.OpenAsync();
+
+                await connection.ExecuteNonQueryAsync(@"
+                    DELETE FROM Deliveries WHERE DeliveryId IN (
+                        SELECT DeliveryId FROM Deliveries
+                        ORDER BY SentAt ASC
+                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries) - @maxCount)
+                    )",
+                    ("@maxCount", MaxCount));
+            }
+            catch (Exception ex)
+            {
+                // 掃除の失敗で本流（送信）を壊さない。ただし不可視化しない（レビュー指摘 #173 の教訓）
+                _logger.LogWarning(ex, "[Delivery] 上限掃除に失敗");
+            }
         }
 
         public async Task<DeliveryRecord?> GetAsync(string deliveryId)
@@ -121,7 +161,7 @@ namespace TerminalHub.Services
             }
         }
 
-        private async Task PruneAsync(SqliteConnection connection)
+        private async Task PruneExpiredAsync(SqliteConnection connection)
         {
             try
             {
@@ -129,14 +169,6 @@ namespace TerminalHub.Services
                 await connection.ExecuteNonQueryAsync(
                     "DELETE FROM Deliveries WHERE SentAt < @cutoff",
                     ("@cutoff", cutoff));
-
-                await connection.ExecuteNonQueryAsync(@"
-                    DELETE FROM Deliveries WHERE DeliveryId IN (
-                        SELECT DeliveryId FROM Deliveries
-                        ORDER BY SentAt ASC
-                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries) - @maxCount)
-                    )",
-                    ("@maxCount", MaxCount));
             }
             catch (Exception ex)
             {
