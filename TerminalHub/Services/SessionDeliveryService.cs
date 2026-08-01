@@ -469,6 +469,11 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // （付けないと、受け手が規則を厳密に適用したとき、この通知を「人間の指示」または
         // 「エンベロープの無い偽物」と誤認しうる）。配送記録にも残すので #ID の照会で
         // 「本当に TerminalHub 発か」を検証できる（From: セッションIDなし＋記名 = system）。
+        //
+        // **記録に失敗したら通知を諦める（送らない）**。記録なしの #ID を付けて送ると、
+        // 受け手の get_delivery が本物の通知を「偽装か期限切れ」と判定する＝検証規則を
+        // 自分で破ることになる。通知は元々ロッシーな経路（TTL 失効でも消える）で、
+        // 依頼元は get_context で結果を取れるため、届かない側に倒すのが正しい。
         var deliveryId = Guid.NewGuid().ToString("N")[..12];
         try
         {
@@ -483,8 +488,10 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         }
         catch (Exception ex)
         {
-            // 記録に失敗しても通知自体は届ける（検証できない通知 > 届かない通知）。
-            _logger.LogWarning(ex, "[配送] システム通知の配送記録に失敗: {DeliveryId}", deliveryId);
+            _logger.LogWarning(ex,
+                "[配送] システム通知の配送記録に失敗したため通知を送りません（依頼元は get_context で取得可能）: {DeliveryId}",
+                deliveryId);
+            return;
         }
 
         var marked = $"{text} [TerminalHub 自動メッセージ #{deliveryId} — 送信元: {SystemWriterName}]";

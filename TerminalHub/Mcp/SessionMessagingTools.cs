@@ -51,8 +51,12 @@ namespace TerminalHub.Mcp
         /// contextId は contextId="new" で送信したときだけ発行された ID が入る。
         /// delivery は "delivered"（ConPTY へ書けた）/ "queued"（宛先が入力待ちなので受理して待機中）。
         /// success=true の意味が「届いた」ではなく「受理した」に変わったため、両者を区別して返す。
+        /// deliveryId は配送記録の照会キー（受理された送信で入る）。エンベロープにも埋まるが、
+        /// スラッシュコマンド送信はエンベロープが付かないため、**送信者がこの値を持つことが
+        /// 監査（get_delivery）の唯一の入口**になる。
         /// </summary>
-        public record SendResult(bool success, string message, string? contextId = null, string? delivery = null);
+        public record SendResult(
+            bool success, string message, string? contextId = null, string? delivery = null, string? deliveryId = null);
 
         [McpServerTool(Name = "list_sessions")]
         [Description(
@@ -125,7 +129,7 @@ namespace TerminalHub.Mcp
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
             "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
-            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / **書き込みが途中で失敗**、のいずれか。" +
+            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / 本文に改行・制御文字が含まれる / **書き込みが途中で失敗**、のいずれか。" +
             "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
             "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
@@ -142,7 +146,7 @@ namespace TerminalHub.Mcp
             ISessionDeliveryService deliveryService,
             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
             string target,
-            [Description("送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨。")]
+            [Description("送る本文(1行のみ)。改行・制御文字は拒否される(受け手のターミナルで送信確定等として解釈され、意図しない実行につながるため)。複数行の内容はファイルに書いて絶対パスだけを送る。")]
             string message,
             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
             string? contextId = null,
@@ -184,6 +188,21 @@ namespace TerminalHub.Mcp
             // 送信失敗時に孤児レコードを残さない。
             string? issuedContextId = null;
             string? effectiveContextId = null;
+            // **本文に改行・制御文字を許さない**。本文中の \r は TUI に送信確定として解釈されるため、
+            // "指示\r" のような本文だと**指示だけが先に無印で実行され、エンベロープは次の入力欄に
+            // 残骸として残る**＝「マーカー無し＝人間」の境界をまるごとすり抜ける穴になる
+            // （スラッシュ例外と組めば "/context\r指示" でも同じ）。ESC・Ctrl+C 等の他の C0 制御文字も
+            // キー操作の注入に使えるため一括で拒否する（タブも TUI の補完等を起こすので含める）。
+            // 複数行の内容はファイルに書いてパスを送る、という既存の推奨運用がそのまま逃げ道になる。
+            if (!string.IsNullOrEmpty(message) && message.Any(c => c < ' ' || c == '\x7f'))
+            {
+                var bad = message.First(c => c < ' ' || c == '\x7f');
+                return new SendResult(false,
+                    $"本文に制御文字(U+{(int)bad:X4})が含まれているため送信できません。" +
+                    "改行を含む内容は本文で送らず、ファイルに書いて絶対パスだけを送ってください" +
+                    "(本文中の改行は受け手のターミナルで送信確定として解釈され、意図しない実行につながります)。");
+            }
+
             // `/` で始まる本文（スラッシュコマンド送信）にはエンベロープを付けない（後述）。
             // その場合 contextId を受け手へ伝える手段が無くなる＝受け手は update_context を
             // 呼べず、依頼元は完了通知を永遠に待つ「静かな機能停止」になる。併用は組み立ての
@@ -313,7 +332,8 @@ namespace TerminalHub.Mcp
                         ? string.Empty
                         : $" contextId={issuedContextId} は発行済みで、本文にも載っています。" +
                           "人間が送信した場合は受け手がこの札へ結果を書くので、get_context で確認できます。"),
-                    issuedContextId);
+                    issuedContextId,
+                    deliveryId: deliveryId);
             }
 
             var queued = outcome == DeliveryOutcome.Queued;
@@ -326,7 +346,7 @@ namespace TerminalHub.Mcp
                     ? $" contextId={issuedContextId} を発行しました。完了/失敗時はあなたのセッションへ通知が届きます（ポーリング不要）。"
                     : $" contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。";
 
-            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered");
+            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered", deliveryId);
         }
 
         /// <summary>
