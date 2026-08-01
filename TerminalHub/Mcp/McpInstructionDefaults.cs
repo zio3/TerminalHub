@@ -71,8 +71,11 @@ public static class McpInstructionDefaults
         - `get_context` / `update_context`: ContextSummary（依頼の状況札）の読み書き。
           `send_to_session` に `contextId="new"` を渡すと発行される。
           **`proof` も渡していれば、札が completed / failed / canceled になった時点で
-          あなたのセッションへ自動で通知が届く**（ポーリング不要。配送できなかった場合も
-          「届きませんでした」が同じ経路で返る）。proof を渡せない外部クライアントは
+          あなたのセッションへ自動で通知が届く**（通常はポーリング不要。配送できなかった場合も
+          「届きませんでした」が同じ経路で返る）。ただし**通知が届いた時点であなた自身が
+          長く入力待ちだと、その通知は破棄される**（失敗通知の連鎖を避けるため再通知しない）。
+          依頼を出したあと長く放置される場合は、念のため `get_context` で確認すること。
+          proof を渡せない外部クライアントは
           `get_context` をポーリングして受け取る（**受信箱を持たない接続でも往復が完結する**）。
           依頼を受けた側は、メッセージ末尾に
           付与された contextId へ `update_context` で状況・結果を書くこと（完了時は

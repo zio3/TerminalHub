@@ -127,7 +127,9 @@ namespace TerminalHub.Mcp
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
             "proof(環境変数 TERMINALHUB_SESSION_PROOF)を渡すと、検証済みのあなたの名前とGUIDが本文末尾に付き、相手が返信できる。" +
             "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
-            "proof も渡していれば、札が完了/失敗/中止になった時点であなたのセッションへ自動で通知が届く(ポーリング不要)。" +
+            "proof も渡していれば、札が完了/失敗/中止になった時点であなたのセッションへ自動で通知が届く(通常はポーリング不要)。" +
+            "ただし通知が届いた時点であなた自身が長く入力待ちだと通知は破棄される(失敗通知の連鎖を避けるため再通知しない)。" +
+            "依頼を出したあと長く放置される場合は、念のため get_context で確認すること。" +
             "proof が無い外部クライアントは get_context をポーリングして結果を受け取る。既存の contextId を渡すと同じ札への続報になる。")]
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
@@ -228,9 +230,11 @@ namespace TerminalHub.Mcp
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
 
+                // ここに来る原因は待ち行列の上限だけ（未起動は手前で別メッセージにして弾いている）。
                 return new SendResult(false,
-                    $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
-                    $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
+                    $"『{info.GetDisplayName()}』の配送待ちが上限に達しているため受理できません。" +
+                    $"相手が入力待ちのまま溜まっている状態なので、ユーザーに宛先セッションの" +
+                    $"許可/選択待ちを解消してもらってから送り直してください。");
             }
 
             if (outcome == DeliveryOutcome.Failed)
