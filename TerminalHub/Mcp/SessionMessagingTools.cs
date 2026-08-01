@@ -29,7 +29,7 @@ namespace TerminalHub.Mcp
     ///   解消後に自動配送する（呼び出し側に状態確認と再送をさせない。呼び出し元が
     ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
     ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
-    ///   および揮発の配送キューの3つ。
+    ///   揮発の配送キュー、および配送記録=Deliveries（エンベロープ #ID の検証台帳・追記のみ）の4つ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -119,7 +119,8 @@ namespace TerminalHub.Mcp
             "target はセッションGUIDか表示名(完全一致)。" +
             "**届く本文の末尾には、TerminalHub 経由の自動メッセージであることを示す角括弧がサーバーによって必ず付く**" +
             "(proof を渡せば検証済みのあなたの名前とGUID入り、無ければ「送信元は無記名」表記。外すことはできない)。" +
-            "唯一の例外は `/` で始まる本文(スラッシュコマンド送信)で、コマンド引数を汚さないためエンベロープを付けない。" +
+            "唯一の例外は `/` で始まる本文(スラッシュコマンド送信)で、コマンド引数を汚さないためエンベロープを付けない" +
+            "(そのため contextId とは併用不可=拒否される)。" +
             "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
@@ -183,6 +184,17 @@ namespace TerminalHub.Mcp
             // 送信失敗時に孤児レコードを残さない。
             string? issuedContextId = null;
             string? effectiveContextId = null;
+            // `/` で始まる本文（スラッシュコマンド送信）にはエンベロープを付けない（後述）。
+            // その場合 contextId を受け手へ伝える手段が無くなる＝受け手は update_context を
+            // 呼べず、依頼元は完了通知を永遠に待つ「静かな機能停止」になる。併用は組み立ての
+            // 時点で拒否する（黙って通すより、送る前に気づかせる）。
+            var isSlashCommand = (message ?? string.Empty).StartsWith("/", StringComparison.Ordinal);
+            if (isSlashCommand && !string.IsNullOrWhiteSpace(contextId))
+                return new SendResult(false,
+                    "スラッシュコマンド（`/` で始まる本文）には contextId を紐づけられません。" +
+                    "コマンド引数を汚さないためエンベロープを付けない仕様で、受け手に contextId を伝える手段が無いためです。" +
+                    "結果が要る依頼は通常の文章で送ってください。");
+
             if (!string.IsNullOrWhiteSpace(contextId))
             {
                 if (string.Equals(contextId, "new", StringComparison.OrdinalIgnoreCase))
@@ -220,26 +232,29 @@ namespace TerminalHub.Mcp
             // CLI にコマンドとして解釈され通常プロンプトにならないため、指示のなりすましには
             // 実質使えない。ローカル利用前提で許容する（2026-08-01 判断）。
             // 配送記録は例外なく残す（誰がどのセッションへコマンドを送ったかの監査は保つ）。
-            var isSlashCommand = message.StartsWith("/", StringComparison.Ordinal);
+            // contextId との併用は上（組み立て前）で拒否済み。
             var deliveredMessage = isSlashCommand
-                ? message
+                ? message!
                 : message + BuildEnvelope(deliveryId, requester, effectiveContextId);
-
-            // 配送記録は送信前に書く。受け手がエンベロープを見た瞬間から照会できる必要があり、
-            // 「届いたのに記録がまだ無い」瞬間を作らないため（逆の「記録はあるが届かなかった」は
-            // 誰も ID を知らないので無害）。
-            await deliveryRepository.CreateAsync(new DeliveryRecord(
-                deliveryId,
-                requester?.SessionId.ToString(),
-                requester?.GetDisplayName(),
-                info.SessionId.ToString(),
-                info.GetDisplayName(),
-                effectiveContextId,
-                DateTime.UtcNow));
 
             DeliveryOutcome outcome;
             try
             {
+                // 配送記録は送信前に書く。受け手がエンベロープを見た瞬間から照会できる必要があり、
+                // 「届いたのに記録がまだ無い」瞬間を作らないため（逆の「記録はあるが届かなかった」は
+                // 誰も ID を知らないので無害）。
+                // **try の中に置く**: この INSERT が例外を投げた場合（ロック競合等）も、
+                // 下の catch が発行済みの札を片付ける安全網の対象に含める（外に置くと
+                // submitted の孤児行が残る＝#187 で塞いだのと同じ穴が別の呼び出しで再発する）。
+                await deliveryRepository.CreateAsync(new DeliveryRecord(
+                    deliveryId,
+                    requester?.SessionId.ToString(),
+                    requester?.GetDisplayName(),
+                    info.SessionId.ToString(),
+                    info.GetDisplayName(),
+                    effectiveContextId,
+                    DateTime.UtcNow));
+
                 outcome = await deliveryService.SendAsync(
                     info, deliveredMessage, effectiveContextId, requester?.SessionId);
             }
@@ -654,9 +669,11 @@ namespace TerminalHub.Mcp
                 record.ToName,
                 record.ContextId,
                 record.SentAt.ToString("o"),
-                record.FromSessionId == null
-                    ? "取得しました。この配送は無記名（proof 無し＝外部クライアントの可能性を含む）です。"
-                    : "取得しました。from は proof 検証済みの送信元です。");
+                record.FromSessionId != null
+                    ? "取得しました。from は proof 検証済みの送信元です。"
+                    : record.FromName == SessionDeliveryService.SystemWriterName
+                        ? "取得しました。この配送は TerminalHub 自身が発したシステム通知です。"
+                        : "取得しました。この配送は無記名（proof 無し＝外部クライアントの可能性を含む）です。");
         }
 
         // ---- セッション専用コマンド（クイック送信バーのボタン） ----

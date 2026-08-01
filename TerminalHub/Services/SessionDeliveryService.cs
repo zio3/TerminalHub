@@ -78,6 +78,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     private readonly Dictionary<Guid, SemaphoreSlim> _writeLocks = new();
     private readonly ISessionManager _sessionManager;
     private readonly IContextRepository _contextRepository;
+    private readonly IDeliveryRepository _deliveryRepository;
     private readonly IHookNotificationService _hookNotificationService;
     private readonly ILogger<SessionDeliveryService> _logger;
     private System.Threading.Timer? _sweepTimer;
@@ -85,11 +86,13 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public SessionDeliveryService(
         ISessionManager sessionManager,
         IContextRepository contextRepository,
+        IDeliveryRepository deliveryRepository,
         IHookNotificationService hookNotificationService,
         ILogger<SessionDeliveryService> logger)
     {
         _sessionManager = sessionManager;
         _contextRepository = contextRepository;
+        _deliveryRepository = deliveryRepository;
         _hookNotificationService = hookNotificationService;
         _logger = logger;
     }
@@ -461,8 +464,33 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             return;
         }
 
+        // システム発の通知にも**エンベロープを付ける**。「末尾にマーカーが無い入力＝人間の指示」
+        // という instructions の規則を、TerminalHub 自身の通知が破ってはいけない
+        // （付けないと、受け手が規則を厳密に適用したとき、この通知を「人間の指示」または
+        // 「エンベロープの無い偽物」と誤認しうる）。配送記録にも残すので #ID の照会で
+        // 「本当に TerminalHub 発か」を検証できる（From: セッションIDなし＋記名 = system）。
+        var deliveryId = Guid.NewGuid().ToString("N")[..12];
+        try
+        {
+            await _deliveryRepository.CreateAsync(new DeliveryRecord(
+                deliveryId,
+                FromSessionId: null,
+                FromName: SystemWriterName,
+                requesterSessionId.ToString(),
+                requester.GetDisplayName(),
+                ContextId: null,
+                DateTime.UtcNow));
+        }
+        catch (Exception ex)
+        {
+            // 記録に失敗しても通知自体は届ける（検証できない通知 > 届かない通知）。
+            _logger.LogWarning(ex, "[配送] システム通知の配送記録に失敗: {DeliveryId}", deliveryId);
+        }
+
+        var marked = $"{text} [TerminalHub 自動メッセージ #{deliveryId} — 送信元: {SystemWriterName}]";
+
         var item = new DeliveryItem(
-            requesterSessionId, text, DateTime.UtcNow,
+            requesterSessionId, marked, DateTime.UtcNow,
             ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
 
         await EnqueueOrWriteAsync(requester, item);
