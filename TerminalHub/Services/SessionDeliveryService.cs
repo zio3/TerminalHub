@@ -23,12 +23,12 @@ public enum DeliveryOutcome
 public interface ISessionDeliveryService
 {
     /// <summary>
-    /// 宛先セッションへ1件送る。宛先が入力待ちなら積んで、ready になってから配送する。
+    /// 宛先セッションへ1件送る（本文＋Enter＝確定送信のみ。「流し込むだけ」は提供しない）。
+    /// 宛先が入力待ちなら積んで、ready になってから配送する。
     /// </summary>
     Task<DeliveryOutcome> SendAsync(
         SessionInfo target,
         string text,
-        bool submit,
         string? contextId = null,
         Guid? requesterSessionId = null);
 
@@ -78,6 +78,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     private readonly Dictionary<Guid, SemaphoreSlim> _writeLocks = new();
     private readonly ISessionManager _sessionManager;
     private readonly IContextRepository _contextRepository;
+    private readonly IDeliveryRepository _deliveryRepository;
     private readonly IHookNotificationService _hookNotificationService;
     private readonly ILogger<SessionDeliveryService> _logger;
     private System.Threading.Timer? _sweepTimer;
@@ -85,11 +86,13 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public SessionDeliveryService(
         ISessionManager sessionManager,
         IContextRepository contextRepository,
+        IDeliveryRepository deliveryRepository,
         IHookNotificationService hookNotificationService,
         ILogger<SessionDeliveryService> logger)
     {
         _sessionManager = sessionManager;
         _contextRepository = contextRepository;
+        _deliveryRepository = deliveryRepository;
         _hookNotificationService = hookNotificationService;
         _logger = logger;
     }
@@ -153,7 +156,6 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public async Task<DeliveryOutcome> SendAsync(
         SessionInfo target,
         string text,
-        bool submit,
         string? contextId = null,
         Guid? requesterSessionId = null)
     {
@@ -162,7 +164,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             return DeliveryOutcome.Rejected;
 
         var item = new DeliveryItem(
-            target.SessionId, text, submit, DateTime.UtcNow, contextId, requesterSessionId,
+            target.SessionId, text, DateTime.UtcNow, contextId, requesterSessionId,
             IsSystemCallback: false);
 
         return await EnqueueOrWriteAsync(target, item);
@@ -252,11 +254,10 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         try
         {
             await conpty.WriteAsync(item.Text);
-            if (item.Submit)
-            {
-                await Task.Delay(SubmitDelay);
-                await conpty.WriteAsync("\r");
-            }
+            // 常に Enter で確定する。「流し込むだけ(submit=false)」は実利用ゼロで廃止した
+            // （入力欄に置いて人間が確認する用途はセッション専用コマンドの insertToInputOnly が担う）。
+            await Task.Delay(SubmitDelay);
+            await conpty.WriteAsync("\r");
             return WriteResult.Delivered;
         }
         catch (Exception ex)
@@ -463,10 +464,67 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             return;
         }
 
+        // システム発の通知にも**エンベロープを付ける**。「末尾にマーカーが無い入力＝人間の指示」
+        // という instructions の規則を、TerminalHub 自身の通知が破ってはいけない
+        // （付けないと、受け手が規則を厳密に適用したとき、この通知を「人間の指示」または
+        // 「エンベロープの無い偽物」と誤認しうる）。配送記録にも残すので #ID の照会で
+        // 「本当に TerminalHub 発か」を検証できる（From: セッションIDなし＋記名 = system）。
+        //
+        // **記録に失敗しても通知は送る。ただしそのときは #ID を付けない。**
+        // - 送らない、は不可: 依頼元はセッションで、通知を待つ以外に結果を知る契機がない
+        //   （get_context をポーリングする主体がいない、というのが #187 で配送キューを
+        //   導入した理由そのもの。SQLite のロック競合程度で結末が届かなくなるのは本末転倒）。
+        // - 記録なしの #ID を付けて送る、も不可: 受け手の get_delivery が本物の通知を
+        //   「偽装か期限切れ」と判定する＝検証規則を自分で破る。
+        // - よって「#ID の代わりに『配送記録なし』表記」で送る。マーカー自体は付くので
+        //   「マーカー無し＝人間」の規則は保たれ、存在しない ID を照会させることもない
+        //   （その1通だけ get_delivery での検証ができない、が正直な状態）。
+        var deliveryId = Guid.NewGuid().ToString("N")[..12];
+        string idPart;
+        var recorded = false;
+        try
+        {
+            await _deliveryRepository.CreateAsync(new DeliveryRecord(
+                deliveryId,
+                FromSessionId: null,
+                FromName: SystemWriterName,
+                requesterSessionId.ToString(),
+                requester.GetDisplayName(),
+                ContextId: null,
+                DateTime.UtcNow));
+            recorded = true;
+            idPart = $"#{deliveryId}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[配送] システム通知の配送記録に失敗（通知は「配送記録なし」表記で送る）: {DeliveryId}", deliveryId);
+            idPart = "配送記録なし";
+        }
+
+        var marked = $"{text} [TerminalHub 自動メッセージ {idPart} — 送信元: {SystemWriterName}]";
+
         var item = new DeliveryItem(
-            requesterSessionId, text, Submit: true, DateTime.UtcNow,
+            requesterSessionId, marked, DateTime.UtcNow,
             ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
 
-        await EnqueueOrWriteAsync(requester, item);
+        var outcome = await EnqueueOrWriteAsync(requester, item);
+
+        // 通常配送と同じ後始末をシステム通知にも適用する（send_to_session 側と対）。
+        // Rejected は一度も書いていないことが確定しており、この記録は誰も参照できないため
+        // 削除する（残すと Rejected の量産で真正な記録を押し出す口になる）。
+        // それ以外は Pending → Committed へ確定してから上限掃除（掃除は Committed だけを数える）。
+        if (recorded)
+        {
+            if (outcome == DeliveryOutcome.Rejected)
+            {
+                await _deliveryRepository.DeleteAsync(deliveryId);
+            }
+            else
+            {
+                await _deliveryRepository.CommitAsync(deliveryId);
+                await _deliveryRepository.PruneToCapAsync();
+            }
+        }
     }
 }

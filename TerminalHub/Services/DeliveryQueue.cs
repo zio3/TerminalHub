@@ -10,7 +10,6 @@ namespace TerminalHub.Services;
 public sealed record DeliveryItem(
     Guid TargetSessionId,
     string Text,
-    bool Submit,
     DateTime EnqueuedAt,
     string? ContextId,
     Guid? RequesterSessionId,

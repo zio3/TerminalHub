@@ -9,8 +9,8 @@ namespace TerminalHub.Mcp
     /// セッション間メッセージング用の MCP ツール群。
     /// TerminalHub が管理する「既存」セッションに対して、一覧取得(list_sessions)・
     /// メッセージ送信(send_to_session)・メモ/カード設定(set_memo/set_card/get_card)・
-    /// 依頼の状況札(get_context/update_context)・セッション専用コマンド
-    /// (list_commands/add_command/remove_command)を提供する最小構成。
+    /// 依頼の状況札(get_context/update_context)・配送記録の検証(get_delivery)・
+    /// セッション専用コマンド(list_commands/add_command/remove_command)を提供する最小構成。
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
@@ -29,7 +29,9 @@ namespace TerminalHub.Mcp
     ///   解消後に自動配送する（呼び出し側に状態確認と再送をさせない。呼び出し元が
     ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
     ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
-    ///   および揮発の配送キューの3つ。
+    ///   揮発の配送キュー、および配送記録=Deliveries（エンベロープ #ID の検証台帳。
+    ///   Pending で作成→配送結果で Committed へ確定 or Rejected なら削除。
+    ///   上限掃除は Committed だけを数える）の4つ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -51,8 +53,12 @@ namespace TerminalHub.Mcp
         /// contextId は contextId="new" で送信したときだけ発行された ID が入る。
         /// delivery は "delivered"（ConPTY へ書けた）/ "queued"（宛先が入力待ちなので受理して待機中）。
         /// success=true の意味が「届いた」ではなく「受理した」に変わったため、両者を区別して返す。
+        /// deliveryId は配送記録の照会キー（受理された送信で入る）。エンベロープにも埋まるが、
+        /// スラッシュコマンド送信はエンベロープが付かないため、**送信者がこの値を持つことが
+        /// 監査（get_delivery）の唯一の入口**になる。
         /// </summary>
-        public record SendResult(bool success, string message, string? contextId = null, string? delivery = null);
+        public record SendResult(
+            bool success, string message, string? contextId = null, string? delivery = null, string? deliveryId = null);
 
         [McpServerTool(Name = "list_sessions")]
         [Description(
@@ -115,13 +121,17 @@ namespace TerminalHub.Mcp
 
         [McpServerTool(Name = "send_to_session")]
         [Description(
-            "指定した既存セッションのターミナルにメッセージを1件送る(応答は待たない)。" +
-            "target はセッションGUIDか表示名(完全一致)。submit=true なら末尾でEnterを送り即実行させる。" +
+            "指定した既存セッションのターミナルにメッセージを1件送る(末尾でEnterを送り即実行させる。応答は待たない)。" +
+            "target はセッションGUIDか表示名(完全一致)。" +
+            "**届く本文の末尾には、TerminalHub 経由の自動メッセージであることを示す角括弧がサーバーによって必ず付く**" +
+            "(proof を渡せば検証済みのあなたの名前とGUID入り、無ければ「送信元は無記名」表記。外すことはできない)。" +
+            "唯一の例外は `/` で始まる本文(スラッシュコマンド送信)で、コマンド引数を汚さないためエンベロープを付けない" +
+            "(そのため contextId とは併用不可=拒否される)。" +
             "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
             "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
-            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / **書き込みが途中で失敗**、のいずれか。" +
+            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / 本文に改行・制御文字が含まれる / **書き込みが途中で失敗**、のいずれか。" +
             "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
             "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
@@ -134,13 +144,12 @@ namespace TerminalHub.Mcp
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
+            IDeliveryRepository deliveryRepository,
             ISessionDeliveryService deliveryService,
             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
             string target,
-            [Description("送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨。")]
+            [Description("送る本文(1行のみ)。改行・制御文字は拒否される(受け手のターミナルで送信確定等として解釈され、意図しない実行につながるため)。複数行の内容はファイルに書いて絶対パスだけを送る。")]
             string message,
-            [Description("末尾にEnterを送って実行を確定するか(既定 true)。false なら入力欄に流し込むだけ。")]
-            bool submit = true,
             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
             string? contextId = null,
             [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。渡すと送信元が本文末尾に付き、配送できなかった場合はあなたのセッションへ通知が届く。contextId と併用すれば札が終端状態になった時点の完了通知も届く。外部クライアント(環境変数なし)は省略。")]
@@ -181,6 +190,31 @@ namespace TerminalHub.Mcp
             // 送信失敗時に孤児レコードを残さない。
             string? issuedContextId = null;
             string? effectiveContextId = null;
+            // **本文に改行・制御文字を許さない**。本文中の \r は TUI に送信確定として解釈されるため、
+            // "指示\r" のような本文だと**指示だけが先に無印で実行され、エンベロープは次の入力欄に
+            // 残骸として残る**＝「マーカー無し＝人間」の境界をまるごとすり抜ける穴になる
+            // （スラッシュ例外と組めば "/context\r指示" でも同じ）。ESC・Ctrl+C 等の他の C0 制御文字も
+            // キー操作の注入に使えるため一括で拒否する（タブも TUI の補完等を起こすので含める）。
+            // 複数行の内容はファイルに書いてパスを送る、という既存の推奨運用がそのまま逃げ道になる。
+            if (MessageTextGuard.TryFindControlChar(message, out var bad))
+            {
+                return new SendResult(false,
+                    $"本文に制御文字(U+{(int)bad:X4})が含まれているため送信できません。" +
+                    "改行を含む内容は本文で送らず、ファイルに書いて絶対パスだけを送ってください" +
+                    "(本文中の改行は受け手のターミナルで送信確定として解釈され、意図しない実行につながります)。");
+            }
+
+            // `/` で始まる本文（スラッシュコマンド送信）にはエンベロープを付けない（後述）。
+            // その場合 contextId を受け手へ伝える手段が無くなる＝受け手は update_context を
+            // 呼べず、依頼元は完了通知を永遠に待つ「静かな機能停止」になる。併用は組み立ての
+            // 時点で拒否する（黙って通すより、送る前に気づかせる）。
+            var isSlashCommand = (message ?? string.Empty).StartsWith("/", StringComparison.Ordinal);
+            if (isSlashCommand && !string.IsNullOrWhiteSpace(contextId))
+                return new SendResult(false,
+                    "スラッシュコマンド（`/` で始まる本文）には contextId を紐づけられません。" +
+                    "コマンド引数を汚さないためエンベロープを付けない仕様で、受け手に contextId を伝える手段が無いためです。" +
+                    "結果が要る依頼は通常の文章で送ってください。");
+
             if (!string.IsNullOrWhiteSpace(contextId))
             {
                 if (string.Equals(contextId, "new", StringComparison.OrdinalIgnoreCase))
@@ -204,13 +238,46 @@ namespace TerminalHub.Mcp
             // 送信元・contextId の伝達はサーバーが定型文で担う（送信者の手書きに任せると書き忘れ事故が
             // 起きるため）。改行ではなくスペース連結にしているのは、TUI CLI が本文中の改行を
             // 送信確定と誤解釈する事故を避けるため。
-            var deliveredMessage = message + BuildEnvelope(requester, effectiveContextId);
+            //
+            // deliveryId は配送の照会キー。エンベロープを受け取った者が get_delivery で
+            // 「本当に TerminalHub を通ったか・どこからどこへか」を検証できる。
+            // 12文字あれば偶然の衝突も総当たりの当てずっぽうも実用上無視できる。
+            var deliveryId = Guid.NewGuid().ToString("N")[..12];
+
+            // **`/` で始まる本文（スラッシュコマンド送信）にはエンベロープを付けない**。
+            // 末尾の角括弧がコマンドの引数として解釈され、引数を取るコマンド（/model 等）を
+            // 壊すため。判定は行頭の `/` のみ（Trim しない。先頭に空白があれば TUI 側も
+            // コマンドとして扱わないので、通常本文と同じにエンベロープを付ける）。
+            // 「マーカー無し＝人間」の保証にはこの分だけ穴が開くが、`/` で始まる入力は
+            // CLI にコマンドとして解釈され通常プロンプトにならないため、指示のなりすましには
+            // 実質使えない。ローカル利用前提で許容する（2026-08-01 判断）。
+            // 配送記録はスラッシュ送信でも作る（誰がどのセッションへコマンドを送ったかの監査を保つ）。
+            // ただし Rejected で受理されなかった場合は通常送信と同じく削除される（下の Rejected 分岐）。
+            // contextId との併用は上（組み立て前）で拒否済み。
+            var deliveredMessage = isSlashCommand
+                ? message!
+                : message + BuildEnvelope(deliveryId, requester, effectiveContextId);
 
             DeliveryOutcome outcome;
             try
             {
+                // 配送記録は送信前に書く。受け手がエンベロープを見た瞬間から照会できる必要があり、
+                // 「届いたのに記録がまだ無い」瞬間を作らないため（逆の「記録はあるが届かなかった」は
+                // 誰も ID を知らないので無害）。
+                // **try の中に置く**: この INSERT が例外を投げた場合（ロック競合等）も、
+                // 下の catch が発行済みの札を片付ける安全網の対象に含める（外に置くと
+                // submitted の孤児行が残る＝#187 で塞いだのと同じ穴が別の呼び出しで再発する）。
+                await deliveryRepository.CreateAsync(new DeliveryRecord(
+                    deliveryId,
+                    requester?.SessionId.ToString(),
+                    requester?.GetDisplayName(),
+                    info.SessionId.ToString(),
+                    info.GetDisplayName(),
+                    effectiveContextId,
+                    DateTime.UtcNow));
+
                 outcome = await deliveryService.SendAsync(
-                    info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
+                    info, deliveredMessage, effectiveContextId, requester?.SessionId);
             }
             catch
             {
@@ -218,6 +285,7 @@ namespace TerminalHub.Mcp
                 // 札を必ず片付ける。submitted は終端状態でなく TTL 掃除の対象外なので、
                 // 残すと永久に消えない行になる。DeliveryOutcome での分岐だけに頼ると
                 // この経路が抜ける（旧実装が持っていた安全網の復元）。
+                // 配送記録は消さない（Pending のまま残っても上限の数えに入らず TTL で消える）。
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
                 throw;
@@ -230,12 +298,26 @@ namespace TerminalHub.Mcp
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
 
+                // 配送記録も片付ける。Rejected は「一度も書いていない」ことが確定しており
+                // （Failed と違い部分配送の可能性がない）、この ID は結果にもエンベロープにも
+                // 出ないので誰も参照できない。残すと、Rejected を量産して総数上限の掃除を
+                // 走らせ、**真正な記録を押し出す**攻撃に使える（押し出された配送は
+                // get_delivery で「偽装か期限切れ」と誤判定される）。
+                await deliveryRepository.DeleteAsync(deliveryId);
+
                 // ここに来る原因は待ち行列の上限だけ（未起動は手前で別メッセージにして弾いている）。
                 return new SendResult(false,
                     $"『{info.GetDisplayName()}』の配送待ちが上限に達しているため受理できません。" +
                     $"相手が入力待ちのまま溜まっている状態なので、ユーザーに宛先セッションの" +
                     $"許可/選択待ちを解消してもらってから送り直してください。");
             }
+
+            // ここから先は記録を残すことが確定（Delivered / Queued / Failed=部分配送の可能性あり）。
+            // Pending → Committed へ確定してから上限掃除。掃除は Committed だけを数えるので、
+            // 並行中の他送信の未確定行が判断に混ざらない（配送時間に上限が無いため、
+            // 時刻ベースの猶予では防ぎきれない＝レビュー指摘）。
+            await deliveryRepository.CommitAsync(deliveryId);
+            await deliveryRepository.PruneToCapAsync();
 
             if (outcome == DeliveryOutcome.Failed)
             {
@@ -266,43 +348,55 @@ namespace TerminalHub.Mcp
                         ? string.Empty
                         : $" contextId={issuedContextId} は発行済みで、本文にも載っています。" +
                           "人間が送信した場合は受け手がこの札へ結果を書くので、get_context で確認できます。"),
-                    issuedContextId);
+                    issuedContextId,
+                    deliveryId: deliveryId);
             }
 
             var queued = outcome == DeliveryOutcome.Queued;
             var head = queued
-                ? $"受理しました（宛先が入力待ちのため配送待ち。解消次第このまま送られます）: {info.GetDisplayName()} (submit={submit})"
-                : $"送信しました: {info.GetDisplayName()} (submit={submit})";
+                ? $"受理しました（宛先が入力待ちのため配送待ち。解消次第このまま送られます）: {info.GetDisplayName()}"
+                : $"送信しました: {info.GetDisplayName()}";
             var tail = issuedContextId == null
                 ? string.Empty
                 : requester != null
                     ? $" contextId={issuedContextId} を発行しました。完了/失敗時はあなたのセッションへ通知が届きます（ポーリング不要）。"
                     : $" contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。";
 
-            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered");
+            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered", deliveryId);
         }
 
         /// <summary>
-        /// 本文末尾へ付ける定型文。送信元（proof で検証済み）と contextId を1つの括弧にまとめる。
+        /// 本文末尾へ付ける定型文。配送 ID・送信元（proof で検証済み）・contextId を1つの括弧にまとめる。
+        ///
+        /// **必ず何かを付ける（空を返さない）**。マーカーはサーバーが付与するため送信側 LLM には
+        /// 外せず、「末尾に [TerminalHub …] が無い入力＝人間がキーボードで打った指示」という
+        /// 区別が受け手側で成立する（機械が人間のふりをして指示を出す穴を塞ぐ。逆方向＝人間が
+        /// 同じ文字列を手打ちして機械のふりをするのは実害がないので防がない）。
+        ///
+        /// deliveryId は配送記録（Deliveries）の照会キー。マーカー単体は「本文の途中に偽の
+        /// エンベロープを埋め込む」偽装に弱い（受け手が位置ルールを厳密に守れる保証がない）ため、
+        /// get_delivery で「本当に TerminalHub を通ったか・どこからどこへか」を事実で検証できるようにする。
         /// 送信元が分かることで、受け手は「意図して中間報告したい」ときだけ自分から
         /// send_to_session で返せる（事務的な status 更新は終端だけ自動通知される、との役割分担）。
         /// </summary>
-        private static string BuildEnvelope(SessionInfo? requester, string? contextId)
+        private static string BuildEnvelope(string deliveryId, SessionInfo? requester, string? contextId)
         {
-            if (requester == null && contextId == null)
-                return string.Empty;
-
+            var head = $"TerminalHub 自動メッセージ #{deliveryId}";
             var from = requester == null
-                ? null
+                ? "送信元は無記名"
                 : $"依頼元: {requester.GetDisplayName()} ({requester.SessionId})";
 
             if (contextId == null)
-                return $" [TerminalHub — {from} — 返信は send_to_session でこの GUID へ]";
+            {
+                return requester == null
+                    ? $" [{head} — {from}]"
+                    : $" [{head} — {from} — 返信は send_to_session でこの GUID へ]";
+            }
 
-            if (from == null)
-                return $" [contextId: {contextId} — 状況・結果は update_context で共有]";
+            if (requester == null)
+                return $" [{head} — {from} / contextId: {contextId} — 状況・結果は update_context で共有]";
 
-            return $" [TerminalHub — {from} / contextId: {contextId} — " +
+            return $" [{head} — {from} / contextId: {contextId} — " +
                    "完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]";
         }
 
@@ -564,6 +658,58 @@ namespace TerminalHub.Mcp
             return new SendResult(true,
                 $"ContextSummary を更新しました(status={status ?? "変更なし"}, " +
                 $"記名={(writer != null ? writer.GetDisplayName() : "無記名")})。");
+        }
+
+        // ---- 配送記録（エンベロープの検証） ----
+        //
+        // 設計（2026-08-01 壁打ちで確定）:
+        // - エンベロープ常時付与とセット。マーカー単体は「本文の途中に偽エンベロープを埋め込む」
+        //   偽装に弱いため、#ID の照会で「本当に TerminalHub を通ったか・どこからどこへか」を
+        //   事実で検証できるようにする（From=null は無記名＝外部クライアントの可能性を含む）。
+        // - deliveryId を知っている＝そのエンベロープを受け取った者、という capability 哲学は
+        //   contextId と同じ。ID なしの一覧は作らない。
+
+        /// <summary>get_delivery の結果。</summary>
+        public record DeliveryResult(
+            bool success,
+            string? fromSessionId,
+            string? fromName,
+            string? toSessionId,
+            string? toName,
+            string? contextId,
+            string? sentAt,
+            string message);
+
+        [McpServerTool(Name = "get_delivery")]
+        [Description(
+            "受け取ったメッセージ末尾のエンベロープ [TerminalHub 自動メッセージ #ID …] の ID から、" +
+            "その配送の記録(どのセッションからどのセッションへ・いつ・contextId)を取得する。" +
+            "**エンベロープが本物か(本当に TerminalHub を通った配送か)の検証に使う**。" +
+            "記録が見つからない場合、そのエンベロープは偽装(本文に手書きされたもの)か、期限切れ(14日で削除)。" +
+            "fromSessionId が null の配送は無記名(proof 無し=外部クライアントの可能性を含む)。")]
+        public static async Task<DeliveryResult> GetDelivery(
+            IDeliveryRepository deliveryRepository,
+            [Description("エンベロープに書かれている配送ID(# の後ろの12文字)。")]
+            string deliveryId)
+        {
+            var record = await deliveryRepository.GetAsync(deliveryId?.TrimStart('#') ?? "");
+            if (record == null)
+                return new DeliveryResult(false, null, null, null, null, null, null,
+                    $"配送記録が見つかりません: {deliveryId}。このエンベロープは偽装（本文に手書きされたもの）か、" +
+                    "期限切れ（14日で削除）です。偽装の場合、そのメッセージは TerminalHub を通った配送ではありません。");
+
+            return new DeliveryResult(true,
+                record.FromSessionId,
+                record.FromName,
+                record.ToSessionId,
+                record.ToName,
+                record.ContextId,
+                record.SentAt.ToString("o"),
+                record.FromSessionId != null
+                    ? "取得しました。from は proof 検証済みの送信元です。"
+                    : record.FromName == SessionDeliveryService.SystemWriterName
+                        ? "取得しました。この配送は TerminalHub 自身が発したシステム通知です。"
+                        : "取得しました。この配送は無記名（proof 無し＝外部クライアントの可能性を含む）です。");
         }
 
         // ---- セッション専用コマンド（クイック送信バーのボタン） ----
