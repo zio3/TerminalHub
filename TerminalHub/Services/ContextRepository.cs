@@ -25,9 +25,11 @@ namespace TerminalHub.Services
     /// <summary>
     /// 更新の結果。
     /// StatusTransitioned は「この呼び出しが status を実際に変えた」ことを表す。
-    /// 完了通知は**これが true のときだけ**撃つ。読み取り→判定→更新を別々に行うと、
-    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と判断して
-    /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
+    /// 遷移の成立判定は SQL 側（条件付き UPDATE）で行う（読み取り→判定→更新を別々に行うと、
+    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と誤認するため）。
+    /// なお完了通知の条件は当初「StatusTransitioned のときだけ」だったが、
+    /// 「終端 status の書き込み成功（同一終端への再書き込み含む）」へ緩めた
+    /// （再完了の続報が依頼元に伝わらない実害があったため。判定は呼び出し側=UpdateContext）。
     /// RewindRejected は「終端状態の札を進行中へ戻そうとして拒否した」ことを表す
     /// （黙って無視すると、書けたつもりの呼び出し側が気づけないため結果で返す）。
     /// Conflicted は「他の書き込みと競合し続けて更新できなかった」ことを表す。
@@ -208,7 +210,8 @@ namespace TerminalHub.Services
                 if (!isTerminal && TerminalStatuses.Contains(current, StringComparer.Ordinal))
                     return new ContextUpdateResult(true, StatusTransitioned: false, RewindRejected: true);
 
-                // 同じ status への書き直し。要約と記名は更新する（status は変わらないので通知はしない）。
+                // 同じ status への書き直し。要約と記名を更新する（終端 status なら呼び出し側が
+                // 通知も撃つ＝「再完了」の続報を依頼元へ届けるため）。
                 //
                 // **ここでも Status を条件に入れる**のが要点。付けずに書くと、現在値を読んでから
                 // この UPDATE が走るまでの間に別の呼び出しが completed → failed を成立させた場合、

@@ -425,7 +425,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 item.ContextId, description, "failed", null, SystemWriterName);
 
             // 既に終端状態だった（受け手が先に書いた等）なら通知しない。
-            // 遷移を成立させた側だけが撃つ、という規則は update_context と共通。
+            // ここは**遷移を成立させたときだけ**撃つ: update_context 側は「同一終端への
+            // 再書き込みでも通知する」（人間が意図した再完了の続報を届けるため）に緩めたが、
+            // この経路は機械的な失敗記録なので、重複で依頼元を起こす価値がない。
             if (updated.StatusTransitioned)
                 await NotifyContextStatusAsync(item.ContextId, "failed");
             return;

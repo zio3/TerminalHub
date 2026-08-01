@@ -550,7 +550,7 @@ namespace TerminalHub.Mcp
         private static readonly string[] AllowedContextStatuses =
             { "submitted", "working", "completed", "failed", "canceled" };
 
-        /// <summary>依頼が閉じた状態。ここへ遷移したときだけ依頼元へ自動通知する。</summary>
+        /// <summary>依頼が閉じた状態。この status の書き込みが成功したとき（同一終端への再書き込み含む）依頼元へ自動通知する。</summary>
         private static readonly string[] TerminalContextStatuses =
             { "completed", "failed", "canceled" };
 
@@ -648,15 +648,19 @@ namespace TerminalHub.Mcp
                     "依頼が閉じたあとに進行中へ巻き戻すと、依頼元の認識と食い違い、自動削除の対象からも外れます。" +
                     "続きの作業が要るなら、新しい依頼として contextId=\"new\" で発行し直してください。");
 
-            // 依頼元への自動通知は**終端 status への遷移のときだけ**。
+            // 依頼元への自動通知は**終端 status の書き込みが成功したとき**。
             // working への遷移でも撃つと、依頼元は「着手した」を聞くためだけにフルターンを1回起こす
             // ことになり（送信直後にターンを終えているので毎回起床する）、得るものが無い。
             // 意図的な中間報告は、受け手がエンベロープの依頼元へ send_to_session で自分から返す。
             //
-            // 遷移が成立したかの判定はリポジトリ側（条件付き UPDATE）で行う。ここで読み直して
-            // 比べると、同時に書いた2者が両方とも遷移したと誤認して依頼元を二度起こす。
-            if (updated.StatusTransitioned &&
-                newStatus != null &&
+            // 当初は「遷移が成立したときだけ」（StatusTransitioned）だったが、
+            // **同一終端への再書き込み（completed → completed）でも撃つ**ように変更した:
+            // 完了後に人間が受け手セッションで追加調整をさせて「再完了」を書いたとき、
+            // 遷移縛りだとその続報が依頼元に永遠に伝わらない実害があった（2026-08-02）。
+            // 代償として、同時に completed を書いた2者がいると依頼元が二度起きることがあるが、
+            // どちらの通知も「最新の要約を読みに行く」以上の意味を持たないので実害は薄い
+            // （通知は status と contextId を運ぶだけで、内容は get_context で読む）。
+            if (newStatus != null &&
                 TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal))
             {
                 await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus);
