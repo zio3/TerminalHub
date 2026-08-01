@@ -1,0 +1,23 @@
+author:	zio3
+association:	owner
+edited:	false
+status:	none
+--
+### Code review
+
+No issues found. Checked for bugs and CLAUDE.md compliance.
+
+Verified across 5 review dimensions (CLAUDE.md compliance, bug scan, git history, prior PR comments, in-code comment guidance):
+
+- The new `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID` injection follows the established config-override pattern (user-supplied extra-args/custom-args win, placed before `resume --last`), matching the ordering rules documented in BuildCodexArgs
+- GUID value needs no quoting (no whitespace), consistent with the existing unquoted `-c mcp_servers.terminalhub.url` pattern; the ConPtyService raw-concatenation constraint is not violated
+- Removing the "find yourself via list_sessions" fallback is sound now that the root cause (env not reaching Codex tool shells) is fixed directly; docs were updated in the same PR (no recurrence of the docs-drift pattern from #150/#153)
+
+Minor note (scored 75, below the 80 reporting threshold): the `set_card` tool [Description] still contains the removed fallback wording 「空なら list_sessions を自分の作業フォルダ・種別で絞り込んで特定」, which now contradicts the updated instructions ("if empty, act as an external client and do not use set_card"). Since tool descriptions are always exposed to MCP clients independently of the instructions template, aligning it would fully close the misidentification path from #176.
+
+https://github.com/zio3/TerminalHub/blob/3ec3a41b0d959065143dd18183838ed7ffcecebc/TerminalHub/Mcp/SessionMessagingTools.cs#L211-L215
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<sub>- If this code review was useful, please react with 👍. Otherwise, react with 👎.</sub>
+--

@@ -1,0 +1,1623 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index dc63879..ddad60e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -129,7 +129,8 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ
+    - `SessionMessagingTools`: `list_sessions` / `send_to_session` / `set_memo` / `set_card` / `get_card` / `get_context` / `update_context` / `list_commands` / `add_command` / `remove_command` を公開。`SessionManager`(Singleton) に直結するため **HTTP トランスポート一択**（stdio だと別プロセスで共有状態に届かない）。エンドポイントは `/mcp`
+    - 自己紹介カード（card）: セッションの「何ができるか」の自己申告（A2A Agent Card のローカル版・memo の姉妹機能）。詳細は `docs/mcp-session-messaging.md`
+    - セッション専用コマンド（command）: クイック送信バーのボタンをセッション自身が登録できる。繰り返す操作を人間がワンクリックで撃てるようにする用途。**セッション専用のみ**でグローバル（設定のコマンド）は対象外。`remove_command` は **AI が登録したものだけ**削除できる（`CustomCommand.CreatedByAgent`）。人間が UI で編集するとフラグが落ち、以降 MCP からは消せなくなる（人間が作ったものは失うと復旧が難しいため）
+-   - ContextSummary（context）: 依頼単位の「状況札」。`send_to_session` の `contextId="new"` で発行し、受信箱を持たない外部クライアントが `get_context` のポーリングで結果を受け取れる（A2A の contextId/TaskState に対応）。詳細は `docs/mcp-session-messaging.md`
++   - ContextSummary（context）: 依頼単位の「状況札」。`send_to_session` の `contextId="new"` で発行（A2A の contextId/TaskState に対応）。依頼元がセッション（`proof` あり）なら**終端 status への遷移時に自動通知**、外部クライアントは `get_context` のポーリングで受け取る。詳細は `docs/mcp-session-messaging.md`
++   - 配送キュー（`DeliveryQueue` / `SessionDeliveryService`）: MCP の送信・完了通知はすべてここを通る。宛先が入力待ちなら**積んで待ち解消後に自動配送**（インメモリ・TTL 5分・再起動で破棄）。「リトライは呼び出し側の責務」は撤回済み（依頼元がセッションだと送信直後にターンが終わるため履行不能だった）
+    - instructions は接続セッションごとに設定から動的に読み込む（TerminalHub 再起動不要。CLI 側の `/clear` 等で再接続時に反映）
+ 
+ 8. **CLI モード（`--notify`）**: `TerminalHub.exe --notify` で hook 通知を HTTP/HTTPS で本体へ送信。`--source codex` で Codex ネイティブ JSON を stdin 経由で `/api/hook/codex/{sessionId}` へ転送するブリッジになる（Program.cs の `RunNotifyModeAsync` / `RunCodexBridgeAsync`）
+diff --git a/TerminalHub.Terminal.Tests/DeliveryQueueTests.cs b/TerminalHub.Terminal.Tests/DeliveryQueueTests.cs
+new file mode 100644
+index 0000000..ffd4a92
+--- /dev/null
++++ b/TerminalHub.Terminal.Tests/DeliveryQueueTests.cs
+@@ -0,0 +1,164 @@
++using TerminalHub.Services;
++using Xunit;
++
++namespace TerminalHub.Terminal.Tests;
++
++/// <summary>
++/// 配送待ちキューの純ロジック（FIFO・TTL・上限）の検証。
++/// 「送れる状態か」の判定と実書き込みは SessionDeliveryService 側なのでここには出てこない。
++/// </summary>
++public sealed class DeliveryQueueTests
++{
++    private static readonly DateTime Origin = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
++
++    private static DeliveryItem Item(Guid target, string text, DateTime? at = null) =>
++        new(target, text, Submit: true, at ?? Origin, ContextId: null,
++            RequesterSessionId: null, IsSystemCallback: false);
++
++    [Fact]
++    public void 同じ宛先には積んだ順に取り出される()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        queue.Enqueue(Item(target, "1"));
++        queue.Enqueue(Item(target, "2"));
++        queue.Enqueue(Item(target, "3"));
++
++        var order = new List<string>();
++        while (queue.TryPeek(target, out var item))
++        {
++            order.Add(item.Text);
++            queue.RemoveHead(target);
++        }
++
++        Assert.Equal(new[] { "1", "2", "3" }, order);
++    }
++
++    [Fact]
++    public void 覗いただけでは減らない()
++    {
++        // 「覗く→書けたら捨てる」で配送するため、書き込み失敗時に先頭が残ることが FIFO の前提。
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        queue.Enqueue(Item(target, "1"));
++
++        Assert.True(queue.TryPeek(target, out var first));
++        Assert.True(queue.TryPeek(target, out var again));
++        Assert.Equal("1", first.Text);
++        Assert.Equal("1", again.Text);
++        Assert.Equal(1, queue.CountFor(target));
++    }
++
++    [Fact]
++    public void 宛先ごとに独立している()
++    {
++        var queue = new DeliveryQueue();
++        var a = Guid.NewGuid();
++        var b = Guid.NewGuid();
++        queue.Enqueue(Item(a, "a1"));
++        queue.Enqueue(Item(b, "b1"));
++
++        Assert.Equal(1, queue.CountFor(a));
++        Assert.Equal(1, queue.CountFor(b));
++
++        queue.RemoveHead(a);
++
++        Assert.Equal(0, queue.CountFor(a));
++        Assert.Equal(1, queue.CountFor(b));
++    }
++
++    [Fact]
++    public void 上限を超えた投函は拒否される()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        for (var i = 0; i < DeliveryQueue.MaxPerTarget; i++)
++        {
++            Assert.True(queue.Enqueue(Item(target, $"{i}")));
++        }
++
++        Assert.False(queue.Enqueue(Item(target, "溢れる")));
++        Assert.Equal(DeliveryQueue.MaxPerTarget, queue.CountFor(target));
++    }
++
++    [Fact]
++    public void TTLを超えた古いものだけが剥がれる()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        queue.Enqueue(Item(target, "古い", Origin));
++        queue.Enqueue(Item(target, "新しい", Origin.AddMinutes(4)));
++
++        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(5), TimeSpan.FromMinutes(5));
++
++        Assert.Single(expired);
++        Assert.Equal("古い", expired[0].Text);
++        Assert.Equal(1, queue.CountFor(target));
++    }
++
++    [Fact]
++    public void 全件が期限切れなら宛先ごと消える()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        queue.Enqueue(Item(target, "1", Origin));
++        queue.Enqueue(Item(target, "2", Origin));
++
++        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
++
++        Assert.Equal(2, expired.Count);
++        Assert.Empty(queue.PendingTargets());
++    }
++
++    [Fact]
++    public void 失効は指定した宛先だけに効く()
++    {
++        // 全宛先を一括で剥がすと、配送中の宛先だけロックを取って失効させることができず、
++        // 配送済みの項目が失敗と報告され次の項目が黙って消える（RemoveExpiredFor の存在理由）。
++        var queue = new DeliveryQueue();
++        var 配送中 = Guid.NewGuid();
++        var その他 = Guid.NewGuid();
++        queue.Enqueue(Item(配送中, "配送中", Origin));
++        queue.Enqueue(Item(その他, "放置", Origin));
++
++        var expired = queue.RemoveExpiredFor(その他, Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
++
++        Assert.Single(expired);
++        Assert.Equal("放置", expired[0].Text);
++        Assert.Equal(1, queue.CountFor(配送中));
++    }
++
++    [Fact]
++    public void 期限切れが無い宛先を失効させても何も起きない()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++        queue.Enqueue(Item(target, "新しい", Origin.AddMinutes(4)));
++
++        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(5), TimeSpan.FromMinutes(5));
++
++        Assert.Empty(expired);
++        Assert.Equal(1, queue.CountFor(target));
++    }
++
++    [Fact]
++    public void 存在しない宛先の失効は空を返す()
++    {
++        var queue = new DeliveryQueue();
++
++        var expired = queue.RemoveExpiredFor(Guid.NewGuid(), Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
++
++        Assert.Empty(expired);
++    }
++
++    [Fact]
++    public void 空のキューからの取り出しは安全に空振りする()
++    {
++        var queue = new DeliveryQueue();
++        var target = Guid.NewGuid();
++
++        Assert.False(queue.TryPeek(target, out _));
++        queue.RemoveHead(target); // 例外にならない
++        Assert.Equal(0, queue.CountFor(target));
++    }
++}
+diff --git a/TerminalHub.Terminal.Tests/TerminalHub.Terminal.Tests.csproj b/TerminalHub.Terminal.Tests/TerminalHub.Terminal.Tests.csproj
+index 6e5e544..48cee8a 100644
+--- a/TerminalHub.Terminal.Tests/TerminalHub.Terminal.Tests.csproj
++++ b/TerminalHub.Terminal.Tests/TerminalHub.Terminal.Tests.csproj
+@@ -27,6 +27,7 @@
+     <Compile Include="..\TerminalHub\Services\SlashCommandMerge.cs" Link="SlashCommandMerge.cs" />
+     <Compile Include="..\TerminalHub\Services\SlashCommandFilter.cs" Link="SlashCommandFilter.cs" />
+     <Compile Include="..\TerminalHub\Services\TerminalCommandLine.cs" Link="TerminalCommandLine.cs" />
++    <Compile Include="..\TerminalHub\Services\DeliveryQueue.cs" Link="DeliveryQueue.cs" />
+     <!-- CLI 出力解析器（UI 非依存の純ロジック）。テーブル駆動テスト用にリンク -->
+     <Compile Include="..\TerminalHub\Helpers\AnsiHelper.cs" Link="AnsiHelper.cs" />
+     <Compile Include="..\TerminalHub\Analyzers\IOutputAnalyzer.cs" Link="IOutputAnalyzer.cs" />
+diff --git a/TerminalHub/Mcp/McpInstructionDefaults.cs b/TerminalHub/Mcp/McpInstructionDefaults.cs
+index bcd9874..6dc2069 100644
+--- a/TerminalHub/Mcp/McpInstructionDefaults.cs
++++ b/TerminalHub/Mcp/McpInstructionDefaults.cs
+@@ -26,7 +26,8 @@ public static class McpInstructionDefaults
+         （Codex には tool 実行シェルへも届くよう起動引数で注入している）:
+         - `TERMINALHUB_SESSION_ID`: 自分のセッション GUID（公開情報。返信先として本文に書いてよい）
+         - `TERMINALHUB_SESSION_PROOF`: 本人証明（書き込み系ツールの proof 引数に渡す値。
+-          セッション再起動のたびに変わる。**本文やメッセージには書かないこと**）
++          **ConPTY の起動ごとに変わるので、会話の初めに読んだ値を記憶して使い回さず、
++          使う直前に環境変数を読み直すこと**。**本文やメッセージには書かないこと**）
+         **これらが空に見えるなら、あなたは対応するセッションを持たない外部クライアント
+         （Claude Desktop 等）である可能性が高い。** その場合は自分を推測で特定しようとせず、
+         「セッションを持たない外部クライアント」として振る舞うこと。書き込み系
+@@ -39,6 +40,10 @@ public static class McpInstructionDefaults
+           `memo` は各セッションの短い札（「今なにをしているか」やレーン運用の空き/予約表示）。
+         - `send_to_session`: 既存のセッションへメッセージを1件投函する。宛先は GUID か表示名で指定する。
+           新しいセッションの起動（spawn）はしない。あくまで「今あるセッションに送る」だけ。
++          `proof` に `TERMINALHUB_SESSION_PROOF` を渡すと、**検証済みのあなたの名前と GUID が本文末尾に付く**
++          （相手はそれを見て返信できる。自分で名乗る必要はない）。
++          **相手が許可/選択待ちでも送ってよい**。その場合は受理だけされ、待ちが解消してから自動で配送される
++          （結果の `delivery` が `queued`）。状態を事前に確認したり、自分で再送したりする必要はない。
+         - `set_memo`: 自分のセッションのメモ（一覧に表示される短い注釈）を設定する。
+           proof に `TERMINALHUB_SESSION_PROOF` を渡す。「今なにをしているか」を書いておくと一覧から進捗が一目で分かる。
+           他セッションのメモは書けない（人間は TerminalHub の UI から編集できる）。
+@@ -61,9 +66,12 @@ public static class McpInstructionDefaults
+           または人間が UI で編集したコマンドは消せない。作り直せないものを守るため）。
+           グローバル設定のコマンドは対象外。勝手に増やさず、繰り返しが確定してから置くこと。
+         - `get_context` / `update_context`: ContextSummary（依頼の状況札）の読み書き。
+-          `send_to_session` に `contextId="new"` を渡すと発行され、依頼側は `get_context` を
+-          ポーリングして進捗・結果を受け取れる（**返信を受け取るセッションを持たない
+-          外部クライアントでも依頼の往復が完結する**）。依頼を受けた側は、メッセージ末尾に
++          `send_to_session` に `contextId="new"` を渡すと発行される。
++          **`proof` も渡していれば、札が completed / failed / canceled になった時点で
++          あなたのセッションへ自動で通知が届く**（ポーリング不要。配送できなかった場合も
++          「届きませんでした」が同じ経路で返る）。proof を渡せない外部クライアントは
++          `get_context` をポーリングして受け取る（**受信箱を持たない接続でも往復が完結する**）。
++          依頼を受けた側は、メッセージ末尾に
+           付与された contextId へ `update_context` で状況・結果を書くこと（完了時は
+           status=completed と結果要約をセットで。**セッション内から書くなら proof も必ず渡す**
+           ＝どのセッションが書いたか検証済みで記録され、依頼側は updatedBy で確認できる。
+@@ -72,13 +80,16 @@ public static class McpInstructionDefaults
+           コンテキストウィンドウとは無関係。
+ 
+         ## 作法（おすすめ・書き換え可）
+-        - 投げっぱなしでよい。応答を待って集約するような仕組みは持たない。
++        - 送ったあとブロックして待つ必要はない。複数の結果を待ち合わせて集約する仕組みは持たない。
+         - 大きな仕様・設計・長文を渡すときは、本文をそのまま送らず、ファイルに書いて「そのパスだけ」を
+           send_to_session で送ると軽くて確実（受け手にファイルを読ませる）。ただしこれは好みの問題なので、
+           直接送りたければ直接送ってよい。
+-        - 返信がほしいときは、本文に自分のセッションID（`TERMINALHUB_SESSION_ID`）を書いておくこと。
+-          サーバーは送信元を相手に伝えない（エンベロープなし）ので、
+-          相手はそれを見て send_to_session で返信できる。「終わったらこの ID に一言返して」等と添えるとよい。
++        - 返信や結果がほしいときは、`proof` と `contextId="new"` をセットで渡す。
++          送信元はサーバーが本文へ付けるので自分で名乗らなくてよく、完了時の通知も自動で届く。
++        - **依頼を受けた側の作法**: 本文末尾に contextId があれば、終わったときに `update_context` へ
++          status（completed / failed）と結果の要約を書く。これが依頼元への通知を兼ねる。
++          途中経過は自動では伝わらないので、**相談したい・止めてほしいときだけ**
++          エンベロープの依頼元へ `send_to_session` で自分から返すこと。
+         - 送り先は必ず既存セッション。存在しない相手には送れない。
+ 
+         ## 優先順位
+diff --git a/TerminalHub/Mcp/SessionMessagingTools.cs b/TerminalHub/Mcp/SessionMessagingTools.cs
+index c1e5ddc..3725880 100644
+--- a/TerminalHub/Mcp/SessionMessagingTools.cs
++++ b/TerminalHub/Mcp/SessionMessagingTools.cs
+@@ -14,16 +14,22 @@ namespace TerminalHub.Mcp
+     ///
+     /// 設計方針（壁打ちで確定）:
+     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
+-    /// - 集約なし: 結果待ち(wait)/読み取り(read)はしない。完了は TerminalHub 本体の LED/通知で人間が気づく。
++    /// - 集約なし: 複数の結果を待ち合わせて集める(wait/join)ことはしない。
++    ///   ただし**1件の依頼の結末を依頼元へ返すことはする**（proof 付きで送った依頼は、札が
++    ///   終端 status になった時点で SessionDeliveryService が依頼元セッションへ1通配る）。
++    ///   proof 無し＝外部クライアントの依頼は従来どおり get_context のポーリングで受け取る。
+     /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
+     ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
+     ///   書き込み系(set_memo/set_card/add_command/remove_command)は proof の検証で
+     ///   本人のみに機構的に制限する。
+     /// - セッション専用コマンドだけは向きが逆で、セッションが人間のために UI(クイック送信バーの
+     ///   ボタン)を生やす。グローバル設定のコマンドは対象外＝共有物には触らせない。
+-    /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
+-    ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
+-    ///   SessionProof、および依頼IDで引く状況札=ContextSummary は例外として持つ）。
++    /// - サーバーは会話の状態を持たない（メッセージの内容を解釈しない・返答を待ち合わせない）。
++    ///   ただし**配送はサーバーの責務**で、宛先が入力待ちなら DeliveryQueue に積んで
++    ///   解消後に自動配送する（呼び出し側に状態確認と再送をさせない。呼び出し元が
++    ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
++    ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
++    ///   および揮発の配送キューの3つ。
+     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
+     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
+     /// </summary>
+@@ -41,17 +47,19 @@ public record SessionSummary(
+             string memo);
+ 
+         /// <summary>
+-        /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
+-        /// 呼び出し側（エージェント）にリトライ判断を委ねる。
++        /// send_to_session の結果。宛先なし/未起動は例外にせず success=false で返す。
+         /// contextId は contextId="new" で送信したときだけ発行された ID が入る。
++        /// delivery は "delivered"（ConPTY へ書けた）/ "queued"（宛先が入力待ちなので受理して待機中）。
++        /// success=true の意味が「届いた」ではなく「受理した」に変わったため、両者を区別して返す。
+         /// </summary>
+-        public record SendResult(bool success, string message, string? contextId = null);
++        public record SendResult(bool success, string message, string? contextId = null, string? delivery = null);
+ 
+         [McpServerTool(Name = "list_sessions")]
+         [Description(
+             "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
+-            "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
+-            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。" +
++            "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中。作業中でも相手CLIのキューに積まれる) / " +
++            "waiting_user_input(ユーザーの許可/選択待ち。**送信は可能**で、待ちが解消してから自動配送される) / " +
++            "not_ready(ConPTY未接続=起動が必要・送信不可)。" +
+             "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。" +
+             "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。")]
+         public static IEnumerable<SessionSummary> ListSessions(
+@@ -80,9 +88,10 @@ public static IEnumerable<SessionSummary> ListSessions(
+                     folder.IndexOf(folderContains, StringComparison.OrdinalIgnoreCase) < 0)
+                     continue;
+ 
+-                // 送信可否で状態を導出（呼び出し側が「送れるか」を一目で判断できるように）。
++                // 宛先の状態（呼び出し側が「今どうなっているか」を把握するため）。
+                 //   not_ready          = ConPTY 未接続。まず起動が必要（送信不可）。
+-                //   waiting_user_input = ユーザーの許可/選択待ち（送信不可・待ち解消後に再試行）。
++                //   waiting_user_input = ユーザーの許可/選択待ち。送信自体は可能で、配送キューが
++                //                        待ち解消後に送る（呼び出し側で確認・再送する必要はない）。
+                 //   ready              = 受付中。idle でも busy でも送れる（busy は相手CLIのキューに積まれる）。
+                 var status = s.ConPtySession == null ? "not_ready"
+                     : s.IsWaitingForUserInput ? "waiting_user_input"
+@@ -106,18 +115,20 @@ public static IEnumerable<SessionSummary> ListSessions(
+ 
+         [McpServerTool(Name = "send_to_session")]
+         [Description(
+-            "指定した既存セッションのターミナルにメッセージを1件送る(投げっぱなし・応答は待たない)。" +
++            "指定した既存セッションのターミナルにメッセージを1件送る(応答は待たない)。" +
+             "target はセッションGUIDか表示名(完全一致)。submit=true なら末尾でEnterを送り即実行させる。" +
+-            "相手がユーザーの許可/選択待ち(waiting)のときは送らず success=false を返す(承認プロンプトを誤確定させないため。待ち解消後に再試行)。" +
+-            "単なる作業中(busy)は送信可(AI CLI がプロンプトをキューに積む)。" +
+-            "宛先が未起動のときも success=false(自動起動しない・ユーザーに起動を依頼し、自動リトライはしない)。" +
++            "相手がユーザーの許可/選択待ちのときは**待ちが解消してから自動で配送される**(あなたが状態を確認したり再送したりする必要はない)。" +
++            "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
++            "宛先が未起動のときだけ success=false(自動起動しない・ユーザーに起動を依頼する)。" +
+             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
++            "proof(環境変数 TERMINALHUB_SESSION_PROOF)を渡すと、検証済みのあなたの名前とGUIDが本文末尾に付き、相手が返信できる。" +
+             "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
+-            "受け手には本文末尾に contextId が自動付与され、あなたは get_context をポーリングして結果を受け取れる" +
+-            "(返信を受け取るセッションを持たない外部クライアント向けの依頼経路)。既存の contextId を渡すと同じ札への続報になる。")]
++            "proof も渡していれば、札が完了/失敗/中止になった時点であなたのセッションへ自動で通知が届く(ポーリング不要)。" +
++            "proof が無い外部クライアントは get_context をポーリングして結果を受け取る。既存の contextId を渡すと同じ札への続報になる。")]
+         public static async Task<SendResult> SendToSession(
+             ISessionManager sessionManager,
+             IContextRepository contextRepository,
++            ISessionDeliveryService deliveryService,
+             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
+             string target,
+             [Description("送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨。")]
+@@ -125,7 +136,9 @@ public static async Task<SendResult> SendToSession(
+             [Description("末尾にEnterを送って実行を確定するか(既定 true)。false なら入力欄に流し込むだけ。")]
+             bool submit = true,
+             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
+-            string? contextId = null)
++            string? contextId = null,
++            [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。渡すと送信元が本文末尾に付き、契約した札の完了通知も受け取れる。外部クライアント(環境変数なし)は省略。")]
++            string? proof = null)
+         {
+             // 宛先解決: GUID を優先し、ダメなら表示名の完全一致で探す。
+             SessionInfo? info = null;
+@@ -139,36 +152,37 @@ public static async Task<SendResult> SendToSession(
+             if (info == null)
+                 return new SendResult(false, $"宛先セッションが見つかりません: {target}");
+ 
+-            // 入力待ち(許可/選択待ち)なら送らない。ここで送ると submit の Enter が
+-            // 許可プロンプトの確定に化けて意図しない承認をしてしまうため。呼び出し側でリトライ判断させる。
+-            // 単なる作業中(busy)は送信を許可する(AI CLI がプロンプトをキューに積むため)。
+-            if (info.IsWaitingForUserInput)
+-                return new SendResult(false,
+-                    $"宛先がユーザーの許可/選択待ち(status=waiting_user_input)のため送信しませんでした。" +
+-                    $"ここで送ると承認プロンプトを誤って確定させる恐れがあります。" +
+-                    $"待ちが解消(status=ready)してから再試行してください: {info.GetDisplayName()}");
++            // 送信元の確定。proof が本人証明と送信元特定を兼ねる（GUID の自己申告は受け付けない）。
++            // 渡されたのに一致しない場合は無記名へ落とさずエラーにする（古い proof の使い回しに気づかせる）。
++            SessionInfo? requester = null;
++            if (!string.IsNullOrWhiteSpace(proof))
++            {
++                requester = sessionManager.ResolveBySessionProof(proof);
++                if (requester == null)
++                    return new SendResult(false, ProofRejectedMessage);
++            }
+ 
+-            var conpty = info.ConPtySession;
+-            if (conpty == null)
++            // 未起動だけは積んでも意味がない（起動は人間の操作が要る）ので、ここで断る。
++            // 入力待ちは断らない: 配送キューが待ち解消後に送る（呼び出し元がセッションの場合、
++            // 送信直後にターンが終わるため「呼び出し側でリトライ」は履行不能な契約だった）。
++            if (info.ConPtySession == null)
+                 return new SendResult(false,
+                     $"宛先セッションが未起動です(status=not_ready / ConPTY 未接続)。これは自動起動できません。" +
+                     $"ユーザーに「TerminalHub で『{info.GetDisplayName()}』を開いて起動してください」と依頼し、" +
+                     $"status=ready になったのを確認してから再送してください。自動でリトライしないこと。");
+ 
+             // ContextSummary の紐づけ。作成は全チェック通過後（＝実際に送るときだけ）に行い、
+-            // 送信失敗時に孤児レコードを残さない。受け手への ID 伝達はサーバーが定型文で担う
+-            // （送信者の手書きに任せると書き忘れ事故が起きるため）。改行ではなくスペース連結に
+-            // しているのは、TUI CLI が本文中の改行を送信確定と誤解釈する事故を避けるため。
++            // 送信失敗時に孤児レコードを残さない。
+             string? issuedContextId = null;
+-            var deliveredMessage = message;
++            string? effectiveContextId = null;
+             if (!string.IsNullOrWhiteSpace(contextId))
+             {
+-                string effectiveId;
+                 if (string.Equals(contextId, "new", StringComparison.OrdinalIgnoreCase))
+                 {
+-                    effectiveId = Guid.NewGuid().ToString("N");
+-                    await contextRepository.CreateAsync(effectiveId);
+-                    issuedContextId = effectiveId;
++                    effectiveContextId = Guid.NewGuid().ToString("N");
++                    await contextRepository.CreateAsync(
++                        effectiveContextId, requester?.SessionId.ToString(), requester?.GetDisplayName());
++                    issuedContextId = effectiveContextId;
+                 }
+                 else
+                 {
+@@ -177,42 +191,75 @@ public static async Task<SendResult> SendToSession(
+                     if (existing == null)
+                         return new SendResult(false,
+                             $"contextId が見つかりません: {contextId}。新規発行なら contextId=\"new\" を指定してください。");
+-                    effectiveId = contextId;
++                    effectiveContextId = contextId;
+                 }
+-                deliveredMessage = $"{message} [contextId: {effectiveId} — 状況・結果は update_context で共有]";
+             }
+ 
+-            // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
+-            // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
+-            try
+-            {
+-                await conpty.WriteAsync(deliveredMessage);
+-                if (submit)
+-                {
+-                    // テキスト送信後、Enter 送信前に待機する。
+-                    // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
+-                    // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
+-                    await Task.Delay(200);
+-                    await conpty.WriteAsync("\r");
+-                }
+-            }
+-            catch
++            // 送信元・contextId の伝達はサーバーが定型文で担う（送信者の手書きに任せると書き忘れ事故が
++            // 起きるため）。改行ではなくスペース連結にしているのは、TUI CLI が本文中の改行を
++            // 送信確定と誤解釈する事故を避けるため。
++            var deliveredMessage = message + BuildEnvelope(requester, effectiveContextId);
++
++            var outcome = await deliveryService.SendAsync(
++                info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
++
++            if (outcome is DeliveryOutcome.Rejected or DeliveryOutcome.Failed)
+             {
+-                // 書き込み自体の失敗（ConPTY切断等）では、発行したばかりの札を片付ける。
+-                // submitted は終端状態でなく TTL 掃除の対象外のため、残すと永続の孤児になる。
+-                // DeleteAsync は例外を投げない（送信エラー本体を握り潰さない）。
++                // 受理できなかったので、発行したばかりの札を片付ける。submitted は終端状態でなく
++                // TTL 掃除の対象外のため、残すと永続の孤児になる。
+                 if (issuedContextId != null)
+-                {
+                     await contextRepository.DeleteAsync(issuedContextId);
+-                }
+-                throw;
++
++                // 失敗の種類で「次に取るべき行動」が正反対なので、文面を分ける。
++                // Failed は書き込みの途中で落ちており、本文だけ相手の入力欄へ届いている
++                // 可能性がある。ここで同じ内容を再送させると本文が二重に連結される。
++                return outcome == DeliveryOutcome.Failed
++                    ? new SendResult(false,
++                        $"宛先への書き込みが途中で失敗しました: {info.GetDisplayName()}。" +
++                        $"**同じ内容をそのまま再送しないでください**（本文だけが相手の入力欄に " +
++                        $"届いている可能性があり、再送すると二重に連結されます）。" +
++                        $"ユーザーに宛先セッションの状態を確認してもらい、必要なら人間の目で入力欄を" +
++                        $"片付けてから送り直してください。")
++                    : new SendResult(false,
++                        $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
++                        $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
+             }
+ 
+-            return new SendResult(true,
+-                issuedContextId != null
+-                    ? $"送信しました: {info.GetDisplayName()} (submit={submit})。contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。"
+-                    : $"送信しました: {info.GetDisplayName()} (submit={submit})",
+-                issuedContextId);
++            var queued = outcome == DeliveryOutcome.Queued;
++            var head = queued
++                ? $"受理しました（宛先が入力待ちのため配送待ち。解消次第このまま送られます）: {info.GetDisplayName()} (submit={submit})"
++                : $"送信しました: {info.GetDisplayName()} (submit={submit})";
++            var tail = issuedContextId == null
++                ? string.Empty
++                : requester != null
++                    ? $" contextId={issuedContextId} を発行しました。完了/失敗時はあなたのセッションへ通知が届きます（ポーリング不要）。"
++                    : $" contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。";
++
++            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered");
++        }
++
++        /// <summary>
++        /// 本文末尾へ付ける定型文。送信元（proof で検証済み）と contextId を1つの括弧にまとめる。
++        /// 送信元が分かることで、受け手は「意図して中間報告したい」ときだけ自分から
++        /// send_to_session で返せる（事務的な status 更新は終端だけ自動通知される、との役割分担）。
++        /// </summary>
++        private static string BuildEnvelope(SessionInfo? requester, string? contextId)
++        {
++            if (requester == null && contextId == null)
++                return string.Empty;
++
++            var from = requester == null
++                ? null
++                : $"依頼元: {requester.GetDisplayName()} ({requester.SessionId})";
++
++            if (contextId == null)
++                return $" [TerminalHub — {from} — 返信は send_to_session でこの GUID へ]";
++
++            if (from == null)
++                return $" [contextId: {contextId} — 状況・結果は update_context で共有]";
++
++            return $" [TerminalHub — {from} / contextId: {contextId} — " +
++                   "完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]";
+         }
+ 
+         [McpServerTool(Name = "set_memo")]
+@@ -346,6 +393,10 @@ public static CardResult GetCard(
+         private static readonly string[] AllowedContextStatuses =
+             { "submitted", "working", "completed", "failed", "canceled" };
+ 
++        /// <summary>依頼が閉じた状態。ここへ遷移したときだけ依頼元へ自動通知する。</summary>
++        private static readonly string[] TerminalContextStatuses =
++            { "completed", "failed", "canceled" };
++
+         /// <summary>
+         /// get_context の結果。updatedBy は最終書き込み者の検証済みセッション名
+         /// （proof 付きで書かれた場合のみ。null なら無記名＝外部クライアント等の書き込み）。
+@@ -395,6 +446,7 @@ public static async Task<ContextSummaryResult> GetContext(
+         public static async Task<SendResult> UpdateContext(
+             ISessionManager sessionManager,
+             IContextRepository contextRepository,
++            ISessionDeliveryService deliveryService,
+             [Description("対象の contextId(受け取ったメッセージ末尾に付与されている)。")]
+             string contextId,
+             [Description("状況・結果の要約(全体上書き)。長いものはファイルパスを書く。")]
+@@ -420,16 +472,31 @@ public static async Task<SendResult> UpdateContext(
+                     return new SendResult(false, ProofRejectedMessage);
+             }
+ 
++            var newStatus = status?.ToLowerInvariant();
+             var updated = await contextRepository.UpdateAsync(
+                 contextId ?? "",
+                 summary ?? string.Empty,
+-                status?.ToLowerInvariant(),
++                newStatus,
+                 writer?.SessionId.ToString(),
+                 writer?.GetDisplayName());
+-            if (!updated)
++            if (!updated.Found)
+                 return new SendResult(false,
+                     $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
+ 
++            // 依頼元への自動通知は**終端 status への遷移のときだけ**。
++            // working への遷移でも撃つと、依頼元は「着手した」を聞くためだけにフルターンを1回起こす
++            // ことになり（送信直後にターンを終えているので毎回起床する）、得るものが無い。
++            // 意図的な中間報告は、受け手がエンベロープの依頼元へ send_to_session で自分から返す。
++            //
++            // 遷移が成立したかの判定はリポジトリ側（条件付き UPDATE）で行う。ここで読み直して
++            // 比べると、同時に書いた2者が両方とも遷移したと誤認して依頼元を二度起こす。
++            if (updated.StatusTransitioned &&
++                newStatus != null &&
++                TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal))
++            {
++                await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus);
++            }
++
+             return new SendResult(true,
+                 $"ContextSummary を更新しました(status={status ?? "変更なし"}, " +
+                 $"記名={(writer != null ? writer.GetDisplayName() : "無記名")})。");
+diff --git a/TerminalHub/Program.cs b/TerminalHub/Program.cs
+index 11a20a2..4eb3c78 100644
+--- a/TerminalHub/Program.cs
++++ b/TerminalHub/Program.cs
+@@ -151,6 +151,12 @@
+ // HookNotificationServiceを登録
+ builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();
+ 
++// 配送サービスを登録（MCP の送信・コールバック通知はすべてここを通る）。
++// hook イベントの購読と掃除タイマーを起動時から回すため HostedService も兼ねる。
++builder.Services.AddSingleton<SessionDeliveryService>();
++builder.Services.AddSingleton<ISessionDeliveryService>(sp => sp.GetRequiredService<SessionDeliveryService>());
++builder.Services.AddHostedService(sp => sp.GetRequiredService<SessionDeliveryService>());
++
+ // ClaudeHookServiceを登録
+ builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
+ 
+diff --git a/TerminalHub/Services/ContextRepository.cs b/TerminalHub/Services/ContextRepository.cs
+index 11f1b34..01697be 100644
+--- a/TerminalHub/Services/ContextRepository.cs
++++ b/TerminalHub/Services/ContextRepository.cs
+@@ -8,6 +8,8 @@ namespace TerminalHub.Services
+     /// ContextSummary（依頼の状況札）1件分。
+     /// UpdatedBy* は最終書き込み者。proof 検証済みのセッションが書いた場合のみ入り、
+     /// proof 無しの書き込み（外部クライアント等）では null（=無記名と区別できる）。
++    /// Requester* は依頼元。send_to_session に proof が渡されたときだけ入り、
++    /// 終端 status への遷移をその相手へ通知するために使う（外部クライアントの依頼では null）。
+     /// </summary>
+     public record ContextRecord(
+         string ContextId,
+@@ -16,7 +18,18 @@ public record ContextRecord(
+         DateTime CreatedAt,
+         DateTime UpdatedAt,
+         string? UpdatedBySessionId,
+-        string? UpdatedByName);
++        string? UpdatedByName,
++        string? RequesterSessionId,
++        string? RequesterName);
++
++    /// <summary>
++    /// 更新の結果。
++    /// StatusTransitioned は「この呼び出しが status を実際に変えた」ことを表す。
++    /// 完了通知は**これが true のときだけ**撃つ。読み取り→判定→更新を別々に行うと、
++    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と判断して
++    /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
++    /// </summary>
++    public record ContextUpdateResult(bool Found, bool StatusTransitioned);
+ 
+     /// <summary>
+     /// ContextSummary の永続化リポジトリ。
+@@ -25,13 +38,18 @@ public record ContextRecord(
+     /// </summary>
+     public interface IContextRepository
+     {
+-        Task CreateAsync(string contextId);
++        /// <summary>
++        /// 札を作る。requester* は依頼元（proof で検証済みのセッション）。
++        /// 記録があれば終端 status への遷移をその相手へ通知でき、無ければ依頼元は
++        /// get_context のポーリングで結果を取る（受信箱を持たない外部クライアント）。
++        /// </summary>
++        Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null);
+         Task<ContextRecord?> GetAsync(string contextId);
+         /// <summary>
+-        /// 要約を全体上書きし、status 指定があれば併せて更新する。対象が無ければ false。
++        /// 要約を全体上書きし、status 指定があれば併せて更新する。
+         /// updatedBy* は proof 検証済みの書き込み元（無記名なら null を渡す＝前回の記名は消える）。
+         /// </summary>
+-        Task<bool> UpdateAsync(string contextId, string summary, string? status,
++        Task<ContextUpdateResult> UpdateAsync(string contextId, string summary, string? status,
+             string? updatedBySessionId, string? updatedByName);
+ 
+         /// <summary>
+@@ -60,7 +78,7 @@ public ContextRepository(SessionDbContext dbContext, ILogger<ContextRepository>
+             _logger = logger;
+         }
+ 
+-        public async Task CreateAsync(string contextId)
++        public async Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null)
+         {
+             await _dbContext.InitializeAsync();
+             await using var connection = _dbContext.CreateConnection();
+@@ -68,10 +86,12 @@ public async Task CreateAsync(string contextId)
+ 
+             var now = DateTime.UtcNow.ToString("o");
+             await connection.ExecuteNonQueryAsync(@"
+-                INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt)
+-                VALUES (@contextId, 'submitted', '', @now, @now)",
++                INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt, RequesterSessionId, RequesterName)
++                VALUES (@contextId, 'submitted', '', @now, @now, @requesterSessionId, @requesterName)",
+                 ("@contextId", contextId),
+-                ("@now", now));
++                ("@now", now),
++                ("@requesterSessionId", requesterSessionId),
++                ("@requesterName", requesterName));
+ 
+             await PruneAsync(connection);
+         }
+@@ -83,7 +103,8 @@ INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt)
+             await connection.OpenAsync();
+ 
+             await using var reader = await connection.ExecuteReaderAsync(@"
+-                SELECT ContextId, Status, Summary, CreatedAt, UpdatedAt, UpdatedBySessionId, UpdatedByName
++                SELECT ContextId, Status, Summary, CreatedAt, UpdatedAt, UpdatedBySessionId, UpdatedByName,
++                       RequesterSessionId, RequesterName
+                 FROM Contexts WHERE ContextId = @contextId",
+                 ("@contextId", contextId));
+ 
+@@ -100,10 +121,12 @@ INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt)
+                 DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                 DateTime.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                 reader.IsDBNull(5) ? null : reader.GetString(5),
+-                reader.IsDBNull(6) ? null : reader.GetString(6));
++                reader.IsDBNull(6) ? null : reader.GetString(6),
++                reader.IsDBNull(7) ? null : reader.GetString(7),
++                reader.IsDBNull(8) ? null : reader.GetString(8));
+         }
+ 
+-        public async Task<bool> UpdateAsync(string contextId, string summary, string? status,
++        public async Task<ContextUpdateResult> UpdateAsync(string contextId, string summary, string? status,
+             string? updatedBySessionId, string? updatedByName)
+         {
+             await _dbContext.InitializeAsync();
+@@ -111,10 +134,10 @@ public async Task<bool> UpdateAsync(string contextId, string summary, string? st
+             await connection.OpenAsync();
+ 
+             var now = DateTime.UtcNow.ToString("o");
+-            int affected;
++
+             if (string.IsNullOrEmpty(status))
+             {
+-                affected = await connection.ExecuteNonQueryAsync(@"
++                var affected = await connection.ExecuteNonQueryAsync(@"
+                     UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
+                         UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+                     WHERE ContextId = @contextId",
+@@ -123,21 +146,39 @@ public async Task<bool> UpdateAsync(string contextId, string summary, string? st
+                     ("@now", now),
+                     ("@updatedBySessionId", updatedBySessionId),
+                     ("@updatedByName", updatedByName));
++                return new ContextUpdateResult(affected > 0, StatusTransitioned: false);
+             }
+-            else
+-            {
+-                affected = await connection.ExecuteNonQueryAsync(@"
+-                    UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
+-                        UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+-                    WHERE ContextId = @contextId",
+-                    ("@contextId", contextId),
+-                    ("@summary", summary),
+-                    ("@status", status),
+-                    ("@now", now),
+-                    ("@updatedBySessionId", updatedBySessionId),
+-                    ("@updatedByName", updatedByName));
+-            }
+-            return affected > 0;
++
++            // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
++            // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
++            // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
++            var transitioned = await connection.ExecuteNonQueryAsync(@"
++                UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
++                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
++                WHERE ContextId = @contextId AND Status <> @status",
++                ("@contextId", contextId),
++                ("@summary", summary),
++                ("@status", status),
++                ("@now", now),
++                ("@updatedBySessionId", updatedBySessionId),
++                ("@updatedByName", updatedByName));
++
++            if (transitioned > 0)
++                return new ContextUpdateResult(true, StatusTransitioned: true);
++
++            // 0行だったのは「同じ status への書き直し」か「札が無い」のどちらか。
++            // 前者でも要約と記名は更新する（status は変わらないので通知はしない）。
++            var rewritten = await connection.ExecuteNonQueryAsync(@"
++                UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
++                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
++                WHERE ContextId = @contextId",
++                ("@contextId", contextId),
++                ("@summary", summary),
++                ("@now", now),
++                ("@updatedBySessionId", updatedBySessionId),
++                ("@updatedByName", updatedByName));
++
++            return new ContextUpdateResult(rewritten > 0, StatusTransitioned: false);
+         }
+ 
+         public async Task DeleteAsync(string contextId)
+diff --git a/TerminalHub/Services/DeliveryQueue.cs b/TerminalHub/Services/DeliveryQueue.cs
+new file mode 100644
+index 0000000..be57b61
+--- /dev/null
++++ b/TerminalHub/Services/DeliveryQueue.cs
+@@ -0,0 +1,139 @@
++namespace TerminalHub.Services;
++
++/// <summary>
++/// 配送1件分。宛先が入力待ちで書き込めないときに積まれる。
++///
++/// ContextId / RequesterSessionId は「配送に失敗したことを誰に知らせるか」のためだけに持つ
++/// （配送そのものには使わない）。IsSystemCallback=true はサーバー自身が発した通知で、
++/// これの配送失敗は二次通知を作らずログだけに留める＝失敗通知の連鎖を止める終端条件。
++/// </summary>
++public sealed record DeliveryItem(
++    Guid TargetSessionId,
++    string Text,
++    bool Submit,
++    DateTime EnqueuedAt,
++    string? ContextId,
++    Guid? RequesterSessionId,
++    bool IsSystemCallback);
++
++/// <summary>
++/// 宛先セッションごとの配送待ちキュー（インメモリ・揮発）。
++///
++/// 設計:
++/// - **揮発でよい**。持つのは高々数分の TTL しかない「配りそびれた1通」で、永続化すると
++///   再起動後に古い依頼が唐突に届くほうが害になる。誰に返すか（Contexts.RequesterSessionId）は
++///   札の属性として別途永続化されるので、再起動後の新しい status 変化はちゃんと発火する。
++/// - **宛先ごとに FIFO**。2通が入れ違いに届くのを防ぐ。
++/// - UI・ConPTY・SessionInfo に依存しない純ロジックに保つ（テストからリンクして検証するため）。
++///   「送れる状態か」の判定と実際の書き込みは <see cref="SessionDeliveryService"/> 側の責務。
++/// </summary>
++public sealed class DeliveryQueue
++{
++    /// <summary>
++    /// 宛先1つあたりの上限。入力待ちのまま放置されたセッションへ送り続けられても、
++    /// 溜め込まずに投函時点で失敗を返せるようにするための歯止め。
++    /// </summary>
++    public const int MaxPerTarget = 20;
++
++    private readonly Dictionary<Guid, Queue<DeliveryItem>> _queues = new();
++    private readonly object _lock = new();
++
++    /// <summary>積む。宛先の待ち行列が上限に達していれば false（呼び出し側が失敗として扱う）。</summary>
++    public bool Enqueue(DeliveryItem item)
++    {
++        lock (_lock)
++        {
++            if (!_queues.TryGetValue(item.TargetSessionId, out var queue))
++            {
++                queue = new Queue<DeliveryItem>();
++                _queues[item.TargetSessionId] = queue;
++            }
++
++            if (queue.Count >= MaxPerTarget)
++                return false;
++
++            queue.Enqueue(item);
++            return true;
++        }
++    }
++
++    /// <summary>
++    /// 先頭を覗く（取り出さない）。空なら false。
++    /// 配送は「覗く → 書けたら <see cref="RemoveHead"/>」の順で行う。取り出してから書くと、
++    /// 書き込みに失敗したときに戻す先が末尾になり FIFO が壊れるため。
++    /// </summary>
++    public bool TryPeek(Guid targetSessionId, out DeliveryItem item)
++    {
++        lock (_lock)
++        {
++            if (_queues.TryGetValue(targetSessionId, out var queue) && queue.Count > 0)
++            {
++                item = queue.Peek();
++                return true;
++            }
++        }
++
++        item = null!;
++        return false;
++    }
++
++    /// <summary>先頭を捨てる（配送が成功したとき）。空なら何もしない。</summary>
++    public void RemoveHead(Guid targetSessionId)
++    {
++        lock (_lock)
++        {
++            if (!_queues.TryGetValue(targetSessionId, out var queue) || queue.Count == 0)
++                return;
++
++            queue.Dequeue();
++            if (queue.Count == 0)
++                _queues.Remove(targetSessionId);
++        }
++    }
++
++    /// <summary>
++    /// 指定宛先の、TTL を超えた項目を取り除いて返す。FIFO かつ EnqueuedAt が単調増加なので、
++    /// 先頭から期限切れが続く間だけ剥がせばよい。
++    ///
++    /// **宛先ごとに分けてあるのは意図的**。全宛先を一括で剥がすと、呼び出し側が
++    /// 「配送中の宛先だけロックを取ってから失効させる」ことができない。配送は
++    /// 「覗く→書く→捨てる」で進むため、書いている最中（先頭に残っている状態）に
++    /// 別スレッドが同じ項目を失効させると、配送済みの項目が失敗と報告され、
++    /// さらに直後の RemoveHead が次の項目を消してしまう（＝1通が黙って消える）。
++    /// </summary>
++    public IReadOnlyList<DeliveryItem> RemoveExpiredFor(Guid targetSessionId, DateTime now, TimeSpan ttl)
++    {
++        var expired = new List<DeliveryItem>();
++        lock (_lock)
++        {
++            if (!_queues.TryGetValue(targetSessionId, out var queue))
++                return expired;
++
++            while (queue.Count > 0 && now - queue.Peek().EnqueuedAt >= ttl)
++            {
++                expired.Add(queue.Dequeue());
++            }
++            if (queue.Count == 0)
++                _queues.Remove(targetSessionId);
++        }
++        return expired;
++    }
++
++    /// <summary>配送待ちが残っている宛先の一覧（掃除タイマーが再送を試みる対象）。</summary>
++    public IReadOnlyList<Guid> PendingTargets()
++    {
++        lock (_lock)
++        {
++            return _queues.Keys.ToList();
++        }
++    }
++
++    /// <summary>指定宛先の待ち件数。</summary>
++    public int CountFor(Guid targetSessionId)
++    {
++        lock (_lock)
++        {
++            return _queues.TryGetValue(targetSessionId, out var queue) ? queue.Count : 0;
++        }
++    }
++}
+diff --git a/TerminalHub/Services/SessionDbContext.cs b/TerminalHub/Services/SessionDbContext.cs
+index 3b259d6..9cb60b0 100644
+--- a/TerminalHub/Services/SessionDbContext.cs
++++ b/TerminalHub/Services/SessionDbContext.cs
+@@ -10,7 +10,7 @@ public class SessionDbContext
+     {
+         private readonly string _connectionString;
+         private readonly ILogger<SessionDbContext> _logger;
+-        private const int CurrentSchemaVersion = 10;
++        private const int CurrentSchemaVersion = 11;
+ 
+         private readonly SemaphoreSlim _initLock = new(1, 1);
+         private bool _initialized = false;
+@@ -282,6 +282,31 @@ private async Task MigrateSchemaAsync()
+                 _logger.LogInformation("[DB][マイグレーション] v10 適用完了");
+             }
+ 
++            if (currentVersion < 11)
++            {
++                // v11: Contexts に依頼元（RequesterSessionId / RequesterName）を追加。
++                // 終端 status への遷移を依頼元セッションへ通知するために使う。
++                _logger.LogInformation("[DB][マイグレーション] v11 適用開始: Contexts に依頼元カラムを追加");
++                await using (var connection = new SqliteConnection(_connectionString))
++                {
++                    await connection.OpenAsync();
++                    foreach (var column in new[] { "RequesterSessionId", "RequesterName" })
++                    {
++                        if (!await ColumnExistsAsync(connection, "Contexts", column))
++                        {
++                            await connection.ExecuteNonQueryAsync($"ALTER TABLE Contexts ADD COLUMN {column} TEXT");
++                            _logger.LogInformation("[DB][マイグレーション] v11: {Column} カラムを追加", column);
++                        }
++                        else
++                        {
++                            _logger.LogInformation("[DB][マイグレーション] v11: {Column} カラムは既存のためスキップ", column);
++                        }
++                    }
++                }
++                await SetSchemaVersionAsync(11);
++                _logger.LogInformation("[DB][マイグレーション] v11 適用完了");
++            }
++
+             _logger.LogInformation("[DB][マイグレーション] 完了");
+         }
+ 
+@@ -496,7 +521,9 @@ CREATE TABLE IF NOT EXISTS Contexts (
+                     CreatedAt TEXT NOT NULL,
+                     UpdatedAt TEXT NOT NULL,
+                     UpdatedBySessionId TEXT,
+-                    UpdatedByName TEXT
++                    UpdatedByName TEXT,
++                    RequesterSessionId TEXT,
++                    RequesterName TEXT
+                 );
+ 
+                 CREATE INDEX IF NOT EXISTS idx_contexts_updated ON Contexts(UpdatedAt);
+diff --git a/TerminalHub/Services/SessionDeliveryService.cs b/TerminalHub/Services/SessionDeliveryService.cs
+new file mode 100644
+index 0000000..0a3d7cd
+--- /dev/null
++++ b/TerminalHub/Services/SessionDeliveryService.cs
+@@ -0,0 +1,430 @@
++using Microsoft.Extensions.Logging;
++using TerminalHub.Models;
++
++namespace TerminalHub.Services;
++
++/// <summary>配送の結果。success=true でも「届いた」とは限らないことを呼び出し側へ伝えるために分ける。</summary>
++public enum DeliveryOutcome
++{
++    /// <summary>ConPTY へ書き込んだ。</summary>
++    Delivered,
++    /// <summary>宛先が入力待ちのため積んだ。ready になり次第配送される。</summary>
++    Queued,
++    /// <summary>受理できなかった（未起動・待ち行列が上限）。**同じ内容で再送してよい**。</summary>
++    Rejected,
++    /// <summary>
++    /// 書き込みの途中で失敗した。**同じ内容で再送してはいけない**（本文だけ相手の入力欄へ
++    /// 届いている可能性があり、再送すると二重に連結される）。Rejected と分けているのは、
++    /// 呼び出し側に伝えるべき次の行動が正反対だから。
++    /// </summary>
++    Failed,
++}
++
++public interface ISessionDeliveryService
++{
++    /// <summary>
++    /// 宛先セッションへ1件送る。宛先が入力待ちなら積んで、ready になってから配送する。
++    /// </summary>
++    Task<DeliveryOutcome> SendAsync(
++        SessionInfo target,
++        string text,
++        bool submit,
++        string? contextId = null,
++        Guid? requesterSessionId = null);
++
++    /// <summary>
++    /// ContextSummary が終端 status へ遷移したことを依頼元セッションへ通知する。
++    /// 依頼元が記録されていない（外部クライアントの依頼）場合は何もしない。
++    /// </summary>
++    Task NotifyContextStatusAsync(string contextId, string status);
++}
++
++/// <summary>
++/// 送信の配送を担うサービス。MCP の送信・コールバック通知はすべてここを通る。
++///
++/// 設計（壁打ちで確定）:
++/// - **リトライは呼び出し側の責務、という当初方針を撤回した**。send_to_session が
++///   「宛先が入力待ち」で失敗しても、呼び出し元がセッションならその直後にターンが終わるため、
++///   再試行する契機が存在しない（結果のポーリングが成立しないのと同じ構造の穴）。
++///   「ready になったら送る」に推論は一切要らないので、システムへ移譲する。
++/// - 待ちの解消は hook イベントで拾う。ただし待ちフラグは SessionInfo の素のフィールドで
++///   変更通知がなく（SessionInfo.IsWaitingForUserInput）、hook を持たない CLI・
++///   タイムアウト解除・ConPTY 起動は hook を通らないため、低頻度の掃除タイマーを安全網に置く。
++/// - **本文と Enter は1単位**。間に別の送信が割り込むと入力が混線するので宛先ごとに直列化する。
++/// - 配送に失敗したら、依頼元が「届かなかった」と分かるようにする（札に failed を書くか、
++///   依頼元へ直接通知）。ただし**システム発の通知の失敗は二次通知を作らない**（連鎖の終端）。
++/// </summary>
++public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedService, IDisposable
++{
++    /// <summary>積んだまま配送できなかった項目を諦めるまでの時間。</summary>
++    private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
++
++    /// <summary>hook を通らない待ち解消（タイムアウト解除・非hook CLI・ConPTY起動）を拾う安全網の間隔。</summary>
++    private static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(2);
++
++    /// <summary>
++    /// 本文送信から Enter までの待ち。Codex 等の TUI CLI は本文取り込み前に \r が来ると
++    /// 送信確定されず入力欄で止まるため、UI の SendInput と同じく 0.2 秒挟む。
++    /// </summary>
++    private static readonly TimeSpan SubmitDelay = TimeSpan.FromMilliseconds(200);
++
++    /// <summary>
++    /// システムが札へ書き込むときの記名。proof からしか設定されない値なので
++    /// エージェントには詐称できず、null（無記名＝外部クライアント）とも区別できる。
++    /// </summary>
++    public const string SystemWriterName = "TerminalHub (system)";
++
++    private readonly DeliveryQueue _queue = new();
++    private readonly Dictionary<Guid, SemaphoreSlim> _writeLocks = new();
++    private readonly ISessionManager _sessionManager;
++    private readonly IContextRepository _contextRepository;
++    private readonly IHookNotificationService _hookNotificationService;
++    private readonly ILogger<SessionDeliveryService> _logger;
++    private System.Threading.Timer? _sweepTimer;
++
++    public SessionDeliveryService(
++        ISessionManager sessionManager,
++        IContextRepository contextRepository,
++        IHookNotificationService hookNotificationService,
++        ILogger<SessionDeliveryService> logger)
++    {
++        _sessionManager = sessionManager;
++        _contextRepository = contextRepository;
++        _hookNotificationService = hookNotificationService;
++        _logger = logger;
++    }
++
++    public Task StartAsync(CancellationToken cancellationToken)
++    {
++        // 主トリガ: hook で待ちフラグが動いた直後に配送を試みる。
++        _hookNotificationService.OnHookNotification += OnHookNotification;
++        // 安全網: hook を通らない待ち解消を拾う。
++        _sweepTimer = new System.Threading.Timer(_ => _ = SweepAsync(), null, SweepInterval, SweepInterval);
++        return Task.CompletedTask;
++    }
++
++    public Task StopAsync(CancellationToken cancellationToken)
++    {
++        _hookNotificationService.OnHookNotification -= OnHookNotification;
++        _sweepTimer?.Change(Timeout.Infinite, Timeout.Infinite);
++        return Task.CompletedTask;
++    }
++
++    public void Dispose()
++    {
++        _sweepTimer?.Dispose();
++        lock (_writeLocks)
++        {
++            foreach (var semaphore in _writeLocks.Values)
++                semaphore.Dispose();
++            _writeLocks.Clear();
++        }
++    }
++
++    private void OnHookNotification(object? sender, HookNotificationEventArgs e)
++    {
++        // hook ハンドラ本体が待ちフラグを更新した後に呼ばれる想定。配送は投げっぱなしで良い
++        // （失敗しても次の掃除タイマーが拾う）。
++        _ = FlushAllAsync();
++    }
++
++    public async Task<DeliveryOutcome> SendAsync(
++        SessionInfo target,
++        string text,
++        bool submit,
++        string? contextId = null,
++        Guid? requesterSessionId = null)
++    {
++        // ConPTY 未接続は積んでも意味がない（起動は人間の操作が要る）ので即座に拒否する。
++        if (target.ConPtySession == null)
++            return DeliveryOutcome.Rejected;
++
++        var item = new DeliveryItem(
++            target.SessionId, text, submit, DateTime.UtcNow, contextId, requesterSessionId,
++            IsSystemCallback: false);
++
++        return await EnqueueOrWriteAsync(target, item);
++    }
++
++    /// <summary>
++    /// 直接書くか積むかを決めて実行する。
++    ///
++    /// **判定・投函・直接書き込みをすべて同じ宛先ロックの中で行う**。待ち行列の件数を
++    /// ロックの外で見ると、同時に来た2件がどちらも「行列は空」と判断して直接書き込み経路へ入り、
++    /// 書き込み自体は直列化されるものの、どちらが先になるかがタスクのスケジューリング任せになる。
++    /// ロック内で判定すれば、2件目は必ず「行列に1件ある」を見て積むので到着順が保たれる。
++    /// </summary>
++    private async Task<DeliveryOutcome> EnqueueOrWriteAsync(SessionInfo target, DeliveryItem item)
++    {
++        var gate = GetWriteLock(target.SessionId);
++        await gate.WaitAsync();
++        try
++        {
++            // 先着の待ち行列が無いときだけ直接書く。行列があるのに割り込むと FIFO が壊れる。
++            // 入力待ちかどうかは WritePairAsync が書き込み直前に見る（NotReady が返る）。
++            if (_queue.CountFor(target.SessionId) == 0)
++            {
++                switch (await WritePairAsync(target, item))
++                {
++                    case WriteResult.Delivered:
++                        return DeliveryOutcome.Delivered;
++
++                    // 書き込みが失敗した宛先は積まない。ConPTY が死んでいれば ready には戻らず、
++                    // TTL の5分ぶん失敗を隠すだけになる。呼び出し元へその場で返す
++                    // （旧実装が例外で即座に失敗を伝えていたのと同じ即時性を保つ）。
++                    case WriteResult.Failed:
++                        return DeliveryOutcome.Failed;
++                }
++            }
++
++            if (!_queue.Enqueue(item))
++            {
++                _logger.LogWarning(
++                    "[配送] 待ち行列が上限のため受理できません: {Target} (上限={Max})",
++                    target.GetDisplayName(), DeliveryQueue.MaxPerTarget);
++                return DeliveryOutcome.Rejected;
++            }
++
++            _logger.LogInformation(
++                "[配送] 宛先が入力待ちのため積みました: {Target} (待ち={Count})",
++                target.GetDisplayName(), _queue.CountFor(target.SessionId));
++            return DeliveryOutcome.Queued;
++        }
++        finally
++        {
++            gate.Release();
++        }
++    }
++
++    /// <summary>
++    /// 書き込みの結果。**「今は書けない」と「書き込みが失敗した」を混ぜない**のが要点。
++    /// 混ぜると、ConPTY が死んでいる宛先へ TTL いっぱい再試行し続けたうえ、
++    /// 本文だけ書けて Enter で失敗したケースで本文をもう一度頭から書いてしまう。
++    /// </summary>
++    private enum WriteResult
++    {
++        /// <summary>本文（と Enter）を書き終えた。</summary>
++        Delivered,
++        /// <summary>いま書ける状態にない（入力待ち・ConPTY 未接続）。キューに残して後で再試行してよい。</summary>
++        NotReady,
++        /// <summary>書き込み自体が失敗した。**再試行しない**（本文が途中まで届いている可能性がある）。</summary>
++        Failed,
++    }
++
++    /// <summary>
++    /// 本文＋Enter を1単位として書き込む（ロックは呼び出し側が保持している前提）。
++    /// 書き込み直前に状態を再確認するのは、積んでから ready を確認するまでの間に
++    /// また待ちへ入っていることがあるため。
++    ///
++    /// 例外時に <see cref="WriteResult.Failed"/> を返して**再試行させない**のは、
++    /// 本文の書き込みが成功したあと Enter で失敗した場合に、同じ項目を積み直すと
++    /// 本文が二重に連結されて届くため。「1単位」を守れなかった時点で、やり直しではなく
++    /// 失敗として報告するのが正しい（本文は相手の入力欄に残っている可能性がある）。
++    /// </summary>
++    private async Task<WriteResult> WritePairAsync(SessionInfo target, DeliveryItem item)
++    {
++        var conpty = target.ConPtySession;
++        if (conpty == null || target.IsWaitingForUserInput)
++            return WriteResult.NotReady;
++
++        try
++        {
++            await conpty.WriteAsync(item.Text);
++            if (item.Submit)
++            {
++                await Task.Delay(SubmitDelay);
++                await conpty.WriteAsync("\r");
++            }
++            return WriteResult.Delivered;
++        }
++        catch (Exception ex)
++        {
++            _logger.LogWarning(ex, "[配送] 書き込みに失敗: {Target}", target.GetDisplayName());
++            return WriteResult.Failed;
++        }
++    }
++
++    private SemaphoreSlim GetWriteLock(Guid sessionId)
++    {
++        lock (_writeLocks)
++        {
++            if (!_writeLocks.TryGetValue(sessionId, out var gate))
++            {
++                gate = new SemaphoreSlim(1, 1);
++                _writeLocks[sessionId] = gate;
++            }
++            return gate;
++        }
++    }
++
++    /// <summary>
++    /// 待ちが解消した宛先へ、積んである順に配送する。
++    /// 宛先ごとのロックを掴んだまま「覗く→書く→捨てる」を回すので、hook イベントと
++    /// 掃除タイマーが同時に走っても同じ項目を二重に配送しない。
++    /// </summary>
++    private async Task FlushAllAsync()
++    {
++        foreach (var targetId in _queue.PendingTargets())
++        {
++            var target = _sessionManager.GetSessionInfo(targetId);
++            if (target == null || target.ConPtySession == null || target.IsWaitingForUserInput)
++                continue;
++
++            // 失敗の通知はロックを解放してから行う。通知先が宛先自身のこともあり
++            // （自分に依頼して自分が詰まっている場合）、掴んだまま送ると
++            // SemaphoreSlim は再入不可なので自分自身とデッドロックする。
++            var failures = new List<DeliveryItem>();
++
++            var gate = GetWriteLock(targetId);
++            await gate.WaitAsync();
++            try
++            {
++                while (_queue.TryPeek(targetId, out var item))
++                {
++                    var result = await WritePairAsync(target, item);
++
++                    if (result == WriteResult.Delivered)
++                    {
++                        _queue.RemoveHead(targetId);
++                        continue;
++                    }
++
++                    if (result == WriteResult.Failed)
++                    {
++                        // 再試行しない（本文が途中まで届いている可能性がある）。
++                        // 書き込み経路自体が壊れている見込みなので、残りは次の掃除に任せる。
++                        _queue.RemoveHead(targetId);
++                        failures.Add(item);
++                    }
++
++                    // NotReady なら先頭に残したまま打ち切る＝順序が保たれる。
++                    break;
++                }
++            }
++            finally
++            {
++                gate.Release();
++            }
++
++            foreach (var item in failures)
++            {
++                await HandleFailureAsync(item,
++                    "宛先への書き込みに失敗しました（本文が途中まで届いている可能性があるため再送していません）");
++            }
++        }
++    }
++
++    private async Task SweepAsync()
++    {
++        try
++        {
++            foreach (var targetId in _queue.PendingTargets())
++            {
++                // **配送中の項目を失効させないため、宛先のロックを取ってから剥がす。**
++                // 配送は「覗く→書く→捨てる」で進むので、書いている最中の項目は
++                // まだキューの先頭に居る。ここで排他しないと、配送済みの項目が
++                // 失敗と報告され、直後の RemoveHead が次の項目を消してしまう。
++                IReadOnlyList<DeliveryItem> expired;
++                var gate = GetWriteLock(targetId);
++                await gate.WaitAsync();
++                try
++                {
++                    expired = _queue.RemoveExpiredFor(targetId, DateTime.UtcNow, Ttl);
++                }
++                finally
++                {
++                    gate.Release();
++                }
++
++                // 通知はロック解放後（FlushAllAsync と同じくデッドロック回避のため）。
++                foreach (var item in expired)
++                {
++                    await HandleFailureAsync(item,
++                        $"{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました");
++                }
++            }
++
++            await FlushAllAsync();
++        }
++        catch (Exception ex)
++        {
++            // 掃除の失敗でタイマーを死なせない。
++            _logger.LogWarning(ex, "[配送] 掃除処理で例外");
++        }
++    }
++
++    /// <summary>
++    /// 配送できなかったことを依頼元へ伝える。
++    /// システム発の通知（コールバック）の失敗はログだけに留める＝失敗通知の連鎖を止める終端条件。
++    /// </summary>
++    private async Task HandleFailureAsync(DeliveryItem item, string reason)
++    {
++        var targetName = _sessionManager.GetSessionInfo(item.TargetSessionId)?.GetDisplayName()
++            ?? item.TargetSessionId.ToString();
++
++        if (item.IsSystemCallback)
++        {
++            _logger.LogWarning("[配送] システム通知の配送に失敗（二次通知はしない）: {Target} — {Reason}",
++                targetName, reason);
++            return;
++        }
++
++        _logger.LogWarning("[配送] 配送に失敗: {Target} — {Reason}", targetName, reason);
++
++        if (!string.IsNullOrEmpty(item.ContextId))
++        {
++            // 札を failed にする。終端状態にしておかないと TTL 掃除の対象外になり、
++            // 使われない行が永久に残る（ContextRepository の後片付けと同じ理由）。
++            var summary =
++                $"宛先「{targetName}」へ配送できませんでした（{reason}）。メッセージは届いていません。";
++            var updated = await _contextRepository.UpdateAsync(
++                item.ContextId, summary, "failed", null, SystemWriterName);
++
++            // 既に終端状態だった（受け手が先に書いた等）なら通知しない。
++            // 遷移を成立させた側だけが撃つ、という規則は update_context と共通。
++            if (updated.StatusTransitioned)
++                await NotifyContextStatusAsync(item.ContextId, "failed");
++            return;
++        }
++
++        if (item.RequesterSessionId.HasValue)
++        {
++            await SendSystemCallbackAsync(item.RequesterSessionId.Value,
++                $"[TerminalHub] 「{targetName}」へのメッセージを配送できませんでした（{reason}）。相手には届いていません。");
++        }
++    }
++
++    public async Task NotifyContextStatusAsync(string contextId, string status)
++    {
++        var record = await _contextRepository.GetAsync(contextId);
++        if (record == null)
++            return;
++
++        // 依頼元が記録されていない＝外部クライアントからの依頼。ポーリングで取ってもらう。
++        if (string.IsNullOrEmpty(record.RequesterSessionId) ||
++            !Guid.TryParse(record.RequesterSessionId, out var requesterId))
++            return;
++
++        await SendSystemCallbackAsync(requesterId,
++            $"[TerminalHub] 依頼(contextId: {contextId})が {status} になりました。詳細は get_context で取得してください。" +
++            "処理中は選択肢を出さず、必要なことは update_context に書いて終えてください。");
++    }
++
++    private async Task SendSystemCallbackAsync(Guid requesterSessionId, string text)
++    {
++        var requester = _sessionManager.GetSessionInfo(requesterSessionId);
++        if (requester == null || requester.ConPtySession == null)
++        {
++            // 依頼元が消えている/未起動なら諦める（依頼元は get_context で取れる）。
++            _logger.LogInformation(
++                "[配送] 依頼元へ通知できません（セッションが無い/未起動）: {Requester}", requesterSessionId);
++            return;
++        }
++
++        var item = new DeliveryItem(
++            requesterSessionId, text, Submit: true, DateTime.UtcNow,
++            ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
++
++        await EnqueueOrWriteAsync(requester, item);
++    }
++}
+diff --git a/docs/mcp-session-messaging.md b/docs/mcp-session-messaging.md
+index eae7598..46cf5ff 100644
+--- a/docs/mcp-session-messaging.md
++++ b/docs/mcp-session-messaging.md
+@@ -11,9 +11,9 @@ TerminalHub 本体プロセスに HTTP MCP サーバーを同居させ、**別
+ | 方針 | 内容 |
+ |---|---|
+ | spawn なし | 子セッションは作らない。宛先は **既存セッションのみ**（暴走ガード不要） |
+-| 集約なし | 結果待ち(wait)・読み取り(read)はしない。投げっぱなし。完了は TerminalHub 本体の LED/通知で人間が気づく |
+-| エンベロープなし | 本文だけ送る。送信元明示や応答要否は将来「呼び出し元フラグ」で足す（自己識別・本人証明は導入済み → 後述の proof） |
+-| サーバーは会話状態を持たない | 渡されたフラグ（`submit` 等）に素直に従うだけ。メッセージの追跡・キューは持たない（本人検証用の proof、および依頼IDで引く**状況札 = ContextSummary** は例外として持つ → 後述） |
++| 集約なし | 複数の結果を待ち合わせて集める(wait/join)ことはしない。ただし**1件の依頼の結末を依頼元へ返すことはする**（後述の配送キュー・完了通知） |
++| エンベロープあり | `proof` を渡すと、**検証済みの送信元**（表示名＋GUID）を本文末尾にサーバーが付与する。自己申告の GUID は受け付けない |
++| 配送はサーバーの責務 | 宛先が入力待ちなら**キューに積み、解消後に自動配送**する（→ [配送キュー](#配送キュー)）。呼び出し側に状態確認・再送をさせない |
+ 
+ 長文は本文に直接流さず、**ファイルに書いて絶対パスだけ送る**運用を推奨（ターミナル入力の化け・切り捨てを避けるため）。
+ 
+@@ -100,13 +100,13 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧
+ | `name` | string | 表示名 |
+ | `terminalType` | string | 種別 |
+ | `folderPath` | string | 作業フォルダ |
+-| `status` | string | 送信可否を表す。`ready`（受付中=送信可。作業中でも相手CLIのキューに積まれる） / `waiting_user_input`（ユーザーの許可/選択待ち=送信不可） / `not_ready`（ConPTY未接続=起動が必要・送信不可） |
++| `status` | string | `ready`（受付中。作業中でも相手CLIのキューに積まれる） / `waiting_user_input`（ユーザーの許可/選択待ち。**送信は可能**で、待ち解消後に自動配送される） / `not_ready`（ConPTY未接続=起動が必要・送信不可） |
+ | `hasCard` | bool | 自己紹介カードの有無（本文は含めない。`get_card` で取得）。カード持ちだけ読みに行くための当たり付け用 |
+ | `memo` | string | セッションのメモ（UI の一覧に出るのと同じ短い札）。worktree レーン運用ではディスパッチャが「タスク無し」＝空きレーンを判別するのに使う（`docs/worktree-lane-operation.md` 参照） |
+ 
+ ### `send_to_session`
+ 
+-指定した既存セッションのターミナルへメッセージを1件送る（投げっぱなし・応答は待たない）。
++指定した既存セッションのターミナルへメッセージを1件送る（応答は待たない）。
+ 
+ **引数**
+ 
+@@ -116,20 +116,93 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧
+ | `message` | string | （必須） | 送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨 |
+ | `submit` | bool | `true` | 末尾に Enter(`\r`) を送って実行を確定するか。`false` なら入力欄に流し込むだけ |
+ | `contextId` | string? | なし | ContextSummary（後述）の紐づけ。`"new"`=発行して紐づけ（結果で ID が返る） / 既存 ID=続報として紐づけ / 未指定=従来どおり |
++| `proof` | string? | なし | 本人証明（`TERMINALHUB_SESSION_PROOF`）。渡すと**検証済みの送信元が本文末尾に付き**、`contextId` と併用すれば**完了時に自分のセッションへ通知が届く** |
+ 
+ **返り値**: `SendResult`
+ 
+ | フィールド | 型 | 説明 |
+ |---|---|---|
+-| `success` | bool | 送信できたか |
++| `success` | bool | **受理できたか**（届いたか、ではない） |
+ | `message` | string | 結果メッセージ |
+-| `contextId` | string? | `contextId="new"` で送信したときだけ発行された ID が入る（それ以外は null）。以降のポーリングはこの ID で `get_context` する |
++| `contextId` | string? | `contextId="new"` で送信したときだけ発行された ID が入る（それ以外は null） |
++| `delivery` | string? | `"delivered"`=ConPTY へ書き込み済み / `"queued"`=宛先が入力待ちのため配送待ち。どちらも `success=true` |
+ 
+-**`success=false` になるケース**（いずれも例外にせず結果で返し、呼び出し側にリトライ判断を委ねる）
++`success=false` のとき、**次に取るべき行動が2通りに分かれる**ので文面で区別している。
++
++- **再送してよい**（未起動・待ち行列が上限・宛先が見つからない）
++- **同じ内容を再送してはいけない**（書き込みが途中で失敗した）。本文だけが相手の入力欄へ届いている可能性があり、再送すると二重に連結される
++
++**`success=false` になるケース**（例外にせず結果で返す）
+ 
+ - 宛先セッションが見つからない
+-- 宛先が **ユーザーの許可/選択待ち（`waiting_user_input`）** → submit の Enter が承認プロンプトを誤確定させる恐れがあるため送信しない。`ready` になってから再試行（単なる作業中は `ready` 扱いで送信可＝相手CLIのキューに積まれる）
+-- 宛先が **未起動（`not_ready` / ConPTY 未接続）** → 自動起動はしない。ユーザーに起動を依頼し、`ready` を確認してから再送
++- 宛先が **未起動（`not_ready` / ConPTY 未接続）** → 自動起動はしない。積んでも起動は人間の操作が要るのでキューにも入れない。ユーザーに起動を依頼する
++- 宛先の**配送待ちが上限**（1宛先20件）に達している
++- **書き込み自体に失敗した**（ConPTY 切断等）。積まずにその場で返す（後述）
++- `proof` を渡したのに一致しない（無記名へ落とさずエラーにする＝古い値の使い回しに気づかせるため）
++
++**入力待ち（`waiting_user_input`）は失敗にならない**。受理して配送キューへ積み、待ちが解消してから送る（→ 次節）。
++
++### 本文末尾に付く定型文（エンベロープ）
++
++送信元・contextId の伝達はサーバーが担う（送信者の手書きに任せると書き忘れ事故が起きるため）。
++改行ではなくスペース連結なのは、TUI CLI が本文中の改行を送信確定と誤解釈する事故を避けるため。
++
++| 条件 | 付与される文字列 |
++|---|---|
++| `proof` + `contextId` | `[TerminalHub — 依頼元: <名前> (<GUID>) / contextId: <id> — 完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]` |
++| `proof` のみ | `[TerminalHub — 依頼元: <名前> (<GUID>) — 返信は send_to_session でこの GUID へ]` |
++| `contextId` のみ | `[contextId: <id> — 状況・結果は update_context で共有]` |
++
++## 配送キュー
++
++**宛先が入力待ちでも呼び出し側は何もしなくてよい。** サーバーが積んで、解消後に配送する。
++
++実装は `TerminalHub/Services/DeliveryQueue.cs`（純ロジック・テスト対象）と
++`TerminalHub/Services/SessionDeliveryService.cs`（配線）。MCP の送信も完了通知もすべてここを通る。
++
++| 項目 | 決定 |
++|---|---|
++| 永続化 | **しない（インメモリ・再起動で破棄）**。持つのは高々数分の TTL しかない「配りそびれた1通」で、再起動後に古い依頼が唐突に届くほうが害。誰に返すかは `Contexts.RequesterSessionId` に永続化されるので、再起動後の新しい status 変化はちゃんと発火する |
++| 順序 | **宛先ごとに FIFO**。「覗く→書けたら捨てる」で配送し、書けなければ先頭に残す。**直接書くか積むかの判定も宛先ロックの中で行う**（外で行列の件数を見ると、同時に来た2件がどちらも「行列は空」と判断して直接書き込みへ進み、順序がスケジューリング任せになる） |
++| 再開トリガ | `IHookNotificationService.OnHookNotification`（主）＋ 2秒間隔の掃除タイマー（安全網）。待ちフラグは `SessionInfo` の素のフィールドで変更通知が無く、hook を持たない CLI・タイムアウト解除・ConPTY 起動は hook を通らないため |
++| TTL | 5分。超えたら諦めて失敗として扱う |
++| 上限 | 1宛先20件 |
++| 本文と Enter | **1単位**として扱い、宛先ごとに直列化する（間に別の送信が割り込むと入力が混線するため） |
++
++### 「今は書けない」と「書き込みが失敗した」を混ぜない
++
++再試行の対象になるのは**前者だけ**。
++
++| | 扱い |
++|---|---|
++| **入力待ち / ConPTY 未接続** | キューに残して待ち解消後に再試行 |
++| **書き込みが例外を投げた** | **再試行しない**。投函時なら `success=false` を即返し、配送中なら失敗として報告する |
++
++後者を再試行しない理由は2つ。ConPTY が死んでいる宛先は ready へ戻らないので TTL の5分ぶん失敗を隠すだけになること、そして**本文を書いたあと Enter で失敗した場合に積み直すと本文が二重に連結されて届く**こと。「1単位」を守れなかった時点で、やり直しではなく失敗として報告するのが正しい（本文は相手の入力欄に残っている可能性がある）。
++
++### TTL 失効は宛先ごとにロックを取ってから
++
++配送は「覗く → 書けたら捨てる」で進むので、**書いている最中の項目はまだキューの先頭に居る**。ここで排他しないと、掃除タイマーが配送中の項目を期限切れとして剥がし、(1) 配送済みの項目が「失敗」と報告され、(2) 直後の `RemoveHead` が次の項目を消す＝**1通が黙って消える**。
++
++`DeliveryQueue.RemoveExpiredFor` が宛先単位なのはこのため（全宛先一括だと、配送中の宛先だけロックを取ることができない）。
++
++失敗の通知は**必ずロックを解放してから**行う。通知先が宛先自身のことがあり（自分に依頼して自分が詰まっている場合）、掴んだまま送ると `SemaphoreSlim` は再入不可なので自分自身とデッドロックする。
++
++### なぜ「リトライは呼び出し側の責務」を撤回したか
++
++呼び出し元がセッションの場合、`send_to_session` を撃った直後にターンが終わる。
++**再試行する契機がそもそも存在しない**ので、その契約は履行不能だった。
++結果のポーリングが「回り続けるクライアント」を前提にしていたのと同じ構造の穴で、
++どちらもサーバー側へ移した。「ready になったら送る」に推論は一切要らない。
++
++### 配送に失敗したとき
++
++依頼元が「届かなかった」と分かるようにする。
++
++- **contextId あり** → 札を `failed` にして理由を要約へ書き（記名は `TerminalHub (system)`）、通常の完了通知として依頼元へ流す。終端状態にしないと TTL 掃除の対象外になり、使われない行が永久に残る
++- **contextId なし・`proof` あり** → 依頼元へ直接1通
++- **どちらもなし** → ログと UI のみ
++- **システム発の通知自体の配送失敗** → **ログのみ。二次通知を作らない**（失敗通知の連鎖を止める終端条件）
+ 
+ ### `set_card` / `get_card`
+ 
+@@ -169,10 +242,19 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
+ 
+ ### `get_context` / `update_context` — ContextSummary（依頼の状況札）
+ 
+-**受信箱を持たない相手のための pull 経路**。`send_to_session` は push 型で、返信を受け取るには
+-自分がセッション（＝ターミナルという受信箱）を持っている必要がある。TerminalHub のセッションを
+-持たない外部 MCP クライアント（Claude Desktop、TerminalHub 外の CLI 等）が依頼の結果を
+-受け取れるように、依頼単位の「状況札」を ID で引けるようにする。
++**依頼単位のトラッキング**。当初は「受信箱を持たない外部クライアント専用の pull 経路」として
++設計したが、実際には TerminalHub のセッション同士でも常用されるようになったため、
++**依頼の状況札一般**として位置づけ直した（2026-08-01）。
++
++受け取り方が2通りある。
++
++| 依頼元 | 結果の受け取り方 |
++|---|---|
++| **セッション**（`send_to_session` に `proof` を渡した） | 終端 status への遷移時に**自動で通知が届く**（ポーリング不要） |
++| **外部クライアント**（proof が無い） | `get_context` を**ポーリング**する |
++
++後者が原型で、前者を後から足した。セッションは依頼を投げた時点でターンが終わるため、
++ポーリングのループに入れない（＝ pull は原理的に成立しない）。
+ 
+ - `send_to_session` に `contextId="new"` を渡すと、サーバーが**推測不能な ID** を発行して
+   ContextSummary を作成し、ツール結果で返す。届く本文の末尾には
+@@ -189,16 +271,50 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
+ - **`get_context(contextId)`**: 依頼側がポーリングして読む。サーバーからの通知は無い。
+   `updatedBy` で「本当に依頼先セッションが書いた結果か」を確認できる（null は無記名）
+ - **contextId は capability 兼用**（知っている＝読み書きできる。proof と同じ哲学で認証を別途作らない）
+-- 永続化: SQLite の `Contexts` テーブル（スキーマ v10）。終端状態（completed/failed/canceled）から
++- 永続化: SQLite の `Contexts` テーブル（スキーマ v11 で依頼元 `RequesterSessionId` / `RequesterName` を追加）。終端状態（completed/failed/canceled）から
+   **14日で自動削除**＋総数上限500（超過分は終端状態の古い順に削除。進行中は消さない）
+ 
+ **A2A との対応**: この contextId は A2A の `contextId`（最初のメッセージ送信時にサーバーが生成して
+ 返す会話束の ID）に対応し、status は TaskState に対応する（1 context = 1 タスクの簡約。
+ Task オブジェクトは作らない）。モデルのコンテキストウィンドウとは無関係。
+ 
++### 完了通知（依頼元がセッションの場合）
++
++`update_context` が **`completed` / `failed` / `canceled` へ遷移したときだけ**、依頼元セッションへ1通配る。
++
++```
++[TerminalHub] 依頼(contextId: xxx)が completed になりました。詳細は get_context で取得してください。
++処理中は選択肢を出さず、必要なことは update_context に書いて終えてください。
++```
++
++2行目はエージェント自身が出す選択肢（`AskUserQuestion` 等）にしか効かない。
++権限プロンプトは設定とツールポリシーが出すもので抑えられないので、
++塞がった場合の受け皿は配送キューのほう。
++
++**撃つ資格があるのは、その遷移を成立させた呼び出しだけ。** 判定は条件付き UPDATE（`WHERE ContextId = @id AND Status <> @status`）で行い、1行更新できた側だけが通知する。読み取ってから比べる方式だと、同じ札へ同時に書いた2者が両方「`working` から `completed` へ変えた」と誤認して依頼元を二度起こす。
++
++**`working` への遷移では撃たない。** 依頼元は送信直後にターンを終えているので、発火＝フルターンが
++1回起動する。「着手しました」を聞くために起きても、依頼元にできることは何も無い。
++一方で受け手が**意図して**中間報告したいことはあるので、そちらはエンベロープの依頼元へ
++`send_to_session` で自分から返す。判断が要る通知だけ、判断のある主体が撃つ、という役割分担。
++
++| | 性質 | 経路 |
++|---|---|---|
++| status 変化 | 受け手が事務的に更新する副作用 | 終端だけ自動発火 |
++| 意図的な中間報告 | 受け手が「起こしたい」と判断したもの | 受け手が明示的に `send_to_session` |
++
+ **作らないもの**（設計判断・滑り込み防止）: ID なしの一覧（capability モデルを崩す）、
+ claim / 担当割当（1対1依頼専用。「誰かやって」型はディスパッチャ側ルールの仕事）、
+-サーバー発の完了通知（集約ロジックの復活）、リトライ・期限監視（クライアント側の責務）。
++複数の結果の待ち合わせ・集約（wait / join）。
++
++> **撤回した項目**（当初は「作らないもの」に入れていた）
++>
++> - **サーバー発の完了通知** — 却下理由は「集約ロジックの復活」だったが、線引きが粗かった。
++>   禁じるべきなのは「結果を待ち合わせて集める」ことで、今あるのは
++>   「契約に購読者が1人いる。終端 status に遷移したら1通配る」という**ルーティング1本**。
++>   待ちも集約もスケジューリングも無い。
++> - **リトライ・期限監視（クライアント側の責務）** — 依頼元がセッションのとき、クライアントは
++>   回っていないので履行不能な契約だった。配送キューへ移した。
+ 
+ **典型フロー（外部クライアント）**:
+ 1. Desktop が `send_to_session(target=<レーン>, message="仕様は C:\work\spec.md", contextId="new")` → ID が返る
+@@ -328,6 +444,6 @@ AI 登録コマンド」を取り込むようにしてある（逆に `remove_co
+ 
+ ## 今後の拡張候補（未実装）
+ 
+-- 送信元を包むエンベロープ／自己識別、応答要否フラグ
+-- 結果の集約（wait / read）
+-- 宛先セッションの状態変化（`ready` 化）を待つオプション
++- 進行中／配送失敗の ContextSummary を UI に出す（人間が「この依頼まだ返ってきてない」を一覧で見る）
++- 受け手が `update_context` を書かずにターンを終えたケースの検出（Stop hook で「終わったのに未記入」を札へ刻む）
++- 結果の集約（wait / join）— 意図的に作っていない

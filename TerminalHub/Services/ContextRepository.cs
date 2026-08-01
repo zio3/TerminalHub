@@ -28,8 +28,10 @@ namespace TerminalHub.Services
     /// 完了通知は**これが true のときだけ**撃つ。読み取り→判定→更新を別々に行うと、
     /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と判断して
     /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
+    /// RewindRejected は「終端状態の札を進行中へ戻そうとして拒否した」ことを表す
+    /// （黙って無視すると、書けたつもりの呼び出し側が気づけないため結果で返す）。
     /// </summary>
-    public record ContextUpdateResult(bool Found, bool StatusTransitioned);
+    public record ContextUpdateResult(bool Found, bool StatusTransitioned, bool RewindRejected = false);
 
     /// <summary>
     /// ContextSummary の永続化リポジトリ。
@@ -71,6 +73,9 @@ namespace TerminalHub.Services
         private const int TtlDays = 14;
         private const int MaxCount = 500;
         private static readonly string[] TerminalStatuses = { "completed", "failed", "canceled" };
+
+        /// <summary>SQL に直接埋める終端状態のリテラル一覧（値は定数なので注入の余地はない）。</summary>
+        private static readonly string TerminalStatusList = $"'{string.Join("','", TerminalStatuses)}'";
 
         public ContextRepository(SessionDbContext dbContext, ILogger<ContextRepository> logger)
         {
@@ -152,22 +157,42 @@ namespace TerminalHub.Services
             // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
             // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
             // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
-            var transitioned = await connection.ExecuteNonQueryAsync(@"
+            //
+            // あわせて**終端状態からの巻き戻しを拒む**。一度 completed になった札へ working を
+            // 書けてしまうと、依頼が閉じたのに一覧上は進行中に戻り、TTL 掃除の対象からも外れる。
+            // 終端 → 別の終端（completed と failed の競合等）は許す。片方が「配送できなかった」を
+            // 書いた後に人間経由で実際に完了した、といった正当な上書きがあるため。
+            var isTerminal = TerminalStatuses.Contains(status, StringComparer.Ordinal);
+            var transitioned = await connection.ExecuteNonQueryAsync($@"
                 UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
                     UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
-                WHERE ContextId = @contextId AND Status <> @status",
+                WHERE ContextId = @contextId AND Status <> @status
+                  AND (@isTerminal = 1 OR Status NOT IN ({TerminalStatusList}))",
                 ("@contextId", contextId),
                 ("@summary", summary),
                 ("@status", status),
                 ("@now", now),
+                ("@isTerminal", isTerminal ? 1 : 0),
                 ("@updatedBySessionId", updatedBySessionId),
                 ("@updatedByName", updatedByName));
 
             if (transitioned > 0)
                 return new ContextUpdateResult(true, StatusTransitioned: true);
 
-            // 0行だったのは「同じ status への書き直し」か「札が無い」のどちらか。
-            // 前者でも要約と記名は更新する（status は変わらないので通知はしない）。
+            // 0行だったのは「札が無い」「同じ status への書き直し」「終端からの巻き戻しを拒否」の
+            // いずれか。どれなのかは呼び出し側へ返す必要があるので現在値を読む。
+            // ここは報告のための読み取りで、遷移の成立判定は上の UPDATE で確定済み（原子的）。
+            var current = await connection.ExecuteScalarAsync<string>(
+                "SELECT Status FROM Contexts WHERE ContextId = @contextId",
+                ("@contextId", contextId));
+
+            if (current == null)
+                return new ContextUpdateResult(false, StatusTransitioned: false);
+
+            if (!isTerminal && TerminalStatuses.Contains(current, StringComparer.Ordinal))
+                return new ContextUpdateResult(true, StatusTransitioned: false, RewindRejected: true);
+
+            // 同じ status への書き直し。要約と記名は更新する（status は変わらないので通知はしない）。
             var rewritten = await connection.ExecuteNonQueryAsync(@"
                 UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
                     UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
@@ -206,7 +231,7 @@ namespace TerminalHub.Services
         {
             try
             {
-                var terminalList = $"'{string.Join("','", TerminalStatuses)}'";
+                var terminalList = TerminalStatusList;
                 var cutoff = DateTime.UtcNow.AddDays(-TtlDays).ToString("o");
 
                 // 終端状態かつ TTL 超過を削除

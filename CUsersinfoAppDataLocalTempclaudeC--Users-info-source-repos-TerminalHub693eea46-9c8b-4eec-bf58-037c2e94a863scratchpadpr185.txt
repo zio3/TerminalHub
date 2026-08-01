@@ -1,0 +1,35 @@
+author:	zio3
+association:	owner
+edited:	false
+status:	none
+--
+### Code review
+
+Found 5 issues (all fixed in 7fc08cd):
+
+1. **接続クライアントへ配信される説明文に新ツールが載っていなかった。** `McpInstructionDefaults.Template` はコメントではなく、MCP クライアントへ実際に送られるツールガイド。ここに無いと接続したセッションは `list_commands` / `add_command` / `remove_command` の存在を知らず、機能が使われないまま終わる。proof 必須の書き込み系を列挙している行にも追加が必要だった
+
+https://github.com/zio3/TerminalHub/blob/a144377f8a023ce0894c70d9e83d2591da44df8b/TerminalHub/Mcp/McpInstructionDefaults.cs#L30-L35
+
+2. **設定ダイアログを開いている間の `add_command` が黙って消える。** `editingSessionCommands` は開いた時点のスナップショットで、`PersistSessionCommandsAsync` はそれを丸ごと `sessionInfo.SessionCommands` へ書き戻し、`SaveSessionToStorageAsync` が行全体 upsert する。人間がダイアログを開いたまま AI が `add_command` すると、その後の任意の編集操作で追加が UI・DB とも消え、エラーもログも出ない。**このファイルは過去に同種の消失を `b03f90d`「セッション専用コマンドが稼働中セッションで消える不具合」で修正している**。保存時に「開いてから増えた AI 登録コマンド」を取り込むよう修正
+
+https://github.com/zio3/TerminalHub/blob/a144377f8a023ce0894c70d9e83d2591da44df8b/TerminalHub/Components/Shared/Dialogs/SessionSettingsDialog.razor#L773-L790
+
+3. **`remove_command` が静かに空振りしうる。** `info.SessionCommands` を2回読み、`ReferenceEquals` で除去していた。その間に別の書き込みでリストが差し替わると参照が一致せず、何も消していないのに success を返す。1回のスナップショットに対して判定と除去を行うよう修正
+
+https://github.com/zio3/TerminalHub/blob/a144377f8a023ce0894c70d9e83d2591da44df8b/TerminalHub/Mcp/SessionMessagingTools.cs#L566-L582
+
+4. **クラス doc コメントのツール一覧が3本ぶん古いまま。** `CLAUDE.md` と `docs/` は更新されていたが、このコメントだけ漏れていた。#177（tool の Description）・#178（クラスコメントと SessionProof）で同種の指摘を受けている箇所
+
+https://github.com/zio3/TerminalHub/blob/a144377f8a023ce0894c70d9e83d2591da44df8b/TerminalHub/Mcp/SessionMessagingTools.cs#L8-L25
+
+5. **LocalStorage モードの空振り注意が新しい書き込みに無い。** `set_memo` / `set_card` には同じ注意書きがある（MCP は Circuit 外なので Singleton の `ISessionRepository` を直接使い、LocalStorage モードでは UPDATE が対象行なしで空振りする）。同じハザードなので追記
+
+あわせて、`title` の前後空白除去（`"Foo"` と `"Foo "` が別物だと重複判定も完全一致も説明できない）、`commandText` の空白のみ拒否、ハードコードしていた日本語2箇所のリソース化（このファイルは全体が `@L[...]` を使っている）を行った。
+
+title 一意化のスコープ（セッション専用リスト内のみ）が既存の「重複排除もしない（同名を並べたい場合があるため）」と矛盾しないこと、`UpdateSessionCommandsAsync` が `UpdateMemoAsync`/`UpdateCardAsync` と同じ列単位更新の作法に沿っていること、proof ゲートが `e78c730` で確立された形と同じであることは確認済み。
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<sub>- If this code review was useful, please react with 👍. Otherwise, react with 👎.</sub>
+--

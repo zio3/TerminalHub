@@ -119,7 +119,10 @@ namespace TerminalHub.Mcp
             "target はセッションGUIDか表示名(完全一致)。submit=true なら末尾でEnterを送り即実行させる。" +
             "相手がユーザーの許可/選択待ちのときは**待ちが解消してから自動で配送される**(あなたが状態を確認したり再送したりする必要はない)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
-            "宛先が未起動のときだけ success=false(自動起動しない・ユーザーに起動を依頼する)。" +
+            "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
+            "配送待ちが上限 / proof 不一致 / **書き込みが途中で失敗**、のいずれか。" +
+            "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
+            "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
             "proof(環境変数 TERMINALHUB_SESSION_PROOF)を渡すと、検証済みのあなたの名前とGUIDが本文末尾に付き、相手が返信できる。" +
             "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
@@ -200,29 +203,65 @@ namespace TerminalHub.Mcp
             // 送信確定と誤解釈する事故を避けるため。
             var deliveredMessage = message + BuildEnvelope(requester, effectiveContextId);
 
-            var outcome = await deliveryService.SendAsync(
-                info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
-
-            if (outcome is DeliveryOutcome.Rejected or DeliveryOutcome.Failed)
+            DeliveryOutcome outcome;
+            try
             {
-                // 受理できなかったので、発行したばかりの札を片付ける。submitted は終端状態でなく
+                outcome = await deliveryService.SendAsync(
+                    info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
+            }
+            catch
+            {
+                // 想定外の例外（終了時の Dispose と競合した SemaphoreSlim 等）でも、発行したばかりの
+                // 札を必ず片付ける。submitted は終端状態でなく TTL 掃除の対象外なので、
+                // 残すと永久に消えない行になる。DeliveryOutcome での分岐だけに頼ると
+                // この経路が抜ける（旧実装が持っていた安全網の復元）。
+                if (issuedContextId != null)
+                    await contextRepository.DeleteAsync(issuedContextId);
+                throw;
+            }
+
+            if (outcome == DeliveryOutcome.Rejected)
+            {
+                // 一度も書いていないので、発行したばかりの札を片付ける。submitted は終端状態でなく
                 // TTL 掃除の対象外のため、残すと永続の孤児になる。
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
 
-                // 失敗の種類で「次に取るべき行動」が正反対なので、文面を分ける。
-                // Failed は書き込みの途中で落ちており、本文だけ相手の入力欄へ届いている
-                // 可能性がある。ここで同じ内容を再送させると本文が二重に連結される。
-                return outcome == DeliveryOutcome.Failed
-                    ? new SendResult(false,
-                        $"宛先への書き込みが途中で失敗しました: {info.GetDisplayName()}。" +
-                        $"**同じ内容をそのまま再送しないでください**（本文だけが相手の入力欄に " +
-                        $"届いている可能性があり、再送すると二重に連結されます）。" +
-                        $"ユーザーに宛先セッションの状態を確認してもらい、必要なら人間の目で入力欄を" +
-                        $"片付けてから送り直してください。")
-                    : new SendResult(false,
-                        $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
-                        $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
+                return new SendResult(false,
+                    $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
+                    $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
+            }
+
+            if (outcome == DeliveryOutcome.Failed)
+            {
+                // **札は消さない**。本文は contextId 入りのエンベロープごと相手の入力欄へ
+                // 届いている可能性があり、人間がそれを送信したら受け手はこの ID へ書きに来る。
+                // 消してしまうと「存在しない contextId」を渡したことになる。
+                // 代わりに failed を記録して、届いたか確認できない旨を残す
+                // （終端状態なので TTL 掃除の対象にもなり、孤児にはならない）。
+                if (issuedContextId != null)
+                {
+                    await contextRepository.UpdateAsync(
+                        issuedContextId,
+                        $"宛先「{info.GetDisplayName()}」への書き込みが途中で失敗しました。届いたかどうか確認できません" +
+                        "（本文だけが相手の入力欄に残っている可能性があります）。" +
+                        "人間が入力欄を確認して送信した場合、受け手はこの札へ結果を書きます。",
+                        "failed", null, SessionDeliveryService.SystemWriterName);
+                }
+
+                // 「次に取るべき行動」が Rejected と正反対なので、文面を分ける。
+                // ここで同じ内容を再送させると本文が二重に連結される。
+                return new SendResult(false,
+                    $"宛先への書き込みが途中で失敗しました: {info.GetDisplayName()}。" +
+                    $"**同じ内容をそのまま再送しないでください**（本文だけが相手の入力欄に " +
+                    $"届いている可能性があり、再送すると二重に連結されます）。" +
+                    $"ユーザーに宛先セッションの状態を確認してもらい、必要なら人間の目で入力欄を" +
+                    $"片付けてから送り直してください。" +
+                    (issuedContextId == null
+                        ? string.Empty
+                        : $" contextId={issuedContextId} は発行済みで、本文にも載っています。" +
+                          "人間が送信した場合は受け手がこの札へ結果を書くので、get_context で確認できます。"),
+                    issuedContextId);
             }
 
             var queued = outcome == DeliveryOutcome.Queued;
@@ -386,7 +425,11 @@ namespace TerminalHub.Mcp
         // - send_to_session（push・受信箱がある相手用）の欠けていた片割れ。受信箱を持たない
         //   外部クライアント（Claude Desktop 等）が依頼の結果を pull で受け取るための仕組み。
         // - サーバーが持つのは「contextId → status＋要約1枚」だけ。追記ログ・claim・担当割当・
-        //   完了通知・一覧（ID なし列挙）は作らない（調整ロジックはクライアント側）。
+        //   一覧（ID なし列挙）は作らない（調整ロジックはクライアント側）。
+        // - **終端 status への遷移時の完了通知だけは持つ**（当初は「作らない」に入れていたが撤回）。
+        //   依頼元がセッションのときポーリングは原理的に成立しない（送信直後にターンが終わるので
+        //   回す主体がいない）ため。禁じているのは「複数の結果を待ち合わせて集める」ことで、
+        //   これは「札に購読者が1人いる。終端に遷移したら1通配る」というルーティング1本。
         // - contextId は capability 兼用（知っている=読み書きできる）。A2A の contextId と同じく
         //   最初の送信時にサーバーが発行して返す。status の語彙は A2A TaskState をそのまま使う。
 
@@ -414,7 +457,9 @@ namespace TerminalHub.Mcp
         [Description(
             "ContextSummary(依頼の状況札)を取得する。contextId は A2A の contextId に対応する依頼単位の ID" +
             "(モデルのコンテキストウィンドウとは無関係)。send_to_session の contextId=\"new\" で発行される。" +
-            "依頼側はこれをポーリングして進捗・結果を受け取る(サーバーからの通知は無い)。" +
+            "依頼側がセッションで、send_to_session に proof を渡していた場合は、札が終端状態" +
+            "(completed / failed / canceled)になった時点で自動通知が届くのでポーリングは不要。" +
+            "proof を渡せない外部クライアントは、これをポーリングして進捗・結果を受け取る。" +
             "ID を知っていれば誰でも読める(ID が読み書きの資格を兼ねる)。" +
             "updatedBy は最終書き込み者の検証済みセッション名(null なら無記名の書き込み)。")]
         public static async Task<ContextSummaryResult> GetContext(
@@ -482,6 +527,13 @@ namespace TerminalHub.Mcp
             if (!updated.Found)
                 return new SendResult(false,
                     $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
+
+            // 黙って無視すると「書けたつもり」で先へ進んでしまうので、拒否は明示して返す。
+            if (updated.RewindRejected)
+                return new SendResult(false,
+                    $"この札は既に終端状態(completed / failed / canceled)なので、{status} へは戻せません。" +
+                    "依頼が閉じたあとに進行中へ巻き戻すと、依頼元の認識と食い違い、自動削除の対象からも外れます。" +
+                    "続きの作業が要るなら、新しい依頼として contextId=\"new\" で発行し直してください。");
 
             // 依頼元への自動通知は**終端 status への遷移のときだけ**。
             // working への遷移でも撃つと、依頼元は「着手した」を聞くためだけにフルターンを1回起こす

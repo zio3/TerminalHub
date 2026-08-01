@@ -1,0 +1,54 @@
+author:	zio3
+association:	owner
+edited:	false
+status:	none
+--
+### Code review
+
+No issues found. Checked for bugs and CLAUDE.md compliance.
+
+Verified across 5 review dimensions (CLAUDE.md compliance, bug scan, git history, prior PR comments, in-code comment guidance):
+
+- Schema v10 follows the frozen-v1 / sequential / idempotent migration rules (CREATE TABLE IF NOT EXISTS, same shape as v7); the PruneAsync catch logs instead of swallowing (the #144/#173 lesson, cited in-code)
+- send_to_session's contextId branch sits after all existing guards (waiting_user_input / not_ready), so no guard ordering regression; existing-ID sends verify existence to avoid silent typo loss
+- proof handling reuses the #178 single-point ResolveBySessionProof and keeps the "mismatch = error, absent = unsigned" contract consistently across Description / instructions / docs
+
+Minor notes (all scored below the 80 reporting threshold):
+
+1. (75) CLAUDE.md section 5's repository list was not extended with `IContextRepository` while section 7 was updated in this PR
+2. (75) The class doc in [SessionMessagingTools.cs](https://github.com/zio3/TerminalHub/blob/9b50d77353517e8a9f69cf0522627c72496c2d5a/TerminalHub/Mcp/SessionMessagingTools.cs#L9-L22) still says 「サーバーは会話状態を持たず…SessionProof のようなセッション属性は除く」 and lists only the original 3 tools — docs were updated for the ContextSummary exception but this comment was not (same pattern as the #178 note)
+3. (50) `DateTime.Parse` without RoundtripKind makes get_context's updatedAt render with a local offset instead of Z (same pre-existing pattern as SessionRepository; instant unaffected)
+4. (50) If WriteAsync itself throws, an orphan `submitted` context remains and is never pruned (TTL/cap only clean terminal states) — the "no orphan records" comment covers pre-send guards only
+
+Notes 1-2 are one-line doc fixes worth folding in before merge; 3-4 are optional hardening.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<sub>- If this code review was useful, please react with 👍. Otherwise, react with 👎.</sub>
+--
+author:	zio3
+association:	owner
+edited:	false
+status:	none
+--
+### Code review
+
+Re-review of fix commit 43f9e26: all 4 previously noted items are resolved (CLAUDE.md section 5, class doc, RoundtripKind, orphan-record cleanup with non-throwing DeleteAsync preserving the original exception via bare `throw`).
+
+Found 1 issue:
+
+1. The `SendResult` return-value table in docs/mcp-session-messaging.md still lists only `success`/`message`, but this PR added a third field `contextId` (`record SendResult(bool success, string message, string? contextId = null)`) — and the argument table right above it even says 「結果で ID が返る」. One row is missing: `contextId` (string?, set only when sending with `contextId="new"`). (bug due to docs/mcp-session-messaging.md return table vs `SendResult` record)
+
+https://github.com/zio3/TerminalHub/blob/43f9e26fcdc91c7654cc015f7e604ad31ef0b22b/docs/mcp-session-messaging.md#L119-L126
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+<sub>- If this code review was useful, please react with 👍. Otherwise, react with 👎.</sub>
+--
+author:	zio3
+association:	owner
+edited:	false
+status:	none
+--
+Superseded by #182. This PR was auto-closed by GitHub when its base branch (feat/list-sessions-memo) was deleted on merging #179; a closed PR whose base is gone cannot be reopened or re-targeted. No commits were lost — the same branch, with all review fixes applied and rebased onto master, is now #182.
+--

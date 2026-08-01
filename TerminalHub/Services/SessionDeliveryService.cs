@@ -125,7 +125,21 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     {
         // hook ハンドラ本体が待ちフラグを更新した後に呼ばれる想定。配送は投げっぱなしで良い
         // （失敗しても次の掃除タイマーが拾う）。
-        _ = FlushAllAsync();
+        //
+        // ただし**例外は必ずここで捕まえてログに残す**。投げっぱなしのまま外へ出すと
+        // unobserved task exception になって何も記録されず、「配送が静かに効かない」状態に
+        // なる（掃除タイマー側は try/catch 済みなので、ここだけ無防備だった）。
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await FlushAllAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[配送] hook 起点の配送で例外");
+            }
+        });
     }
 
     public async Task<DeliveryOutcome> SendAsync(
@@ -308,8 +322,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
 
             foreach (var item in failures)
             {
-                await HandleFailureAsync(item,
-                    "宛先への書き込みに失敗しました（本文が途中まで届いている可能性があるため再送していません）");
+                await HandleFailureAsync(item, FailureKind.WriteFailed);
             }
         }
     }
@@ -339,8 +352,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 // 通知はロック解放後（FlushAllAsync と同じくデッドロック回避のため）。
                 foreach (var item in expired)
                 {
-                    await HandleFailureAsync(item,
-                        $"{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました");
+                    await HandleFailureAsync(item, FailureKind.Expired);
                 }
             }
 
@@ -354,31 +366,54 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     }
 
     /// <summary>
+    /// 配送できなかった理由。**「届いていない」と言い切れるかどうかが違う**ので必ず区別する。
+    /// 依頼元はこの文面を読んで再送するかを決めるため、届いた可能性があるのに
+    /// 「届いていません」と書くと、本文の重複・二重実行を招く。
+    /// </summary>
+    private enum FailureKind
+    {
+        /// <summary>TTL 超過。一度も書いていないので**確実に届いていない**。</summary>
+        Expired,
+        /// <summary>書き込みの途中で失敗した。**届いたかどうか確認できない**（本文だけ届いた可能性がある）。</summary>
+        WriteFailed,
+    }
+
+    private static string DescribeFailure(FailureKind kind, string targetName) => kind switch
+    {
+        FailureKind.Expired =>
+            $"宛先「{targetName}」へ配送できませんでした（{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました）。" +
+            "一度も書き込んでいないので、メッセージは届いていません。同じ内容を送り直して構いません。",
+        _ =>
+            $"宛先「{targetName}」への書き込みが途中で失敗しました。**届いたかどうか確認できません**" +
+            "（本文だけが相手の入力欄に残っている可能性があります）。" +
+            "同じ内容を再送する前に、人間に宛先の入力欄を確認してもらってください。",
+    };
+
+    /// <summary>
     /// 配送できなかったことを依頼元へ伝える。
     /// システム発の通知（コールバック）の失敗はログだけに留める＝失敗通知の連鎖を止める終端条件。
     /// </summary>
-    private async Task HandleFailureAsync(DeliveryItem item, string reason)
+    private async Task HandleFailureAsync(DeliveryItem item, FailureKind kind)
     {
         var targetName = _sessionManager.GetSessionInfo(item.TargetSessionId)?.GetDisplayName()
             ?? item.TargetSessionId.ToString();
+        var description = DescribeFailure(kind, targetName);
 
         if (item.IsSystemCallback)
         {
-            _logger.LogWarning("[配送] システム通知の配送に失敗（二次通知はしない）: {Target} — {Reason}",
-                targetName, reason);
+            _logger.LogWarning("[配送] システム通知の配送に失敗（二次通知はしない）: {Target} — {Kind}",
+                targetName, kind);
             return;
         }
 
-        _logger.LogWarning("[配送] 配送に失敗: {Target} — {Reason}", targetName, reason);
+        _logger.LogWarning("[配送] 配送に失敗: {Target} — {Kind}", targetName, kind);
 
         if (!string.IsNullOrEmpty(item.ContextId))
         {
             // 札を failed にする。終端状態にしておかないと TTL 掃除の対象外になり、
             // 使われない行が永久に残る（ContextRepository の後片付けと同じ理由）。
-            var summary =
-                $"宛先「{targetName}」へ配送できませんでした（{reason}）。メッセージは届いていません。";
             var updated = await _contextRepository.UpdateAsync(
-                item.ContextId, summary, "failed", null, SystemWriterName);
+                item.ContextId, description, "failed", null, SystemWriterName);
 
             // 既に終端状態だった（受け手が先に書いた等）なら通知しない。
             // 遷移を成立させた側だけが撃つ、という規則は update_context と共通。
@@ -389,8 +424,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
 
         if (item.RequesterSessionId.HasValue)
         {
-            await SendSystemCallbackAsync(item.RequesterSessionId.Value,
-                $"[TerminalHub] 「{targetName}」へのメッセージを配送できませんでした（{reason}）。相手には届いていません。");
+            await SendSystemCallbackAsync(item.RequesterSessionId.Value, $"[TerminalHub] {description}");
         }
     }
 
