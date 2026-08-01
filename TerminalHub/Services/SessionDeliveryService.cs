@@ -481,6 +481,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         //   （その1通だけ get_delivery での検証ができない、が正直な状態）。
         var deliveryId = Guid.NewGuid().ToString("N")[..12];
         string idPart;
+        var recorded = false;
         try
         {
             await _deliveryRepository.CreateAsync(new DeliveryRecord(
@@ -491,9 +492,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 requester.GetDisplayName(),
                 ContextId: null,
                 DateTime.UtcNow));
-            // システム通知の記録は常に残る（Rejected のような取り消しが無い）ので、
-            // ここで総数上限の掃除を行ってよい。PruneToCapAsync は例外を投げない。
-            await _deliveryRepository.PruneToCapAsync();
+            recorded = true;
             idPart = $"#{deliveryId}";
         }
         catch (Exception ex)
@@ -509,6 +508,18 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             requesterSessionId, marked, DateTime.UtcNow,
             ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
 
-        await EnqueueOrWriteAsync(requester, item);
+        var outcome = await EnqueueOrWriteAsync(requester, item);
+
+        // 通常配送と同じ後始末をシステム通知にも適用する（send_to_session 側と対）。
+        // Rejected は一度も書いていないことが確定しており、この記録は誰も参照できないため
+        // 削除する（残すと Rejected の量産で真正な記録を押し出す口になる）。
+        // 上限掃除は「記録を残すことが確定した後」＝Rejected でないと分かってから行う。
+        if (recorded)
+        {
+            if (outcome == DeliveryOutcome.Rejected)
+                await _deliveryRepository.DeleteAsync(deliveryId);
+            else
+                await _deliveryRepository.PruneToCapAsync();
+        }
     }
 }

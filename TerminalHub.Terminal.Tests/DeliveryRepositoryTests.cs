@@ -77,7 +77,8 @@ public sealed class DeliveryRepositoryTests : IDisposable
         // 押し出され、Rejected 側を後から消しても戻らない（押し出された配送は get_delivery で
         // 「偽装」と誤判定される）。CreateAsync は TTL 掃除のみ・上限掃除は
         // PruneToCapAsync（記録を残すことが確定した後）に分離されていることを検証する。
-        var origin = DateTime.UtcNow.AddMinutes(-DeliveryRepository.MaxCount);
+        // 猶予期間（PruneGrace）より確実に古い時刻で「確定済み」の真正な記録を作る
+        var origin = DateTime.UtcNow.AddDays(-1);
         for (var i = 0; i < DeliveryRepository.MaxCount; i++)
         {
             await _repository.CreateAsync(new DeliveryRecord(
@@ -96,12 +97,49 @@ public sealed class DeliveryRepositoryTests : IDisposable
         await _repository.PruneToCapAsync();
         Assert.NotNull(await _repository.GetAsync("gen000000000"));
 
-        // 本当に超過した（残すことが確定した1001件目がある）ときだけ、最古が押し出される
+        // 本当に超過した（残すことが確定し、猶予期間も過ぎた1001件目がある）ときだけ、最古が押し出される
         await _repository.CreateAsync(new DeliveryRecord(
-            "kept00000001", null, null, "to", "宛先", null, DateTime.UtcNow));
+            "kept00000001", null, null, "to", "宛先", null, origin.AddMinutes(DeliveryRepository.MaxCount)));
         await _repository.PruneToCapAsync();
         Assert.Null(await _repository.GetAsync("gen000000000"));
         Assert.NotNull(await _repository.GetAsync("kept00000001"));
+    }
+
+    [Fact]
+    public async Task 並行送信のインターリーブでも真正な記録を余分に押し出さない()
+    {
+        // レビュー指摘の再現: 真正1000件の状態で
+        //   1. A（後で Rejected になる）が行を作成
+        //   2. B（成功する）が行を作成
+        //   3. B が上限掃除 ← 旧実装は A の一時的な +1 を数えて真正な2件を押し出した
+        //   4. A が自分の行を削除 → 真正な記録が1件余分に失われる
+        // 対策 = 上限掃除は猶予期間（PruneGrace）内の行を数えも消しもしない。
+        // 未確定の行（A・B とも作成直後）は掃除の判断に混ざらないので、このレースは成立しない。
+        var origin = DateTime.UtcNow.AddDays(-1);
+        for (var i = 0; i < DeliveryRepository.MaxCount; i++)
+        {
+            await _repository.CreateAsync(new DeliveryRecord(
+                $"gen{i:D9}", null, null, "to", "宛先", null, origin.AddMinutes(i)));
+        }
+
+        // 1. A（作成直後＝猶予期間内）
+        await _repository.CreateAsync(new DeliveryRecord(
+            "inflightA000", null, null, "to", "宛先", null, DateTime.UtcNow));
+        // 2. B（作成直後＝猶予期間内）
+        await _repository.CreateAsync(new DeliveryRecord(
+            "inflightB000", null, null, "to", "宛先", null, DateTime.UtcNow));
+        // 3. B の上限掃除: A も B も猶予期間内なので数えられず、真正な1000件は無傷
+        await _repository.PruneToCapAsync();
+        Assert.NotNull(await _repository.GetAsync("gen000000000"));
+        Assert.NotNull(await _repository.GetAsync("gen000000001"));
+        // 4. A が Rejected の後片付け
+        await _repository.DeleteAsync("inflightA000");
+
+        Assert.Null(await _repository.GetAsync("inflightA000"));
+        Assert.NotNull(await _repository.GetAsync("inflightB000"));
+        // 真正な記録は1件も失われていない（B が猶予期間を過ぎた後の掃除で
+        // 正当に1件押し出されるのは別の話＝上のテストで検証済み）
+        Assert.NotNull(await _repository.GetAsync("gen000000000"));
     }
 
     [Fact]

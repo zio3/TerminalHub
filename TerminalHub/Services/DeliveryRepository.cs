@@ -64,6 +64,17 @@ namespace TerminalHub.Services
         private const int TtlDays = 14;
         public const int MaxCount = 1000;
 
+        /// <summary>
+        /// 上限掃除の猶予期間。**この期間より新しい行は、上限掃除で数えも消しもしない**。
+        /// 並行送信では「A（後で Rejected になり削除される）が行を作る → B が行を作って
+        /// 上限掃除 → B の掃除が A の一時的な +1 を数えて真正な最古を余分に押し出す →
+        /// A が自分の行を消す」というインターリーブが起こりうる。未確定の行が存在するのは
+        /// 生成から高々数秒なので、直近の行を掃除の判断から外せばこのレースは成立しない
+        /// （上限は瞬間的に MaxCount＋並行送信数まで超過しうるが、肥大化防止の
+        /// 安全弁としては誤差の範囲）。
+        /// </summary>
+        public static readonly TimeSpan PruneGrace = TimeSpan.FromSeconds(60);
+
         public DeliveryRepository(SessionDbContext dbContext, ILogger<DeliveryRepository> logger)
         {
             _dbContext = dbContext;
@@ -100,12 +111,16 @@ namespace TerminalHub.Services
                 await using var connection = _dbContext.CreateConnection();
                 await connection.OpenAsync();
 
+                // 猶予期間内（直近 PruneGrace）の行は数えず消さない（PruneGrace のコメント参照）。
+                var graceCutoff = (DateTime.UtcNow - PruneGrace).ToString("o");
                 await connection.ExecuteNonQueryAsync(@"
                     DELETE FROM Deliveries WHERE DeliveryId IN (
                         SELECT DeliveryId FROM Deliveries
+                        WHERE SentAt < @graceCutoff
                         ORDER BY SentAt ASC
-                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries) - @maxCount)
+                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries WHERE SentAt < @graceCutoff) - @maxCount)
                     )",
+                    ("@graceCutoff", graceCutoff),
                     ("@maxCount", MaxCount));
             }
             catch (Exception ex)
