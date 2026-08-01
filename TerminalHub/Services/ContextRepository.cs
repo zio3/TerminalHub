@@ -30,10 +30,10 @@ namespace TerminalHub.Services
     /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
     /// RewindRejected は「終端状態の札を進行中へ戻そうとして拒否した」ことを表す
     /// （黙って無視すると、書けたつもりの呼び出し側が気づけないため結果で返す）。
-    /// </summary>
     /// Conflicted は「他の書き込みと競合し続けて更新できなかった」ことを表す。
     /// **Found=false（札が無い）と混ぜないこと**。札は存在しており、原因も対処も違う
     /// （前者は諦める・後者は再試行する）。
+    /// </summary>
     public record ContextUpdateResult(
         bool Found,
         bool StatusTransitioned,

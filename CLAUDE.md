@@ -49,7 +49,7 @@ dotnet clean
 ```
 
 ### テスト
-VTエミュレータ（`TerminalHub.Terminal`）のヘッドレステスト（xUnit）が `TerminalHub.Terminal.Tests` にある。WinForms/ConPTY/Web に依存しないので高速に回せる。
+VTエミュレータ（`TerminalHub.Terminal`）のヘッドレステスト（xUnit）が `TerminalHub.Terminal.Tests` にある。WinForms/ConPTY/Web に依存しないので高速に回せる。純ロジックのほか、判定が SQL に載っているもの（`ContextRepository` の status 遷移＝条件付き UPDATE）は実 SQLite（テンポラリDB・後始末つき）で検証する。
 ```bash
 # 全テスト実行
 dotnet test TerminalHub.Terminal.Tests/TerminalHub.Terminal.Tests.csproj
