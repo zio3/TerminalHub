@@ -16,6 +16,11 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
+    <!-- ContextRepository の status 遷移判定（条件付き UPDATE）を実 SQLite で検証するため -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+    <!-- 本体と同じく CVE-2025-6965 (GHSA-2m69-gcr7-jv3q) 回避のため SQLitePCLRaw を 3.x にオーバーライド -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +32,10 @@
     <Compile Include="..\TerminalHub\Services\SlashCommandMerge.cs" Link="SlashCommandMerge.cs" />
     <Compile Include="..\TerminalHub\Services\SlashCommandFilter.cs" Link="SlashCommandFilter.cs" />
     <Compile Include="..\TerminalHub\Services\TerminalCommandLine.cs" Link="TerminalCommandLine.cs" />
+    <Compile Include="..\TerminalHub\Services\DeliveryQueue.cs" Link="DeliveryQueue.cs" />
+    <!-- 依頼の状況札。status 遷移の判定が SQL の条件付き UPDATE に載っているため、実 SQLite で検証する -->
+    <Compile Include="..\TerminalHub\Services\ContextRepository.cs" Link="ContextRepository.cs" />
+    <Compile Include="..\TerminalHub\Services\SessionDbContext.cs" Link="SessionDbContext.cs" />
     <!-- CLI 出力解析器（UI 非依存の純ロジック）。テーブル駆動テスト用にリンク -->
     <Compile Include="..\TerminalHub\Helpers\AnsiHelper.cs" Link="AnsiHelper.cs" />
     <Compile Include="..\TerminalHub\Analyzers\IOutputAnalyzer.cs" Link="IOutputAnalyzer.cs" />

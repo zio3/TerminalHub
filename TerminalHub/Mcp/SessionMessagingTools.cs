@@ -14,16 +14,22 @@ namespace TerminalHub.Mcp
     ///
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
-    /// - 集約なし: 結果待ち(wait)/読み取り(read)はしない。完了は TerminalHub 本体の LED/通知で人間が気づく。
+    /// - 集約なし: 複数の結果を待ち合わせて集める(wait/join)ことはしない。
+    ///   ただし**1件の依頼の結末を依頼元へ返すことはする**（proof 付きで送った依頼は、札が
+    ///   終端 status になった時点で SessionDeliveryService が依頼元セッションへ1通配る）。
+    ///   proof 無し＝外部クライアントの依頼は従来どおり get_context のポーリングで受け取る。
     /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
     ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
     ///   書き込み系(set_memo/set_card/add_command/remove_command)は proof の検証で
     ///   本人のみに機構的に制限する。
     /// - セッション専用コマンドだけは向きが逆で、セッションが人間のために UI(クイック送信バーの
     ///   ボタン)を生やす。グローバル設定のコマンドは対象外＝共有物には触らせない。
-    /// - サーバーは会話状態を持たず、渡されたフラグ(submit 等)に素直に従うだけ
-    ///   （メッセージの追跡・待ち合わせ・キューを持たないという意味。本人検証用の
-    ///   SessionProof、および依頼IDで引く状況札=ContextSummary は例外として持つ）。
+    /// - サーバーは会話の状態を持たない（メッセージの内容を解釈しない・返答を待ち合わせない）。
+    ///   ただし**配送はサーバーの責務**で、宛先が入力待ちなら DeliveryQueue に積んで
+    ///   解消後に自動配送する（呼び出し側に状態確認と再送をさせない。呼び出し元が
+    ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
+    ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
+    ///   および揮発の配送キューの3つ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -41,17 +47,19 @@ namespace TerminalHub.Mcp
             string memo);
 
         /// <summary>
-        /// send_to_session の結果。宛先なし/未起動/処理中は例外にせず success=false で返し、
-        /// 呼び出し側（エージェント）にリトライ判断を委ねる。
+        /// send_to_session の結果。宛先なし/未起動は例外にせず success=false で返す。
         /// contextId は contextId="new" で送信したときだけ発行された ID が入る。
+        /// delivery は "delivered"（ConPTY へ書けた）/ "queued"（宛先が入力待ちなので受理して待機中）。
+        /// success=true の意味が「届いた」ではなく「受理した」に変わったため、両者を区別して返す。
         /// </summary>
-        public record SendResult(bool success, string message, string? contextId = null);
+        public record SendResult(bool success, string message, string? contextId = null, string? delivery = null);
 
         [McpServerTool(Name = "list_sessions")]
         [Description(
             "TerminalHub が管理中のセッション一覧を返す。send_to_session の宛先を選ぶために使う。" +
-            "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中=送信可。作業中でも相手CLIのキューに積まれる) / " +
-            "waiting_user_input(ユーザーの許可/選択待ち=送信不可) / not_ready(ConPTY未接続=起動が必要・送信不可)。" +
+            "任意のフィルタ引数で絞り込める。各項目の status は ready(受付中。作業中でも相手CLIのキューに積まれる) / " +
+            "waiting_user_input(ユーザーの許可/選択待ち。**送信は可能**で、待ちが解消してから自動配送される) / " +
+            "not_ready(ConPTY未接続=起動が必要・送信不可)。" +
             "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。" +
             "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。")]
         public static IEnumerable<SessionSummary> ListSessions(
@@ -80,9 +88,10 @@ namespace TerminalHub.Mcp
                     folder.IndexOf(folderContains, StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
-                // 送信可否で状態を導出（呼び出し側が「送れるか」を一目で判断できるように）。
+                // 宛先の状態（呼び出し側が「今どうなっているか」を把握するため）。
                 //   not_ready          = ConPTY 未接続。まず起動が必要（送信不可）。
-                //   waiting_user_input = ユーザーの許可/選択待ち（送信不可・待ち解消後に再試行）。
+                //   waiting_user_input = ユーザーの許可/選択待ち。送信自体は可能で、配送キューが
+                //                        待ち解消後に送る（呼び出し側で確認・再送する必要はない）。
                 //   ready              = 受付中。idle でも busy でも送れる（busy は相手CLIのキューに積まれる）。
                 var status = s.ConPtySession == null ? "not_ready"
                     : s.IsWaitingForUserInput ? "waiting_user_input"
@@ -106,18 +115,26 @@ namespace TerminalHub.Mcp
 
         [McpServerTool(Name = "send_to_session")]
         [Description(
-            "指定した既存セッションのターミナルにメッセージを1件送る(投げっぱなし・応答は待たない)。" +
+            "指定した既存セッションのターミナルにメッセージを1件送る(応答は待たない)。" +
             "target はセッションGUIDか表示名(完全一致)。submit=true なら末尾でEnterを送り即実行させる。" +
-            "相手がユーザーの許可/選択待ち(waiting)のときは送らず success=false を返す(承認プロンプトを誤確定させないため。待ち解消後に再試行)。" +
-            "単なる作業中(busy)は送信可(AI CLI がプロンプトをキューに積む)。" +
-            "宛先が未起動のときも success=false(自動起動しない・ユーザーに起動を依頼し、自動リトライはしない)。" +
+            "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
+            "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
+            "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
+            "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
+            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / **書き込みが途中で失敗**、のいずれか。" +
+            "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
+            "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
+            "proof(環境変数 TERMINALHUB_SESSION_PROOF)を渡すと、検証済みのあなたの名前とGUIDが本文末尾に付き、相手が返信できる。" +
             "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
-            "受け手には本文末尾に contextId が自動付与され、あなたは get_context をポーリングして結果を受け取れる" +
-            "(返信を受け取るセッションを持たない外部クライアント向けの依頼経路)。既存の contextId を渡すと同じ札への続報になる。")]
+            "proof も渡していれば、札が完了/失敗/中止になった時点であなたのセッションへ自動で通知が届く(通常はポーリング不要)。" +
+            "ただし通知が届いた時点であなた自身が長く入力待ちだと通知は破棄される(失敗通知の連鎖を避けるため再通知しない)。" +
+            "依頼を出したあと長く放置される場合は、念のため get_context で確認すること。" +
+            "proof が無い外部クライアントは get_context をポーリングして結果を受け取る。既存の contextId を渡すと同じ札への続報になる。")]
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
+            ISessionDeliveryService deliveryService,
             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
             string target,
             [Description("送る本文。改行を含む長文は避け、短い指示＋ファイルの絶対パスを推奨。")]
@@ -125,7 +142,9 @@ namespace TerminalHub.Mcp
             [Description("末尾にEnterを送って実行を確定するか(既定 true)。false なら入力欄に流し込むだけ。")]
             bool submit = true,
             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
-            string? contextId = null)
+            string? contextId = null,
+            [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。渡すと送信元が本文末尾に付き、配送できなかった場合はあなたのセッションへ通知が届く。contextId と併用すれば札が終端状態になった時点の完了通知も届く。外部クライアント(環境変数なし)は省略。")]
+            string? proof = null)
         {
             // 宛先解決: GUID を優先し、ダメなら表示名の完全一致で探す。
             SessionInfo? info = null;
@@ -139,36 +158,37 @@ namespace TerminalHub.Mcp
             if (info == null)
                 return new SendResult(false, $"宛先セッションが見つかりません: {target}");
 
-            // 入力待ち(許可/選択待ち)なら送らない。ここで送ると submit の Enter が
-            // 許可プロンプトの確定に化けて意図しない承認をしてしまうため。呼び出し側でリトライ判断させる。
-            // 単なる作業中(busy)は送信を許可する(AI CLI がプロンプトをキューに積むため)。
-            if (info.IsWaitingForUserInput)
-                return new SendResult(false,
-                    $"宛先がユーザーの許可/選択待ち(status=waiting_user_input)のため送信しませんでした。" +
-                    $"ここで送ると承認プロンプトを誤って確定させる恐れがあります。" +
-                    $"待ちが解消(status=ready)してから再試行してください: {info.GetDisplayName()}");
+            // 送信元の確定。proof が本人証明と送信元特定を兼ねる（GUID の自己申告は受け付けない）。
+            // 渡されたのに一致しない場合は無記名へ落とさずエラーにする（古い proof の使い回しに気づかせる）。
+            SessionInfo? requester = null;
+            if (!string.IsNullOrWhiteSpace(proof))
+            {
+                requester = sessionManager.ResolveBySessionProof(proof);
+                if (requester == null)
+                    return new SendResult(false, ProofRejectedMessage);
+            }
 
-            var conpty = info.ConPtySession;
-            if (conpty == null)
+            // 未起動だけは積んでも意味がない（起動は人間の操作が要る）ので、ここで断る。
+            // 入力待ちは断らない: 配送キューが待ち解消後に送る（呼び出し元がセッションの場合、
+            // 送信直後にターンが終わるため「呼び出し側でリトライ」は履行不能な契約だった）。
+            if (info.ConPtySession == null)
                 return new SendResult(false,
                     $"宛先セッションが未起動です(status=not_ready / ConPTY 未接続)。これは自動起動できません。" +
                     $"ユーザーに「TerminalHub で『{info.GetDisplayName()}』を開いて起動してください」と依頼し、" +
                     $"status=ready になったのを確認してから再送してください。自動でリトライしないこと。");
 
             // ContextSummary の紐づけ。作成は全チェック通過後（＝実際に送るときだけ）に行い、
-            // 送信失敗時に孤児レコードを残さない。受け手への ID 伝達はサーバーが定型文で担う
-            // （送信者の手書きに任せると書き忘れ事故が起きるため）。改行ではなくスペース連結に
-            // しているのは、TUI CLI が本文中の改行を送信確定と誤解釈する事故を避けるため。
+            // 送信失敗時に孤児レコードを残さない。
             string? issuedContextId = null;
-            var deliveredMessage = message;
+            string? effectiveContextId = null;
             if (!string.IsNullOrWhiteSpace(contextId))
             {
-                string effectiveId;
                 if (string.Equals(contextId, "new", StringComparison.OrdinalIgnoreCase))
                 {
-                    effectiveId = Guid.NewGuid().ToString("N");
-                    await contextRepository.CreateAsync(effectiveId);
-                    issuedContextId = effectiveId;
+                    effectiveContextId = Guid.NewGuid().ToString("N");
+                    await contextRepository.CreateAsync(
+                        effectiveContextId, requester?.SessionId.ToString(), requester?.GetDisplayName());
+                    issuedContextId = effectiveContextId;
                 }
                 else
                 {
@@ -177,42 +197,113 @@ namespace TerminalHub.Mcp
                     if (existing == null)
                         return new SendResult(false,
                             $"contextId が見つかりません: {contextId}。新規発行なら contextId=\"new\" を指定してください。");
-                    effectiveId = contextId;
+                    effectiveContextId = contextId;
                 }
-                deliveredMessage = $"{message} [contextId: {effectiveId} — 状況・結果は update_context で共有]";
             }
 
-            // 送信本体。submit=true なら Enter(\r) を続けて送り実行を確定する。
-            // WriteAsync 側で256文字チャンク＋Flush 済みなので長文でも切り捨てられない。
+            // 送信元・contextId の伝達はサーバーが定型文で担う（送信者の手書きに任せると書き忘れ事故が
+            // 起きるため）。改行ではなくスペース連結にしているのは、TUI CLI が本文中の改行を
+            // 送信確定と誤解釈する事故を避けるため。
+            var deliveredMessage = message + BuildEnvelope(requester, effectiveContextId);
+
+            DeliveryOutcome outcome;
             try
             {
-                await conpty.WriteAsync(deliveredMessage);
-                if (submit)
-                {
-                    // テキスト送信後、Enter 送信前に待機する。
-                    // Codex 等の TUI CLI は本文取り込み前に \r が来ると送信確定されず入力欄で止まるため、
-                    // UI の SendInput と同じく 0.2 秒挟んでから Enter を送る。
-                    await Task.Delay(200);
-                    await conpty.WriteAsync("\r");
-                }
+                outcome = await deliveryService.SendAsync(
+                    info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
             }
             catch
             {
-                // 書き込み自体の失敗（ConPTY切断等）では、発行したばかりの札を片付ける。
-                // submitted は終端状態でなく TTL 掃除の対象外のため、残すと永続の孤児になる。
-                // DeleteAsync は例外を投げない（送信エラー本体を握り潰さない）。
+                // 想定外の例外（終了時の Dispose と競合した SemaphoreSlim 等）でも、発行したばかりの
+                // 札を必ず片付ける。submitted は終端状態でなく TTL 掃除の対象外なので、
+                // 残すと永久に消えない行になる。DeliveryOutcome での分岐だけに頼ると
+                // この経路が抜ける（旧実装が持っていた安全網の復元）。
                 if (issuedContextId != null)
-                {
                     await contextRepository.DeleteAsync(issuedContextId);
-                }
                 throw;
             }
 
-            return new SendResult(true,
-                issuedContextId != null
-                    ? $"送信しました: {info.GetDisplayName()} (submit={submit})。contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。"
-                    : $"送信しました: {info.GetDisplayName()} (submit={submit})",
-                issuedContextId);
+            if (outcome == DeliveryOutcome.Rejected)
+            {
+                // 一度も書いていないので、発行したばかりの札を片付ける。submitted は終端状態でなく
+                // TTL 掃除の対象外のため、残すと永続の孤児になる。
+                if (issuedContextId != null)
+                    await contextRepository.DeleteAsync(issuedContextId);
+
+                // ここに来る原因は待ち行列の上限だけ（未起動は手前で別メッセージにして弾いている）。
+                return new SendResult(false,
+                    $"『{info.GetDisplayName()}』の配送待ちが上限に達しているため受理できません。" +
+                    $"相手が入力待ちのまま溜まっている状態なので、ユーザーに宛先セッションの" +
+                    $"許可/選択待ちを解消してもらってから送り直してください。");
+            }
+
+            if (outcome == DeliveryOutcome.Failed)
+            {
+                // **札は消さない**。本文は contextId 入りのエンベロープごと相手の入力欄へ
+                // 届いている可能性があり、人間がそれを送信したら受け手はこの ID へ書きに来る。
+                // 消してしまうと「存在しない contextId」を渡したことになる。
+                // 代わりに failed を記録して、届いたか確認できない旨を残す
+                // （終端状態なので TTL 掃除の対象にもなり、孤児にはならない）。
+                if (issuedContextId != null)
+                {
+                    await contextRepository.UpdateAsync(
+                        issuedContextId,
+                        $"宛先「{info.GetDisplayName()}」への書き込みが途中で失敗しました。届いたかどうか確認できません" +
+                        "（本文だけが相手の入力欄に残っている可能性があります）。" +
+                        "人間が入力欄を確認して送信した場合、受け手はこの札へ結果を書きます。",
+                        "failed", null, SessionDeliveryService.SystemWriterName);
+                }
+
+                // 「次に取るべき行動」が Rejected と正反対なので、文面を分ける。
+                // ここで同じ内容を再送させると本文が二重に連結される。
+                return new SendResult(false,
+                    $"宛先への書き込みが途中で失敗しました: {info.GetDisplayName()}。" +
+                    $"**同じ内容をそのまま再送しないでください**（本文だけが相手の入力欄に " +
+                    $"届いている可能性があり、再送すると二重に連結されます）。" +
+                    $"ユーザーに宛先セッションの状態を確認してもらい、必要なら人間の目で入力欄を" +
+                    $"片付けてから送り直してください。" +
+                    (issuedContextId == null
+                        ? string.Empty
+                        : $" contextId={issuedContextId} は発行済みで、本文にも載っています。" +
+                          "人間が送信した場合は受け手がこの札へ結果を書くので、get_context で確認できます。"),
+                    issuedContextId);
+            }
+
+            var queued = outcome == DeliveryOutcome.Queued;
+            var head = queued
+                ? $"受理しました（宛先が入力待ちのため配送待ち。解消次第このまま送られます）: {info.GetDisplayName()} (submit={submit})"
+                : $"送信しました: {info.GetDisplayName()} (submit={submit})";
+            var tail = issuedContextId == null
+                ? string.Empty
+                : requester != null
+                    ? $" contextId={issuedContextId} を発行しました。完了/失敗時はあなたのセッションへ通知が届きます（ポーリング不要）。"
+                    : $" contextId={issuedContextId} を発行しました。get_context でポーリングして結果を受け取れます。";
+
+            return new SendResult(true, head + tail, issuedContextId, queued ? "queued" : "delivered");
+        }
+
+        /// <summary>
+        /// 本文末尾へ付ける定型文。送信元（proof で検証済み）と contextId を1つの括弧にまとめる。
+        /// 送信元が分かることで、受け手は「意図して中間報告したい」ときだけ自分から
+        /// send_to_session で返せる（事務的な status 更新は終端だけ自動通知される、との役割分担）。
+        /// </summary>
+        private static string BuildEnvelope(SessionInfo? requester, string? contextId)
+        {
+            if (requester == null && contextId == null)
+                return string.Empty;
+
+            var from = requester == null
+                ? null
+                : $"依頼元: {requester.GetDisplayName()} ({requester.SessionId})";
+
+            if (contextId == null)
+                return $" [TerminalHub — {from} — 返信は send_to_session でこの GUID へ]";
+
+            if (from == null)
+                return $" [contextId: {contextId} — 状況・結果は update_context で共有]";
+
+            return $" [TerminalHub — {from} / contextId: {contextId} — " +
+                   "完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]";
         }
 
         [McpServerTool(Name = "set_memo")]
@@ -339,12 +430,20 @@ namespace TerminalHub.Mcp
         // - send_to_session（push・受信箱がある相手用）の欠けていた片割れ。受信箱を持たない
         //   外部クライアント（Claude Desktop 等）が依頼の結果を pull で受け取るための仕組み。
         // - サーバーが持つのは「contextId → status＋要約1枚」だけ。追記ログ・claim・担当割当・
-        //   完了通知・一覧（ID なし列挙）は作らない（調整ロジックはクライアント側）。
+        //   一覧（ID なし列挙）は作らない（調整ロジックはクライアント側）。
+        // - **終端 status への遷移時の完了通知だけは持つ**（当初は「作らない」に入れていたが撤回）。
+        //   依頼元がセッションのときポーリングは原理的に成立しない（送信直後にターンが終わるので
+        //   回す主体がいない）ため。禁じているのは「複数の結果を待ち合わせて集める」ことで、
+        //   これは「札に購読者が1人いる。終端に遷移したら1通配る」というルーティング1本。
         // - contextId は capability 兼用（知っている=読み書きできる）。A2A の contextId と同じく
         //   最初の送信時にサーバーが発行して返す。status の語彙は A2A TaskState をそのまま使う。
 
         private static readonly string[] AllowedContextStatuses =
             { "submitted", "working", "completed", "failed", "canceled" };
+
+        /// <summary>依頼が閉じた状態。ここへ遷移したときだけ依頼元へ自動通知する。</summary>
+        private static readonly string[] TerminalContextStatuses =
+            { "completed", "failed", "canceled" };
 
         /// <summary>
         /// get_context の結果。updatedBy は最終書き込み者の検証済みセッション名
@@ -363,7 +462,9 @@ namespace TerminalHub.Mcp
         [Description(
             "ContextSummary(依頼の状況札)を取得する。contextId は A2A の contextId に対応する依頼単位の ID" +
             "(モデルのコンテキストウィンドウとは無関係)。send_to_session の contextId=\"new\" で発行される。" +
-            "依頼側はこれをポーリングして進捗・結果を受け取る(サーバーからの通知は無い)。" +
+            "依頼側がセッションで、send_to_session に proof を渡していた場合は、札が終端状態" +
+            "(completed / failed / canceled)になった時点で自動通知が届くのでポーリングは不要。" +
+            "proof を渡せない外部クライアントは、これをポーリングして進捗・結果を受け取る。" +
             "ID を知っていれば誰でも読める(ID が読み書きの資格を兼ねる)。" +
             "updatedBy は最終書き込み者の検証済みセッション名(null なら無記名の書き込み)。")]
         public static async Task<ContextSummaryResult> GetContext(
@@ -395,6 +496,7 @@ namespace TerminalHub.Mcp
         public static async Task<SendResult> UpdateContext(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
+            ISessionDeliveryService deliveryService,
             [Description("対象の contextId(受け取ったメッセージ末尾に付与されている)。")]
             string contextId,
             [Description("状況・結果の要約(全体上書き)。長いものはファイルパスを書く。")]
@@ -420,15 +522,44 @@ namespace TerminalHub.Mcp
                     return new SendResult(false, ProofRejectedMessage);
             }
 
+            var newStatus = status?.ToLowerInvariant();
             var updated = await contextRepository.UpdateAsync(
                 contextId ?? "",
                 summary ?? string.Empty,
-                status?.ToLowerInvariant(),
+                newStatus,
                 writer?.SessionId.ToString(),
                 writer?.GetDisplayName());
-            if (!updated)
+            if (!updated.Found)
                 return new SendResult(false,
                     $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
+
+            // 札は存在するが他の書き込みと競合し続けた場合。「見つかりません」と混ぜると
+            // 原因も対処も誤って伝わるので分けて返す（こちらは再試行すれば通る）。
+            if (updated.Conflicted)
+                return new SendResult(false,
+                    $"他の書き込みと競合したため更新できませんでした: {contextId}。" +
+                    "札は存在しているので、そのまま同じ内容で再試行してください。");
+
+            // 黙って無視すると「書けたつもり」で先へ進んでしまうので、拒否は明示して返す。
+            if (updated.RewindRejected)
+                return new SendResult(false,
+                    $"この札は既に終端状態(completed / failed / canceled)なので、{status} へは戻せません。" +
+                    "依頼が閉じたあとに進行中へ巻き戻すと、依頼元の認識と食い違い、自動削除の対象からも外れます。" +
+                    "続きの作業が要るなら、新しい依頼として contextId=\"new\" で発行し直してください。");
+
+            // 依頼元への自動通知は**終端 status への遷移のときだけ**。
+            // working への遷移でも撃つと、依頼元は「着手した」を聞くためだけにフルターンを1回起こす
+            // ことになり（送信直後にターンを終えているので毎回起床する）、得るものが無い。
+            // 意図的な中間報告は、受け手がエンベロープの依頼元へ send_to_session で自分から返す。
+            //
+            // 遷移が成立したかの判定はリポジトリ側（条件付き UPDATE）で行う。ここで読み直して
+            // 比べると、同時に書いた2者が両方とも遷移したと誤認して依頼元を二度起こす。
+            if (updated.StatusTransitioned &&
+                newStatus != null &&
+                TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal))
+            {
+                await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus);
+            }
 
             return new SendResult(true,
                 $"ContextSummary を更新しました(status={status ?? "変更なし"}, " +
