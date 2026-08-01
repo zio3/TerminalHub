@@ -69,7 +69,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     private static readonly TimeSpan SubmitDelay = TimeSpan.FromMilliseconds(200);
 
     /// <summary>
-    /// システムが札へ書き込むときの記名。proof からしか設定されない値なので
+    /// システムが札へ書き込むときの記名。接続キー検証からしか設定されない値なので
     /// エージェントには詐称できず、null（無記名＝外部クライアント）とも区別できる。
     /// </summary>
     public const string SystemWriterName = "TerminalHub (system)";

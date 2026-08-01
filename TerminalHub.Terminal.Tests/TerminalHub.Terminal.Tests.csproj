@@ -33,6 +33,9 @@
     <Compile Include="..\TerminalHub\Services\SlashCommandFilter.cs" Link="SlashCommandFilter.cs" />
     <Compile Include="..\TerminalHub\Services\TerminalCommandLine.cs" Link="TerminalCommandLine.cs" />
     <Compile Include="..\TerminalHub\Services\DeliveryQueue.cs" Link="DeliveryQueue.cs" />
+    <!-- MCP 接続キー入り設定 JSON の組み立て（純ロジック）検証用。McpConfigService が AppDataPaths を参照する -->
+    <Compile Include="..\TerminalHub\Services\McpConfigService.cs" Link="McpConfigService.cs" />
+    <Compile Include="..\TerminalHub\Services\AppDataPaths.cs" Link="AppDataPaths.cs" />
     <Compile Include="..\TerminalHub\Services\MessageTextGuard.cs" Link="MessageTextGuard.cs" />
     <!-- 依頼の状況札。status 遷移の判定が SQL の条件付き UPDATE に載っているため、実 SQLite で検証する -->
     <Compile Include="..\TerminalHub\Services\ContextRepository.cs" Link="ContextRepository.cs" />

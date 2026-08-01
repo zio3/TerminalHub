@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel;
+using Microsoft.AspNetCore.Http;
 using ModelContextProtocol.Server;
+using TerminalHub.Constants;
 using TerminalHub.Models;
 using TerminalHub.Services;
 
@@ -15,12 +17,16 @@ namespace TerminalHub.Mcp
     /// 設計方針（壁打ちで確定）:
     /// - spawn なし: 子セッションは作らない。宛先は既存セッションのみ（暴走ガード不要）。
     /// - 集約なし: 複数の結果を待ち合わせて集める(wait/join)ことはしない。
-    ///   ただし**1件の依頼の結末を依頼元へ返すことはする**（proof 付きで送った依頼は、札が
-    ///   終端 status になった時点で SessionDeliveryService が依頼元セッションへ1通配る）。
-    ///   proof 無し＝外部クライアントの依頼は従来どおり get_context のポーリングで受け取る。
-    /// - 自己識別は環境変数経由: ConPTY 起動時に TERMINALHUB_SESSION_ID(自分が誰か) と
-    ///   TERMINALHUB_SESSION_PROOF(本人証明・起動ごとに変わるランダム値) を注入している。
-    ///   書き込み系(set_memo/set_card/add_command/remove_command)は proof の検証で
+    ///   ただし**1件の依頼の結末を依頼元へ返すことはする**（本人確定済みの接続から送った依頼は、
+    ///   札が終端 status になった時点で SessionDeliveryService が依頼元セッションへ1通配る）。
+    ///   無記名＝外部クライアントの依頼は従来どおり get_context のポーリングで受け取る。
+    /// - 自己識別は**接続（トランスポート層）で確定**: TerminalHub がセッション起動時に配る
+    ///   MCP 設定に接続キー(X-TerminalHub-Session-Key ヘッダ)が入っており、サーバーは
+    ///   ヘッダで「どのセッションの呼び出しか」を確定する。モデルは秘密を運ばない
+    ///   （旧方式＝proof 引数を環境変数から読ませる方式は、シェル出力が安全分類器に弾かれて
+    ///   無言で無記名に劣化する実害があり、互換も残さず全面撤去した。2026-08-02）。
+    ///   ヘッダ無し接続（外部クライアント・旧 .mcp.json 残骸経由）は無記名として扱う。
+    ///   書き込み系(set_memo/set_card/add_command/remove_command)はこの本人確定で
     ///   本人のみに機構的に制限する。
     /// - セッション専用コマンドだけは向きが逆で、セッションが人間のために UI(クイック送信バーの
     ///   ボタン)を生やす。グローバル設定のコマンドは対象外＝共有物には触らせない。
@@ -28,7 +34,7 @@ namespace TerminalHub.Mcp
     ///   ただし**配送はサーバーの責務**で、宛先が入力待ちなら DeliveryQueue に積んで
     ///   解消後に自動配送する（呼び出し側に状態確認と再送をさせない。呼び出し元が
     ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
-    ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
+    ///   状態として持つのは本人検証用の McpConnectionKey、依頼IDで引く状況札=ContextSummary、
     ///   揮発の配送キュー、および配送記録=Deliveries（エンベロープ #ID の検証台帳。
     ///   Pending で作成→配送結果で Committed へ確定 or Rejected なら削除。
     ///   上限掃除は Committed だけを数える）の4つ。
@@ -124,36 +130,36 @@ namespace TerminalHub.Mcp
             "指定した既存セッションのターミナルにメッセージを1件送る(末尾でEnterを送り即実行させる。応答は待たない)。" +
             "target はセッションGUIDか表示名(完全一致)。" +
             "**届く本文の末尾には、TerminalHub 経由の自動メッセージであることを示す角括弧がサーバーによって必ず付く**" +
-            "(proof を渡せば検証済みのあなたの名前とGUID入り、無ければ「送信元は無記名」表記。外すことはできない)。" +
+            "(TerminalHub 起動のセッションからの呼び出しは接続キーで本人が自動確定し、検証済みのあなたの名前とGUID入りになる。" +
+            "無記名になるのはセッションを持たない外部クライアント等だけ。外すことはできない)。" +
             "唯一の例外は `/` で始まる本文(スラッシュコマンド送信)で、コマンド引数を汚さないためエンベロープを付けない" +
             "(そのため contextId とは併用不可=拒否される)。" +
             "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
             "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
-            "配送待ちが上限 / proof 不一致 / 指定した既存 contextId が見つからない / 本文に改行・制御文字が含まれる / **書き込みが途中で失敗**、のいずれか。" +
+            "配送待ちが上限 / 指定した既存 contextId が見つからない / 本文に改行・制御文字が含まれる / **書き込みが途中で失敗**、のいずれか。" +
             "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
             "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
             "長文はそのまま流さず、ファイルに書いて絶対パスだけ送る運用を推奨。" +
-            "proof(環境変数 TERMINALHUB_SESSION_PROOF)を渡すと、検証済みのあなたの名前とGUIDが本文末尾に付き、相手が返信できる。" +
             "contextId=\"new\" を渡すと ContextSummary(依頼の状況札)を発行し、結果の contextId で返す。" +
-            "proof も渡していれば、札が完了/失敗/中止になった時点であなたのセッションへ自動で通知が届く(通常はポーリング不要)。" +
+            "呼び出し元が確定しているセッション(通常はそう)なら、札が完了/失敗/中止になった時点で" +
+            "あなたのセッションへ自動で通知が届く(通常はポーリング不要)。" +
             "ただし通知が届いた時点であなた自身が長く入力待ちだと通知は破棄される(失敗通知の連鎖を避けるため再通知しない)。" +
             "依頼を出したあと長く放置される場合は、念のため get_context で確認すること。" +
-            "proof が無い外部クライアントは get_context をポーリングして結果を受け取る。既存の contextId を渡すと同じ札への続報になる。")]
+            "無記名の外部クライアントは get_context をポーリングして結果を受け取る。既存の contextId を渡すと同じ札への続報になる。")]
         public static async Task<SendResult> SendToSession(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
             IDeliveryRepository deliveryRepository,
             ISessionDeliveryService deliveryService,
+            IHttpContextAccessor httpContextAccessor,
             [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
             string target,
             [Description("送る本文(1行のみ)。改行・制御文字は拒否される(受け手のターミナルで送信確定等として解釈され、意図しない実行につながるため)。複数行の内容はファイルに書いて絶対パスだけを送る。")]
             string message,
             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
-            string? contextId = null,
-            [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。渡すと送信元が本文末尾に付き、配送できなかった場合はあなたのセッションへ通知が届く。contextId と併用すれば札が終端状態になった時点の完了通知も届く。外部クライアント(環境変数なし)は省略。")]
-            string? proof = null)
+            string? contextId = null)
         {
             // 宛先解決: GUID を優先し、ダメなら表示名の完全一致で探す。
             SessionInfo? info = null;
@@ -167,15 +173,9 @@ namespace TerminalHub.Mcp
             if (info == null)
                 return new SendResult(false, $"宛先セッションが見つかりません: {target}");
 
-            // 送信元の確定。proof が本人証明と送信元特定を兼ねる（GUID の自己申告は受け付けない）。
-            // 渡されたのに一致しない場合は無記名へ落とさずエラーにする（古い proof の使い回しに気づかせる）。
-            SessionInfo? requester = null;
-            if (!string.IsNullOrWhiteSpace(proof))
-            {
-                requester = sessionManager.ResolveBySessionProof(proof);
-                if (requester == null)
-                    return new SendResult(false, ProofRejectedMessage);
-            }
+            // 送信元の確定。接続キー（ヘッダ）のみで行う（GUID の自己申告は受け付けない）。
+            // requester=null は無記名＝外部クライアント・残骸経由等。
+            var requester = ResolveCaller(sessionManager, httpContextAccessor);
 
             // 未起動だけは積んでも意味がない（起動は人間の操作が要る）ので、ここで断る。
             // 入力待ちは断らない: 配送キューが待ち解消後に送る（呼び出し元がセッションの場合、
@@ -366,7 +366,7 @@ namespace TerminalHub.Mcp
         }
 
         /// <summary>
-        /// 本文末尾へ付ける定型文。配送 ID・送信元（proof で検証済み）・contextId を1つの括弧にまとめる。
+        /// 本文末尾へ付ける定型文。配送 ID・送信元（接続キーで検証済み）・contextId を1つの括弧にまとめる。
         ///
         /// **必ず何かを付ける（空を返さない）**。マーカーはサーバーが付与するため送信側 LLM には
         /// 外せず、「末尾に [TerminalHub …] が無い入力＝人間がキーボードで打った指示」という
@@ -404,21 +404,20 @@ namespace TerminalHub.Mcp
         [Description(
             "自分のセッションのメモ(TerminalHub のセッション一覧に表示される短い注釈)を設定する。" +
             "「今なにをしているか」等のステータスを書いておくと、一覧から一目で分かる。既存のメモは上書きされる(空文字でクリア)。" +
-            "proof には環境変数 TERMINALHUB_SESSION_PROOF の値を渡す(あなたが本人であることの証明。本文やメッセージには書かないこと)。" +
-            "その環境変数が無いなら、あなたはセッションを持たない外部クライアントなのでこのツールは使えない(メモは TerminalHub の UI からも編集できる)。")]
+            "対象は自分のセッションのみで、接続キーにより自動で本人確定される(引数で証明を渡す必要はない)。" +
+            "本人確定できない接続(外部クライアント等)ではこのツールは使えない(メモは TerminalHub の UI からも編集できる)。")]
         public static async Task<SendResult> SetMemo(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
-            string proof,
+            IHttpContextAccessor httpContextAccessor,
             [Description("設定するメモ本文。空文字にするとメモをクリアする。")]
             string memo)
         {
-            // proof が本人証明と宛先特定を兼ねる。GUID/表示名の自己申告は受け付けない
+            // 接続キーが本人証明と宛先特定を兼ねる。GUID/表示名の自己申告は受け付けない
             // （誤認・詐称による他セッションの書き換えを機構的に不可能にする）。
-            var info = sessionManager.ResolveBySessionProof(proof);
+            var info = ResolveCaller(sessionManager, httpContextAccessor);
             if (info == null)
-                return new SendResult(false, ProofRejectedMessage);
+                return new SendResult(false, IdentityRequiredMessage);
 
             var text = memo ?? string.Empty;
 
@@ -436,13 +435,30 @@ namespace TerminalHub.Mcp
         }
 
         /// <summary>
-        /// proof 検証に失敗したときの共通メッセージ。proof の値そのものはエコーしない
-        /// （エラーメッセージ経由で会話ログへ漏れるのを防ぐ）。
+        /// 本人確定が必須のツールで、接続キーが無かったときの共通メッセージ。
         /// </summary>
-        private const string ProofRejectedMessage =
-            "本人証明(proof)が一致しません。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡してください。" +
-            "この環境変数が存在しないなら、あなたはセッションを持たない外部クライアントであり、このツールは使えません。" +
-            "値はセッション再起動のたびに変わるため、古い値を記憶から使い回している場合は環境変数を読み直してください。";
+        private const string IdentityRequiredMessage =
+            "呼び出し元セッションを特定できません。TerminalHub 起動のセッションなら通常は接続キー" +
+            "（TerminalHub が配る MCP 設定のヘッダ）で自動的に本人確定されるため、何も渡す必要はありません。" +
+            "この接続にキーが無いなら、あなたは古い設定の残骸経由か、セッションを持たない外部クライアントであり、" +
+            "このツールは使えません（残骸経由の場合、TerminalHub の設定で「TerminalHub MCP」を ON にして" +
+            "セッションを起動し直せばキー付きで接続される）。";
+
+        /// <summary>
+        /// 呼び出し元セッションの特定。**接続キー（HTTP ヘッダ＝トランスポート層）だけ**で行う。
+        /// TerminalHub が配った MCP 設定で接続しているセッションは何も渡さなくても本人が確定し、
+        /// キーの無い接続（外部クライアント・旧 .mcp.json 残骸経由）は一律で無記名（null）。
+        /// 旧方式の proof 引数（環境変数 TERMINALHUB_SESSION_PROOF をモデルに運ばせる）は
+        /// 互換を残さず全面撤去した（秘密のシェル出力が安全分類器に弾かれて無言で無記名に
+        /// 劣化する実害があり、モデルに秘密を持たせる構造ごと消した。2026-08-02）。
+        /// </summary>
+        private static SessionInfo? ResolveCaller(
+            ISessionManager sessionManager, IHttpContextAccessor httpContextAccessor)
+        {
+            var key = httpContextAccessor.HttpContext?.Request.Headers[TerminalConstants.McpSessionKeyHeader]
+                .FirstOrDefault();
+            return sessionManager.ResolveByMcpConnectionKey(key);
+        }
 
         // ---- 自己紹介カード（「何ができるか」の自己申告・A2A Agent Card のローカル版） ----
         //
@@ -451,10 +467,10 @@ namespace TerminalHub.Mcp
         // - 用語: A2A の Agent Card の description/skills に相当するものを card と呼ぶ。
         //   A2A の capabilities フィールドはプロトコル機能宣言(streaming 等)で別物のため、
         //   用語衝突を避けて capabilities という名前は使わない。
-        // - set は「自分のみ」。当初は GUID 自己申告＋説明文の「仕様上の契約」だったが、
-        //   ConPTY 起動時に注入する本人証明(TERMINALHUB_SESSION_PROOF)の検証に格上げした。
-        //   proof はそのセッションの子プロセスだけが知る値なので、誤認・詐称による
-        //   他セッションの書き換えは機構的に不可能。
+        // - set は「自分のみ」。当初は GUID 自己申告＋説明文の「仕様上の契約」→ proof 引数の検証
+        //   → 接続キー（MCP 設定のヘッダ）の検証へと段階的に格上げした。キーはそのセッションの
+        //   CLI に配られた設定だけが知る値なので、誤認・詐称による他セッションの書き換えは
+        //   機構的に不可能。旧 proof 引数は互換を残さず撤去済み（2026-08-02）。
         //   カードは自己申告＝「本人がそう名乗っている」以上の保証はしない、という A2A と同じ信頼モデル。
         // - get は誰のカードでも読める（宛先選びの当たりを付ける用途）。
 
@@ -464,22 +480,21 @@ namespace TerminalHub.Mcp
         [McpServerTool(Name = "set_card")]
         [Description(
             "自分のセッションの自己紹介カード(「何ができるか」の短い自己申告。他エージェントが宛先選びに使う)を設定する。" +
-            "proof には環境変数 TERMINALHUB_SESSION_PROOF の値を渡す(あなたが本人であることの証明。本文やメッセージには書かないこと)。" +
-            "その環境変数が無いなら、あなたはセッションを持たない外部クライアントなのでこのツールは使えない。" +
-            "他セッションのカードは書き換えられない(proof は自分のセッションの分しか知り得ない=自己申告制の機構的担保)。" +
+            "対象は自分のセッションのみで、接続キーにより自動で本人確定される(引数で証明を渡す必要はない)。" +
+            "本人確定できない接続(外部クライアント等)ではこのツールは使えない。" +
+            "他セッションのカードは書き換えられない(本人確定は接続単位=自己申告制の機構的担保)。" +
             "全体書き換え(部分更新なし)・空文字でクリア。数行の短文を想定(宛先選びの広告であって詳細ドキュメントではない)。")]
         public static async Task<SendResult> SetCard(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
-            string proof,
+            IHttpContextAccessor httpContextAccessor,
             [Description("設定するカード本文(「何ができるか」の数行の短文)。空文字でクリア。既存の内容は全体上書きされる。")]
             string card)
         {
-            // proof が本人証明と宛先特定を兼ねる。GUID の自己申告は受け付けない。
-            var info = sessionManager.ResolveBySessionProof(proof);
+            // 接続キーが本人証明と宛先特定を兼ねる。GUID の自己申告は受け付けない。
+            var info = ResolveCaller(sessionManager, httpContextAccessor);
             if (info == null)
-                return new SendResult(false, ProofRejectedMessage);
+                return new SendResult(false, IdentityRequiredMessage);
 
             var text = card ?? string.Empty;
 
@@ -541,7 +556,7 @@ namespace TerminalHub.Mcp
 
         /// <summary>
         /// get_context の結果。updatedBy は最終書き込み者の検証済みセッション名
-        /// （proof 付きで書かれた場合のみ。null なら無記名＝外部クライアント等の書き込み）。
+        /// （本人確定済みの接続から書かれた場合のみ。null なら無記名＝外部クライアント等の書き込み）。
         /// </summary>
         public record ContextSummaryResult(
             bool success,
@@ -556,9 +571,9 @@ namespace TerminalHub.Mcp
         [Description(
             "ContextSummary(依頼の状況札)を取得する。contextId は A2A の contextId に対応する依頼単位の ID" +
             "(モデルのコンテキストウィンドウとは無関係)。send_to_session の contextId=\"new\" で発行される。" +
-            "依頼側がセッションで、send_to_session に proof を渡していた場合は、札が終端状態" +
+            "依頼側が本人確定済みのセッション(TerminalHub 起動のセッションなら通常はそう)の場合、札が終端状態" +
             "(completed / failed / canceled)になった時点で自動通知が届くのでポーリングは不要。" +
-            "proof を渡せない外部クライアントは、これをポーリングして進捗・結果を受け取る。" +
+            "本人確定の無い外部クライアントは、これをポーリングして進捗・結果を受け取る。" +
             "ID を知っていれば誰でも読める(ID が読み書きの資格を兼ねる)。" +
             "updatedBy は最終書き込み者の検証済みセッション名(null なら無記名の書き込み)。")]
         public static async Task<ContextSummaryResult> GetContext(
@@ -584,37 +599,29 @@ namespace TerminalHub.Mcp
             "summary は要約1枚(履歴は積まれない)。長い成果物はファイルに書いてパスを載せる。" +
             "status は submitted / working / completed / failed / canceled (A2A TaskState 準拠)。" +
             "完了時は status=completed と結果の要約をセットで書くこと。" +
-            "セッション内から書くときは proof(環境変数 TERMINALHUB_SESSION_PROOF)を必ず渡すこと" +
-            "(「どのセッションが書いたか」が検証済みで記録され、依頼側が信頼できる)。" +
-            "proof 無しでも書けるが無記名になる(外部クライアント用)。")]
+            "セッション内からの書き込みは接続キーにより自動で記名される(「どのセッションが書いたか」が" +
+            "検証済みで記録され、依頼側が信頼できる。引数で証明を渡す必要はない)。" +
+            "本人確定できない接続からでも書けるが無記名になる(外部クライアント用)。")]
         public static async Task<SendResult> UpdateContext(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
             ISessionDeliveryService deliveryService,
+            IHttpContextAccessor httpContextAccessor,
             [Description("対象の contextId(受け取ったメッセージ末尾に付与されている)。")]
             string contextId,
             [Description("状況・結果の要約(全体上書き)。長いものはファイルパスを書く。")]
             string summary,
             [Description("状態。submitted / working / completed / failed / canceled のいずれか。省略時は状態を変えず要約だけ更新。")]
-            string? status = null,
-            [Description("本人証明(環境変数 TERMINALHUB_SESSION_PROOF の値)。セッション内から書くなら必ず渡す。外部クライアント(環境変数なし)は省略可=無記名。")]
-            string? proof = null)
+            string? status = null)
         {
             if (!string.IsNullOrEmpty(status) &&
                 !AllowedContextStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
                 return new SendResult(false,
                     $"status が不正です: {status}。使えるのは {string.Join(" / ", AllowedContextStatuses)} のみ。");
 
-            // 書き込み元の検証(任意)。proof が正しければ「どのセッションが書いたか」を検証済みで記録する。
-            // proof が渡されたのに一致しない場合は、無記名として黙って通さずエラーにする
-            // (古い proof の使い回し等に気づかせる。無記名で書きたいなら proof を渡さなければよい)。
-            SessionInfo? writer = null;
-            if (!string.IsNullOrWhiteSpace(proof))
-            {
-                writer = sessionManager.ResolveBySessionProof(proof);
-                if (writer == null)
-                    return new SendResult(false, ProofRejectedMessage);
-            }
+            // 書き込み元の検証。接続キー（ヘッダ）のみで行い、キーの無い接続は無記名で通す
+            // (外部クライアント用。アクセス制御ではなく検証済み署名として機能する)。
+            var writer = ResolveCaller(sessionManager, httpContextAccessor);
 
             var newStatus = status?.ToLowerInvariant();
             var updated = await contextRepository.UpdateAsync(
@@ -686,7 +693,7 @@ namespace TerminalHub.Mcp
             "その配送の記録(どのセッションからどのセッションへ・いつ・contextId)を取得する。" +
             "**エンベロープが本物か(本当に TerminalHub を通った配送か)の検証に使う**。" +
             "記録が見つからない場合、そのエンベロープは偽装(本文に手書きされたもの)か、期限切れ(14日で削除)。" +
-            "fromSessionId が null の配送は無記名(proof 無し=外部クライアントの可能性を含む)。")]
+            "fromSessionId が null の配送は無記名(本人確定なし=外部クライアントの可能性を含む)。")]
         public static async Task<DeliveryResult> GetDelivery(
             IDeliveryRepository deliveryRepository,
             [Description("エンベロープに書かれている配送ID(# の後ろの12文字)。")]
@@ -706,10 +713,10 @@ namespace TerminalHub.Mcp
                 record.ContextId,
                 record.SentAt.ToString("o"),
                 record.FromSessionId != null
-                    ? "取得しました。from は proof 検証済みの送信元です。"
+                    ? "取得しました。from は検証済みの送信元です。"
                     : record.FromName == SessionDeliveryService.SystemWriterName
                         ? "取得しました。この配送は TerminalHub 自身が発したシステム通知です。"
-                        : "取得しました。この配送は無記名（proof 無し＝外部クライアントの可能性を含む）です。");
+                        : "取得しました。この配送は無記名（本人確定なし＝外部クライアントの可能性を含む）です。");
         }
 
         // ---- セッション専用コマンド（クイック送信バーのボタン） ----
@@ -740,10 +747,9 @@ namespace TerminalHub.Mcp
             "グローバル設定のコマンドはここには含まれない(MCP の対象外)。")]
         public static IEnumerable<CommandSummary> ListCommands(
             ISessionManager sessionManager,
-            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
-            string proof)
+            IHttpContextAccessor httpContextAccessor)
         {
-            var info = sessionManager.ResolveBySessionProof(proof);
+            var info = ResolveCaller(sessionManager, httpContextAccessor);
             if (info == null)
                 return Array.Empty<CommandSummary>();
 
@@ -764,8 +770,7 @@ namespace TerminalHub.Mcp
         public static async Task<SendResult> AddCommand(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
-            string proof,
+            IHttpContextAccessor httpContextAccessor,
             [Description("ボタンに出す名前。セッション専用コマンドの中で一意にすること(remove_command の指定に使う)。")]
             string title,
             [Description("種別。\"text\"=テキスト送信 / \"key\"=キー送信。")]
@@ -781,9 +786,9 @@ namespace TerminalHub.Mcp
             [Description("サブセッションにも同じボタンを出すなら true。親セッションでのみ意味を持つ。")]
             bool propagateToChildren = false)
         {
-            var info = sessionManager.ResolveBySessionProof(proof);
+            var info = ResolveCaller(sessionManager, httpContextAccessor);
             if (info == null)
-                return new SendResult(false, ProofRejectedMessage);
+                return new SendResult(false, IdentityRequiredMessage);
 
             if (string.IsNullOrWhiteSpace(title))
                 return new SendResult(false, "title は必須です（remove_command の指定に使うため）。");
@@ -845,14 +850,13 @@ namespace TerminalHub.Mcp
         public static async Task<SendResult> RemoveCommand(
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
-            [Description("本人証明。環境変数 TERMINALHUB_SESSION_PROOF の値をそのまま渡す。")]
-            string proof,
+            IHttpContextAccessor httpContextAccessor,
             [Description("削除するコマンドの title。")]
             string title)
         {
-            var info = sessionManager.ResolveBySessionProof(proof);
+            var info = ResolveCaller(sessionManager, httpContextAccessor);
             if (info == null)
-                return new SendResult(false, ProofRejectedMessage);
+                return new SendResult(false, IdentityRequiredMessage);
 
             var key = (title ?? string.Empty).Trim();
 

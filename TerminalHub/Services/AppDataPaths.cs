@@ -63,14 +63,36 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// Claude Code へ --mcp-config で渡す JSON のフルパス。"mcp-config-{ポート}.json"。
+        /// Claude Code へ --mcp-config で渡す JSON のフルパス。"mcp-configs\mcp-{ポート}-{セッションGUID}.json"。
         ///
-        /// dev/prod ではなく<b>ポートで分ける</b>のが要点。このファイルの中身は実質ポートそのもので、
-        /// 5080(常用) と 5082(開発版) を同時に起動する運用があるため、共有すると後勝ちで
-        /// 上書きし合い、セッションが意図しない方のインスタンスへ繋がる。過去に terminalhub が
-        /// 5080/5081 の二重定義で別インスタンスへ繋がった実害があるので、同じ轍を踏まない。
+        /// かつては「ポート毎の共有ファイル」だったが、中身に MCP 接続キー
+        /// (X-TerminalHub-Session-Key＝そのセッションの本人証明)が入るようになり共有できないため、
+        /// hook 設定と同じ<b>セッション毎</b>に分ける。さらに<b>ポートも名前に含める</b>:
+        /// dev/prod は DB が別で GUID 空間は通常重ならないが、DB をコピーした環境では同じ GUID を
+        /// 2つのインスタンス(5080/5082)が持ち得て、共有すると後勝ちで上書きし合う
+        /// (旧「ポート毎」ファイルが担っていた同時起動の混線防止を、セッション毎になっても保つ)。
+        /// セッション完全削除時にファイルも消す(全ポート分。hook 設定と同じライフサイクル)。
         /// </summary>
-        public static string GetMcpConfigFilePath(int port)
+        public static string GetMcpConfigFilePath(int port, Guid sessionId)
+        {
+            return Path.Combine(UserDataRoot, "mcp-configs", $"mcp-{port}-{sessionId}.json");
+        }
+
+        /// <summary>
+        /// 指定セッションの MCP 設定 JSON を全ポート分列挙する(削除用)。ディレクトリ不在なら空。
+        /// </summary>
+        public static IEnumerable<string> EnumerateMcpConfigFilePaths(Guid sessionId)
+        {
+            var dir = Path.Combine(UserDataRoot, "mcp-configs");
+            if (!Directory.Exists(dir))
+                return Array.Empty<string>();
+            return Directory.EnumerateFiles(dir, $"mcp-*-{sessionId}.json");
+        }
+
+        /// <summary>
+        /// 旧方式(〜今回の変更前)の「ポート毎共有」MCP 設定 JSON のフルパス。残骸掃除専用。
+        /// </summary>
+        public static string GetLegacyMcpConfigFilePath(int port)
         {
             return Path.Combine(UserDataRoot, $"mcp-config-{port}.json");
         }

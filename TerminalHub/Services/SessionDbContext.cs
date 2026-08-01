@@ -571,7 +571,7 @@ namespace TerminalHub.Services
         /// （エンベロープの #ID）から From/To を引く台帳。
         /// 行の内容は作成後変わらないが、Committed（Pending→確定、v13）の更新と
         /// Rejected 時の削除がある。
-        /// From は proof 検証済みの送信元で、NULL = 無記名（外部クライアントの可能性を含む）。
+        /// From は接続キー検証済みの送信元で、NULL = 無記名（外部クライアントの可能性を含む）。
         /// </summary>
         private async Task CreateDeliveriesTableAsync()
         {

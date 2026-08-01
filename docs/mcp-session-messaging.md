@@ -12,8 +12,9 @@ TerminalHub 本体プロセスに HTTP MCP サーバーを同居させ、**別�
 |---|---|
 | spawn なし | 子セッションは作らない。宛先は **既存セッションのみ**（暴走ガード不要） |
 | 集約なし | 複数の結果を待ち合わせて集める(wait/join)ことはしない。ただし**1件の依頼の結末を依頼元へ返すことはする**（後述の配送キュー・完了通知） |
-| エンベロープあり（**常時**） | すべての配送に `[TerminalHub 自動メッセージ #ID …]` をサーバーが付与する（外せない）。`proof` を渡せば**検証済みの送信元**（表示名＋GUID）入り。自己申告の GUID は受け付けない。真偽は `get_delivery` で検証できる |
+| エンベロープあり（**常時**） | すべての配送に `[TerminalHub 自動メッセージ #ID …]` をサーバーが付与する（外せない）。本人確定済みの接続からの送信は**検証済みの送信元**（表示名＋GUID）入り。自己申告の GUID は受け付けない。真偽は `get_delivery` で検証できる |
 | 配送はサーバーの責務 | 宛先が入力待ちなら**キューに積み、解消後に自動配送**する（→ [配送キュー](#配送キュー)）。呼び出し側に状態確認・再送をさせない |
+| 本人確定は接続で行う | TerminalHub が配る MCP 設定の**接続キー（HTTP ヘッダ）**で呼び出し元セッションを確定する（→ [本人確定（接続キー）](#本人確定接続キー)）。モデルに秘密を運ばせない |
 
 長文は本文に直接流さず、**ファイルに書いて絶対パスだけ送る**運用を推奨（ターミナル入力の化け・切り捨てを避けるため）。
 
@@ -78,6 +79,45 @@ claude --mcp-config "C:\path\to\terminalhub-mcp.json"
 
 ---
 
+## 本人確定（接続キー）
+
+**「どの扉から入ったか」で呼び出し元を確定する**（2026-08-02 導入）。
+
+TerminalHub はセッション起動時に、その CLI へ渡す MCP 設定に**接続キー**
+（`X-TerminalHub-Session-Key` ヘッダ）を載せる。サーバーは全リクエストのこのヘッダから
+呼び出し元セッションを解決し（`SessionManager.ResolveByMcpConnectionKey` / ツール側は
+`IHttpContextAccessor`）、書き込み系の本人検証・エンベロープの記名・完了通知の宛先の
+すべてに使う。**モデルは秘密を読まないし運ばない。**
+
+| 入口 | 身元 | 書き込み系 |
+|---|---|---|
+| **接続キー付き接続**（TerminalHub が起動時に配る） | そのセッション本人。確定 | 可（追加の証明不要） |
+| **素の `/mcp`**（Claude Desktop 等の外部クライアント。旧 `.mcp.json` 残骸経由の接続も同じ扱い） | 無記名 | 拒否 |
+
+- **なぜ引数方式（proof）から移したか**: 旧方式（環境変数 `TERMINALHUB_SESSION_PROOF` を読んで
+  ツール引数 `proof` に渡させる）は、「秘密のシェル出力」が Claude Code の安全分類器に
+  不安定にブロックされ、**無言で無記名送信に劣化する**実害があった
+  （実測: Bash の `echo $env:…` は拒否・PowerShell は通過、という不安定さ）。
+  秘密がモデルのコンテキスト・transcript に載り続ける構造的問題もあった。
+  認証を「モデルが運ぶもの」から「接続が持つもの」へ移すと、この事故の類型がまとめて消える。
+  **proof 引数・環境変数の注入・ローテーションは互換を残さず全面撤去した**（2026-08-02。
+  残骸経由の接続は無記名の外部クライアント扱いになるが、本機能を ON にして
+  セッションを起動し直せばキー付きで接続される）。
+- **キーの寿命**: `SessionInfo.McpConnectionKey`。SessionId とは別の固定ランダム値
+  （SessionId は公開情報＝本文に書ける設計を維持するため資格には使えない）。
+  モデルが値を見ないためローテーション不要で、**SessionInfo の寿命いっぱい固定**・永続化しない
+  （TerminalHub 再起動で変わるが、そのとき CLI プロセスも消えており次の起動で新しい設定が配られる）。
+- **ヘッダに載せる理由**: URL のパスやクエリに載せるとアクセスログ・プロキシログに残る。
+  ヘッダ名に Key を含むのは、環境変数と違い Codex の `ignore_default_excludes` の対象外だから。
+- **配り方**: Claude Code は `--mcp-config` の**ポート＋セッション毎 JSON**
+  （`%LOCALAPPDATA%\TerminalHub\mcp-configs\mcp-<ポート>-<セッションGUID>.json`・`headers` に記載・
+  セッション完全削除時に全ポート分削除）。Codex は起動引数
+  `-c mcp_servers.terminalhub.http_headers.X-TerminalHub-Session-Key=<キー>`（ファイル不要）。
+- **instructions のサーバー付記**: 認証済み接続の instructions **冒頭**に「この接続について」として
+  検証済みの表示名と GUID を付記する（モデルが環境変数で自己識別する必要も無くす。
+  冒頭なのは、自己識別が全ツール利用の前提であることに加え、クライアント側で長い instructions が
+  切り詰め表示されても生き残りやすくするため）。
+
 ## 提供ツール
 
 ### `list_sessions`
@@ -117,7 +157,8 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 | `contextId` | string? | なし | ContextSummary（後述）の紐づけ。`"new"`=発行して紐づけ（結果で ID が返る） / 既存 ID=続報として紐づけ / 未指定=従来どおり |
 
 > **`submit` 引数は廃止**（2026-08-01）。常に末尾で Enter を送り実行を確定する。「入力欄に流し込むだけ（submit=false）」は実利用ゼロで、配送キューの「本文＋Enter を1単位」という不変条件の唯一の例外だったため削除した。人間が確認してから送る用途はセッション専用コマンドの `insertToInputOnly` が担う。
-| `proof` | string? | なし | 本人証明（`TERMINALHUB_SESSION_PROOF`）。渡すと**検証済みの送信元が本文末尾に付き**、**配送できなかった場合に自分のセッションへ通知が届く**。`contextId` と併用すれば**完了時の通知**も届く |
+
+（旧 `proof` 引数は撤去済み。送信元は接続キーで自動確定し、本人確定済みなら**検証済みの送信元が本文末尾に付き**、**配送できなかった場合に自分のセッションへ通知が届く**。`contextId` と併用すれば**完了時の通知**も届く）
 
 **返り値**: `SendResult`
 
@@ -140,7 +181,6 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 - 宛先が **未起動（`not_ready` / ConPTY 未接続）** → 自動起動はしない。積んでも起動は人間の操作が要るのでキューにも入れない。ユーザーに起動を依頼する
 - 宛先の**配送待ちが上限**（1宛先20件）に達している
 - **書き込み自体に失敗した**（ConPTY 切断等）。積まずにその場で返す（後述）
-- `proof` を渡したのに一致しない（無記名へ落とさずエラーにする＝古い値の使い回しに気づかせるため）
 - 指定した**既存の `contextId` が見つからない**（タイポで紐づけが静かに失われるのを防ぐため存在確認する）
 - 本文に**改行・制御文字**が含まれる。本文中の `\r` は受け手の TUI に送信確定として解釈され、「指示だけが先に無印で実行され、エンベロープが残骸になる」＝**エンベロープの迂回**に使えるため一括拒否（ESC 等の C0 制御文字＝キー操作の注入も同様）
 
@@ -157,10 +197,12 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 
 | 条件 | 付与される文字列 |
 |---|---|
-| `proof` + `contextId` | `[TerminalHub 自動メッセージ #<id12> — 依頼元: <名前> (<GUID>) / contextId: <id> — 完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]` |
-| `proof` のみ | `[TerminalHub 自動メッセージ #<id12> — 依頼元: <名前> (<GUID>) — 返信は send_to_session でこの GUID へ]` |
-| `contextId` のみ | `[TerminalHub 自動メッセージ #<id12> — 送信元は無記名 / contextId: <id> — 状況・結果は update_context で共有]` |
+| 本人確定 + `contextId` | `[TerminalHub 自動メッセージ #<id12> — 依頼元: <名前> (<GUID>) / contextId: <id> — 完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]` |
+| 本人確定のみ | `[TerminalHub 自動メッセージ #<id12> — 依頼元: <名前> (<GUID>) — 返信は send_to_session でこの GUID へ]` |
+| `contextId` のみ（無記名） | `[TerminalHub 自動メッセージ #<id12> — 送信元は無記名 / contextId: <id> — 状況・結果は update_context で共有]` |
 | どちらも無し | `[TerminalHub 自動メッセージ #<id12> — 送信元は無記名]` |
+
+（「本人確定」= 接続キー。→ [本人確定（接続キー）](#本人確定接続キー)）
 
 TerminalHub 自身が発するシステム通知（完了通知・配送失敗通知）にも同じ形式のエンベロープが付く（`送信元: TerminalHub (system)`・配送記録にも残る）。「マーカー無し＝人間」の規則を TerminalHub 自身の通知が破らないため。まれに配送記録の書き込みに失敗した場合は、**#ID の代わりに「配送記録なし」表記**で届く（通知は送る＝依頼元はポーリングする主体を持たないので届かない側に倒さない / 存在しない ID を照会させて本物を偽装判定させない、の両立）。その1通は `get_delivery` で検証できないが、エンベロープ自体は付く。
 
@@ -174,7 +216,7 @@ TerminalHub 自身が発するシステム通知（完了通知・配送失敗�
 |---|---|---|
 | `deliveryId` | string | エンベロープの `#` の後ろの12文字 |
 
-**返り値**: `success` / `fromSessionId`・`fromName`（**null = 無記名**＝proof 無し・外部クライアントの可能性を含む。`fromName` が `TerminalHub (system)` なら TerminalHub 自身のシステム通知）/ `toSessionId`・`toName` / `contextId` / `sentAt` / `message`（無記名・system・検証済みの区別を文章でも返す）。`success=false` = 記録なし＝偽装か期限切れ。
+**返り値**: `success` / `fromSessionId`・`fromName`（**null = 無記名**＝本人確定なし・外部クライアントの可能性を含む。`fromName` が `TerminalHub (system)` なら TerminalHub 自身のシステム通知）/ `toSessionId`・`toName` / `contextId` / `sentAt` / `message`（無記名・system・検証済みの区別を文章でも返す）。`success=false` = 記録なし＝偽装か期限切れ。
 
 - 記録が見つからない = **偽装（本文に手書きされたエンベロープ）か期限切れ**
 - 永続化: SQLite の `Deliveries` テーブル（スキーマ v12〜13）。**14日 TTL＋上限1000**（Committed の古い順に削除）
@@ -230,7 +272,7 @@ TerminalHub 自身が発するシステム通知（完了通知・配送失敗�
 依頼元が「届かなかった」と分かるようにする。
 
 - **contextId あり** → 札を `failed` にして理由を要約へ書き（記名は `TerminalHub (system)`）、通常の完了通知として依頼元へ流す。終端状態にしないと TTL 掃除の対象外になり、使われない行が永久に残る
-- **contextId なし・`proof` あり** → 依頼元へ直接1通
+- **contextId なし・本人確定あり** → 依頼元へ直接1通
 - **どちらもなし** → ログと UI のみ
 - **システム発の通知自体の配送失敗** → **ログのみ。二次通知を作らない**（失敗通知の連鎖を止める終端条件）
 
@@ -262,15 +304,13 @@ memo=「今なにをしているか」（動的）に対し、card=「何がで�
 
 | 引数 | 型 | 説明 |
 |---|---|---|
-| `proof` | string | **本人証明**（環境変数 `TERMINALHUB_SESSION_PROOF` の値）。proof が本人検証と宛先特定を兼ねる |
 | `card` | string | カード本文（数行の短文想定）。空文字でクリア。全体書き換え（部分更新なし） |
 
-- **自分のみ設定可（機構的担保）**。proof は ConPTY 起動ごとに生成されるランダム値で、
-  そのセッションの子プロセスだけが環境変数として知っている。proof の提示＝本人であり、
-  他セッションのカードは書き換えようがない（当初の「GUID 自己申告＋仕様上の契約」から格上げ）
-- 永続化はセッションと同じライフサイクル（SQLite の `Sessions.Card`。セッションが消えればカードも消える）。
-  proof 自体は永続化せず、再起動のたびに変わる
-- `set_memo` も同じ proof 認証（自分のメモのみ。他セッションのメモは UI から人間が編集する）
+- **自分のみ設定可（機構的担保）**。本人確定は接続キーで行われ、キーはそのセッションの
+  CLI に配られた設定だけが知る値のため、他セッションのカードは書き換えようがない
+  （「GUID 自己申告＋仕様上の契約」→ proof 引数 → 接続キーへと段階的に格上げ。proof は撤去済み）
+- 永続化はセッションと同じライフサイクル（SQLite の `Sessions.Card`。セッションが消えればカードも消える）
+- `set_memo` も同じ本人確定（自分のメモのみ。他セッションのメモは UI から人間が編集する）
 
 **`get_card`** — 指定 GUID のカードを取得する（誰のものでも読める）
 
@@ -299,8 +339,8 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
 
 | 依頼元 | 結果の受け取り方 |
 |---|---|
-| **セッション**（`send_to_session` に `proof` を渡した） | 終端 status への遷移時に**自動で通知が届く**（通常はポーリング不要） |
-| **外部クライアント**（proof が無い） | `get_context` を**ポーリング**する |
+| **セッション**（送信時に本人確定していた） | 終端 status への遷移時に**自動で通知が届く**（通常はポーリング不要） |
+| **外部クライアント**（無記名） | `get_context` を**ポーリング**する |
 
 > 前者にも取りこぼしが1つある。**通知が届いた時点で依頼元自身が長く入力待ちだと、その通知は破棄される**（配送キューの TTL 超過。システム発の通知の失敗は二次通知を作らない＝連鎖の終端条件のため）。頻度は低いが「ポーリング不要」は無条件ではないので、依頼後に長く放置される運用では `get_context` の確認を残すこと。
 
@@ -313,16 +353,15 @@ A2A の `capabilities` フィールドは**プロトコル機能宣言**（strea
   （送信者の手書きに任せると書き忘れ事故が起きるため。改行ではなくスペース連結なのは
   TUI が改行を送信確定と誤解釈する事故を避けるため）。
   なお `/` で始まる本文はエンベロープが付かないため **contextId と併用できない**（送信時に拒否される）
-- **`update_context(contextId, summary, status?, proof?)`**: 受け手が状況・結果を書く。summary は
+- **`update_context(contextId, summary, status?)`**: 受け手が状況・結果を書く。summary は
   **要約1枚の全体上書き**（履歴は積まれない）。長い成果物はファイルに書いてパスを載せる。
   status は `submitted / working / completed / failed / canceled`（**A2A TaskState 準拠**）。
-  **セッション内から書くときは proof（`TERMINALHUB_SESSION_PROOF`）を渡す**と、
-  「どのセッションが書いたか」が検証済みで記録される（`updatedBy`）。proof 無しでも書けるが
-  **無記名**になる（外部クライアント用。アクセス制御ではなく検証済み署名として機能する。
-  proof が不一致の場合は無記名として通さずエラー＝古い値の使い回しに気づかせる）
-- **`get_context(contextId)`**: 札を読む。依頼元がセッション（`proof` あり）なら終端状態への遷移時に自動通知が届くのでポーリングは不要。proof を渡せない外部クライアントはこれをポーリングする。
+  セッション内からの書き込みは**接続キーで自動的に記名**され、「どのセッションが書いたか」が
+  検証済みで記録される（`updatedBy`）。本人確定の無い接続からも書けるが**無記名**になる
+  （外部クライアント用。アクセス制御ではなく検証済み署名として機能する）
+- **`get_context(contextId)`**: 札を読む。依頼元が本人確定済みのセッションなら終端状態への遷移時に自動通知が届くのでポーリングは不要。無記名の外部クライアントはこれをポーリングする。
   `updatedBy` で「本当に依頼先セッションが書いた結果か」を確認できる（null は無記名）
-- **contextId は capability 兼用**（知っている＝読み書きできる。proof と同じ哲学で認証を別途作らない）
+- **contextId は capability 兼用**（知っている＝読み書きできる。deliveryId と同じ哲学で認証を別途作らない）
 - 永続化: SQLite の `Contexts` テーブル（スキーマ v11 で依頼元 `RequesterSessionId` / `RequesterName` を追加）。終端状態（completed/failed/canceled）から
   **14日で自動削除**＋総数上限500（超過分は終端状態の古い順に削除。進行中は消さない）
 
@@ -384,7 +423,6 @@ claim / 担当割当（1対1依頼専用。「誰かやって」型はディス�
 
 | 引数（`add_command`） | 意味 |
 |---|---|
-| `proof` | 本人証明（必須） |
 | `title` | ボタン名。**セッション専用コマンドの中で一意**（`remove_command` の指定に使う） |
 | `type` | `"text"`（テキスト送信）/ `"key"`（キー送信） |
 | `commandText` | `type="text"` の本文 |
@@ -436,12 +474,10 @@ AI 登録コマンド」を取り込むようにしてある（逆に `remove_co
 
 - **Codex の tool シェルへの環境変数透過**: Codex は `shell_environment_policy` 次第（`inherit=core` 等）で
   ConPTY が注入した環境変数を tool 実行シェルへ渡さないことがある。このため Codex 起動時に
-  `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=<GUID>` と
-  `-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF=<値>` を注入して確実に届けている
+  `-c shell_environment_policy.set.TERMINALHUB_SESSION_ID=<GUID>` を注入して確実に届けている
   （`set` はフィルタ後に変数を足す仕組みでユーザーのポリシー設定と衝突しない。同キーの手書き指定があればそちらを優先）。
   hook ブリッジ（`$env:TERMINALHUB_SESSION_ID` 参照）の空振り対策も兼ねる。
-  なお `TERMINALHUB_SESSION_PROOF` という変数名に KEY/SECRET/TOKEN を含めないのは、
-  Codex の `ignore_default_excludes`（該当語を含む変数の自動除外）を踏まないための意図的な選択。
+  旧 `TERMINALHUB_SESSION_PROOF` の注入は proof 方式の全面撤去と共に廃止した（本人確定は接続キーへ移行）。
 - **ConPTY 制約**: 実際の送信テスト（ターミナルへの書き込み）は実機で行うこと。
 - **antiforgery**: 既存の `/api/hook`（JSON POST）は `UseAntiforgery` 下でも通っている実績があり、MCP の POST も通る見込み。もし `/mcp` への POST が 400 になる場合は `app.MapMcp("/mcp").DisableAntiforgery()` にする。
 - **セキュリティ**: ローカル利用前提。無認証で `/mcp` を公開するため、localhost 以外へバインドを広げる際は再評価すること。
@@ -456,10 +492,16 @@ AI 登録コマンド」を取り込むようにしてある（逆に `remove_co
 （旧バージョンが書いた設定は別途残る。後述の注記を参照）。手段は CLI ごとに異なる。
 
 - **Claude Code → 起動オプション `--mcp-config "<JSONパス>"`**。ユーザーの設定ファイル（`.mcp.json` / `~/.claude.json`）は**一切書き換えない**。
-  JSON は TerminalHub 自身のデータ領域 `%LOCALAPPDATA%\TerminalHub\mcp-config-<ポート>.json` に置き、コマンドラインにはパスだけを乗せる。
-- **Codex → 起動オプション `-c mcp_servers.terminalhub.url=<URL>`**。設定ファイルへの書き込みは不要で、既存 MCP とマージされる。
-  値は TOML としてパースされ、失敗すればリテラル文字列として扱われるため URL は引用符なしでそのまま渡せる。
-  ユーザーが `extra-args` / `custom-args` に手書きで `-c mcp_servers.terminalhub.url=...` を入れている場合はそちらを優先する。
+  JSON は TerminalHub 自身のデータ領域 `%LOCALAPPDATA%\TerminalHub\mcp-configs\mcp-<ポート>-<セッションGUID>.json` に置き、コマンドラインにはパスだけを乗せる
+  （中身に接続キーが入るため**ポート＋セッション毎**。hook 設定と同じライフサイクルで、セッション完全削除時に全ポート分消す。
+  旧「ポート毎共有」ファイル `mcp-config-<ポート>.json` は起動時にベストエフォートで掃除される）。
+- **Codex → 起動オプション `-c mcp_servers.terminalhub.url=<URL>` と `-c mcp_servers.terminalhub.http_headers.X-TerminalHub-Session-Key=<キー>`**。
+  設定ファイルへの書き込みは不要で、既存 MCP とマージされる。
+  値は TOML としてパースされ、失敗すればリテラル文字列として扱われるため URL は引用符なしでそのまま渡せる
+  （TOML のベアキーはハイフンを許すのでヘッダ名もドット記法で書ける）。
+  ユーザーが `extra-args` / `custom-args` に手書きで `-c mcp_servers.terminalhub.url=...` を入れている場合はそちらを優先し、
+  **その場合はキーも注入しない**（自前定義の接続先は別インスタンスの可能性があり、そこへこのインスタンスの秘密を送らない）。
+  `http_headers` の全体代入や同名キーの手書きがある場合もキー注入を控える（別名ヘッダの追加だけならキーは注入する＝マージされ衝突しない）。
 - ポートは実行中の値を反映。
 - 実装: `TerminalHub/Services/McpConfigService.cs`（Claude 用 JSON 生成と URL 組み立て）、
   `TerminalHub/Constants/TerminalConstants.cs`（`BuildClaudeCodeArgs` / `BuildCodexArgs`）、
@@ -483,8 +525,9 @@ AI 登録コマンド」を取り込むようにしてある（逆に `remove_co
   JSON 中の `"` が cmd.exe のパースで落ちて `Error: Invalid MCP configuration` になる。**必ずファイルパスで渡す**。
 - **パスは引用符で囲む**。`ConPtyService` はクォートを足さないので、`%LOCALAPPDATA%` にスペースを含むユーザー名だと
   空白で分割されて `MCP config file not found` になる。Codex の `--add-dir "<dir>"` と同じ流儀。
-- **JSON ファイルはポート毎に分ける**。中身は実質ポートそのものなので、5080(常用) と 5082(開発版) の同時起動で
-  共有すると後勝ちで上書きし合い、セッションが意図しないインスタンスへ繋がる（過去に 5080/5081 の二重定義で実害あり）。
+- **JSON ファイルはポート＋セッション毎に分ける**（旧: ポート毎の共有）。中身に接続キー（セッション固有の秘密）が入るため
+  セッション間で共有できず、さらに DB をコピーした環境では同じセッション GUID を 2 インスタンス（5080/5082）が持ち得るため
+  ポートも名前に含める（過去に 5080/5081 の二重定義で別インスタンスへ繋がる実害があった轍を踏まない）。
 - **`--mcp-config` は `.mcp.json`(project スコープ) より優先される**。同名 `terminalhub` が両方にある場合、
   `--mcp-config` の値が勝つ（実測: `.mcp.json` に生きている 5080、`--mcp-config` に死んでいる 5999 を置くと
   `failed` になる＝後者が採用されている。逆向きも確認済み）。
