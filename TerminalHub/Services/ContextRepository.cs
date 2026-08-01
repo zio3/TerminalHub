@@ -77,6 +77,9 @@ namespace TerminalHub.Services
         /// <summary>SQL に直接埋める終端状態のリテラル一覧（値は定数なので注入の余地はない）。</summary>
         private static readonly string TerminalStatusList = $"'{string.Join("','", TerminalStatuses)}'";
 
+        /// <summary>status 更新が競合したときのやり直し上限。1回でも十分だが余裕を見る。</summary>
+        private const int MaxUpdateAttempts = 3;
+
         public ContextRepository(SessionDbContext dbContext, ILogger<ContextRepository> logger)
         {
             _dbContext = dbContext;
@@ -154,56 +157,79 @@ namespace TerminalHub.Services
                 return new ContextUpdateResult(affected > 0, StatusTransitioned: false);
             }
 
-            // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
-            // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
-            // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
-            //
-            // あわせて**終端状態からの巻き戻しを拒む**。一度 completed になった札へ working を
-            // 書けてしまうと、依頼が閉じたのに一覧上は進行中に戻り、TTL 掃除の対象からも外れる。
-            // 終端 → 別の終端（completed と failed の競合等）は許す。片方が「配送できなかった」を
-            // 書いた後に人間経由で実際に完了した、といった正当な上書きがあるため。
+            // status 指定ありは「読まずに条件付き UPDATE で決める」のが基本。
+            // どの UPDATE も **status を条件に含める**ので、判定してから書くまでの間に
+            // 別の呼び出しが status を動かしても、こちらの書き込みが後乗せで通ることはない。
+            // 競合して0行になったら、新しい現在値でやり直す（数回で収束する）。
             var isTerminal = TerminalStatuses.Contains(status, StringComparer.Ordinal);
-            var transitioned = await connection.ExecuteNonQueryAsync($@"
-                UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
-                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
-                WHERE ContextId = @contextId AND Status <> @status
-                  AND (@isTerminal = 1 OR Status NOT IN ({TerminalStatusList}))",
-                ("@contextId", contextId),
-                ("@summary", summary),
-                ("@status", status),
-                ("@now", now),
-                ("@isTerminal", isTerminal ? 1 : 0),
-                ("@updatedBySessionId", updatedBySessionId),
-                ("@updatedByName", updatedByName));
 
-            if (transitioned > 0)
-                return new ContextUpdateResult(true, StatusTransitioned: true);
+            for (var attempt = 0; attempt < MaxUpdateAttempts; attempt++)
+            {
+                // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
+                // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
+                // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
+                //
+                // あわせて**終端状態からの巻き戻しを拒む**。一度 completed になった札へ working を
+                // 書けてしまうと、依頼が閉じたのに一覧上は進行中に戻り、TTL 掃除の対象からも外れる。
+                // 終端 → 別の終端（completed と failed の競合等）は許す。片方が「配送できなかった」を
+                // 書いた後に人間経由で実際に完了した、といった正当な上書きがあるため。
+                var transitioned = await connection.ExecuteNonQueryAsync($@"
+                    UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
+                        UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+                    WHERE ContextId = @contextId AND Status <> @status
+                      AND (@isTerminal = 1 OR Status NOT IN ({TerminalStatusList}))",
+                    ("@contextId", contextId),
+                    ("@summary", summary),
+                    ("@status", status),
+                    ("@now", now),
+                    ("@isTerminal", isTerminal ? 1 : 0),
+                    ("@updatedBySessionId", updatedBySessionId),
+                    ("@updatedByName", updatedByName));
 
-            // 0行だったのは「札が無い」「同じ status への書き直し」「終端からの巻き戻しを拒否」の
-            // いずれか。どれなのかは呼び出し側へ返す必要があるので現在値を読む。
-            // ここは報告のための読み取りで、遷移の成立判定は上の UPDATE で確定済み（原子的）。
-            var current = await connection.ExecuteScalarAsync<string>(
-                "SELECT Status FROM Contexts WHERE ContextId = @contextId",
-                ("@contextId", contextId));
+                if (transitioned > 0)
+                    return new ContextUpdateResult(true, StatusTransitioned: true);
 
-            if (current == null)
-                return new ContextUpdateResult(false, StatusTransitioned: false);
+                // 0行だったのは「札が無い」「同じ status への書き直し」「終端からの巻き戻しを拒否」の
+                // いずれか。どれなのかは呼び出し側へ返す必要があるので現在値を読む。
+                var current = await connection.ExecuteScalarAsync<string>(
+                    "SELECT Status FROM Contexts WHERE ContextId = @contextId",
+                    ("@contextId", contextId));
 
-            if (!isTerminal && TerminalStatuses.Contains(current, StringComparer.Ordinal))
-                return new ContextUpdateResult(true, StatusTransitioned: false, RewindRejected: true);
+                if (current == null)
+                    return new ContextUpdateResult(false, StatusTransitioned: false);
 
-            // 同じ status への書き直し。要約と記名は更新する（status は変わらないので通知はしない）。
-            var rewritten = await connection.ExecuteNonQueryAsync(@"
-                UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
-                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
-                WHERE ContextId = @contextId",
-                ("@contextId", contextId),
-                ("@summary", summary),
-                ("@now", now),
-                ("@updatedBySessionId", updatedBySessionId),
-                ("@updatedByName", updatedByName));
+                if (!isTerminal && TerminalStatuses.Contains(current, StringComparer.Ordinal))
+                    return new ContextUpdateResult(true, StatusTransitioned: false, RewindRejected: true);
 
-            return new ContextUpdateResult(rewritten > 0, StatusTransitioned: false);
+                // 同じ status への書き直し。要約と記名は更新する（status は変わらないので通知はしない）。
+                //
+                // **ここでも Status を条件に入れる**のが要点。付けずに書くと、現在値を読んでから
+                // この UPDATE が走るまでの間に別の呼び出しが completed → failed を成立させた場合、
+                // 古い completed 側の要約だけが後から乗り、「status=failed / summary=完了内容」
+                // という食い違った札になる。
+                var rewritten = await connection.ExecuteNonQueryAsync(@"
+                    UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
+                        UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+                    WHERE ContextId = @contextId AND Status = @status",
+                    ("@contextId", contextId),
+                    ("@summary", summary),
+                    ("@status", status),
+                    ("@now", now),
+                    ("@updatedBySessionId", updatedBySessionId),
+                    ("@updatedByName", updatedByName));
+
+                if (rewritten > 0)
+                    return new ContextUpdateResult(true, StatusTransitioned: false);
+
+                // 0行＝読んだ直後に status が動いた。新しい現在値でやり直す。
+            }
+
+            // ここへ来るのは、毎回その隙間で status が動き続けた場合だけ（現実には起きない）。
+            // 黙って成功扱いにすると書けていないのに書けたつもりになるので、失敗として返す。
+            _logger.LogWarning(
+                "[Context] status の競合が続いて更新できませんでした: {ContextId} (試行={Attempts})",
+                contextId, MaxUpdateAttempts);
+            return new ContextUpdateResult(false, StatusTransitioned: false);
         }
 
         public async Task DeleteAsync(string contextId)

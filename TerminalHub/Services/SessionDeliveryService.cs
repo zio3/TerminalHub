@@ -113,10 +113,18 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public void Dispose()
     {
         _sweepTimer?.Dispose();
+
+        // **宛先ごとの SemaphoreSlim は破棄しない。** 破棄すると、進行中の配送が
+        // gate.Release() で ObjectDisposedException を投げうる。それは「本文は書けたのに
+        // 例外で失敗として扱われる」ことを意味し、SendToSession の後始末が
+        // 配送済みの札を消してしまう（＝相手の入力欄には contextId 入りの本文が残るのに、
+        // その ID がもう存在しない）。
+        //
+        // SemaphoreSlim は AvailableWaitHandle を使わない限りアンマネージド資源を持たないので、
+        // 破棄しないことによる漏れは無い。持ち主はアプリと同じ寿命の Singleton で、
+        // ここは終了時にしか呼ばれない。
         lock (_writeLocks)
         {
-            foreach (var semaphore in _writeLocks.Values)
-                semaphore.Dispose();
             _writeLocks.Clear();
         }
     }
