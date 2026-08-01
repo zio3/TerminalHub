@@ -25,7 +25,7 @@ public static class McpInstructionDefaults
         あなたが TerminalHub のセッション内で動いている場合、**本人確定は接続で自動的に行われる**。
         TerminalHub がセッション起動時に配った MCP 設定に接続キー（HTTP ヘッダ）が入っており、
         サーバーは「どの接続からの呼び出しか」であなたを特定する。**あなたが秘密を読んだり
-        引数で渡したりする必要はない**（instructions 末尾に「この接続について」の付記があれば、
+        引数で渡したりする必要はない**（instructions 冒頭に「この接続について」の付記があれば、
         そこに検証済みのあなたの名前と GUID が書かれている）。
         書き込み系（`set_memo` / `set_card` / `add_command` / `remove_command`）も送信元の記名も、
         何も渡さなくても本人として扱われる。

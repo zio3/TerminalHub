@@ -113,8 +113,10 @@ TerminalHub はセッション起動時に、その CLI へ渡す MCP 設定に*
   （`%LOCALAPPDATA%\TerminalHub\mcp-configs\mcp-<ポート>-<セッションGUID>.json`・`headers` に記載・
   セッション完全削除時に全ポート分削除）。Codex は起動引数
   `-c mcp_servers.terminalhub.http_headers.X-TerminalHub-Session-Key=<キー>`（ファイル不要）。
-- **instructions のサーバー付記**: 認証済み接続の instructions 末尾に「この接続について」として
-  検証済みの表示名と GUID を付記する（モデルが環境変数で自己識別する必要も無くす）。
+- **instructions のサーバー付記**: 認証済み接続の instructions **冒頭**に「この接続について」として
+  検証済みの表示名と GUID を付記する（モデルが環境変数で自己識別する必要も無くす。
+  冒頭なのは、自己識別が全ツール利用の前提であることに加え、クライアント側で長い instructions が
+  切り詰め表示されても生き残りやすくするため）。
 
 ## 提供ツール
 

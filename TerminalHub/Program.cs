@@ -211,11 +211,15 @@ builder.Services
             var caller = sessionManager.ResolveByMcpConnectionKey(key);
             if (caller != null)
             {
-                instructions +=
-                    "\n\n## この接続について（サーバー付記）\n" +
+                // **末尾ではなく冒頭に付ける**。自己識別は全ツール利用の前提なので最初に読まれるべき情報で、
+                // クライアント側で長い instructions が切り詰め表示された場合（実機で [truncated] 表示の
+                // 観測あり。本文が実際に欠けるのかは未確定）にも末尾より生き残りやすい。
+                instructions =
+                    "## この接続について（サーバー付記）\n" +
                     $"この接続は TerminalHub が配った接続キーで認証済み。あなたは「{caller.GetDisplayName()}」" +
                     $"(SessionId: {caller.SessionId})。書き込み系ツールも送信元の記名も、" +
-                    "追加の証明なしで本人として扱われる（環境変数を読む必要はない）。";
+                    "追加の証明なしで本人として扱われる（環境変数を読む必要はない）。\n\n" +
+                    instructions;
             }
             serverOptions.ServerInstructions = instructions;
             return Task.CompletedTask;
