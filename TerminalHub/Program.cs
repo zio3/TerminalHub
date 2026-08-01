@@ -151,6 +151,12 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttService>());
 // HookNotificationServiceを登録
 builder.Services.AddSingleton<IHookNotificationService, HookNotificationService>();
 
+// 配送サービスを登録（MCP の送信・コールバック通知はすべてここを通る）。
+// hook イベントの購読と掃除タイマーを起動時から回すため HostedService も兼ねる。
+builder.Services.AddSingleton<SessionDeliveryService>();
+builder.Services.AddSingleton<ISessionDeliveryService>(sp => sp.GetRequiredService<SessionDeliveryService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SessionDeliveryService>());
+
 // ClaudeHookServiceを登録
 builder.Services.AddSingleton<IClaudeHookService, ClaudeHookService>();
 

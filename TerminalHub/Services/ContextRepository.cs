@@ -8,6 +8,8 @@ namespace TerminalHub.Services
     /// ContextSummary（依頼の状況札）1件分。
     /// UpdatedBy* は最終書き込み者。proof 検証済みのセッションが書いた場合のみ入り、
     /// proof 無しの書き込み（外部クライアント等）では null（=無記名と区別できる）。
+    /// Requester* は依頼元。send_to_session に proof が渡されたときだけ入り、
+    /// 終端 status への遷移をその相手へ通知するために使う（外部クライアントの依頼では null）。
     /// </summary>
     public record ContextRecord(
         string ContextId,
@@ -16,7 +18,9 @@ namespace TerminalHub.Services
         DateTime CreatedAt,
         DateTime UpdatedAt,
         string? UpdatedBySessionId,
-        string? UpdatedByName);
+        string? UpdatedByName,
+        string? RequesterSessionId,
+        string? RequesterName);
 
     /// <summary>
     /// ContextSummary の永続化リポジトリ。
@@ -25,7 +29,12 @@ namespace TerminalHub.Services
     /// </summary>
     public interface IContextRepository
     {
-        Task CreateAsync(string contextId);
+        /// <summary>
+        /// 札を作る。requester* は依頼元（proof で検証済みのセッション）。
+        /// 記録があれば終端 status への遷移をその相手へ通知でき、無ければ依頼元は
+        /// get_context のポーリングで結果を取る（受信箱を持たない外部クライアント）。
+        /// </summary>
+        Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null);
         Task<ContextRecord?> GetAsync(string contextId);
         /// <summary>
         /// 要約を全体上書きし、status 指定があれば併せて更新する。対象が無ければ false。
@@ -60,7 +69,7 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task CreateAsync(string contextId)
+        public async Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null)
         {
             await _dbContext.InitializeAsync();
             await using var connection = _dbContext.CreateConnection();
@@ -68,10 +77,12 @@ namespace TerminalHub.Services
 
             var now = DateTime.UtcNow.ToString("o");
             await connection.ExecuteNonQueryAsync(@"
-                INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt)
-                VALUES (@contextId, 'submitted', '', @now, @now)",
+                INSERT INTO Contexts (ContextId, Status, Summary, CreatedAt, UpdatedAt, RequesterSessionId, RequesterName)
+                VALUES (@contextId, 'submitted', '', @now, @now, @requesterSessionId, @requesterName)",
                 ("@contextId", contextId),
-                ("@now", now));
+                ("@now", now),
+                ("@requesterSessionId", requesterSessionId),
+                ("@requesterName", requesterName));
 
             await PruneAsync(connection);
         }
@@ -83,7 +94,8 @@ namespace TerminalHub.Services
             await connection.OpenAsync();
 
             await using var reader = await connection.ExecuteReaderAsync(@"
-                SELECT ContextId, Status, Summary, CreatedAt, UpdatedAt, UpdatedBySessionId, UpdatedByName
+                SELECT ContextId, Status, Summary, CreatedAt, UpdatedAt, UpdatedBySessionId, UpdatedByName,
+                       RequesterSessionId, RequesterName
                 FROM Contexts WHERE ContextId = @contextId",
                 ("@contextId", contextId));
 
@@ -100,7 +112,9 @@ namespace TerminalHub.Services
                 DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 DateTime.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6));
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8));
         }
 
         public async Task<bool> UpdateAsync(string contextId, string summary, string? status,

@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 10;
+        private const int CurrentSchemaVersion = 11;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -282,6 +282,31 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v10 適用完了");
             }
 
+            if (currentVersion < 11)
+            {
+                // v11: Contexts に依頼元（RequesterSessionId / RequesterName）を追加。
+                // 終端 status への遷移を依頼元セッションへ通知するために使う。
+                _logger.LogInformation("[DB][マイグレーション] v11 適用開始: Contexts に依頼元カラムを追加");
+                await using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    foreach (var column in new[] { "RequesterSessionId", "RequesterName" })
+                    {
+                        if (!await ColumnExistsAsync(connection, "Contexts", column))
+                        {
+                            await connection.ExecuteNonQueryAsync($"ALTER TABLE Contexts ADD COLUMN {column} TEXT");
+                            _logger.LogInformation("[DB][マイグレーション] v11: {Column} カラムを追加", column);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("[DB][マイグレーション] v11: {Column} カラムは既存のためスキップ", column);
+                        }
+                    }
+                }
+                await SetSchemaVersionAsync(11);
+                _logger.LogInformation("[DB][マイグレーション] v11 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -496,7 +521,9 @@ namespace TerminalHub.Services
                     CreatedAt TEXT NOT NULL,
                     UpdatedAt TEXT NOT NULL,
                     UpdatedBySessionId TEXT,
-                    UpdatedByName TEXT
+                    UpdatedByName TEXT,
+                    RequesterSessionId TEXT,
+                    RequesterName TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_contexts_updated ON Contexts(UpdatedAt);

@@ -1,0 +1,345 @@
+using Microsoft.Extensions.Logging;
+using TerminalHub.Models;
+
+namespace TerminalHub.Services;
+
+/// <summary>配送の結果。success=true でも「届いた」とは限らないことを呼び出し側へ伝えるために分ける。</summary>
+public enum DeliveryOutcome
+{
+    /// <summary>ConPTY へ書き込んだ。</summary>
+    Delivered,
+    /// <summary>宛先が入力待ちのため積んだ。ready になり次第配送される。</summary>
+    Queued,
+    /// <summary>受理できなかった（未起動・待ち行列が上限）。</summary>
+    Rejected,
+}
+
+public interface ISessionDeliveryService
+{
+    /// <summary>
+    /// 宛先セッションへ1件送る。宛先が入力待ちなら積んで、ready になってから配送する。
+    /// </summary>
+    Task<DeliveryOutcome> SendAsync(
+        SessionInfo target,
+        string text,
+        bool submit,
+        string? contextId = null,
+        Guid? requesterSessionId = null);
+
+    /// <summary>
+    /// ContextSummary が終端 status へ遷移したことを依頼元セッションへ通知する。
+    /// 依頼元が記録されていない（外部クライアントの依頼）場合は何もしない。
+    /// </summary>
+    Task NotifyContextStatusAsync(string contextId, string status);
+}
+
+/// <summary>
+/// 送信の配送を担うサービス。MCP の送信・コールバック通知はすべてここを通る。
+///
+/// 設計（壁打ちで確定）:
+/// - **リトライは呼び出し側の責務、という当初方針を撤回した**。send_to_session が
+///   「宛先が入力待ち」で失敗しても、呼び出し元がセッションならその直後にターンが終わるため、
+///   再試行する契機が存在しない（結果のポーリングが成立しないのと同じ構造の穴）。
+///   「ready になったら送る」に推論は一切要らないので、システムへ移譲する。
+/// - 待ちの解消は hook イベントで拾う。ただし待ちフラグは SessionInfo の素のフィールドで
+///   変更通知がなく（SessionInfo.IsWaitingForUserInput）、hook を持たない CLI・
+///   タイムアウト解除・ConPTY 起動は hook を通らないため、低頻度の掃除タイマーを安全網に置く。
+/// - **本文と Enter は1単位**。間に別の送信が割り込むと入力が混線するので宛先ごとに直列化する。
+/// - 配送に失敗したら、依頼元が「届かなかった」と分かるようにする（札に failed を書くか、
+///   依頼元へ直接通知）。ただし**システム発の通知の失敗は二次通知を作らない**（連鎖の終端）。
+/// </summary>
+public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedService, IDisposable
+{
+    /// <summary>積んだまま配送できなかった項目を諦めるまでの時間。</summary>
+    private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+
+    /// <summary>hook を通らない待ち解消（タイムアウト解除・非hook CLI・ConPTY起動）を拾う安全網の間隔。</summary>
+    private static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// 本文送信から Enter までの待ち。Codex 等の TUI CLI は本文取り込み前に \r が来ると
+    /// 送信確定されず入力欄で止まるため、UI の SendInput と同じく 0.2 秒挟む。
+    /// </summary>
+    private static readonly TimeSpan SubmitDelay = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// システムが札へ書き込むときの記名。proof からしか設定されない値なので
+    /// エージェントには詐称できず、null（無記名＝外部クライアント）とも区別できる。
+    /// </summary>
+    public const string SystemWriterName = "TerminalHub (system)";
+
+    private readonly DeliveryQueue _queue = new();
+    private readonly Dictionary<Guid, SemaphoreSlim> _writeLocks = new();
+    private readonly ISessionManager _sessionManager;
+    private readonly IContextRepository _contextRepository;
+    private readonly IHookNotificationService _hookNotificationService;
+    private readonly ILogger<SessionDeliveryService> _logger;
+    private System.Threading.Timer? _sweepTimer;
+
+    public SessionDeliveryService(
+        ISessionManager sessionManager,
+        IContextRepository contextRepository,
+        IHookNotificationService hookNotificationService,
+        ILogger<SessionDeliveryService> logger)
+    {
+        _sessionManager = sessionManager;
+        _contextRepository = contextRepository;
+        _hookNotificationService = hookNotificationService;
+        _logger = logger;
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        // 主トリガ: hook で待ちフラグが動いた直後に配送を試みる。
+        _hookNotificationService.OnHookNotification += OnHookNotification;
+        // 安全網: hook を通らない待ち解消を拾う。
+        _sweepTimer = new System.Threading.Timer(_ => _ = SweepAsync(), null, SweepInterval, SweepInterval);
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _hookNotificationService.OnHookNotification -= OnHookNotification;
+        _sweepTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _sweepTimer?.Dispose();
+        lock (_writeLocks)
+        {
+            foreach (var semaphore in _writeLocks.Values)
+                semaphore.Dispose();
+            _writeLocks.Clear();
+        }
+    }
+
+    private void OnHookNotification(object? sender, HookNotificationEventArgs e)
+    {
+        // hook ハンドラ本体が待ちフラグを更新した後に呼ばれる想定。配送は投げっぱなしで良い
+        // （失敗しても次の掃除タイマーが拾う）。
+        _ = FlushAllAsync();
+    }
+
+    public async Task<DeliveryOutcome> SendAsync(
+        SessionInfo target,
+        string text,
+        bool submit,
+        string? contextId = null,
+        Guid? requesterSessionId = null)
+    {
+        // ConPTY 未接続は積んでも意味がない（起動は人間の操作が要る）ので即座に拒否する。
+        if (target.ConPtySession == null)
+            return DeliveryOutcome.Rejected;
+
+        var item = new DeliveryItem(
+            target.SessionId, text, submit, DateTime.UtcNow, contextId, requesterSessionId,
+            IsSystemCallback: false);
+
+        return await EnqueueOrWriteAsync(target, item);
+    }
+
+    private async Task<DeliveryOutcome> EnqueueOrWriteAsync(SessionInfo target, DeliveryItem item)
+    {
+        // 待ちでなく、かつ先着の待ち行列も無いときだけ直接書く。
+        // 行列があるのに割り込むと FIFO が壊れるので、その場合は末尾へ積んで掃除に任せる。
+        if (!target.IsWaitingForUserInput && _queue.CountFor(target.SessionId) == 0)
+        {
+            if (await TryWriteAsync(target, item))
+                return DeliveryOutcome.Delivered;
+        }
+
+        if (!_queue.Enqueue(item))
+        {
+            _logger.LogWarning(
+                "[配送] 待ち行列が上限のため受理できません: {Target} (上限={Max})",
+                target.GetDisplayName(), DeliveryQueue.MaxPerTarget);
+            return DeliveryOutcome.Rejected;
+        }
+
+        _logger.LogInformation(
+            "[配送] 宛先が入力待ちのため積みました: {Target} (待ち={Count})",
+            target.GetDisplayName(), _queue.CountFor(target.SessionId));
+        return DeliveryOutcome.Queued;
+    }
+
+    /// <summary>宛先ごとの直列化つきで1件書き込む。</summary>
+    private async Task<bool> TryWriteAsync(SessionInfo target, DeliveryItem item)
+    {
+        var gate = GetWriteLock(target.SessionId);
+        await gate.WaitAsync();
+        try
+        {
+            return await WritePairAsync(target, item);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// 本文＋Enter を1単位として書き込む（ロックは呼び出し側が保持している前提）。
+    /// 書き込み直前に状態を再確認するのは、積んでから ready を確認するまでの間に
+    /// また待ちへ入っていることがあるため。
+    /// </summary>
+    private async Task<bool> WritePairAsync(SessionInfo target, DeliveryItem item)
+    {
+        var conpty = target.ConPtySession;
+        if (conpty == null || target.IsWaitingForUserInput)
+            return false;
+
+        try
+        {
+            await conpty.WriteAsync(item.Text);
+            if (item.Submit)
+            {
+                await Task.Delay(SubmitDelay);
+                await conpty.WriteAsync("\r");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[配送] 書き込みに失敗: {Target}", target.GetDisplayName());
+            return false;
+        }
+    }
+
+    private SemaphoreSlim GetWriteLock(Guid sessionId)
+    {
+        lock (_writeLocks)
+        {
+            if (!_writeLocks.TryGetValue(sessionId, out var gate))
+            {
+                gate = new SemaphoreSlim(1, 1);
+                _writeLocks[sessionId] = gate;
+            }
+            return gate;
+        }
+    }
+
+    /// <summary>
+    /// 待ちが解消した宛先へ、積んである順に配送する。
+    /// 宛先ごとのロックを掴んだまま「覗く→書く→捨てる」を回すので、hook イベントと
+    /// 掃除タイマーが同時に走っても同じ項目を二重に配送しない。
+    /// </summary>
+    private async Task FlushAllAsync()
+    {
+        foreach (var targetId in _queue.PendingTargets())
+        {
+            var target = _sessionManager.GetSessionInfo(targetId);
+            if (target == null || target.ConPtySession == null || target.IsWaitingForUserInput)
+                continue;
+
+            var gate = GetWriteLock(targetId);
+            await gate.WaitAsync();
+            try
+            {
+                while (_queue.TryPeek(targetId, out var item))
+                {
+                    // 書けなければ（また待ちに入った等）先頭に残したまま打ち切る＝順序が保たれる。
+                    if (!await WritePairAsync(target, item))
+                        break;
+
+                    _queue.RemoveHead(targetId);
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+    }
+
+    private async Task SweepAsync()
+    {
+        try
+        {
+            var expired = _queue.RemoveExpired(DateTime.UtcNow, Ttl);
+            foreach (var item in expired)
+            {
+                await HandleFailureAsync(item,
+                    $"{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました");
+            }
+
+            await FlushAllAsync();
+        }
+        catch (Exception ex)
+        {
+            // 掃除の失敗でタイマーを死なせない。
+            _logger.LogWarning(ex, "[配送] 掃除処理で例外");
+        }
+    }
+
+    /// <summary>
+    /// 配送できなかったことを依頼元へ伝える。
+    /// システム発の通知（コールバック）の失敗はログだけに留める＝失敗通知の連鎖を止める終端条件。
+    /// </summary>
+    private async Task HandleFailureAsync(DeliveryItem item, string reason)
+    {
+        var targetName = _sessionManager.GetSessionInfo(item.TargetSessionId)?.GetDisplayName()
+            ?? item.TargetSessionId.ToString();
+
+        if (item.IsSystemCallback)
+        {
+            _logger.LogWarning("[配送] システム通知の配送に失敗（二次通知はしない）: {Target} — {Reason}",
+                targetName, reason);
+            return;
+        }
+
+        _logger.LogWarning("[配送] 配送に失敗: {Target} — {Reason}", targetName, reason);
+
+        if (!string.IsNullOrEmpty(item.ContextId))
+        {
+            // 札を failed にする。終端状態にしておかないと TTL 掃除の対象外になり、
+            // 使われない行が永久に残る（ContextRepository の後片付けと同じ理由）。
+            var summary =
+                $"宛先「{targetName}」へ配送できませんでした（{reason}）。メッセージは届いていません。";
+            await _contextRepository.UpdateAsync(item.ContextId, summary, "failed", null, SystemWriterName);
+            await NotifyContextStatusAsync(item.ContextId, "failed");
+            return;
+        }
+
+        if (item.RequesterSessionId.HasValue)
+        {
+            await SendSystemCallbackAsync(item.RequesterSessionId.Value,
+                $"[TerminalHub] 「{targetName}」へのメッセージを配送できませんでした（{reason}）。相手には届いていません。");
+        }
+    }
+
+    public async Task NotifyContextStatusAsync(string contextId, string status)
+    {
+        var record = await _contextRepository.GetAsync(contextId);
+        if (record == null)
+            return;
+
+        // 依頼元が記録されていない＝外部クライアントからの依頼。ポーリングで取ってもらう。
+        if (string.IsNullOrEmpty(record.RequesterSessionId) ||
+            !Guid.TryParse(record.RequesterSessionId, out var requesterId))
+            return;
+
+        await SendSystemCallbackAsync(requesterId,
+            $"[TerminalHub] 依頼(contextId: {contextId})が {status} になりました。詳細は get_context で取得してください。" +
+            "処理中は選択肢を出さず、必要なことは update_context に書いて終えてください。");
+    }
+
+    private async Task SendSystemCallbackAsync(Guid requesterSessionId, string text)
+    {
+        var requester = _sessionManager.GetSessionInfo(requesterSessionId);
+        if (requester == null || requester.ConPtySession == null)
+        {
+            // 依頼元が消えている/未起動なら諦める（依頼元は get_context で取れる）。
+            _logger.LogInformation(
+                "[配送] 依頼元へ通知できません（セッションが無い/未起動）: {Requester}", requesterSessionId);
+            return;
+        }
+
+        var item = new DeliveryItem(
+            requesterSessionId, text, Submit: true, DateTime.UtcNow,
+            ContextId: null, RequesterSessionId: null, IsSystemCallback: true);
+
+        await EnqueueOrWriteAsync(requester, item);
+    }
+}
