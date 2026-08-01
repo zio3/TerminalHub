@@ -119,6 +119,7 @@ namespace TerminalHub.Mcp
             "target はセッションGUIDか表示名(完全一致)。" +
             "**届く本文の末尾には、TerminalHub 経由の自動メッセージであることを示す角括弧がサーバーによって必ず付く**" +
             "(proof を渡せば検証済みのあなたの名前とGUID入り、無ければ「送信元は無記名」表記。外すことはできない)。" +
+            "唯一の例外は `/` で始まる本文(スラッシュコマンド送信)で、コマンド引数を汚さないためエンベロープを付けない。" +
             "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
@@ -210,7 +211,19 @@ namespace TerminalHub.Mcp
             // 「本当に TerminalHub を通ったか・どこからどこへか」を検証できる。
             // 12文字あれば偶然の衝突も総当たりの当てずっぽうも実用上無視できる。
             var deliveryId = Guid.NewGuid().ToString("N")[..12];
-            var deliveredMessage = message + BuildEnvelope(deliveryId, requester, effectiveContextId);
+
+            // **`/` で始まる本文（スラッシュコマンド送信）にはエンベロープを付けない**。
+            // 末尾の角括弧がコマンドの引数として解釈され、引数を取るコマンド（/model 等）を
+            // 壊すため。判定は行頭の `/` のみ（Trim しない。先頭に空白があれば TUI 側も
+            // コマンドとして扱わないので、通常本文と同じにエンベロープを付ける）。
+            // 「マーカー無し＝人間」の保証にはこの分だけ穴が開くが、`/` で始まる入力は
+            // CLI にコマンドとして解釈され通常プロンプトにならないため、指示のなりすましには
+            // 実質使えない。ローカル利用前提で許容する（2026-08-01 判断）。
+            // 配送記録は例外なく残す（誰がどのセッションへコマンドを送ったかの監査は保つ）。
+            var isSlashCommand = message.StartsWith("/", StringComparison.Ordinal);
+            var deliveredMessage = isSlashCommand
+                ? message
+                : message + BuildEnvelope(deliveryId, requester, effectiveContextId);
 
             // 配送記録は送信前に書く。受け手がエンベロープを見た瞬間から照会できる必要があり、
             // 「届いたのに記録がまだ無い」瞬間を作らないため（逆の「記録はあるが届かなかった」は
