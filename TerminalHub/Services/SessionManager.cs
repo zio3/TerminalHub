@@ -71,10 +71,11 @@ namespace TerminalHub.Services
         void RequestRawRingReplay(Guid sessionId, bool paced);
 
         /// <summary>
-        /// 本人証明(TERMINALHUB_SESSION_PROOF)からセッションを特定する。一致がなければ null。
-        /// MCP の書き込み系ツール（将来的には send のエンベロープも）の本人検証はここに一点集約する。
+        /// MCP 接続キー(X-TerminalHub-Session-Key ヘッダの値)からセッションを特定する。一致がなければ null。
+        /// TerminalHub が起動時に配った MCP 設定で接続しているセッションは、これで本人が確定する。
+        /// MCP の本人検証はここに一点集約する（旧 proof 引数方式は互換を残さず撤去済み）。
         /// </summary>
-        SessionInfo? ResolveBySessionProof(string? proof);
+        SessionInfo? ResolveByMcpConnectionKey(string? connectionKey);
 
         /// <summary>
         /// ConPTYからの最初のデータ受信時に呼び出し、接続処理中フラグを解除する
@@ -243,7 +244,7 @@ namespace TerminalHub.Services
         /// OFF・未対応・失敗時は null（＝オプション無しで起動する）。
         /// ポートは起動中の実値を使うので、TerminalHub のポートが変わっても次の起動から自動で追従する。
         /// </summary>
-        private string? ResolveClaudeMcpConfigPath()
+        private string? ResolveClaudeMcpConfigPath(Guid sessionId, string? mcpConnectionKey)
         {
             if (_mcpConfigService == null || _appSettingsService == null)
                 return null;
@@ -251,7 +252,12 @@ namespace TerminalHub.Services
             if (!_appSettingsService.GetSettings().Experimental.EnableLocalMcp)
                 return null;
 
-            return _mcpConfigService.EnsureClaudeMcpConfigFile(GetServerBaseUrl());
+            // 接続キーが無い経路（あり得ないが防御）では設定を配らない。
+            // キー無しの設定を配ると、その CLI は恒久的に無記名接続になる。
+            if (string.IsNullOrEmpty(mcpConnectionKey))
+                return null;
+
+            return _mcpConfigService.EnsureClaudeMcpConfigFile(GetServerBaseUrl(), sessionId, mcpConnectionKey);
         }
 
         /// <summary>
@@ -285,24 +291,12 @@ namespace TerminalHub.Services
             return _mcpConfigService.BuildMcpUrl(GetServerBaseUrl());
         }
 
-        /// <summary>
-        /// ConPTY 起動ごとに本人証明(TERMINALHUB_SESSION_PROOF)を新規生成して SessionInfo に保持する。
-        /// この値は子プロセスだけが環境変数として知り、MCP の書き込み系ツールの本人検証に使う。
-        /// 再起動のたびに作り直す（永続化しない）。
-        /// </summary>
-        private static string RotateSessionProof(SessionInfo sessionInfo)
-        {
-            var proof = Guid.NewGuid().ToString("N");
-            sessionInfo.SessionProof = proof;
-            return proof;
-        }
-
-        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options, Guid sessionId, string? sessionProof = null)
+        private (string command, string args) BuildTerminalCommand(TerminalType terminalType, Dictionary<string, string> options, Guid sessionId, string? mcpConnectionKey = null)
         {
             switch (terminalType)
             {
                 case TerminalType.ClaudeCode:
-                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath(), ResolveClaudeHookConfigPath(sessionId));
+                    var claudeArgs = TerminalConstants.BuildClaudeCodeArgs(options, ResolveClaudeMcpConfigPath(sessionId, mcpConnectionKey), ResolveClaudeHookConfigPath(sessionId));
                     // ネイティブ版(.exe)・npm版(.cmd)とも cmd.exe 経由で同じ形に組み立てる。
                     // 引用符の二重掛けが必要な理由（v1.0.71 の起動不能回帰）は ExecuteQuoted のコメント参照。
                     return TerminalCommandLine.ExecuteQuoted(GetClaudeCmdPath(), claudeArgs);
@@ -316,7 +310,7 @@ namespace TerminalHub.Services
                         GetCodexMcpUrl(),
                         codexHookArgs,
                         sessionId,
-                        sessionProof);
+                        mcpConnectionKey);
                     return TerminalCommandLine.KeepOpen("codex", codexArgs);
 
                 case TerminalType.Antigravity:
@@ -481,12 +475,11 @@ namespace TerminalHub.Services
                 // 設定画面は再起動なしでも Options を更新できるため、起動に使う値をここで固定する。
                 var terminalType = sessionInfo.TerminalType;
                 var options = new Dictionary<string, string>(sessionInfo.Options ?? new());
-                var sessionProof = RotateSessionProof(sessionInfo);
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionInfo.McpConnectionKey);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 _logger.LogInformation("新規セッション接続開始: SessionId={SessionId}", sessionId);
-                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
+                var newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行
@@ -563,14 +556,13 @@ namespace TerminalHub.Services
             return true;
         }
 
-        public SessionInfo? ResolveBySessionProof(string? proof)
+        public SessionInfo? ResolveByMcpConnectionKey(string? connectionKey)
         {
-            if (string.IsNullOrWhiteSpace(proof))
+            if (string.IsNullOrWhiteSpace(connectionKey))
                 return null;
 
             return _sessionInfos.Values.FirstOrDefault(s =>
-                !string.IsNullOrEmpty(s.SessionProof) &&
-                string.Equals(s.SessionProof, proof, StringComparison.Ordinal));
+                string.Equals(s.McpConnectionKey, connectionKey, StringComparison.Ordinal));
         }
 
         public event Action<Guid, bool>? OnRawRingReplayRequested;
@@ -1053,12 +1045,11 @@ namespace TerminalHub.Services
                 sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo, removeContinueOption);
                 var terminalType = sessionInfo.TerminalType;
-                var sessionProof = RotateSessionProof(sessionInfo);
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionInfo.McpConnectionKey);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成（Startは呼ばない）
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
@@ -1136,12 +1127,11 @@ namespace TerminalHub.Services
                 sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
                 var options = PrepareSessionOptions(sessionInfo);
                 var terminalType = sessionInfo.TerminalType;
-                var sessionProof = RotateSessionProof(sessionInfo);
-                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionProof);
+                var (command, args) = BuildTerminalCommand(terminalType, options, sessionInfo.SessionId, sessionInfo.McpConnectionKey);
                 CaptureRunningCodexOptions(sessionInfo, terminalType, options);
 
                 // 新しいセッションを作成して起動
-                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId, sessionProof);
+                ConPtySession newSession = await _conPtyService.CreateSessionAsync(command, args, sessionInfo.FolderPath, cols, rows, sessionInfo.SessionId);
                 AttachServerSideBufferTap(sessionInfo, newSession);
 
                 // ConPtySession登録をロック内で実行（GetSessionAsyncと同じ再確認）。
@@ -1373,6 +1363,8 @@ namespace TerminalHub.Services
                 _rawStreamCapture?.CloseSession(sessionId);
                 // --settings 用 hook 設定ファイルの後始末（残っても実害はないが溜めない）
                 _claudeHookService?.DeleteHookConfigFile(sessionId);
+                // --mcp-config 用 MCP 設定ファイルの後始末（接続キーが書かれたファイルなので残さない）
+                _mcpConfigService?.DeleteMcpConfigFile(sessionId);
                 _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
                 NotifySessionsChanged();
             }

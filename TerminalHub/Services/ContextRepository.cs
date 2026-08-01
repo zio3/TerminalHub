@@ -6,9 +6,9 @@ namespace TerminalHub.Services
 {
     /// <summary>
     /// ContextSummary（依頼の状況札）1件分。
-    /// UpdatedBy* は最終書き込み者。proof 検証済みのセッションが書いた場合のみ入り、
-    /// proof 無しの書き込み（外部クライアント等）では null（=無記名と区別できる）。
-    /// Requester* は依頼元。send_to_session に proof が渡されたときだけ入り、
+    /// UpdatedBy* は最終書き込み者。本人確定済み（接続キー検証）のセッションが書いた場合のみ入り、
+    /// 無記名の書き込み（外部クライアント等）では null（=無記名と区別できる）。
+    /// Requester* は依頼元。send_to_session の呼び出し元が本人確定できたときだけ入り、
     /// 終端 status への遷移をその相手へ通知するために使う（外部クライアントの依頼では null）。
     /// </summary>
     public record ContextRecord(
@@ -43,12 +43,12 @@ namespace TerminalHub.Services
     /// <summary>
     /// ContextSummary の永続化リポジトリ。
     /// contextId は send_to_session が発行する推測不能な値で capability を兼ねる
-    /// （知っている=読み書きできる。proof と同じ哲学で認証を別途作らない）。
+    /// （知っている=読み書きできる。deliveryId と同じ哲学で認証を別途作らない）。
     /// </summary>
     public interface IContextRepository
     {
         /// <summary>
-        /// 札を作る。requester* は依頼元（proof で検証済みのセッション）。
+        /// 札を作る。requester* は依頼元（接続キーで検証済みのセッション）。
         /// 記録があれば終端 status への遷移をその相手へ通知でき、無ければ依頼元は
         /// get_context のポーリングで結果を取る（受信箱を持たない外部クライアント）。
         /// </summary>
@@ -56,7 +56,7 @@ namespace TerminalHub.Services
         Task<ContextRecord?> GetAsync(string contextId);
         /// <summary>
         /// 要約を全体上書きし、status 指定があれば併せて更新する。
-        /// updatedBy* は proof 検証済みの書き込み元（無記名なら null を渡す＝前回の記名は消える）。
+        /// updatedBy* は接続キー検証済みの書き込み元（無記名なら null を渡す＝前回の記名は消える）。
         /// </summary>
         Task<ContextUpdateResult> UpdateAsync(string contextId, string summary, string? status,
             string? updatedBySessionId, string? updatedByName);

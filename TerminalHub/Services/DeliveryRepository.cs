@@ -7,7 +7,7 @@ namespace TerminalHub.Services
     /// <summary>
     /// 配送記録1件分。エンベロープの #ID から「その配送が本当に TerminalHub を通ったか・
     /// どこからどこへか」を検証するための台帳。
-    /// From* は proof 検証済みの送信元（null = 無記名＝外部クライアントの可能性を含む）。
+    /// From* は接続キー検証済みの送信元（null = 無記名＝外部クライアントの可能性を含む）。
     /// </summary>
     public record DeliveryRecord(
         string DeliveryId,

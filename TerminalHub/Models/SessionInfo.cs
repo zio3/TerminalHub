@@ -57,13 +57,17 @@ namespace TerminalHub.Models
 
         public string Memo { get; set; } = string.Empty;
 
-        // 本人証明（TERMINALHUB_SESSION_PROOF）。ConPTY 起動ごとに生成するランダム値で、
-        // そのセッションの子プロセスだけが環境変数として知っている。MCP の書き込み系ツール
-        // (set_memo/set_card) はこの値で「呼び出し元が本人か」を機構的に検証する
-        // （GUID 自己申告の「仕様上の契約」からの格上げ）。永続化しない（再起動で変わる）。
-        // 名前に KEY/SECRET/TOKEN を含めないのは Codex の ignore_default_excludes 対策。
+        // MCP 接続キー（X-TerminalHub-Session-Key ヘッダの値）。TerminalHub がこのセッションの
+        // CLI へ配る MCP 設定にだけ載せる固定ランダム値で、サーバーは接続ヘッダから
+        // 「どのセッションの呼び出しか」を確定する。モデルに引数で運ばせない
+        // （＝値がモデルのコンテキストに載らない）ため、ConPTY 再起動ごとに変える必要がなく
+        // SessionInfo の寿命いっぱい固定。SessionId は公開情報（本文に書ける）なので
+        // 資格には使えず、別の秘密が要る。永続化しない（TerminalHub 再起動で変わるが、
+        // そのとき CLI プロセスも消えており、次の起動で新しい値入りの設定が配られる）。
+        // 旧方式（環境変数 TERMINALHUB_SESSION_PROOF を proof 引数でモデルに運ばせる）は
+        // 互換を残さず撤去済み（2026-08-02）。
         [System.Text.Json.Serialization.JsonIgnore]
-        public string? SessionProof { get; set; }
+        public string McpConnectionKey { get; } = Guid.NewGuid().ToString("N");
 
         // 自己紹介カード（「何ができるか」の自己申告・A2A Agent Card のローカル版）。
         // memo=「今なにをしているか」(動的) に対し、こちらは「何ができるか」(静的・長命)。

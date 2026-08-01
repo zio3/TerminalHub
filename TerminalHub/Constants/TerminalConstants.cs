@@ -11,6 +11,18 @@
 
         // ファイルパス
         public const string DefaultShell = @"C:\Windows\System32\cmd.exe";
+
+        /// <summary>
+        /// MCP 接続キーを運ぶ HTTP ヘッダ名。TerminalHub がセッション起動時に配る MCP 設定
+        /// (Claude: --mcp-config の headers / Codex: -c mcp_servers.terminalhub.http_headers)にだけ
+        /// 値を書き、サーバーはこのヘッダで「どのセッションからの接続か」を確定する。
+        /// モデルは値を知らないし運ばない（proof 引数を環境変数から読ませる方式は、
+        /// 秘密のシェル出力が安全分類器に弾かれて無言で無記名に劣化する実害があった）。
+        /// URL のパスやクエリに載せないのはアクセスログへの残留を避けるため。
+        /// 環境変数と違い Codex の ignore_default_excludes(KEY/SECRET/TOKEN を含む変数の
+        /// 自動除外)の対象ではないので、ヘッダ名に Key を含んでよい。
+        /// </summary>
+        public const string McpSessionKeyHeader = "X-TerminalHub-Session-Key";
         
         // Claude Codeのパス（ネイティブ版優先、npm版フォールバック）
         public static string GetDefaultClaudeCmdPath()
@@ -101,7 +113,7 @@
             string? terminalHubMcpUrl = null,
             string? terminalHubHookArgs = null,
             Guid? sessionId = null,
-            string? sessionProof = null)
+            string? terminalHubMcpConnectionKey = null)
         {
             var args = new List<string>();
 
@@ -121,12 +133,12 @@
             var userSuppliedNetworkAccess = ContainsCodexConfigOverride(options, "sandbox_workspace_write.network_access");
             var userSuppliedWebSearch = ContainsCodexConfigOverride(options, "web_search");
             var userSuppliedTerminalHubMcpUrl = ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.url");
+            var userSuppliedTerminalHubMcpHeaders =
+                ContainsCodexConfigOverride(options, "mcp_servers.terminalhub.http_headers") ||
+                ContainsCodexConfigOverride(options, $"mcp_servers.terminalhub.http_headers.{McpSessionKeyHeader}");
             var userSuppliedSessionIdEnv = ContainsCodexConfigOverride(
                 options,
                 "shell_environment_policy.set.TERMINALHUB_SESSION_ID");
-            var userSuppliedSessionProofEnv = ContainsCodexConfigOverride(
-                options,
-                "shell_environment_policy.set.TERMINALHUB_SESSION_PROOF");
             if (options.TryGetValue("no-alt-screen", out var noAltScreen) && noAltScreen == "true" &&
                 !userSuppliedNoAltScreen)
             {
@@ -253,6 +265,16 @@
             if (!string.IsNullOrWhiteSpace(terminalHubMcpUrl) && !userSuppliedTerminalHubMcpUrl)
             {
                 args.Add($"-c mcp_servers.terminalhub.url={terminalHubMcpUrl}");
+
+                // MCP 接続キー。サーバーはこのヘッダで呼び出し元セッションを確定する
+                // （proof 引数をモデルに運ばせない）。TOML のベアキーはハイフンを許すので
+                // ヘッダ名はドット記法でそのまま書ける。URL を注入しない（＝ユーザーが
+                // 自前定義している）場合はヘッダも注入しない: 自前定義の接続先が
+                // 別インスタンスの可能性があり、そこへこのインスタンスの秘密を送らない。
+                if (!string.IsNullOrEmpty(terminalHubMcpConnectionKey) && !userSuppliedTerminalHubMcpHeaders)
+                {
+                    args.Add($"-c mcp_servers.terminalhub.http_headers.{McpSessionKeyHeader}={terminalHubMcpConnectionKey}");
+                }
             }
 
             // Codex は shell_environment_policy 次第で tool 実行シェルへ環境変数を渡さない
@@ -264,14 +286,6 @@
             if (sessionId.HasValue && !userSuppliedSessionIdEnv)
             {
                 args.Add($"-c shell_environment_policy.set.TERMINALHUB_SESSION_ID={sessionId.Value}");
-            }
-
-            // 本人証明も同じ理由で明示注入する（MCP 書き込み系ツールの proof 認証に必要）。
-            // 変数名に KEY/SECRET/TOKEN を含めないのは Codex の ignore_default_excludes
-            // （該当語を含む変数の自動除外）を踏まないため。
-            if (!string.IsNullOrEmpty(sessionProof) && !userSuppliedSessionProofEnv)
-            {
-                args.Add($"-c shell_environment_policy.set.TERMINALHUB_SESSION_PROOF={sessionProof}");
             }
 
             // TerminalHub の lifecycle hook もプロジェクト設定へ永続化せず、起動時だけ注入する。

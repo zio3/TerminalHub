@@ -18,7 +18,7 @@ namespace TerminalHub.Services
     
     public interface IConPtyService
     {
-        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null, string? sessionProof = null);
+        Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null);
     }
     
     public class DataReceivedEventArgs : EventArgs
@@ -47,9 +47,9 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null, string? sessionProof = null)
+        public Task<ConPtySession> CreateSessionAsync(string command, string? arguments, string? workingDirectory = null, int cols = 80, int rows = 24, Guid? sessionId = null)
         {
-            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, sessionId, sessionProof));
+            return Task.FromResult(new ConPtySession(command, arguments, workingDirectory, _logger, cols, rows, sessionId));
         }
     }
 
@@ -80,10 +80,6 @@ namespace TerminalHub.Services
         // このセッションの TerminalHub セッション GUID。子プロセスに環境変数 TERMINALHUB_SESSION_ID として
         // 注入し、CLI/エージェントが「自分がどの TerminalHub セッションか」を自己識別できるようにする。
         private readonly Guid? _sessionId;
-
-        // 本人証明（TERMINALHUB_SESSION_PROOF）。この ConPTY の子プロセスだけが知るランダム値で、
-        // MCP の書き込み系ツールが「呼び出し元が本人か」を検証するのに使う。
-        private readonly string? _sessionProof;
 
         // 環境変数フラグ
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
@@ -134,13 +130,12 @@ namespace TerminalHub.Services
         // プロセス終了イベント
         public event EventHandler? ProcessExited;
 
-        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, Guid? sessionId = null, string? sessionProof = null)
+        public ConPtySession(string command, string? arguments, string? workingDirectory, ILogger logger, int cols = 80, int rows = 24, Guid? sessionId = null)
         {
             _logger = logger;
             Cols = cols;
             Rows = rows;
             _sessionId = sessionId;
-            _sessionProof = sessionProof;
 
             // バッファリング用タイマーの初期化
             _flushTimer = new System.Timers.Timer(FLUSH_INTERVAL_MS);
@@ -196,13 +191,6 @@ namespace TerminalHub.Services
             if (_sessionId is Guid sid && sid != Guid.Empty)
             {
                 envVars["TERMINALHUB_SESSION_ID"] = sid.ToString();
-            }
-
-            // 本人証明。このプロセスツリーだけが知る値なので、MCP 側は
-            // この値の提示をもって「呼び出し元＝このセッション本人」と判定できる。
-            if (!string.IsNullOrEmpty(_sessionProof))
-            {
-                envVars["TERMINALHUB_SESSION_PROOF"] = _sessionProof;
             }
 
             // 既存の環境変数を取得してマージ

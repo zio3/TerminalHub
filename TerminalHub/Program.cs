@@ -185,6 +185,10 @@ builder.Services.AddSingleton<SlashCommandProvider>();
 // タイミング（例: CLI 側の /clear）で新しい instructions が反映される。
 // （IOptions<McpServerOptions>.Value はシングルトンで1回キャッシュされ再起動が要るが、
 //  ConfigureSessionOptions を設定すると SDK が接続ごとに options を生成し直すため動的反映になる）。
+// MCP ツール内から呼び出し元の HTTP リクエスト（接続キーのヘッダ）を読むために登録する。
+// 本人確定をトランスポート層（どの扉から入ったか）で行い、モデルに proof を運ばせない。
+builder.Services.AddHttpContextAccessor();
+
 builder.Services
     .AddMcpServer()
     .WithHttpTransport(options =>
@@ -193,9 +197,27 @@ builder.Services
         {
             var appSettings = httpContext.RequestServices.GetRequiredService<IAppSettingsService>();
             var text = appSettings.GetSettings().Experimental.McpInstructions;
-            serverOptions.ServerInstructions = string.IsNullOrWhiteSpace(text)
+            var instructions = string.IsNullOrWhiteSpace(text)
                 ? TerminalHub.Mcp.McpInstructionDefaults.Template
                 : text;
+
+            // 接続キー（ヘッダ）で本人が確定している接続には、自己識別を instructions で直接伝える。
+            // モデルが環境変数を読みに行く必要を無くす（旧 proof 方式では TERMINALHUB_SESSION_PROOF の
+            // シェル出力が安全分類器に弾かれ、無言で無記名送信に劣化する実害があった）。
+            // DisplayName はここで固定される（変更は次の再接続で反映）が、instructions 自体が
+            // 同じ性質なので許容する。
+            var sessionManager = httpContext.RequestServices.GetRequiredService<ISessionManager>();
+            var key = httpContext.Request.Headers[TerminalHub.Constants.TerminalConstants.McpSessionKeyHeader].FirstOrDefault();
+            var caller = sessionManager.ResolveByMcpConnectionKey(key);
+            if (caller != null)
+            {
+                instructions +=
+                    "\n\n## この接続について（サーバー付記）\n" +
+                    $"この接続は TerminalHub が配った接続キーで認証済み。あなたは「{caller.GetDisplayName()}」" +
+                    $"(SessionId: {caller.SessionId})。書き込み系ツールも送信元の記名も、" +
+                    "追加の証明なしで本人として扱われる（環境変数を読む必要はない）。";
+            }
+            serverOptions.ServerInstructions = instructions;
             return Task.CompletedTask;
         };
     })
