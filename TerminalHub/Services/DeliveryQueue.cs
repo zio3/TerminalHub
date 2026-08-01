@@ -92,23 +92,29 @@ public sealed class DeliveryQueue
     }
 
     /// <summary>
-    /// TTL を超えた項目を取り除いて返す。FIFO かつ EnqueuedAt が単調増加なので、
-    /// 各キューの先頭から期限切れが続く間だけ剥がせばよい。
+    /// 指定宛先の、TTL を超えた項目を取り除いて返す。FIFO かつ EnqueuedAt が単調増加なので、
+    /// 先頭から期限切れが続く間だけ剥がせばよい。
+    ///
+    /// **宛先ごとに分けてあるのは意図的**。全宛先を一括で剥がすと、呼び出し側が
+    /// 「配送中の宛先だけロックを取ってから失効させる」ことができない。配送は
+    /// 「覗く→書く→捨てる」で進むため、書いている最中（先頭に残っている状態）に
+    /// 別スレッドが同じ項目を失効させると、配送済みの項目が失敗と報告され、
+    /// さらに直後の RemoveHead が次の項目を消してしまう（＝1通が黙って消える）。
     /// </summary>
-    public IReadOnlyList<DeliveryItem> RemoveExpired(DateTime now, TimeSpan ttl)
+    public IReadOnlyList<DeliveryItem> RemoveExpiredFor(Guid targetSessionId, DateTime now, TimeSpan ttl)
     {
         var expired = new List<DeliveryItem>();
         lock (_lock)
         {
-            foreach (var (targetId, queue) in _queues.ToList())
+            if (!_queues.TryGetValue(targetSessionId, out var queue))
+                return expired;
+
+            while (queue.Count > 0 && now - queue.Peek().EnqueuedAt >= ttl)
             {
-                while (queue.Count > 0 && now - queue.Peek().EnqueuedAt >= ttl)
-                {
-                    expired.Add(queue.Dequeue());
-                }
-                if (queue.Count == 0)
-                    _queues.Remove(targetId);
+                expired.Add(queue.Dequeue());
             }
+            if (queue.Count == 0)
+                _queues.Remove(targetSessionId);
         }
         return expired;
     }

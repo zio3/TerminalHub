@@ -89,7 +89,7 @@ public sealed class DeliveryQueueTests
         queue.Enqueue(Item(target, "古い", Origin));
         queue.Enqueue(Item(target, "新しい", Origin.AddMinutes(4)));
 
-        var expired = queue.RemoveExpired(Origin.AddMinutes(5), TimeSpan.FromMinutes(5));
+        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(5), TimeSpan.FromMinutes(5));
 
         Assert.Single(expired);
         Assert.Equal("古い", expired[0].Text);
@@ -104,10 +104,51 @@ public sealed class DeliveryQueueTests
         queue.Enqueue(Item(target, "1", Origin));
         queue.Enqueue(Item(target, "2", Origin));
 
-        var expired = queue.RemoveExpired(Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
+        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
 
         Assert.Equal(2, expired.Count);
         Assert.Empty(queue.PendingTargets());
+    }
+
+    [Fact]
+    public void 失効は指定した宛先だけに効く()
+    {
+        // 全宛先を一括で剥がすと、配送中の宛先だけロックを取って失効させることができず、
+        // 配送済みの項目が失敗と報告され次の項目が黙って消える（RemoveExpiredFor の存在理由）。
+        var queue = new DeliveryQueue();
+        var 配送中 = Guid.NewGuid();
+        var その他 = Guid.NewGuid();
+        queue.Enqueue(Item(配送中, "配送中", Origin));
+        queue.Enqueue(Item(その他, "放置", Origin));
+
+        var expired = queue.RemoveExpiredFor(その他, Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
+
+        Assert.Single(expired);
+        Assert.Equal("放置", expired[0].Text);
+        Assert.Equal(1, queue.CountFor(配送中));
+    }
+
+    [Fact]
+    public void 期限切れが無い宛先を失効させても何も起きない()
+    {
+        var queue = new DeliveryQueue();
+        var target = Guid.NewGuid();
+        queue.Enqueue(Item(target, "新しい", Origin.AddMinutes(4)));
+
+        var expired = queue.RemoveExpiredFor(target, Origin.AddMinutes(5), TimeSpan.FromMinutes(5));
+
+        Assert.Empty(expired);
+        Assert.Equal(1, queue.CountFor(target));
+    }
+
+    [Fact]
+    public void 存在しない宛先の失効は空を返す()
+    {
+        var queue = new DeliveryQueue();
+
+        var expired = queue.RemoveExpiredFor(Guid.NewGuid(), Origin.AddMinutes(10), TimeSpan.FromMinutes(5));
+
+        Assert.Empty(expired);
     }
 
     [Fact]

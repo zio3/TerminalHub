@@ -146,8 +146,17 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 行列があるのに割り込むと FIFO が壊れるので、その場合は末尾へ積んで掃除に任せる。
         if (!target.IsWaitingForUserInput && _queue.CountFor(target.SessionId) == 0)
         {
-            if (await TryWriteAsync(target, item))
-                return DeliveryOutcome.Delivered;
+            switch (await TryWriteAsync(target, item))
+            {
+                case WriteResult.Delivered:
+                    return DeliveryOutcome.Delivered;
+
+                // 書き込みが失敗した宛先は積まない。ConPTY が死んでいれば ready には戻らず、
+                // TTL の5分ぶん失敗を隠すだけになる。呼び出し元へその場で返す
+                // （旧実装が例外で即座に失敗を伝えていたのと同じ即時性を保つ）。
+                case WriteResult.Failed:
+                    return DeliveryOutcome.Rejected;
+            }
         }
 
         if (!_queue.Enqueue(item))
@@ -164,8 +173,23 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         return DeliveryOutcome.Queued;
     }
 
+    /// <summary>
+    /// 書き込みの結果。**「今は書けない」と「書き込みが失敗した」を混ぜない**のが要点。
+    /// 混ぜると、ConPTY が死んでいる宛先へ TTL いっぱい再試行し続けたうえ、
+    /// 本文だけ書けて Enter で失敗したケースで本文をもう一度頭から書いてしまう。
+    /// </summary>
+    private enum WriteResult
+    {
+        /// <summary>本文（と Enter）を書き終えた。</summary>
+        Delivered,
+        /// <summary>いま書ける状態にない（入力待ち・ConPTY 未接続）。キューに残して後で再試行してよい。</summary>
+        NotReady,
+        /// <summary>書き込み自体が失敗した。**再試行しない**（本文が途中まで届いている可能性がある）。</summary>
+        Failed,
+    }
+
     /// <summary>宛先ごとの直列化つきで1件書き込む。</summary>
-    private async Task<bool> TryWriteAsync(SessionInfo target, DeliveryItem item)
+    private async Task<WriteResult> TryWriteAsync(SessionInfo target, DeliveryItem item)
     {
         var gate = GetWriteLock(target.SessionId);
         await gate.WaitAsync();
@@ -183,12 +207,17 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     /// 本文＋Enter を1単位として書き込む（ロックは呼び出し側が保持している前提）。
     /// 書き込み直前に状態を再確認するのは、積んでから ready を確認するまでの間に
     /// また待ちへ入っていることがあるため。
+    ///
+    /// 例外時に <see cref="WriteResult.Failed"/> を返して**再試行させない**のは、
+    /// 本文の書き込みが成功したあと Enter で失敗した場合に、同じ項目を積み直すと
+    /// 本文が二重に連結されて届くため。「1単位」を守れなかった時点で、やり直しではなく
+    /// 失敗として報告するのが正しい（本文は相手の入力欄に残っている可能性がある）。
     /// </summary>
-    private async Task<bool> WritePairAsync(SessionInfo target, DeliveryItem item)
+    private async Task<WriteResult> WritePairAsync(SessionInfo target, DeliveryItem item)
     {
         var conpty = target.ConPtySession;
         if (conpty == null || target.IsWaitingForUserInput)
-            return false;
+            return WriteResult.NotReady;
 
         try
         {
@@ -198,12 +227,12 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 await Task.Delay(SubmitDelay);
                 await conpty.WriteAsync("\r");
             }
-            return true;
+            return WriteResult.Delivered;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[配送] 書き込みに失敗: {Target}", target.GetDisplayName());
-            return false;
+            return WriteResult.Failed;
         }
     }
 
@@ -233,22 +262,46 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             if (target == null || target.ConPtySession == null || target.IsWaitingForUserInput)
                 continue;
 
+            // 失敗の通知はロックを解放してから行う。通知先が宛先自身のこともあり
+            // （自分に依頼して自分が詰まっている場合）、掴んだまま送ると
+            // SemaphoreSlim は再入不可なので自分自身とデッドロックする。
+            var failures = new List<DeliveryItem>();
+
             var gate = GetWriteLock(targetId);
             await gate.WaitAsync();
             try
             {
                 while (_queue.TryPeek(targetId, out var item))
                 {
-                    // 書けなければ（また待ちに入った等）先頭に残したまま打ち切る＝順序が保たれる。
-                    if (!await WritePairAsync(target, item))
-                        break;
+                    var result = await WritePairAsync(target, item);
 
-                    _queue.RemoveHead(targetId);
+                    if (result == WriteResult.Delivered)
+                    {
+                        _queue.RemoveHead(targetId);
+                        continue;
+                    }
+
+                    if (result == WriteResult.Failed)
+                    {
+                        // 再試行しない（本文が途中まで届いている可能性がある）。
+                        // 書き込み経路自体が壊れている見込みなので、残りは次の掃除に任せる。
+                        _queue.RemoveHead(targetId);
+                        failures.Add(item);
+                    }
+
+                    // NotReady なら先頭に残したまま打ち切る＝順序が保たれる。
+                    break;
                 }
             }
             finally
             {
                 gate.Release();
+            }
+
+            foreach (var item in failures)
+            {
+                await HandleFailureAsync(item,
+                    "宛先への書き込みに失敗しました（本文が途中まで届いている可能性があるため再送していません）");
             }
         }
     }
@@ -257,11 +310,30 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     {
         try
         {
-            var expired = _queue.RemoveExpired(DateTime.UtcNow, Ttl);
-            foreach (var item in expired)
+            foreach (var targetId in _queue.PendingTargets())
             {
-                await HandleFailureAsync(item,
-                    $"{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました");
+                // **配送中の項目を失効させないため、宛先のロックを取ってから剥がす。**
+                // 配送は「覗く→書く→捨てる」で進むので、書いている最中の項目は
+                // まだキューの先頭に居る。ここで排他しないと、配送済みの項目が
+                // 失敗と報告され、直後の RemoveHead が次の項目を消してしまう。
+                IReadOnlyList<DeliveryItem> expired;
+                var gate = GetWriteLock(targetId);
+                await gate.WaitAsync();
+                try
+                {
+                    expired = _queue.RemoveExpiredFor(targetId, DateTime.UtcNow, Ttl);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+
+                // 通知はロック解放後（FlushAllAsync と同じくデッドロック回避のため）。
+                foreach (var item in expired)
+                {
+                    await HandleFailureAsync(item,
+                        $"{Ttl.TotalMinutes:0} 分間 宛先の入力待ちが解消しなかったため配送を諦めました");
+                }
             }
 
             await FlushAllAsync();
