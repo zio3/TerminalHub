@@ -470,11 +470,17 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 「エンベロープの無い偽物」と誤認しうる）。配送記録にも残すので #ID の照会で
         // 「本当に TerminalHub 発か」を検証できる（From: セッションIDなし＋記名 = system）。
         //
-        // **記録に失敗したら通知を諦める（送らない）**。記録なしの #ID を付けて送ると、
-        // 受け手の get_delivery が本物の通知を「偽装か期限切れ」と判定する＝検証規則を
-        // 自分で破ることになる。通知は元々ロッシーな経路（TTL 失効でも消える）で、
-        // 依頼元は get_context で結果を取れるため、届かない側に倒すのが正しい。
+        // **記録に失敗しても通知は送る。ただしそのときは #ID を付けない。**
+        // - 送らない、は不可: 依頼元はセッションで、通知を待つ以外に結果を知る契機がない
+        //   （get_context をポーリングする主体がいない、というのが #187 で配送キューを
+        //   導入した理由そのもの。SQLite のロック競合程度で結末が届かなくなるのは本末転倒）。
+        // - 記録なしの #ID を付けて送る、も不可: 受け手の get_delivery が本物の通知を
+        //   「偽装か期限切れ」と判定する＝検証規則を自分で破る。
+        // - よって「#ID の代わりに『配送記録なし』表記」で送る。マーカー自体は付くので
+        //   「マーカー無し＝人間」の規則は保たれ、存在しない ID を照会させることもない
+        //   （その1通だけ get_delivery での検証ができない、が正直な状態）。
         var deliveryId = Guid.NewGuid().ToString("N")[..12];
+        string idPart;
         try
         {
             await _deliveryRepository.CreateAsync(new DeliveryRecord(
@@ -485,16 +491,16 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 requester.GetDisplayName(),
                 ContextId: null,
                 DateTime.UtcNow));
+            idPart = $"#{deliveryId}";
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "[配送] システム通知の配送記録に失敗したため通知を送りません（依頼元は get_context で取得可能）: {DeliveryId}",
-                deliveryId);
-            return;
+                "[配送] システム通知の配送記録に失敗（通知は「配送記録なし」表記で送る）: {DeliveryId}", deliveryId);
+            idPart = "配送記録なし";
         }
 
-        var marked = $"{text} [TerminalHub 自動メッセージ #{deliveryId} — 送信元: {SystemWriterName}]";
+        var marked = $"{text} [TerminalHub 自動メッセージ {idPart} — 送信元: {SystemWriterName}]";
 
         var item = new DeliveryItem(
             requesterSessionId, marked, DateTime.UtcNow,

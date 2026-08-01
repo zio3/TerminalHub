@@ -131,7 +131,7 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
    - セッション専用コマンド（command）: クイック送信バーのボタンをセッション自身が登録できる。繰り返す操作を人間がワンクリックで撃てるようにする用途。**セッション専用のみ**でグローバル（設定のコマンド）は対象外。`remove_command` は **AI が登録したものだけ**削除できる（`CustomCommand.CreatedByAgent`）。人間が UI で編集するとフラグが落ち、以降 MCP からは消せなくなる（人間が作ったものは失うと復旧が難しいため）
    - ContextSummary（context）: 依頼単位の「状況札」。`send_to_session` の `contextId="new"` で発行（A2A の contextId/TaskState に対応）。依頼元がセッション（`proof` あり）なら**終端 status への遷移時に自動通知**、外部クライアントは `get_context` のポーリングで受け取る。詳細は `docs/mcp-session-messaging.md`
    - 配送キュー（`DeliveryQueue` / `SessionDeliveryService`）: MCP の送信・完了通知はすべてここを通る。宛先が入力待ちなら**積んで待ち解消後に自動配送**（インメモリ・TTL 5分・再起動で破棄）。「リトライは呼び出し側の責務」は撤回済み（依頼元がセッションだと送信直後にターンが終わるため履行不能だった）
-   - エンベロープ（常時付与）: `send_to_session` の全配送に `[TerminalHub 自動メッセージ #ID …]` をサーバーが付ける（外せない）。**マーカー無し＝人間の指示**の区別を成立させるため。真偽は `get_delivery`（`Deliveries` テーブル・スキーマ v12・TTL14日）で検証。`submit` 引数は廃止（常に Enter で確定。流し込み用途はセッション専用コマンドの `insertToInputOnly` が担う）
+   - エンベロープ（常時付与）: `send_to_session` の配送に `[TerminalHub 自動メッセージ #ID …]` をサーバーが付ける（外せない。唯一の例外は `/` で始まるスラッシュコマンド送信＝引数を汚さないため付けず、contextId とは併用不可）。本文の改行・制御文字は拒否（`\r` 埋め込みによるエンベロープ迂回を塞ぐ）。**マーカー無し＝人間の指示**の区別を成立させるため。真偽は `get_delivery`（`Deliveries` テーブル・スキーマ v12・TTL14日）で検証。`submit` 引数は廃止（常に Enter で確定。流し込み用途はセッション専用コマンドの `insertToInputOnly` が担う）
    - instructions は接続セッションごとに設定から動的に読み込む（TerminalHub 再起動不要。CLI 側の `/clear` 等で再接続時に反映）
 
 8. **CLI モード（`--notify`）**: `TerminalHub.exe --notify` で hook 通知を HTTP/HTTPS で本体へ送信。`--source codex` で Codex ネイティブ JSON を stdin 経由で `/api/hook/codex/{sessionId}` へ転送するブリッジになる（Program.cs の `RunNotifyModeAsync` / `RunCodexBridgeAsync`）
