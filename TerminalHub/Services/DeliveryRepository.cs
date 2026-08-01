@@ -71,7 +71,8 @@ namespace TerminalHub.Services
 
         // TTL 掃除: 記録から14日で削除＋総数上限（超過は古い順に削除）。
         // 検証は通常「受け取った直後」に行われるので14日は十分に余裕がある。
-        // Contexts と違い全行が終端（追記も更新もない）ため、無条件に古い順で消してよい。
+        // Contexts と違い行の内容は変わらない（更新は Pending→Committed の確定フラグのみ）ため、
+        // Committed の行を無条件に古い順で消してよい。
         // MaxCount が public なのはテスト（上限掃除の実行順序の検証）が参照するため。
         private const int TtlDays = 14;
         public const int MaxCount = 1000;
@@ -193,7 +194,7 @@ namespace TerminalHub.Services
             catch (Exception ex)
             {
                 // 後片付けの失敗で送信エラー本体を握り潰さない（ContextRepository.DeleteAsync と同じ方針）。
-                // 残っても TTL で消える追記のみの行が1件残るだけ。
+                // 残っても TTL で消える行が1件残るだけ（Pending なら上限の数えにも入らない）。
                 _logger.LogWarning(ex, "[Delivery] 記録の後片付けに失敗: {DeliveryId}", deliveryId);
             }
         }

@@ -30,7 +30,8 @@ namespace TerminalHub.Mcp
     ///   セッションの場合、送信直後にターンが終わるので再試行する契機が存在しないため）。
     ///   状態として持つのは本人検証用の SessionProof、依頼IDで引く状況札=ContextSummary、
     ///   揮発の配送キュー、および配送記録=Deliveries（エンベロープ #ID の検証台帳。
-    ///   Rejected＝受理されなかった送信の後片付けを除き追記のみ）の4つ。
+    ///   Pending で作成→配送結果で Committed へ確定 or Rejected なら削除。
+    ///   上限掃除は Committed だけを数える）の4つ。
     /// メインユースケース: Claude で仕様を書きファイル化 → その絶対パスを Codex セッションへ送って実装させる。
     /// 自分の作業状況を set_memo で一覧に書いておけば、TerminalHub から進捗が一目で分かる。
     /// </summary>
@@ -284,7 +285,7 @@ namespace TerminalHub.Mcp
                 // 札を必ず片付ける。submitted は終端状態でなく TTL 掃除の対象外なので、
                 // 残すと永久に消えない行になる。DeliveryOutcome での分岐だけに頼ると
                 // この経路が抜ける（旧実装が持っていた安全網の復元）。
-                // 配送記録は消さない（TTL で消える追記のみの台帳で、孤児の害がない）。
+                // 配送記録は消さない（Pending のまま残っても上限の数えに入らず TTL で消える）。
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
                 throw;
