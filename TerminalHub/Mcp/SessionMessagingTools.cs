@@ -312,8 +312,10 @@ namespace TerminalHub.Mcp
             }
 
             // ここから先は記録を残すことが確定（Delivered / Queued / Failed=部分配送の可能性あり）。
-            // 総数上限の掃除はこの時点で行う。INSERT 直後にやると、Rejected の一時的な +1 が
-            // 引き金になって真正な最古の記録が先に押し出され、Rejected 側を消しても戻らない。
+            // Pending → Committed へ確定してから上限掃除。掃除は Committed だけを数えるので、
+            // 並行中の他送信の未確定行が判断に混ざらない（配送時間に上限が無いため、
+            // 時刻ベースの猶予では防ぎきれない＝レビュー指摘）。
+            await deliveryRepository.CommitAsync(deliveryId);
             await deliveryRepository.PruneToCapAsync();
 
             if (outcome == DeliveryOutcome.Failed)

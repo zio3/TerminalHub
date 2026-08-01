@@ -513,13 +513,18 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 通常配送と同じ後始末をシステム通知にも適用する（send_to_session 側と対）。
         // Rejected は一度も書いていないことが確定しており、この記録は誰も参照できないため
         // 削除する（残すと Rejected の量産で真正な記録を押し出す口になる）。
-        // 上限掃除は「記録を残すことが確定した後」＝Rejected でないと分かってから行う。
+        // それ以外は Pending → Committed へ確定してから上限掃除（掃除は Committed だけを数える）。
         if (recorded)
         {
             if (outcome == DeliveryOutcome.Rejected)
+            {
                 await _deliveryRepository.DeleteAsync(deliveryId);
+            }
             else
+            {
+                await _deliveryRepository.CommitAsync(deliveryId);
                 await _deliveryRepository.PruneToCapAsync();
+            }
         }
     }
 }

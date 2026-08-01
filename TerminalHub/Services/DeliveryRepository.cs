@@ -26,17 +26,29 @@ namespace TerminalHub.Services
     public interface IDeliveryRepository
     {
         /// <summary>
-        /// 記録を追加する。掃除は **TTL のみ**行い、総数上限の掃除はしない。
+        /// 記録を **Pending（未確定）** として追加する。掃除は **TTL のみ**行い、総数上限の掃除はしない。
         /// 上限掃除を INSERT 直後にやると、Rejected（後で削除される参照不能な記録）の
         /// INSERT が引き金になって**真正な最古の記録が先に押し出され**、その後 Rejected 側を
-        /// 削除しても戻らない。上限掃除は記録を残すことが確定した後に
-        /// <see cref="PruneToCapAsync"/> で行う。
+        /// 削除しても戻らない。配送結果が出たら <see cref="CommitAsync"/> →
+        /// <see cref="PruneToCapAsync"/>（Rejected なら <see cref="DeleteAsync"/>）の順で確定させる。
         /// </summary>
         Task CreateAsync(DeliveryRecord record);
 
         /// <summary>
-        /// 総数上限の掃除（超過分を古い順に削除）。**記録を残すことが確定した後**
-        /// （Delivered / Queued / Failed＝部分配送の可能性あり）に呼ぶ。例外は投げない。
+        /// 記録を **Committed（確定）** にする。配送結果が Rejected 以外
+        /// （Delivered / Queued / Failed＝部分配送の可能性あり）と判明した時点で呼ぶ。
+        /// 例外は投げない（失敗すると行は Pending のまま＝上限の数えから外れ続けるが、
+        /// TTL で消えるので実害は「上限が実効的に少し緩む」だけ）。
+        /// </summary>
+        Task CommitAsync(string deliveryId);
+
+        /// <summary>
+        /// 総数上限の掃除（**Committed の行だけ**を数え、超過分を古い順に削除）。例外は投げない。
+        /// Pending を判断から外すのは並行送信対策: 「A（後で Rejected で削除）が行を作る →
+        /// B が行を作って掃除 → B の掃除が A の一時的な +1 を数えて真正な最古を余分に押し出す →
+        /// A が自分の行を消す」というインターリーブを、状態で数えることで原理的に防ぐ
+        /// （時刻ベースの猶予期間では、配送時間に上限が無い＝本文長×チャンク間隔・ロック待ち
+        /// 次第で猶予を超えられるため不十分だった）。
         /// </summary>
         Task PruneToCapAsync();
 
@@ -64,16 +76,6 @@ namespace TerminalHub.Services
         private const int TtlDays = 14;
         public const int MaxCount = 1000;
 
-        /// <summary>
-        /// 上限掃除の猶予期間。**この期間より新しい行は、上限掃除で数えも消しもしない**。
-        /// 並行送信では「A（後で Rejected になり削除される）が行を作る → B が行を作って
-        /// 上限掃除 → B の掃除が A の一時的な +1 を数えて真正な最古を余分に押し出す →
-        /// A が自分の行を消す」というインターリーブが起こりうる。未確定の行が存在するのは
-        /// 生成から高々数秒なので、直近の行を掃除の判断から外せばこのレースは成立しない
-        /// （上限は瞬間的に MaxCount＋並行送信数まで超過しうるが、肥大化防止の
-        /// 安全弁としては誤差の範囲）。
-        /// </summary>
-        public static readonly TimeSpan PruneGrace = TimeSpan.FromSeconds(60);
 
         public DeliveryRepository(SessionDbContext dbContext, ILogger<DeliveryRepository> logger)
         {
@@ -87,9 +89,10 @@ namespace TerminalHub.Services
             await using var connection = _dbContext.CreateConnection();
             await connection.OpenAsync();
 
+            // Committed=0（Pending）で作る。配送結果が出たら CommitAsync で確定する。
             await connection.ExecuteNonQueryAsync(@"
-                INSERT INTO Deliveries (DeliveryId, FromSessionId, FromName, ToSessionId, ToName, ContextId, SentAt)
-                VALUES (@deliveryId, @fromSessionId, @fromName, @toSessionId, @toName, @contextId, @sentAt)",
+                INSERT INTO Deliveries (DeliveryId, FromSessionId, FromName, ToSessionId, ToName, ContextId, SentAt, Committed)
+                VALUES (@deliveryId, @fromSessionId, @fromName, @toSessionId, @toName, @contextId, @sentAt, 0)",
                 ("@deliveryId", record.DeliveryId),
                 ("@fromSessionId", record.FromSessionId),
                 ("@fromName", record.FromName),
@@ -103,6 +106,26 @@ namespace TerminalHub.Services
             await PruneExpiredAsync(connection);
         }
 
+        public async Task CommitAsync(string deliveryId)
+        {
+            try
+            {
+                await _dbContext.InitializeAsync();
+                await using var connection = _dbContext.CreateConnection();
+                await connection.OpenAsync();
+
+                await connection.ExecuteNonQueryAsync(
+                    "UPDATE Deliveries SET Committed = 1 WHERE DeliveryId = @deliveryId",
+                    ("@deliveryId", deliveryId));
+            }
+            catch (Exception ex)
+            {
+                // 確定の失敗で本流（送信）を壊さない。行は Pending のまま＝上限の数えから
+                // 外れ続けるが、TTL で消える（実害は上限が実効的に少し緩むだけ）。
+                _logger.LogWarning(ex, "[Delivery] 記録の確定に失敗: {DeliveryId}", deliveryId);
+            }
+        }
+
         public async Task PruneToCapAsync()
         {
             try
@@ -111,16 +134,15 @@ namespace TerminalHub.Services
                 await using var connection = _dbContext.CreateConnection();
                 await connection.OpenAsync();
 
-                // 猶予期間内（直近 PruneGrace）の行は数えず消さない（PruneGrace のコメント参照）。
-                var graceCutoff = (DateTime.UtcNow - PruneGrace).ToString("o");
+                // Committed の行だけを数え、超過分を古い順に削除（Pending は並行送信の
+                // 未確定行なので判断から外す。インターフェースのコメント参照）。
                 await connection.ExecuteNonQueryAsync(@"
                     DELETE FROM Deliveries WHERE DeliveryId IN (
                         SELECT DeliveryId FROM Deliveries
-                        WHERE SentAt < @graceCutoff
+                        WHERE Committed = 1
                         ORDER BY SentAt ASC
-                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries WHERE SentAt < @graceCutoff) - @maxCount)
+                        LIMIT max(0, (SELECT COUNT(*) FROM Deliveries WHERE Committed = 1) - @maxCount)
                     )",
-                    ("@graceCutoff", graceCutoff),
                     ("@maxCount", MaxCount));
             }
             catch (Exception ex)

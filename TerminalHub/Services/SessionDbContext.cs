@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 12;
+        private const int CurrentSchemaVersion = 13;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -317,6 +317,30 @@ namespace TerminalHub.Services
                 _logger.LogInformation("[DB][マイグレーション] v12 適用完了");
             }
 
+            if (currentVersion < 13)
+            {
+                // v13: Deliveries に Committed（確定フラグ）を追加。上限掃除は確定済みの行だけを
+                // 数える（並行送信の未確定行が掃除の判断に混ざるのを防ぐ）。
+                // 既定 1 = 既存行（旧コードが作った行）は確定済み扱い。新規行はコード側で 0 を入れる。
+                _logger.LogInformation("[DB][マイグレーション] v13 適用開始: Deliveries に Committed カラムを追加");
+                await using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    if (!await ColumnExistsAsync(connection, "Deliveries", "Committed"))
+                    {
+                        await connection.ExecuteNonQueryAsync(
+                            "ALTER TABLE Deliveries ADD COLUMN Committed INTEGER NOT NULL DEFAULT 1");
+                        _logger.LogInformation("[DB][マイグレーション] v13: Committed カラムを追加");
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[DB][マイグレーション] v13: Committed カラムは既存のためスキップ");
+                    }
+                }
+                await SetSchemaVersionAsync(13);
+                _logger.LogInformation("[DB][マイグレーション] v13 適用完了");
+            }
+
             _logger.LogInformation("[DB][マイグレーション] 完了");
         }
 
@@ -560,7 +584,8 @@ namespace TerminalHub.Services
                     ToSessionId TEXT NOT NULL,
                     ToName TEXT NOT NULL,
                     ContextId TEXT,
-                    SentAt TEXT NOT NULL
+                    SentAt TEXT NOT NULL,
+                    Committed INTEGER NOT NULL DEFAULT 1
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_deliveries_sentat ON Deliveries(SentAt);
