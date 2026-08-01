@@ -115,7 +115,7 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
 
 5. **永続化とデータ層**
    - `SessionDbContext` + `SqliteStorageService`: セッション状態を SQLite に永続化（`Microsoft.Data.Sqlite`）。従来の `LocalStorageService`（ブラウザ）と併用する二層構成
-   - `ISessionRepository` / `ISessionMemoRepository` / `ISessionMemoSnapshotRepository` / `IContextRepository`: セッション本体・メモ・メモ編集履歴・ContextSummary（依頼の状況札）のリポジトリ
+   - `ISessionRepository` / `ISessionMemoRepository` / `ISessionMemoSnapshotRepository` / `IContextRepository` / `IDeliveryRepository`: セッション本体・メモ・メモ編集履歴・ContextSummary（依頼の状況札）・配送記録（エンベロープ #ID の検証台帳）のリポジトリ
    - `MemoSnapshotService`: メモ編集履歴を10分毎に自動スナップショット（HostedService）
    - `AppSettingsService`: ファイルベースのアプリ設定（LocalStorage とは別系統）
    - `AppDataPaths`: DB / app-settings / logs の保存先を `%LOCALAPPDATA%\TerminalHub\` 配下で `IsDevelopment` により切替（dev=`sessions-dev.db` / prod=`sessions.db`）。詳細はメモリの「dev/prodデータ保存先」を参照

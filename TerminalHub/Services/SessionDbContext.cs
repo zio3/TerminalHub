@@ -568,7 +568,9 @@ namespace TerminalHub.Services
 
         /// <summary>
         /// v12: 配送記録テーブル。send_to_session の各配送に発行される deliveryId
-        /// （エンベロープの #ID）から From/To を引く台帳。全行が追記のみ（更新なし）。
+        /// （エンベロープの #ID）から From/To を引く台帳。
+        /// 行の内容は作成後変わらないが、Committed（Pending→確定、v13）の更新と
+        /// Rejected 時の削除がある。
         /// From は proof 検証済みの送信元で、NULL = 無記名（外部クライアントの可能性を含む）。
         /// </summary>
         private async Task CreateDeliveriesTableAsync()
