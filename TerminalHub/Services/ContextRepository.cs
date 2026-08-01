@@ -31,7 +31,14 @@ namespace TerminalHub.Services
     /// RewindRejected は「終端状態の札を進行中へ戻そうとして拒否した」ことを表す
     /// （黙って無視すると、書けたつもりの呼び出し側が気づけないため結果で返す）。
     /// </summary>
-    public record ContextUpdateResult(bool Found, bool StatusTransitioned, bool RewindRejected = false);
+    /// Conflicted は「他の書き込みと競合し続けて更新できなかった」ことを表す。
+    /// **Found=false（札が無い）と混ぜないこと**。札は存在しており、原因も対処も違う
+    /// （前者は諦める・後者は再試行する）。
+    public record ContextUpdateResult(
+        bool Found,
+        bool StatusTransitioned,
+        bool RewindRejected = false,
+        bool Conflicted = false);
 
     /// <summary>
     /// ContextSummary の永続化リポジトリ。
@@ -226,10 +233,12 @@ namespace TerminalHub.Services
 
             // ここへ来るのは、毎回その隙間で status が動き続けた場合だけ（現実には起きない）。
             // 黙って成功扱いにすると書けていないのに書けたつもりになるので、失敗として返す。
+            // **Found=true のまま Conflicted で返す**。札は存在しているので、
+            // 「contextId が見つかりません」と報告すると原因も対処も誤って伝わる。
             _logger.LogWarning(
                 "[Context] status の競合が続いて更新できませんでした: {ContextId} (試行={Attempts})",
                 contextId, MaxUpdateAttempts);
-            return new ContextUpdateResult(false, StatusTransitioned: false);
+            return new ContextUpdateResult(true, StatusTransitioned: false, Conflicted: true);
         }
 
         public async Task DeleteAsync(string contextId)

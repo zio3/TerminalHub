@@ -533,6 +533,13 @@ namespace TerminalHub.Mcp
                 return new SendResult(false,
                     $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
 
+            // 札は存在するが他の書き込みと競合し続けた場合。「見つかりません」と混ぜると
+            // 原因も対処も誤って伝わるので分けて返す（こちらは再試行すれば通る）。
+            if (updated.Conflicted)
+                return new SendResult(false,
+                    $"他の書き込みと競合したため更新できませんでした: {contextId}。" +
+                    "札は存在しているので、そのまま同じ内容で再試行してください。");
+
             // 黙って無視すると「書けたつもり」で先へ進んでしまうので、拒否は明示して返す。
             if (updated.RewindRejected)
                 return new SendResult(false,
