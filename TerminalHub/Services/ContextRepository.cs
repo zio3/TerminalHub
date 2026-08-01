@@ -23,6 +23,15 @@ namespace TerminalHub.Services
         string? RequesterName);
 
     /// <summary>
+    /// 更新の結果。
+    /// StatusTransitioned は「この呼び出しが status を実際に変えた」ことを表す。
+    /// 完了通知は**これが true のときだけ**撃つ。読み取り→判定→更新を別々に行うと、
+    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と判断して
+    /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
+    /// </summary>
+    public record ContextUpdateResult(bool Found, bool StatusTransitioned);
+
+    /// <summary>
     /// ContextSummary の永続化リポジトリ。
     /// contextId は send_to_session が発行する推測不能な値で capability を兼ねる
     /// （知っている=読み書きできる。proof と同じ哲学で認証を別途作らない）。
@@ -37,10 +46,10 @@ namespace TerminalHub.Services
         Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null);
         Task<ContextRecord?> GetAsync(string contextId);
         /// <summary>
-        /// 要約を全体上書きし、status 指定があれば併せて更新する。対象が無ければ false。
+        /// 要約を全体上書きし、status 指定があれば併せて更新する。
         /// updatedBy* は proof 検証済みの書き込み元（無記名なら null を渡す＝前回の記名は消える）。
         /// </summary>
-        Task<bool> UpdateAsync(string contextId, string summary, string? status,
+        Task<ContextUpdateResult> UpdateAsync(string contextId, string summary, string? status,
             string? updatedBySessionId, string? updatedByName);
 
         /// <summary>
@@ -117,7 +126,7 @@ namespace TerminalHub.Services
                 reader.IsDBNull(8) ? null : reader.GetString(8));
         }
 
-        public async Task<bool> UpdateAsync(string contextId, string summary, string? status,
+        public async Task<ContextUpdateResult> UpdateAsync(string contextId, string summary, string? status,
             string? updatedBySessionId, string? updatedByName)
         {
             await _dbContext.InitializeAsync();
@@ -125,10 +134,10 @@ namespace TerminalHub.Services
             await connection.OpenAsync();
 
             var now = DateTime.UtcNow.ToString("o");
-            int affected;
+
             if (string.IsNullOrEmpty(status))
             {
-                affected = await connection.ExecuteNonQueryAsync(@"
+                var affected = await connection.ExecuteNonQueryAsync(@"
                     UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
                         UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
                     WHERE ContextId = @contextId",
@@ -137,21 +146,39 @@ namespace TerminalHub.Services
                     ("@now", now),
                     ("@updatedBySessionId", updatedBySessionId),
                     ("@updatedByName", updatedByName));
+                return new ContextUpdateResult(affected > 0, StatusTransitioned: false);
             }
-            else
-            {
-                affected = await connection.ExecuteNonQueryAsync(@"
-                    UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
-                        UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
-                    WHERE ContextId = @contextId",
-                    ("@contextId", contextId),
-                    ("@summary", summary),
-                    ("@status", status),
-                    ("@now", now),
-                    ("@updatedBySessionId", updatedBySessionId),
-                    ("@updatedByName", updatedByName));
-            }
-            return affected > 0;
+
+            // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
+            // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
+            // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
+            var transitioned = await connection.ExecuteNonQueryAsync(@"
+                UPDATE Contexts SET Summary = @summary, Status = @status, UpdatedAt = @now,
+                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+                WHERE ContextId = @contextId AND Status <> @status",
+                ("@contextId", contextId),
+                ("@summary", summary),
+                ("@status", status),
+                ("@now", now),
+                ("@updatedBySessionId", updatedBySessionId),
+                ("@updatedByName", updatedByName));
+
+            if (transitioned > 0)
+                return new ContextUpdateResult(true, StatusTransitioned: true);
+
+            // 0行だったのは「同じ status への書き直し」か「札が無い」のどちらか。
+            // 前者でも要約と記名は更新する（status は変わらないので通知はしない）。
+            var rewritten = await connection.ExecuteNonQueryAsync(@"
+                UPDATE Contexts SET Summary = @summary, UpdatedAt = @now,
+                    UpdatedBySessionId = @updatedBySessionId, UpdatedByName = @updatedByName
+                WHERE ContextId = @contextId",
+                ("@contextId", contextId),
+                ("@summary", summary),
+                ("@now", now),
+                ("@updatedBySessionId", updatedBySessionId),
+                ("@updatedByName", updatedByName));
+
+            return new ContextUpdateResult(rewritten > 0, StatusTransitioned: false);
         }
 
         public async Task DeleteAsync(string contextId)

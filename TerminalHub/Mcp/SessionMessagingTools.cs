@@ -203,16 +203,26 @@ namespace TerminalHub.Mcp
             var outcome = await deliveryService.SendAsync(
                 info, deliveredMessage, submit, effectiveContextId, requester?.SessionId);
 
-            if (outcome == DeliveryOutcome.Rejected)
+            if (outcome is DeliveryOutcome.Rejected or DeliveryOutcome.Failed)
             {
                 // 受理できなかったので、発行したばかりの札を片付ける。submitted は終端状態でなく
                 // TTL 掃除の対象外のため、残すと永続の孤児になる。
                 if (issuedContextId != null)
                     await contextRepository.DeleteAsync(issuedContextId);
 
-                return new SendResult(false,
-                    $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
-                    $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
+                // 失敗の種類で「次に取るべき行動」が正反対なので、文面を分ける。
+                // Failed は書き込みの途中で落ちており、本文だけ相手の入力欄へ届いている
+                // 可能性がある。ここで同じ内容を再送させると本文が二重に連結される。
+                return outcome == DeliveryOutcome.Failed
+                    ? new SendResult(false,
+                        $"宛先への書き込みが途中で失敗しました: {info.GetDisplayName()}。" +
+                        $"**同じ内容をそのまま再送しないでください**（本文だけが相手の入力欄に " +
+                        $"届いている可能性があり、再送すると二重に連結されます）。" +
+                        $"ユーザーに宛先セッションの状態を確認してもらい、必要なら人間の目で入力欄を" +
+                        $"片付けてから送り直してください。")
+                    : new SendResult(false,
+                        $"宛先が受理できる状態にありません(未起動、または配送待ちが上限)。" +
+                        $"ユーザーに『{info.GetDisplayName()}』の状態を確認してもらってください。");
             }
 
             var queued = outcome == DeliveryOutcome.Queued;
@@ -462,9 +472,6 @@ namespace TerminalHub.Mcp
                     return new SendResult(false, ProofRejectedMessage);
             }
 
-            // 通知が要るかの判定に前の status が要るので、更新前に読む。
-            var before = await contextRepository.GetAsync(contextId ?? "");
-
             var newStatus = status?.ToLowerInvariant();
             var updated = await contextRepository.UpdateAsync(
                 contextId ?? "",
@@ -472,7 +479,7 @@ namespace TerminalHub.Mcp
                 newStatus,
                 writer?.SessionId.ToString(),
                 writer?.GetDisplayName());
-            if (!updated)
+            if (!updated.Found)
                 return new SendResult(false,
                     $"contextId が見つかりません: {contextId}。終端状態(completed等)から一定期間で自動削除されます。");
 
@@ -480,9 +487,12 @@ namespace TerminalHub.Mcp
             // working への遷移でも撃つと、依頼元は「着手した」を聞くためだけにフルターンを1回起こす
             // ことになり（送信直後にターンを終えているので毎回起床する）、得るものが無い。
             // 意図的な中間報告は、受け手がエンベロープの依頼元へ send_to_session で自分から返す。
-            if (newStatus != null &&
-                TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal) &&
-                !string.Equals(before?.Status, newStatus, StringComparison.Ordinal))
+            //
+            // 遷移が成立したかの判定はリポジトリ側（条件付き UPDATE）で行う。ここで読み直して
+            // 比べると、同時に書いた2者が両方とも遷移したと誤認して依頼元を二度起こす。
+            if (updated.StatusTransitioned &&
+                newStatus != null &&
+                TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal))
             {
                 await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus);
             }

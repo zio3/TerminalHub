@@ -10,8 +10,14 @@ public enum DeliveryOutcome
     Delivered,
     /// <summary>宛先が入力待ちのため積んだ。ready になり次第配送される。</summary>
     Queued,
-    /// <summary>受理できなかった（未起動・待ち行列が上限）。</summary>
+    /// <summary>受理できなかった（未起動・待ち行列が上限）。**同じ内容で再送してよい**。</summary>
     Rejected,
+    /// <summary>
+    /// 書き込みの途中で失敗した。**同じ内容で再送してはいけない**（本文だけ相手の入力欄へ
+    /// 届いている可能性があり、再送すると二重に連結される）。Rejected と分けているのは、
+    /// 呼び出し側に伝えるべき次の行動が正反対だから。
+    /// </summary>
+    Failed,
 }
 
 public interface ISessionDeliveryService
@@ -140,37 +146,54 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         return await EnqueueOrWriteAsync(target, item);
     }
 
+    /// <summary>
+    /// 直接書くか積むかを決めて実行する。
+    ///
+    /// **判定・投函・直接書き込みをすべて同じ宛先ロックの中で行う**。待ち行列の件数を
+    /// ロックの外で見ると、同時に来た2件がどちらも「行列は空」と判断して直接書き込み経路へ入り、
+    /// 書き込み自体は直列化されるものの、どちらが先になるかがタスクのスケジューリング任せになる。
+    /// ロック内で判定すれば、2件目は必ず「行列に1件ある」を見て積むので到着順が保たれる。
+    /// </summary>
     private async Task<DeliveryOutcome> EnqueueOrWriteAsync(SessionInfo target, DeliveryItem item)
     {
-        // 待ちでなく、かつ先着の待ち行列も無いときだけ直接書く。
-        // 行列があるのに割り込むと FIFO が壊れるので、その場合は末尾へ積んで掃除に任せる。
-        if (!target.IsWaitingForUserInput && _queue.CountFor(target.SessionId) == 0)
+        var gate = GetWriteLock(target.SessionId);
+        await gate.WaitAsync();
+        try
         {
-            switch (await TryWriteAsync(target, item))
+            // 先着の待ち行列が無いときだけ直接書く。行列があるのに割り込むと FIFO が壊れる。
+            // 入力待ちかどうかは WritePairAsync が書き込み直前に見る（NotReady が返る）。
+            if (_queue.CountFor(target.SessionId) == 0)
             {
-                case WriteResult.Delivered:
-                    return DeliveryOutcome.Delivered;
+                switch (await WritePairAsync(target, item))
+                {
+                    case WriteResult.Delivered:
+                        return DeliveryOutcome.Delivered;
 
-                // 書き込みが失敗した宛先は積まない。ConPTY が死んでいれば ready には戻らず、
-                // TTL の5分ぶん失敗を隠すだけになる。呼び出し元へその場で返す
-                // （旧実装が例外で即座に失敗を伝えていたのと同じ即時性を保つ）。
-                case WriteResult.Failed:
-                    return DeliveryOutcome.Rejected;
+                    // 書き込みが失敗した宛先は積まない。ConPTY が死んでいれば ready には戻らず、
+                    // TTL の5分ぶん失敗を隠すだけになる。呼び出し元へその場で返す
+                    // （旧実装が例外で即座に失敗を伝えていたのと同じ即時性を保つ）。
+                    case WriteResult.Failed:
+                        return DeliveryOutcome.Failed;
+                }
             }
-        }
 
-        if (!_queue.Enqueue(item))
+            if (!_queue.Enqueue(item))
+            {
+                _logger.LogWarning(
+                    "[配送] 待ち行列が上限のため受理できません: {Target} (上限={Max})",
+                    target.GetDisplayName(), DeliveryQueue.MaxPerTarget);
+                return DeliveryOutcome.Rejected;
+            }
+
+            _logger.LogInformation(
+                "[配送] 宛先が入力待ちのため積みました: {Target} (待ち={Count})",
+                target.GetDisplayName(), _queue.CountFor(target.SessionId));
+            return DeliveryOutcome.Queued;
+        }
+        finally
         {
-            _logger.LogWarning(
-                "[配送] 待ち行列が上限のため受理できません: {Target} (上限={Max})",
-                target.GetDisplayName(), DeliveryQueue.MaxPerTarget);
-            return DeliveryOutcome.Rejected;
+            gate.Release();
         }
-
-        _logger.LogInformation(
-            "[配送] 宛先が入力待ちのため積みました: {Target} (待ち={Count})",
-            target.GetDisplayName(), _queue.CountFor(target.SessionId));
-        return DeliveryOutcome.Queued;
     }
 
     /// <summary>
@@ -186,21 +209,6 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         NotReady,
         /// <summary>書き込み自体が失敗した。**再試行しない**（本文が途中まで届いている可能性がある）。</summary>
         Failed,
-    }
-
-    /// <summary>宛先ごとの直列化つきで1件書き込む。</summary>
-    private async Task<WriteResult> TryWriteAsync(SessionInfo target, DeliveryItem item)
-    {
-        var gate = GetWriteLock(target.SessionId);
-        await gate.WaitAsync();
-        try
-        {
-            return await WritePairAsync(target, item);
-        }
-        finally
-        {
-            gate.Release();
-        }
     }
 
     /// <summary>
@@ -369,8 +377,13 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             // 使われない行が永久に残る（ContextRepository の後片付けと同じ理由）。
             var summary =
                 $"宛先「{targetName}」へ配送できませんでした（{reason}）。メッセージは届いていません。";
-            await _contextRepository.UpdateAsync(item.ContextId, summary, "failed", null, SystemWriterName);
-            await NotifyContextStatusAsync(item.ContextId, "failed");
+            var updated = await _contextRepository.UpdateAsync(
+                item.ContextId, summary, "failed", null, SystemWriterName);
+
+            // 既に終端状態だった（受け手が先に書いた等）なら通知しない。
+            // 遷移を成立させた側だけが撃つ、という規則は update_context と共通。
+            if (updated.StatusTransitioned)
+                await NotifyContextStatusAsync(item.ContextId, "failed");
             return;
         }
 
