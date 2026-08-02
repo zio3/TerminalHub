@@ -550,9 +550,8 @@ namespace TerminalHub.Mcp
         private static readonly string[] AllowedContextStatuses =
             { "submitted", "working", "completed", "failed", "canceled" };
 
-        /// <summary>依頼が閉じた状態。この status の書き込みが成功したとき（同一終端への再書き込み含む）依頼元へ自動通知する。</summary>
-        private static readonly string[] TerminalContextStatuses =
-            { "completed", "failed", "canceled" };
+        // 終端 status の定義と通知要否の判定は ContextNotifyPolicy が正本
+        // （書き込み成功時は毎回通知・依頼元自身は除く。テスト可能にするため分離）。
 
         /// <summary>
         /// get_context の結果。updatedBy は最終書き込み者の検証済みセッション名
@@ -660,10 +659,14 @@ namespace TerminalHub.Mcp
             // 代償として、同時に completed を書いた2者がいると依頼元が二度起きることがあるが、
             // どちらの通知も「最新の要約を読みに行く」以上の意味を持たないので実害は薄い
             // （通知は status と contextId を運ぶだけで、内容は get_context で読む）。
-            if (newStatus != null &&
-                TerminalContextStatuses.Contains(newStatus, StringComparer.Ordinal))
+            //
+            // writer を渡すのは**依頼元自身の書き込みに通知しない**ため: 通知文面が
+            // update_context への記入を促すので、自己書き込みにも通知すると
+            // 「自分へ再通知 → また書く」の自己励振ループが成立してしまう（レビュー指摘。
+            // 抑止の判定は ContextNotifyPolicy に分離してテストで固定）。
+            if (ContextNotifyPolicy.IsTerminal(newStatus))
             {
-                await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus);
+                await deliveryService.NotifyContextStatusAsync(contextId ?? "", newStatus!, writer?.SessionId);
             }
 
             return new SendResult(true,
