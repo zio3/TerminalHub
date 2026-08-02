@@ -9,7 +9,7 @@ namespace TerminalHub.Services
     /// UpdatedBy* は最終書き込み者。本人確定済み（接続キー検証）のセッションが書いた場合のみ入り、
     /// 無記名の書き込み（外部クライアント等）では null（=無記名と区別できる）。
     /// Requester* は依頼元。send_to_session の呼び出し元が本人確定できたときだけ入り、
-    /// 終端 status への遷移をその相手へ通知するために使う（外部クライアントの依頼では null）。
+    /// 終端 status の書き込みをその相手へ通知するために使う（外部クライアントの依頼では null）。
     /// </summary>
     public record ContextRecord(
         string ContextId,
@@ -25,9 +25,11 @@ namespace TerminalHub.Services
     /// <summary>
     /// 更新の結果。
     /// StatusTransitioned は「この呼び出しが status を実際に変えた」ことを表す。
-    /// 完了通知は**これが true のときだけ**撃つ。読み取り→判定→更新を別々に行うと、
-    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と判断して
-    /// 依頼元を二度起こしてしまうため、遷移の成立判定は SQL 側（条件付き UPDATE）で行う。
+    /// 遷移の成立判定は SQL 側（条件付き UPDATE）で行う（読み取り→判定→更新を別々に行うと、
+    /// 同じ札へ同時に書いた2者が両方とも「working から completed へ変えた」と誤認するため）。
+    /// なお完了通知の条件は当初「StatusTransitioned のときだけ」だったが、
+    /// 「終端 status の書き込み成功（同一終端への再書き込み含む）」へ緩めた
+    /// （再完了の続報が依頼元に伝わらない実害があったため。判定は呼び出し側=UpdateContext）。
     /// RewindRejected は「終端状態の札を進行中へ戻そうとして拒否した」ことを表す
     /// （黙って無視すると、書けたつもりの呼び出し側が気づけないため結果で返す）。
     /// Conflicted は「他の書き込みと競合し続けて更新できなかった」ことを表す。
@@ -49,7 +51,7 @@ namespace TerminalHub.Services
     {
         /// <summary>
         /// 札を作る。requester* は依頼元（接続キーで検証済みのセッション）。
-        /// 記録があれば終端 status への遷移をその相手へ通知でき、無ければ依頼元は
+        /// 記録があれば終端 status の書き込みをその相手へ通知でき、無ければ依頼元は
         /// get_context のポーリングで結果を取る（受信箱を持たない外部クライアント）。
         /// </summary>
         Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null);
@@ -173,8 +175,10 @@ namespace TerminalHub.Services
             for (var attempt = 0; attempt < MaxUpdateAttempts; attempt++)
             {
                 // まず「status が今と違う場合だけ」更新する。1行更新できた＝**この呼び出しが遷移を
-                // 成立させた**ということなので、完了通知を撃つ資格があるのはこの呼び出しだけになる。
-                // 読み取ってから判定すると、同時に書いた2者が両方とも遷移したと誤認する。
+                // 成立させた**という事実が StatusTransitioned で返る（読み取ってから判定すると、
+                // 同時に書いた2者が両方とも遷移したと誤認する）。通知の可否はもうこのフラグだけでは
+                // 決まらない（update_context 経路は終端 status の書き込み成功で毎回通知・依頼元自身を
+                // 除く。ContextNotifyPolicy 参照。システム経路は今もこのフラグで遷移時のみ）。
                 //
                 // あわせて**終端状態からの巻き戻しを拒む**。一度 completed になった札へ working を
                 // 書けてしまうと、依頼が閉じたのに一覧上は進行中に戻り、TTL 掃除の対象からも外れる。
@@ -208,7 +212,8 @@ namespace TerminalHub.Services
                 if (!isTerminal && TerminalStatuses.Contains(current, StringComparer.Ordinal))
                     return new ContextUpdateResult(true, StatusTransitioned: false, RewindRejected: true);
 
-                // 同じ status への書き直し。要約と記名は更新する（status は変わらないので通知はしない）。
+                // 同じ status への書き直し。要約と記名を更新する（終端 status なら呼び出し側が
+                // 通知も撃つ＝「再完了」の続報を依頼元へ届けるため）。
                 //
                 // **ここでも Status を条件に入れる**のが要点。付けずに書くと、現在値を読んでから
                 // この UPDATE が走るまでの間に別の呼び出しが completed → failed を成立させた場合、

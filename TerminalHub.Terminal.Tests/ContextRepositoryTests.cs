@@ -70,8 +70,10 @@ public sealed class ContextRepositoryTests : IDisposable
     [Fact]
     public async Task 同じstatusへの書き直しは遷移にならないが要約は更新される()
     {
-        // 完了通知は「遷移を成立させた側」だけが撃つので、ここが true になると
-        // 要約を書き直しただけで依頼元を起こしてしまう。
+        // StatusTransitioned は「実際に status を変えたか」の事実を返す（同一 status の
+        // 書き直しで true になってはいけない）。なお完了通知の条件はこのフラグから
+        // 「終端 status の書き込み成功」へ緩められた（再完了の続報を届けるため。
+        // working の書き直しは従来どおり通知されない＝このテストの前提は変わらない）。
         var id = await CreateAsync();
         await _repository.UpdateAsync(id, "1回目", "working", null, null);
 

@@ -39,6 +39,8 @@
     <Compile Include="..\TerminalHub\Services\MessageTextGuard.cs" Link="MessageTextGuard.cs" />
     <!-- 依頼の状況札。status 遷移の判定が SQL の条件付き UPDATE に載っているため、実 SQLite で検証する -->
     <Compile Include="..\TerminalHub\Services\ContextRepository.cs" Link="ContextRepository.cs" />
+    <!-- 完了通知の要否判定（自己再通知ループ防止を含む純ロジック） -->
+    <Compile Include="..\TerminalHub\Services\ContextNotifyPolicy.cs" Link="ContextNotifyPolicy.cs" />
     <Compile Include="..\TerminalHub\Services\DeliveryRepository.cs" Link="DeliveryRepository.cs" />
     <Compile Include="..\TerminalHub\Services\SessionDbContext.cs" Link="SessionDbContext.cs" />
     <!-- CLI 出力解析器（UI 非依存の純ロジック）。テーブル駆動テスト用にリンク -->

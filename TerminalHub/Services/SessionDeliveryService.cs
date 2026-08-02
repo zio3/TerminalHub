@@ -33,10 +33,14 @@ public interface ISessionDeliveryService
         Guid? requesterSessionId = null);
 
     /// <summary>
-    /// ContextSummary が終端 status へ遷移したことを依頼元セッションへ通知する。
+    /// ContextSummary に終端 status が書き込まれたことを依頼元セッションへ通知する
+    /// （通知の要否＝遷移時のみか毎回かは呼び出し側が決める。update_context 経路は
+    /// 再書き込みでも呼び、システムの失敗記録経路は遷移時のみ呼ぶ）。
     /// 依頼元が記録されていない（外部クライアントの依頼）場合は何もしない。
+    /// writerSessionId を渡すと、それが依頼元自身のときは通知しない（自己再通知ループ防止。
+    /// <see cref="ContextNotifyPolicy"/> 参照）。
     /// </summary>
-    Task NotifyContextStatusAsync(string contextId, string status);
+    Task NotifyContextStatusAsync(string contextId, string status, Guid? writerSessionId = null);
 }
 
 /// <summary>
@@ -425,7 +429,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 item.ContextId, description, "failed", null, SystemWriterName);
 
             // 既に終端状態だった（受け手が先に書いた等）なら通知しない。
-            // 遷移を成立させた側だけが撃つ、という規則は update_context と共通。
+            // ここは**遷移を成立させたときだけ**撃つ: update_context 側は「同一終端への
+            // 再書き込みでも通知する」（人間が意図した再完了の続報を届けるため）に緩めたが、
+            // この経路は機械的な失敗記録なので、重複で依頼元を起こす価値がない。
             if (updated.StatusTransitioned)
                 await NotifyContextStatusAsync(item.ContextId, "failed");
             return;
@@ -437,7 +443,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         }
     }
 
-    public async Task NotifyContextStatusAsync(string contextId, string status)
+    public async Task NotifyContextStatusAsync(string contextId, string status, Guid? writerSessionId = null)
     {
         var record = await _contextRepository.GetAsync(contextId);
         if (record == null)
@@ -446,6 +452,12 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 依頼元が記録されていない＝外部クライアントからの依頼。ポーリングで取ってもらう。
         if (string.IsNullOrEmpty(record.RequesterSessionId) ||
             !Guid.TryParse(record.RequesterSessionId, out var requesterId))
+            return;
+
+        // 依頼元自身の書き込みには通知しない。「終端の書き込みで毎回通知」へ緩めた結果、
+        // 通知文面（update_context に書いて終えよ）→ 依頼元が同じ札へ終端を書く → また通知、
+        // という自己励振ループが成立し得るため、書き込み元＝依頼元をここで断ち切る（レビュー指摘）。
+        if (!ContextNotifyPolicy.ShouldNotifyRequester(record.RequesterSessionId, writerSessionId))
             return;
 
         await SendSystemCallbackAsync(requesterId,
