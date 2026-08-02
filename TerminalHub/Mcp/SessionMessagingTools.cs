@@ -396,8 +396,11 @@ namespace TerminalHub.Mcp
             if (requester == null)
                 return $" [{head} — {from} / contextId: {contextId} — 状況・結果は update_context で共有]";
 
+            // 「完了時は…」という表現は使わない: 受け手が「自分の作業が全部終わったら書く」と
+            // 解釈して working のまま回答を書き、依頼元に永遠に伝わらない実害があった（2026-08-02）。
+            // 札は「この依頼」単位＝依頼に応えられた時点で completed。working は通知されない事実も明記する。
             return $" [{head} — {from} / contextId: {contextId} — " +
-                   "完了時は update_context に status と結果を書く。途中で相談したいときだけ send_to_session で依頼元へ返す]";
+                   "回答・結果は update_context に status=completed で書く(working は依頼元に通知されない)。途中で相談したいときだけ send_to_session で依頼元へ返す]";
         }
 
         [McpServerTool(Name = "set_memo")]
@@ -598,7 +601,10 @@ namespace TerminalHub.Mcp
             "依頼を受けた側が「今どうなっているか・結果」を書く用途(依頼側は get_context で読む)。" +
             "summary は要約1枚(履歴は積まれない)。長い成果物はファイルに書いてパスを載せる。" +
             "status は submitted / working / completed / failed / canceled (A2A TaskState 準拠)。" +
-            "完了時は status=completed と結果の要約をセットで書くこと。" +
+            "**依頼元に通知が届くのは終端status(completed / failed / canceled)を書いたときだけ**で、" +
+            "working では通知されない。札は「その依頼」単位なので、依頼(質問・作業)に応えられた時点で " +
+            "status=completed と結果の要約をセットで書くこと(あなたに残作業があっても札の完了とは別。" +
+            "残作業が終わったら同じ札にもう一度 completed を書けば続報として再通知される)。" +
             "セッション内からの書き込みは接続キーにより自動で記名される(「どのセッションが書いたか」が" +
             "検証済みで記録され、依頼側が信頼できる。引数で証明を渡す必要はない)。" +
             "本人確定できない接続からでも書けるが無記名になる(外部クライアント用)。")]
