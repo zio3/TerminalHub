@@ -9,7 +9,7 @@ namespace TerminalHub.Services
     /// UpdatedBy* は最終書き込み者。本人確定済み（接続キー検証）のセッションが書いた場合のみ入り、
     /// 無記名の書き込み（外部クライアント等）では null（=無記名と区別できる）。
     /// Requester* は依頼元。send_to_session の呼び出し元が本人確定できたときだけ入り、
-    /// 終端 status への遷移をその相手へ通知するために使う（外部クライアントの依頼では null）。
+    /// 終端 status の書き込みをその相手へ通知するために使う（外部クライアントの依頼では null）。
     /// </summary>
     public record ContextRecord(
         string ContextId,
@@ -51,7 +51,7 @@ namespace TerminalHub.Services
     {
         /// <summary>
         /// 札を作る。requester* は依頼元（接続キーで検証済みのセッション）。
-        /// 記録があれば終端 status への遷移をその相手へ通知でき、無ければ依頼元は
+        /// 記録があれば終端 status の書き込みをその相手へ通知でき、無ければ依頼元は
         /// get_context のポーリングで結果を取る（受信箱を持たない外部クライアント）。
         /// </summary>
         Task CreateAsync(string contextId, string? requesterSessionId = null, string? requesterName = null);

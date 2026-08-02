@@ -285,7 +285,7 @@ namespace TerminalHub.Services
             if (currentVersion < 11)
             {
                 // v11: Contexts に依頼元（RequesterSessionId / RequesterName）を追加。
-                // 終端 status への遷移を依頼元セッションへ通知するために使う。
+                // 終端 status の書き込みを依頼元セッションへ通知するために使う。
                 _logger.LogInformation("[DB][マイグレーション] v11 適用開始: Contexts に依頼元カラムを追加");
                 await using (var connection = new SqliteConnection(_connectionString))
                 {
