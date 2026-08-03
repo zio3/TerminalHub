@@ -883,6 +883,36 @@
     }
 
     /// <summary>
+    /// 右クリックメニューの「フォルダを開く」（JavaScript から呼び出される）。
+    /// パスをセッションのフォルダ基準で解決し、親フォルダを Explorer で開いて対象を選択状態にする。
+    /// ファイルをメール等へドラッグしたい（開くのではなく置き場所へ行きたい）ケース向け。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnTerminalPathOpenFolder(string sessionId, string path)
+    {
+        try
+        {
+            // 解決規則は ResolveTerminalPath と同一（行番号付き表記のフォールバック込み）
+            var resolved = await ResolveTerminalPath(sessionId, path);
+            if (resolved == null)
+            {
+                toast?.ShowWarning(string.Format(L["Root.Toast.PathNotFoundFormat"], path.Trim()));
+                return;
+            }
+
+            if (ExplorerLauncher.OpenFolderAndSelect(resolved))
+            {
+                var parent = System.IO.Path.GetDirectoryName(resolved);
+                toast?.ShowSuccess(string.Format(L["Root.Toast.FolderOpenedFormat"], parent ?? resolved));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[PathOpenFolder] フォルダを開けませんでした: {Path}", path);
+        }
+    }
+
+    /// <summary>
     /// 選択テキストをセッションのフォルダ基準で解決し、実在すれば絶対パスを返す（JavaScript から呼び出される）。
     /// 右クリックメニューの「フルパスをコピー」用。実在しなければ null を返し、呼び出し側はメニューを出さない。
     /// </summary>

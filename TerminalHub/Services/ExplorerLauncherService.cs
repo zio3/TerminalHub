@@ -15,6 +15,12 @@ public interface IExplorerLauncherService
     /// 戻り値は「explorer.exe の起動まで成功したか」。前面化の成否は含まない（非同期のベストエフォート）。
     /// </summary>
     bool OpenFolder(string path);
+
+    /// <summary>
+    /// エクスプローラーで親フォルダを開き、指定したファイル/フォルダを選択状態にして前面に出す
+    /// （explorer /select）。対象が実在しなければ何もしない。戻り値の意味は OpenFolder と同じ。
+    /// </summary>
+    bool OpenFolderAndSelect(string itemPath);
 }
 
 public class ExplorerLauncherService : IExplorerLauncherService
@@ -31,18 +37,32 @@ public class ExplorerLauncherService : IExplorerLauncherService
 
     public bool OpenFolder(string path)
     {
+        if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+            return false;
+
+        return LaunchExplorer($"\"{path.Replace('/', '\\')}\"", path);
+    }
+
+    public bool OpenFolderAndSelect(string itemPath)
+    {
+        if (string.IsNullOrEmpty(itemPath) || (!File.Exists(itemPath) && !Directory.Exists(itemPath)))
+            return false;
+
+        // /select は親フォルダを開いて対象をハイライトする（ファイルにもフォルダにも使える）
+        return LaunchExplorer($"/select,\"{itemPath.Replace('/', '\\')}\"", itemPath);
+    }
+
+    private bool LaunchExplorer(string arguments, string pathForLog)
+    {
         try
         {
-            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
-                return false;
-
             // 起動前のウィンドウ一覧を控えておき、後で「新しく増えたウィンドウ」を特定する
             var before = ForegroundWindowHelper.FindVisibleWindowsByClass(ExplorerWindowClass).ToHashSet();
 
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
-                Arguments = $"\"{path.Replace('/', '\\')}\"",
+                Arguments = arguments,
                 UseShellExecute = true,
             });
 
@@ -68,7 +88,7 @@ public class ExplorerLauncherService : IExplorerLauncherService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "[ExplorerLauncher] ウィンドウ前面化に失敗: {Path}", path);
+                    _logger.LogWarning(ex, "[ExplorerLauncher] ウィンドウ前面化に失敗: {Path}", pathForLog);
                 }
             });
 
@@ -76,7 +96,7 @@ public class ExplorerLauncherService : IExplorerLauncherService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[ExplorerLauncher] フォルダを開けませんでした: {Path}", path);
+            _logger.LogError(ex, "[ExplorerLauncher] フォルダを開けませんでした: {Path}", pathForLog);
             return false;
         }
     }
