@@ -80,8 +80,9 @@ public sealed class VtParser
                     FeedCsi(ch);
                     break;
                 case State.Osc:
-                    if (ch == '\a')
+                    if (ch == '\a' || ch == '\u009C')
                     {
+                        // BEL または 8-bit ST (U+009C) で終端
                         _state = State.Ground;
                     }
                     else if (ch == '\x1b')
@@ -94,7 +95,12 @@ public sealed class VtParser
                     _state = ch == '\\' ? State.Ground : State.Osc;
                     break;
                 case State.Dcs:
-                    if (ch == '\x1b')
+                    if (ch == '\u009C')
+                    {
+                        // 8-bit ST (U+009C) で終端
+                        _state = State.Ground;
+                    }
+                    else if (ch == '\x1b')
                     {
                         _state = State.DcsEsc;
                     }
@@ -170,36 +176,48 @@ public sealed class VtParser
 
         if (ch >= 0x80 && ch <= 0x9F)
         {
-            // C1 制御: xterm は 7-bit ESC 等価として実行し precedingJoinState をリセットする。
-            // FeedEscape が対応している機能は同じ動作へマップし、それ以外（HTS 等、
-            // ESC 側でも未対応のもの）は join だけ切って読み捨てる
-            _canJoinVs16 = false;
+            // C1 制御: xterm は 7-bit ESC 等価として実行する。precedingJoinState の扱いは
+            // 機能ごとに異なる: EXECUTE 系・CSI/OSC/DCS 開始はリセット、
+            // 単独の ST と SOS/PM/APC（読み捨て文字列）は保持（xterm の parser table 準拠）
             switch (ch)
             {
                 case '\u0084': // IND（ESC D 相当）
+                    _canJoinVs16 = false;
                     _grid.LineFeed();
                     return;
                 case '\u0085': // NEL（ESC E 相当）
+                    _canJoinVs16 = false;
                     _grid.CarriageReturn();
                     _grid.LineFeed();
                     return;
                 case '\u008D': // RI（ESC M 相当）
+                    _canJoinVs16 = false;
                     _grid.ReverseIndex();
                     return;
                 case '\u009B': // CSI（ESC [ 相当）
+                    _canJoinVs16 = false;
                     _csiParams.Clear();
                     _state = State.Csi;
                     return;
                 case '\u009D': // OSC（ESC ] 相当）
+                    _canJoinVs16 = false;
                     _state = State.Osc;
                     return;
                 case '\u0090': // DCS
+                    _canJoinVs16 = false;
+                    _state = State.Dcs;
+                    return;
                 case '\u0098': // SOS
                 case '\u009E': // PM
                 case '\u009F': // APC
+                    // 読み捨て文字列: xterm は join を保持したまま ST まで飲み込む
                     _state = State.Dcs;
                     return;
+                case '\u009C': // 単独の ST: xterm は無視（join も保持）
+                    return;
                 default:
+                    // その他（HTS 等、ESC 側でも未対応のもの）は join だけ切って読み捨てる
+                    _canJoinVs16 = false;
                     return;
             }
         }

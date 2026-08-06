@@ -204,6 +204,47 @@ public class Vs16WidthTests
     }
 
     [Fact]
+    public void Eightbit_st_terminates_dcs_and_osc_strings()
+    {
+        var buf = Create();
+        // 8-bit DCS/OSC 文字列は 8-bit ST (U+009C) で終端できる
+        // （終端できないと以降の出力を永久に飲み込む）
+        buf.Append("A\u0090foo\u009CB");
+        buf.Append("\u009D0;title\u009CC");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal("A", row[0].Text);
+        Assert.Equal("B", row[1].Text);
+        Assert.Equal("C", row[2].Text);
+    }
+
+    [Fact]
+    public void Standalone_st_preserves_join()
+    {
+        var buf = Create();
+        // 単独の ST (U+009C) は xterm では無視され join を保持する → 拡幅される
+        buf.Append(Sun + "\u009C" + Vs16 + "B");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal(Sun + Vs16, row[0].Text);
+        Assert.Equal(2, row[0].Width);
+        Assert.Equal("B", row[2].Text);
+    }
+
+    [Fact]
+    public void Sos_string_preserves_join()
+    {
+        var buf = Create();
+        // SOS (U+0098) の読み捨て文字列は ST 後まで join を保持する → 拡幅される
+        buf.Append(Sun + "\u0098ignored\u009C" + Vs16 + "B");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal(Sun + Vs16, row[0].Text);
+        Assert.Equal(2, row[0].Width);
+        Assert.Equal("B", row[2].Text);
+    }
+
+    [Fact]
     public void Eightbit_csi_is_parsed_like_esc_bracket()
     {
         var buf = Create();
