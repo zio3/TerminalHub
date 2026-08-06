@@ -92,7 +92,7 @@ public sealed class VtParser
                     break;
                 case State.OscEsc:
                     // ESC \ (ST) なら終了。それ以外は OSC 続行扱い
-                    _state = ch == '\\' ? State.Ground : State.Osc;
+                    _state = (ch == '\\' || ch == '\u009C') ? State.Ground : State.Osc; // 8-bit ST も終端
                     break;
                 case State.Dcs:
                     if (ch == '\u009C')
@@ -106,7 +106,7 @@ public sealed class VtParser
                     }
                     break;
                 case State.DcsEsc:
-                    _state = ch == '\\' ? State.Ground : State.Dcs;
+                    _state = (ch == '\\' || ch == '\u009C') ? State.Ground : State.Dcs; // 8-bit ST も終端
                     break;
             }
 

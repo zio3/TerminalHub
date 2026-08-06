@@ -219,6 +219,21 @@ public class Vs16WidthTests
     }
 
     [Fact]
+    public void Esc_then_eightbit_st_terminates_dcs_and_osc_strings()
+    {
+        var buf = Create();
+        // 文字列内で ESC を受けた直後の 8-bit ST (U+009C) も終端として扱う
+        // （ESC \ の7-bit STと8-bit STの混在ケース）
+        buf.Append("A\u0090foo\u001B\u009CB");
+        buf.Append("\u009D0;title\u001B\u009CC");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal("A", row[0].Text);
+        Assert.Equal("B", row[1].Text);
+        Assert.Equal("C", row[2].Text);
+    }
+
+    [Fact]
     public void Standalone_st_preserves_join()
     {
         var buf = Create();
