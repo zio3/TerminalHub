@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.9.0/lib/addon-unicode11.js"></script>
+<script src="js/unicode-vs16.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
 <style>
   body { background:#141414; color:#d4d4d4; font-family:'Segoe UI',system-ui,sans-serif; margin:0; padding:12px; }
@@ -202,8 +203,14 @@ function buildTerminal() {
   });
 
   if ($('uni11').checked && window.Unicode11Addon) {
-    term.loadAddon(new Unicode11Addon.Unicode11Addon());
-    term.unicode.activeVersion = '11';
+    // 本体（terminal.js）と同じ '11-vs16' プロバイダを共通実装で登録する。
+    // 素の Unicode11 だと VS16 拡幅の規則が本体とズレて診断に使えない
+    if (typeof window.registerUnicode11Vs16 === 'function') {
+      window.registerUnicode11Vs16(term);
+    } else {
+      term.loadAddon(new Unicode11Addon.Unicode11Addon());
+      term.unicode.activeVersion = '11';
+    }
   }
   term.open(host);
   if ($('webgl').checked && window.WebglAddon) {

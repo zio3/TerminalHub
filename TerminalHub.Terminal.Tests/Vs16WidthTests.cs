@@ -60,16 +60,60 @@ public class Vs16WidthTests
     }
 
     [Fact]
+    public void Wrap_widening_clears_wide_pair_on_destination_row()
+    {
+        var buf = Create(cols: 4);
+        // 次行(row1)の桁1に全角「あ」を置く（桁2がそのトレーラになる）
+        buf.Append("\u001B[2;2Hあ");
+        // row0 へ戻って行末拡幅を発生させ、クラスタを row1 の桁0-1 へ移す
+        buf.Append("\u001B[1;1Habc" + Sun + Vs16);
+
+        var row1 = buf.Grid.Screen[1];
+        Assert.Equal(Sun + Vs16, row1[0].Text);
+        Assert.Equal(2, row1[0].Width);
+        Assert.True(row1[1].IsWideTrailer);
+        // 「あ」のトレーラ（桁2）が孤児のまま残らないこと（Codex レビュー P1 指摘）
+        Assert.False(row1[2].IsWideTrailer);
+        Assert.True(row1[2].IsBlank);
+    }
+
+    [Fact]
     public void Vs16_does_not_join_across_escape_sequence()
     {
         var buf = Create();
         // 基底と VS16 の間に SGR を挟むと join 状態がリセットされる（xterm の
-        // precedingJoinState と同じ）。拡幅せず、従来どおり結合文字として合成のみ
-        buf.Append(Sun + "[31m" + Vs16 + "B");
+        // precedingJoinState と同じ）。拡幅せず、独立した1セル（空白へ正規化）として
+        // 置かれ、カーソルが1桁進む（xterm の孤立幅0セルと同じ配置）
+        buf.Append(Sun + "\u001B[31m" + Vs16 + "B");
 
         var row = buf.Grid.Screen[0];
+        Assert.Equal(Sun, row[0].Text);
         Assert.Equal(1, row[0].Width);
-        Assert.Equal("B", row[1].Text);
+        Assert.Equal(" ", row[1].Text);
+        Assert.Equal("B", row[2].Text);
+        Assert.Equal(3, buf.Grid.CursorCol);
+    }
+
+    [Fact]
+    public void Nonjoining_vs16_layout_survives_replay_round_trip()
+    {
+        var buf = Create();
+        // 非結合 VS16 を含む行の再生パリティ。旧実装（直前セルへ合成）は
+        // シリアライズで基底と VS16 が連続になり、再生時に '11-vs16' 規則が
+        // 再拡幅してレイアウトが変わっていた（Codex レビュー P1 指摘）
+        buf.Append(Sun + "\u001B[31m" + Vs16 + "B");
+
+        var replay = buf.SerializeForReplay();
+        var buf2 = Create();
+        buf2.Append(replay);
+
+        var row = buf.Grid.Screen[0];
+        var row2 = buf2.Grid.Screen[0];
+        for (int c = 0; c < buf.Grid.Cols; c++)
+        {
+            Assert.Equal(row[c].Text, row2[c].Text);
+            Assert.Equal(row[c].Width, row2[c].Width);
+        }
     }
 
     [Fact]
@@ -79,19 +123,53 @@ public class Vs16WidthTests
         buf.Append(Sun + "\r" + Vs16);
 
         var row = buf.Grid.Screen[0];
-        // CR で join が切れ、行頭の FE0F は直前印字セルが無い扱い（拡幅されない）
+        // CR で join が切れ、行頭の FE0F は独立セル化して桁0を上書きする
+        // （xterm も同じ位置に孤立幅0セルを書き ☀ を潰す）
+        Assert.Equal(" ", row[0].Text);
         Assert.Equal(1, row[0].Width);
+        Assert.Equal(1, buf.Grid.CursorCol);
     }
 
     [Fact]
-    public void Orphan_vs16_at_start_is_harmless()
+    public void Orphan_vs16_at_start_occupies_one_blank_cell()
     {
         var buf = Create();
         buf.Append(Vs16 + "A");
 
         var row = buf.Grid.Screen[0];
-        Assert.Equal("A", row[0].Text);
+        Assert.Equal(" ", row[0].Text);
+        Assert.Equal("A", row[1].Text);
+        Assert.Equal(1, row[1].Width);
+    }
+
+    [Fact]
+    public void Consecutive_orphan_vs16_each_occupy_one_cell()
+    {
+        var buf = Create();
+        // 孤立 VS16 の連続は1個ずつ独立セル化（2個目が1個目の空白セルを拡幅しない）
+        buf.Append(Vs16 + Vs16 + "A");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal(" ", row[0].Text);
         Assert.Equal(1, row[0].Width);
+        Assert.Equal(" ", row[1].Text);
+        Assert.Equal(1, row[1].Width);
+        Assert.Equal("A", row[2].Text);
+    }
+
+    [Fact]
+    public void Vs16_does_not_join_across_c1_control()
+    {
+        var buf = Create();
+        // C1 制御（NEL U+0085）も xterm は EXECUTE として join をリセットする。
+        // 拡幅せず、VS16 は独立セル化する
+        buf.Append(Sun + "\u0085" + Vs16 + "B");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal(Sun, row[0].Text);
+        Assert.Equal(1, row[0].Width);
+        Assert.Equal(" ", row[1].Text);
+        Assert.Equal("B", row[2].Text);
     }
 
     [Fact]
@@ -135,7 +213,7 @@ public class Vs16WidthTests
         // 全角「あ」(0-1) を書いた後、カーソルを桁1へ戻して幅1の ☀ を書く →「あ」は片割れ防止で消える。
         // 続く VS16 で ☀ が幅2に広がり、トレーラが桁2を上書きする
         buf.Append("あ");
-        buf.Append("[1;2H");   // 1行2桁目（0-based col=1）
+        buf.Append("\u001B[1;2H");   // 1行2桁目（0-based col=1）
         buf.Append(Sun + Vs16 + "B");
 
         var row = buf.Grid.Screen[0];

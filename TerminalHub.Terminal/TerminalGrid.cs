@@ -210,6 +210,13 @@ public sealed class TerminalGrid
             CarriageReturn();
             LineFeed();
             var newRow = _screen[CursorRow];
+            // \u79FB\u52D5\u5148\uFF08\u30B9\u30AF\u30ED\u30FC\u30EB\u3057\u306A\u3044\u5834\u5408\u306F\u65E2\u5B58\u5185\u5BB9\u3092\u6301\u3064\u884C\uFF09\u306E\u5168\u89D2\u30DA\u30A2\u306E\u7247\u5272\u308C\u3092\u5148\u306B\u6D88\u3059\u3002
+            // \u3053\u308C\u3092\u3057\u306A\u3044\u3068 col1 \u306B\u65E2\u5B58\u306E\u5168\u89D2\u5148\u982D\u304C\u3042\u3063\u305F\u3068\u304D col2 \u304C\u5B64\u5150\u30C8\u30EC\u30FC\u30E9\u306E\u307E\u307E\u6B8B\u308B
+            ClearWidePairAt(CursorRow, 0);
+            if (Cols > 1)
+            {
+                ClearWidePairAt(CursorRow, 1);
+            }
             moved.Text += "\uFE0F";
             moved.Width = 2;
             newRow[0] = moved;

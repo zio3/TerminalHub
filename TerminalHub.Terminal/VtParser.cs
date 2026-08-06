@@ -163,6 +163,15 @@ public sealed class VtParser
             return; // その他の C0 制御は無視
         }
 
+        if (ch >= 0x7F && ch <= 0x9F)
+        {
+            // DEL / C1 制御（NEL 等）: xterm は EXECUTE として解釈し precedingJoinState を
+            // リセットする。機能自体は未実装のため読み捨てるが、join 候補は必ず切る
+            // （切らないと「基底 + C1 + VS16」が xterm と違って拡幅されてしまう）
+            _canJoinVs16 = false;
+            return;
+        }
+
         // サロゲートペアの合成
         if (char.IsHighSurrogate(ch))
         {
@@ -184,11 +193,24 @@ public sealed class VtParser
             cp = ch;
         }
 
-        // VS16（絵文字化セレクタ）: 直前が印字なら直前セルへ適用（幅1なら幅2へ拡幅）。
-        // join 状態は維持する（連続する FE0F も合成のみで済む）
-        if (cp == 0xFE0F && _canJoinVs16)
+        // VS16（絵文字化セレクタ）の特別扱い
+        if (cp == 0xFE0F)
         {
-            _grid.ApplyVs16();
+            if (_canJoinVs16)
+            {
+                // 直前が印字: 直前セルへ適用（幅1なら幅2へ拡幅）。
+                // join 状態は維持する（連続する FE0F も合成のみで済む）
+                _grid.ApplyVs16();
+                return;
+            }
+
+            // 非結合の VS16（行頭・制御/エスケープ直後）: xterm コアは独立した不可視の
+            // 幅0セルを置いてカーソルを1桁進める。当エミュレータの Cell モデルは幅0を
+            // 全角トレーラ専用にしているため、可視結果が同じ「空白1セル」へ正規化する
+            // （直前セルへ合成すると、シリアライズで基底と連続になり再生時に '11-vs16'
+            // プロバイダが再拡幅してレイアウトが変わる＝切替時崩れの原因になる）。
+            // join 状態は立てない（連続 VS16 も xterm と同じく1個ずつ独立セル化する）
+            _grid.PutGrapheme(" ", 1);
             return;
         }
 
