@@ -167,6 +167,107 @@ public sealed class TerminalGrid
         }
     }
 
+    /// <summary>
+    /// 非結合の VS16（行頭・制御/エスケープ直後の U+FE0F）を置く。
+    /// xterm コアは独立した不可視の幅0セルを現在位置へ書いてカーソルを1桁進めるが、
+    /// 当エミュレータの Cell モデルは幅0を全角トレーラ専用にしているため、
+    /// 可視結果が同じ「空白1セル」へ正規化する。
+    /// 遅延ラップ中は xterm では仮想列（最終列の右）への書き込みになり画面に影響しない
+    /// （遅延ラップも維持される）ため、何もしない。
+    /// </summary>
+    public void PutOrphanVs16()
+    {
+        if (_pendingWrap)
+        {
+            return;
+        }
+        PutGrapheme(" ", 1);
+    }
+
+    /// <summary>
+    /// VS16（U+FE0F）を直前の書記素へ適用する。直前セルが幅1なら幅2へ広げる。
+    /// ConPTY（conhost）実測および xterm.js 6.0 の join 機構と同じ挙動で、
+    /// terminal.js の '11-vs16' プロバイダと必ず揃えること（片方だけ変えると再生パリティが壊れる）。
+    /// 「直前に印字があり、制御・エスケープを挟んでいない」ことの保証は VtParser 側が担う。
+    /// </summary>
+    public void ApplyVs16()
+    {
+        int col = CursorCol;
+        int r = CursorRow;
+        if (!_pendingWrap)
+        {
+            col--;
+        }
+        if (col < 0)
+        {
+            return;
+        }
+        if (_screen[r][col].IsWideTrailer && col > 0)
+        {
+            col--;
+        }
+        if (_screen[r][col].Text == null)
+        {
+            return;
+        }
+        // 既に全角（またはグリッドが狭すぎて広げられない）なら合成のみ
+        if (_screen[r][col].Width != 1 || Cols < 2)
+        {
+            _screen[r][col].Text += "\uFE0F";
+            return;
+        }
+
+        if (_pendingWrap)
+        {
+            // 基底が最終列: xterm 準拠でクラスタごと次行の先頭へ移す。
+            // 旧位置は現在スタイルの空白、移動セルは元のスタイルを保持、トレーラは現在スタイル。
+            var moved = _screen[r][col];
+            _screen[r][col] = Cell.BlankWith(CurrentFg, CurrentBg, CurrentAttrs);
+            _pendingWrap = false;
+            CarriageReturn();
+            LineFeed();
+            var newRow = _screen[CursorRow];
+            // \u79FB\u52D5\u5148\uFF08\u30B9\u30AF\u30ED\u30FC\u30EB\u3057\u306A\u3044\u5834\u5408\u306F\u65E2\u5B58\u5185\u5BB9\u3092\u6301\u3064\u884C\uFF09\u306E\u5168\u89D2\u30DA\u30A2\u306E\u7247\u5272\u308C\u3092\u5148\u306B\u6D88\u3059\u3002
+            // \u3053\u308C\u3092\u3057\u306A\u3044\u3068 col1 \u306B\u65E2\u5B58\u306E\u5168\u89D2\u5148\u982D\u304C\u3042\u3063\u305F\u3068\u304D col2 \u304C\u5B64\u5150\u30C8\u30EC\u30FC\u30E9\u306E\u307E\u307E\u6B8B\u308B
+            ClearWidePairAt(CursorRow, 0);
+            if (Cols > 1)
+            {
+                ClearWidePairAt(CursorRow, 1);
+            }
+            moved.Text += "\uFE0F";
+            moved.Width = 2;
+            newRow[0] = moved;
+            newRow[1] = Cell.WideTrailer(CurrentFg, CurrentBg, CurrentAttrs);
+            if (Cols <= 2)
+            {
+                CursorCol = Cols - 1;
+                _pendingWrap = true;
+            }
+            else
+            {
+                CursorCol = 2;
+            }
+            return;
+        }
+
+        // 通常: セルを広げ、直後（現在のカーソル位置）をトレーラにする
+        var row = _screen[r];
+        row[col].Text += "\uFE0F";
+        row[col].Width = 2;
+        ClearWidePairAt(r, CursorCol); // 上書き先が全角ペアの一部なら片割れを消す
+        row[CursorCol] = Cell.WideTrailer(CurrentFg, CurrentBg, CurrentAttrs);
+        // カーソルを1桁前進（最終列なら遅延ラップ）
+        if (CursorCol + 1 >= Cols)
+        {
+            CursorCol = Cols - 1;
+            _pendingWrap = true;
+        }
+        else
+        {
+            CursorCol++;
+        }
+    }
+
     /// <summary>指定位置が全角ペアの一部なら、ペア両方を空白化する（片割れ防止）。</summary>
     private void ClearWidePairAt(int rowIndex, int colIndex)
     {

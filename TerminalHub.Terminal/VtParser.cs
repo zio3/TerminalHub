@@ -27,6 +27,14 @@ public sealed class VtParser
     private readonly StringBuilder _pendingRaw = new();
     private char _pendingHighSurrogate;
 
+    /// <summary>
+    /// 直前が印字（幅>0）で、間に制御文字・エスケープシーケンスを挟んでいないか。
+    /// VS16（U+FE0F）による直前セルの拡幅は、この状態が立っているときだけ行う
+    /// （xterm.js の precedingJoinState が EXECUTE / CSI / ESC / OSC / DCS で
+    /// リセットされるのと同じ規則。幅0の結合文字は状態を維持する）。
+    /// </summary>
+    private bool _canJoinVs16;
+
     public VtParser(TerminalGrid grid)
     {
         _grid = grid;
@@ -72,8 +80,9 @@ public sealed class VtParser
                     FeedCsi(ch);
                     break;
                 case State.Osc:
-                    if (ch == '\a')
+                    if (ch == '\a' || ch == '\u009C')
                     {
+                        // BEL または 8-bit ST (U+009C) で終端
                         _state = State.Ground;
                     }
                     else if (ch == '\x1b')
@@ -83,16 +92,21 @@ public sealed class VtParser
                     break;
                 case State.OscEsc:
                     // ESC \ (ST) なら終了。それ以外は OSC 続行扱い
-                    _state = ch == '\\' ? State.Ground : State.Osc;
+                    _state = (ch == '\\' || ch == '\u009C') ? State.Ground : State.Osc; // 8-bit ST も終端
                     break;
                 case State.Dcs:
-                    if (ch == '\x1b')
+                    if (ch == '\u009C')
+                    {
+                        // 8-bit ST (U+009C) で終端
+                        _state = State.Ground;
+                    }
+                    else if (ch == '\x1b')
                     {
                         _state = State.DcsEsc;
                     }
                     break;
                 case State.DcsEsc:
-                    _state = ch == '\\' ? State.Ground : State.Dcs;
+                    _state = (ch == '\\' || ch == '\u009C') ? State.Ground : State.Dcs; // 8-bit ST も終端
                     break;
             }
 
@@ -122,30 +136,90 @@ public sealed class VtParser
         {
             case '\x1b':
                 _pendingHighSurrogate = '\0';
+                _canJoinVs16 = false;
                 _state = State.Escape;
                 return;
             case '\r':
+                _canJoinVs16 = false;
                 _grid.CarriageReturn();
                 return;
             case '\n':
             case '\v':
             case '\f':
+                _canJoinVs16 = false;
                 _grid.LineFeed();
                 return;
             case '\b':
+                _canJoinVs16 = false;
                 _grid.Backspace();
                 return;
             case '\t':
+                _canJoinVs16 = false;
                 _grid.Tab();
                 return;
             case '\a':
             case '\0':
+                _canJoinVs16 = false;
                 return; // BEL / NUL は無視
         }
 
         if (ch < 0x20)
         {
+            _canJoinVs16 = false;
             return; // その他の C0 制御は無視
+        }
+
+        if (ch == '\u007F')
+        {
+            return; // DEL: xterm は Ground で無視する（join 状態も保持＝☀+DEL+VS16 は拡幅される）
+        }
+
+        if (ch >= 0x80 && ch <= 0x9F)
+        {
+            // C1 制御: xterm は 7-bit ESC 等価として実行する。precedingJoinState の扱いは
+            // 機能ごとに異なる: EXECUTE 系・CSI/OSC/DCS 開始はリセット、
+            // 単独の ST と SOS/PM/APC（読み捨て文字列）は保持（xterm の parser table 準拠）
+            switch (ch)
+            {
+                case '\u0084': // IND（ESC D 相当）
+                    _canJoinVs16 = false;
+                    _grid.LineFeed();
+                    return;
+                case '\u0085': // NEL（ESC E 相当）
+                    _canJoinVs16 = false;
+                    _grid.CarriageReturn();
+                    _grid.LineFeed();
+                    return;
+                case '\u008D': // RI（ESC M 相当）
+                    _canJoinVs16 = false;
+                    _grid.ReverseIndex();
+                    return;
+                case '\u009B': // CSI（ESC [ 相当）
+                    _canJoinVs16 = false;
+                    _csiParams.Clear();
+                    _state = State.Csi;
+                    return;
+                case '\u009D': // OSC（ESC ] 相当）
+                    _canJoinVs16 = false;
+                    _state = State.Osc;
+                    return;
+                case '\u0090': // DCS
+                    _canJoinVs16 = false;
+                    _state = State.Dcs;
+                    return;
+                case '\u0098': // SOS
+                case '\u009E': // PM
+                case '\u009F': // APC
+                    // 読み捨て文字列: xterm は join を保持したまま ST まで飲み込む
+                    _state = State.Dcs;
+                    return;
+                case '\u009C': // 単独の ST: xterm は無視（join も保持）
+                    return;
+                default:
+                    // その他（HTS 等、ESC 側でも未対応のもの）は join だけ切って読み捨てる
+                    _canJoinVs16 = false;
+                    return;
+            }
         }
 
         // サロゲートペアの合成
@@ -169,7 +243,33 @@ public sealed class VtParser
             cp = ch;
         }
 
-        _grid.PutGrapheme(text, CharWidth.GetWidth(cp));
+        // VS16（絵文字化セレクタ）の特別扱い
+        if (cp == 0xFE0F)
+        {
+            if (_canJoinVs16)
+            {
+                // 直前が印字: 直前セルへ適用（幅1なら幅2へ拡幅）。
+                // join 状態は維持する（連続する FE0F も合成のみで済む）
+                _grid.ApplyVs16();
+                return;
+            }
+
+            // 非結合の VS16（行頭・制御/エスケープ直後）: 空白1セルへ正規化して置く
+            // （挙動の詳細と理由は TerminalGrid.PutOrphanVs16 のコメント参照。
+            // 直前セルへ合成すると、シリアライズで基底と連続になり再生時に '11-vs16'
+            // プロバイダが再拡幅してレイアウトが変わる＝切替時崩れの原因になる）。
+            // join 状態は立てない（連続 VS16 も xterm と同じく1個ずつ独立セル化する）
+            _grid.PutOrphanVs16();
+            return;
+        }
+
+        int width = CharWidth.GetWidth(cp);
+        _grid.PutGrapheme(text, width);
+        if (width > 0)
+        {
+            _canJoinVs16 = true;
+        }
+        // 幅0（結合文字）は join 状態を変えない（基底+結合+VS16 の並びでも拡幅できる）
     }
 
     private void FeedEscape(char ch)

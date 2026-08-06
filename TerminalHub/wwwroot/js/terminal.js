@@ -1071,16 +1071,11 @@ window.terminalFunctions = {
             setupCommitHashDetection(term, sessionId);
             setupPrNumberDetection(term, sessionId);
 
-            // Unicode11Addonをロード（ブロック文字の幅計算を改善）
-            if (typeof Unicode11Addon !== 'undefined' && Unicode11Addon.Unicode11Addon) {
-                try {
-                    const unicode11Addon = new Unicode11Addon.Unicode11Addon();
-                    term.loadAddon(unicode11Addon);
-                    term.unicode.activeVersion = '11';
-                    console.log('[Unicode11] Unicode11Addon loaded successfully');
-                } catch (error) {
-                    console.error('[Unicode11] Failed to load Unicode11Addon:', error);
-                }
+            // Unicode11 + VS16 拡幅プロバイダをロード（実装は js/unicode-vs16.js に共通化。
+            // 診断ツール rawring-replay.html と同じ関数を使い、本体との規則ズレを防ぐ）
+            if (typeof window.registerUnicode11Vs16 === 'function') {
+                const activeVersion = window.registerUnicode11Vs16(term);
+                console.log(`[Unicode11] provider loaded: activeVersion=${activeVersion}`);
             }
 
             // WebglAddonをロード（GPU描画。xterm.js 6.0 で廃止された CanvasAddon の後継）
