@@ -163,13 +163,45 @@ public sealed class VtParser
             return; // その他の C0 制御は無視
         }
 
-        if (ch >= 0x7F && ch <= 0x9F)
+        if (ch == '\u007F')
         {
-            // DEL / C1 制御（NEL 等）: xterm は EXECUTE として解釈し precedingJoinState を
-            // リセットする。機能自体は未実装のため読み捨てるが、join 候補は必ず切る
-            // （切らないと「基底 + C1 + VS16」が xterm と違って拡幅されてしまう）
+            return; // DEL: xterm は Ground で無視する（join 状態も保持＝☀+DEL+VS16 は拡幅される）
+        }
+
+        if (ch >= 0x80 && ch <= 0x9F)
+        {
+            // C1 制御: xterm は 7-bit ESC 等価として実行し precedingJoinState をリセットする。
+            // FeedEscape が対応している機能は同じ動作へマップし、それ以外（HTS 等、
+            // ESC 側でも未対応のもの）は join だけ切って読み捨てる
             _canJoinVs16 = false;
-            return;
+            switch (ch)
+            {
+                case '\u0084': // IND（ESC D 相当）
+                    _grid.LineFeed();
+                    return;
+                case '\u0085': // NEL（ESC E 相当）
+                    _grid.CarriageReturn();
+                    _grid.LineFeed();
+                    return;
+                case '\u008D': // RI（ESC M 相当）
+                    _grid.ReverseIndex();
+                    return;
+                case '\u009B': // CSI（ESC [ 相当）
+                    _csiParams.Clear();
+                    _state = State.Csi;
+                    return;
+                case '\u009D': // OSC（ESC ] 相当）
+                    _state = State.Osc;
+                    return;
+                case '\u0090': // DCS
+                case '\u0098': // SOS
+                case '\u009E': // PM
+                case '\u009F': // APC
+                    _state = State.Dcs;
+                    return;
+                default:
+                    return;
+            }
         }
 
         // サロゲートペアの合成
@@ -204,13 +236,12 @@ public sealed class VtParser
                 return;
             }
 
-            // 非結合の VS16（行頭・制御/エスケープ直後）: xterm コアは独立した不可視の
-            // 幅0セルを置いてカーソルを1桁進める。当エミュレータの Cell モデルは幅0を
-            // 全角トレーラ専用にしているため、可視結果が同じ「空白1セル」へ正規化する
-            // （直前セルへ合成すると、シリアライズで基底と連続になり再生時に '11-vs16'
+            // 非結合の VS16（行頭・制御/エスケープ直後）: 空白1セルへ正規化して置く
+            // （挙動の詳細と理由は TerminalGrid.PutOrphanVs16 のコメント参照。
+            // 直前セルへ合成すると、シリアライズで基底と連続になり再生時に '11-vs16'
             // プロバイダが再拡幅してレイアウトが変わる＝切替時崩れの原因になる）。
             // join 状態は立てない（連続 VS16 も xterm と同じく1個ずつ独立セル化する）
-            _grid.PutGrapheme(" ", 1);
+            _grid.PutOrphanVs16();
             return;
         }
 

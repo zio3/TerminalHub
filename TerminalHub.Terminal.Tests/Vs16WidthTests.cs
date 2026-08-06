@@ -161,15 +161,59 @@ public class Vs16WidthTests
     public void Vs16_does_not_join_across_c1_control()
     {
         var buf = Create();
-        // C1 制御（NEL U+0085）も xterm は EXECUTE として join をリセットする。
-        // 拡幅せず、VS16 は独立セル化する
+        // C1 制御（NEL U+0085）は xterm では ESC E 等価として実行され（CR+LF）、
+        // join もリセットされる。行が変わった先で VS16 は独立セル化する
         buf.Append(Sun + "\u0085" + Vs16 + "B");
 
+        var row0 = buf.Grid.Screen[0];
+        var row1 = buf.Grid.Screen[1];
+        Assert.Equal(Sun, row0[0].Text);
+        Assert.Equal(1, row0[0].Width);
+        Assert.Equal(" ", row1[0].Text);
+        Assert.Equal("B", row1[1].Text);
+    }
+
+    [Fact]
+    public void Vs16_joins_across_del()
+    {
+        var buf = Create();
+        // DEL (0x7F) は xterm の Ground では無視され join 状態を保持する → 拡幅される
+        buf.Append(Sun + "\u007F" + Vs16 + "B");
+
         var row = buf.Grid.Screen[0];
-        Assert.Equal(Sun, row[0].Text);
-        Assert.Equal(1, row[0].Width);
-        Assert.Equal(" ", row[1].Text);
+        Assert.Equal(Sun + Vs16, row[0].Text);
+        Assert.Equal(2, row[0].Width);
+        Assert.True(row[1].IsWideTrailer);
         Assert.Equal("B", row[2].Text);
+    }
+
+    [Fact]
+    public void Orphan_vs16_during_pending_wrap_is_consumed_without_effect()
+    {
+        var buf = Create(cols: 4);
+        // 最終列に幅1の ☀ を書いて遅延ラップ状態にし、SGR で join を切ってから VS16。
+        // xterm では仮想列（最終列の右）で消費されて画面に影響せず、遅延ラップも維持される。
+        // 次の B は行頭へ折り返す
+        buf.Append("abc" + Sun + "\u001B[31m" + Vs16 + "B");
+
+        var row0 = buf.Grid.Screen[0];
+        var row1 = buf.Grid.Screen[1];
+        Assert.Equal(Sun, row0[3].Text);
+        Assert.Equal(1, row0[3].Width);
+        Assert.Equal("B", row1[0].Text);
+    }
+
+    [Fact]
+    public void Eightbit_csi_is_parsed_like_esc_bracket()
+    {
+        var buf = Create();
+        // 8-bit CSI (U+009B) は ESC [ 等価としてシーケンス解釈される
+        // （途中の "31m" が画面に印字されないこと）
+        buf.Append("A\u009B31mB");
+
+        var row = buf.Grid.Screen[0];
+        Assert.Equal("A", row[0].Text);
+        Assert.Equal("B", row[1].Text);
     }
 
     [Fact]

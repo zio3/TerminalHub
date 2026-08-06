@@ -168,6 +168,23 @@ public sealed class TerminalGrid
     }
 
     /// <summary>
+    /// 非結合の VS16（行頭・制御/エスケープ直後の U+FE0F）を置く。
+    /// xterm コアは独立した不可視の幅0セルを現在位置へ書いてカーソルを1桁進めるが、
+    /// 当エミュレータの Cell モデルは幅0を全角トレーラ専用にしているため、
+    /// 可視結果が同じ「空白1セル」へ正規化する。
+    /// 遅延ラップ中は xterm では仮想列（最終列の右）への書き込みになり画面に影響しない
+    /// （遅延ラップも維持される）ため、何もしない。
+    /// </summary>
+    public void PutOrphanVs16()
+    {
+        if (_pendingWrap)
+        {
+            return;
+        }
+        PutGrapheme(" ", 1);
+    }
+
+    /// <summary>
     /// VS16（U+FE0F）を直前の書記素へ適用する。直前セルが幅1なら幅2へ広げる。
     /// ConPTY（conhost）実測および xterm.js 6.0 の join 機構と同じ挙動で、
     /// terminal.js の '11-vs16' プロバイダと必ず揃えること（片方だけ変えると再生パリティが壊れる）。
