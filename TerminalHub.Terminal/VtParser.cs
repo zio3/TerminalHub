@@ -27,6 +27,14 @@ public sealed class VtParser
     private readonly StringBuilder _pendingRaw = new();
     private char _pendingHighSurrogate;
 
+    /// <summary>
+    /// 直前が印字（幅>0）で、間に制御文字・エスケープシーケンスを挟んでいないか。
+    /// VS16（U+FE0F）による直前セルの拡幅は、この状態が立っているときだけ行う
+    /// （xterm.js の precedingJoinState が EXECUTE / CSI / ESC / OSC / DCS で
+    /// リセットされるのと同じ規則。幅0の結合文字は状態を維持する）。
+    /// </summary>
+    private bool _canJoinVs16;
+
     public VtParser(TerminalGrid grid)
     {
         _grid = grid;
@@ -122,29 +130,36 @@ public sealed class VtParser
         {
             case '\x1b':
                 _pendingHighSurrogate = '\0';
+                _canJoinVs16 = false;
                 _state = State.Escape;
                 return;
             case '\r':
+                _canJoinVs16 = false;
                 _grid.CarriageReturn();
                 return;
             case '\n':
             case '\v':
             case '\f':
+                _canJoinVs16 = false;
                 _grid.LineFeed();
                 return;
             case '\b':
+                _canJoinVs16 = false;
                 _grid.Backspace();
                 return;
             case '\t':
+                _canJoinVs16 = false;
                 _grid.Tab();
                 return;
             case '\a':
             case '\0':
+                _canJoinVs16 = false;
                 return; // BEL / NUL は無視
         }
 
         if (ch < 0x20)
         {
+            _canJoinVs16 = false;
             return; // その他の C0 制御は無視
         }
 
@@ -169,7 +184,21 @@ public sealed class VtParser
             cp = ch;
         }
 
-        _grid.PutGrapheme(text, CharWidth.GetWidth(cp));
+        // VS16（絵文字化セレクタ）: 直前が印字なら直前セルへ適用（幅1なら幅2へ拡幅）。
+        // join 状態は維持する（連続する FE0F も合成のみで済む）
+        if (cp == 0xFE0F && _canJoinVs16)
+        {
+            _grid.ApplyVs16();
+            return;
+        }
+
+        int width = CharWidth.GetWidth(cp);
+        _grid.PutGrapheme(text, width);
+        if (width > 0)
+        {
+            _canJoinVs16 = true;
+        }
+        // 幅0（結合文字）は join 状態を変えない（基底+結合+VS16 の並びでも拡幅できる）
     }
 
     private void FeedEscape(char ch)

@@ -167,6 +167,83 @@ public sealed class TerminalGrid
         }
     }
 
+    /// <summary>
+    /// VS16（U+FE0F）を直前の書記素へ適用する。直前セルが幅1なら幅2へ広げる。
+    /// ConPTY（conhost）実測および xterm.js 6.0 の join 機構と同じ挙動で、
+    /// terminal.js の '11-vs16' プロバイダと必ず揃えること（片方だけ変えると再生パリティが壊れる）。
+    /// 「直前に印字があり、制御・エスケープを挟んでいない」ことの保証は VtParser 側が担う。
+    /// </summary>
+    public void ApplyVs16()
+    {
+        int col = CursorCol;
+        int r = CursorRow;
+        if (!_pendingWrap)
+        {
+            col--;
+        }
+        if (col < 0)
+        {
+            return;
+        }
+        if (_screen[r][col].IsWideTrailer && col > 0)
+        {
+            col--;
+        }
+        if (_screen[r][col].Text == null)
+        {
+            return;
+        }
+        // 既に全角（またはグリッドが狭すぎて広げられない）なら合成のみ
+        if (_screen[r][col].Width != 1 || Cols < 2)
+        {
+            _screen[r][col].Text += "\uFE0F";
+            return;
+        }
+
+        if (_pendingWrap)
+        {
+            // 基底が最終列: xterm 準拠でクラスタごと次行の先頭へ移す。
+            // 旧位置は現在スタイルの空白、移動セルは元のスタイルを保持、トレーラは現在スタイル。
+            var moved = _screen[r][col];
+            _screen[r][col] = Cell.BlankWith(CurrentFg, CurrentBg, CurrentAttrs);
+            _pendingWrap = false;
+            CarriageReturn();
+            LineFeed();
+            var newRow = _screen[CursorRow];
+            moved.Text += "\uFE0F";
+            moved.Width = 2;
+            newRow[0] = moved;
+            newRow[1] = Cell.WideTrailer(CurrentFg, CurrentBg, CurrentAttrs);
+            if (Cols <= 2)
+            {
+                CursorCol = Cols - 1;
+                _pendingWrap = true;
+            }
+            else
+            {
+                CursorCol = 2;
+            }
+            return;
+        }
+
+        // 通常: セルを広げ、直後（現在のカーソル位置）をトレーラにする
+        var row = _screen[r];
+        row[col].Text += "\uFE0F";
+        row[col].Width = 2;
+        ClearWidePairAt(r, CursorCol); // 上書き先が全角ペアの一部なら片割れを消す
+        row[CursorCol] = Cell.WideTrailer(CurrentFg, CurrentBg, CurrentAttrs);
+        // カーソルを1桁前進（最終列なら遅延ラップ）
+        if (CursorCol + 1 >= Cols)
+        {
+            CursorCol = Cols - 1;
+            _pendingWrap = true;
+        }
+        else
+        {
+            CursorCol++;
+        }
+    }
+
     /// <summary>指定位置が全角ペアの一部なら、ペア両方を空白化する（片割れ防止）。</summary>
     private void ClearWidePairAt(int rowIndex, int colIndex)
     {
