@@ -152,10 +152,12 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 
 | 引数 | 型 | 既定 | 説明 |
 |---|---|---|---|
-| `target` | string | （必須） | 宛先。セッション GUID、または表示名（完全一致・大文字小文字無視） |
+| `targetSessionId` | string | （必須） | 宛先セッションの **GUID**（`list_sessions` の `sessionId`）。表示名は受け付けない |
 | `message` | string | （必須） | 送る本文（**1行のみ。改行・制御文字は拒否**）。長文はファイルに書いて絶対パスを送る |
 | `contextId` | string? | なし | ContextSummary（後述）の紐づけ。`"new"`=発行して紐づけ（結果で ID が返る） / 既存 ID=続報として紐づけ / 未指定=従来どおり |
 
+> **`target` は `targetSessionId` に改名し、表示名での宛先指定を廃止した**（2026-08-06・非互換）。表示名は実運用で普通に重複する（worktree の子セッションはブランチ名が似る、`DisplayName` 未設定だとフォルダ名にフォールバックする）のに、旧実装は先頭一致で黙って1件を選んでいた＝**別セッションへ送っても成功として返る**穴だった。誤送信は送れてしまうぶん静かに失敗するため、互換は残さず弾いて GUID を引き直させる。引数名に `target` を残さず向きを明示したのは、エージェントが自分の GUID（`TERMINALHUB_SESSION_ID`）を渡す取り違えを防ぐため。GUID 以外を渡すと `list_sessions` へ誘導するメッセージ付きで `success=false` になる。
+>
 > **`submit` 引数は廃止**（2026-08-01）。常に末尾で Enter を送り実行を確定する。「入力欄に流し込むだけ（submit=false）」は実利用ゼロで、配送キューの「本文＋Enter を1単位」という不変条件の唯一の例外だったため削除した。人間が確認してから送る用途はセッション専用コマンドの `insertToInputOnly` が担う。
 
 （旧 `proof` 引数は撤去済み。送信元は接続キーで自動確定し、本人確定済みなら**検証済みの送信元が本文末尾に付き**、**配送できなかった場合に自分のセッションへ通知が届く**。`contextId` と併用すれば**完了時の通知**も届く）
@@ -417,7 +419,7 @@ claim / 担当割当（1対1依頼専用。「誰かやって」型はディス�
 >   回っていないので履行不能な契約だった。配送キューへ移した。
 
 **典型フロー（外部クライアント）**:
-1. Desktop が `send_to_session(target=<レーン>, message="仕様は C:\work\spec.md", contextId="new")` → ID が返る
+1. Desktop が `send_to_session(targetSessionId=<レーンのGUID>, message="仕様は C:\work\spec.md", contextId="new")` → ID が返る
 2. 受け手は本文末尾の contextId を見て作業し、`update_context` で status/summary を更新
 3. Desktop は `get_context(id)` をポーリングして完了・結果を取得（受信箱ゼロで往復が完結）
 
@@ -474,7 +476,7 @@ AI 登録コマンド」を取り込むようにしてある（逆に `remove_co
 1. Claude 側で仕様を書き、ファイル（例: `C:\work\spec.md`）に保存する。
 2. `list_sessions` で Codex セッションを探す（例: `terminalType="CodexCLI"`）。
 3. 対象が `ready` なら `send_to_session` で
-   `target=<GUID or 表示名>`, `message="C:\work\spec.md の内容で実装して"` を送る（常に Enter で実行が確定する）。
+   `targetSessionId=<GUID>`, `message="C:\work\spec.md の内容で実装して"` を送る（常に Enter で実行が確定する）。
 4. Codex 側で処理が走る。完了は TerminalHub 本体の LED / 通知で人間が確認する。
 
 ---
