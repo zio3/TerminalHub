@@ -352,11 +352,6 @@
         // 親セッションのみ抽出
         var parentSessions = filteredSessions.Where(s => !s.ParentSessionId.HasValue).ToList();
 
-        // 親が存在しない子セッション（孤児）も追加
-        var orphanSessions = filteredSessions
-            .Where(s => s.ParentSessionId.HasValue && !Sessions.Any(p => p.SessionId == s.ParentSessionId))
-            .ToList();
-
         // ソート用のキーを計算（lastAccessedの場合は子セッションの最終アクセス日時も考慮）
         // ソート: ピン留め → ピン優先度 → ユーザー設定のソート
         IOrderedEnumerable<SessionInfo> sortedParents;
@@ -421,15 +416,10 @@
             result.Add(group);
         }
 
-        // 孤児セッションを追加
-        foreach (var orphan in orphanSessions)
-        {
-            if (!processed.Contains(orphan.SessionId))
-            {
-                result.Add(new List<SessionInfo> { orphan });
-                processed.Add(orphan.SessionId);
-            }
-        }
+        // 孤児（親が存在しない子）は表示しない。
+        // 削除は子へカスケードするので本来この状態は作られず、それ以前に溜まった分は
+        // 起動時に掃除される（Root の CleanupOrphanSessionsAsync）。掃除の前後で
+        // 一瞬だけ現れうるが、最上位に混ぜて出すと親子の見え方が壊れるので出さない。
 
         return result;
     }

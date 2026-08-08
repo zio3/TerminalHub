@@ -695,6 +695,9 @@
                             sessionInfo.SessionId, sessionInfo.DisplayName);
                     }
                 }
+
+                // 全件そろってから孤児を掃除する（復元順で親がまだ居ないだけ、を誤判定しないため）
+                await CleanupOrphanSessionsAsync();
             }
 
             // SessionManagerから全セッションを取得（アーカイブ含む）
@@ -1911,11 +1914,46 @@
         }
     }
 
+    /// <summary>
+    /// 親が存在しない子セッション（孤児）を削除する。起動時の復元直後に1回だけ走る。
+    ///
+    /// 削除は子へカスケードするようになったので、これから孤児が生まれることはない。
+    /// 対象はそれ以前に溜まった分で、UI が孤児を最上位に並べるのをやめた結果、
+    /// 人間から見えず削除もできないまま残り続けるのを避けるために掃除する
+    /// （ConPTY を持ったまま生きている孤児があれば、見えないプロセスが動き続けることになる）。
+    /// </summary>
+    private async Task CleanupOrphanSessionsAsync()
+    {
+        // 削除しながら列挙しないよう先にスナップショットを取る
+        var all = SessionManager.GetAllSessions().ToList();
+        var existingIds = all.Select(s => s.SessionId).ToHashSet();
+        var orphans = all
+            .Where(s => s.ParentSessionId.HasValue && !existingIds.Contains(s.ParentSessionId.Value))
+            .ToList();
+
+        foreach (var orphan in orphans)
+        {
+            Logger.LogWarning("[起動] 孤児セッションを削除します: SessionId={SessionId}, Name={Name}, ParentSessionId={ParentSessionId}",
+                orphan.SessionId, orphan.GetDisplayName(), orphan.ParentSessionId);
+
+            // 孤児が孤児を子に持つ場合はカスケードで既に消えているので、空が返る＝後始末も不要
+            var deletedIds = SessionManager.DeleteSession(orphan.SessionId);
+            foreach (var deletedId in deletedIds)
+            {
+                await DeleteSessionFromStorageAsync(deletedId);
+            }
+        }
+    }
+
     private async Task DeleteArchivedSession(Guid sessionId)
     {
-        SessionManager.DeleteSession(sessionId);
-        await DeleteSessionFromStorageAsync(sessionId);
-        bottomPanel?.RemoveMemoTabsForSession(sessionId);
+        // DeleteSession は子セッションも道連れにするので、後始末は「実際に消えた全件」に対して行う。
+        var deletedIds = SessionManager.DeleteSession(sessionId);
+        foreach (var deletedId in deletedIds)
+        {
+            await DeleteSessionFromStorageAsync(deletedId);
+            bottomPanel?.RemoveMemoTabsForSession(deletedId);
+        }
 
         sessions = SessionManager.GetAllSessions().ToList();
         StateHasChanged();
@@ -1926,9 +1964,13 @@
         var archivedSessions = SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
         foreach (var session in archivedSessions)
         {
-            SessionManager.DeleteSession(session.SessionId);
-            await DeleteSessionFromStorageAsync(session.SessionId);
-            bottomPanel?.RemoveMemoTabsForSession(session.SessionId);
+            // 先に消した親の道連れで既に消えている場合があり、そのときは空が返る（後始末も不要）。
+            var deletedIds = SessionManager.DeleteSession(session.SessionId);
+            foreach (var deletedId in deletedIds)
+            {
+                await DeleteSessionFromStorageAsync(deletedId);
+                bottomPanel?.RemoveMemoTabsForSession(deletedId);
+            }
         }
 
         sessions = SessionManager.GetAllSessions().ToList();
