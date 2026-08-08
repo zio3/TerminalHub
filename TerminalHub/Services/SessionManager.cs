@@ -112,9 +112,11 @@ namespace TerminalHub.Services
         Task<SessionInfo?> RestoreArchivedSessionAsync(Guid sessionId);
 
         /// <summary>
-        /// セッションを完全削除（アーカイブ含む）
+        /// セッションを完全削除（アーカイブ含む）。
+        /// 子セッション（worktree）も一緒に削除し、実際に削除した SessionId を返す。
+        /// 呼び出し側は返った ID すべてについて永続化側の後始末を行うこと。
         /// </summary>
-        void DeleteSession(Guid sessionId);
+        IReadOnlyList<Guid> DeleteSession(Guid sessionId);
     }
 
     public class SessionManager : ISessionManager, IDisposable
@@ -1308,66 +1310,116 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// セッションを完全削除（アーカイブ含む）
+        /// セッションを完全削除（アーカイブ含む）。子セッションも一緒に削除する。
+        ///
+        /// 親だけを消すと、子は ParentSessionId が誰も指さない孤児として残る
+        /// （ParentSessionId をクリアする処理はどこにも無く、永続化側にも残り続ける）。
+        /// アーカイブ済みの親は UI で子ごと畳まれて見えないため、そこから親を削除すると
+        /// 「見えない孤児」だけが積み上がっていた。親を消すなら子も道連れにする。
+        ///
+        /// 戻り値は実際に削除した SessionId（親を含む）。呼び出し側はこの全件について
+        /// 永続化側（DB・メモタブ等）の後始末を行うこと。
         /// </summary>
-        public void DeleteSession(Guid sessionId)
+        public IReadOnlyList<Guid> DeleteSession(Guid sessionId)
         {
-            ConPtySession? sessionToDispose = null;
-            ConPtySession? sessionInfoConPtyToDispose = null;
-            SemaphoreSlim? initLockToDispose = null;
-            bool deleted = false;
+            var toDispose = new List<IDisposable>();
+            var deletedIds = new List<Guid>();
 
             lock (_lockObject)
             {
-                // ConPtyセッションが存在する場合は取得
-                if (_sessions.TryRemove(sessionId, out var session))
+                foreach (var id in CollectSelfAndDescendants(sessionId))
                 {
-                    sessionToDispose = session;
-                    deleted = true;
-                }
+                    ConPtySession? sessionToDispose = null;
+                    var deleted = false;
 
-                // SessionInfoを削除
-                if (_sessionInfos.TryRemove(sessionId, out var sessionInfo))
-                {
-                    // 二重Dispose防止
-                    if (sessionInfo.ConPtySession != null &&
-                        !ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
+                    // ConPtyセッションが存在する場合は取得
+                    if (_sessions.TryRemove(id, out var session))
                     {
-                        sessionInfoConPtyToDispose = sessionInfo.ConPtySession;
+                        sessionToDispose = session;
+                        toDispose.Add(session);
+                        deleted = true;
                     }
-                    sessionInfo.ConPtySession = null;
-                    deleted = true;
+
+                    // SessionInfoを削除
+                    if (_sessionInfos.TryRemove(id, out var sessionInfo))
+                    {
+                        // 二重Dispose防止
+                        if (sessionInfo.ConPtySession != null &&
+                            !ReferenceEquals(sessionInfo.ConPtySession, sessionToDispose))
+                        {
+                            toDispose.Add(sessionInfo.ConPtySession);
+                        }
+                        sessionInfo.ConPtySession = null;
+                        deleted = true;
+                    }
+
+                    // 初期化ロックを削除
+                    if (_initializationLocks.TryRemove(id, out var initLock))
+                    {
+                        toDispose.Add(initLock);
+                    }
+
+                    if (deleted)
+                    {
+                        deletedIds.Add(id);
+                    }
                 }
 
-                // 初期化ロックを削除
-                if (_initializationLocks.TryRemove(sessionId, out var initLock))
-                {
-                    initLockToDispose = initLock;
-                }
-
-                // アクティブセッションの更新
-                if (deleted && _activeSessionId == sessionId)
+                // アクティブセッションの更新（消えたのが表示中なら別のものへ寄せる）
+                if (_activeSessionId.HasValue && deletedIds.Contains(_activeSessionId.Value))
                 {
                     _activeSessionId = _sessionInfos.Keys.FirstOrDefault();
                 }
             }
 
             // ロック外でDispose（デッドロック防止）
-            sessionToDispose?.Dispose();
-            sessionInfoConPtyToDispose?.Dispose();
-            initLockToDispose?.Dispose();
+            foreach (var d in toDispose)
+            {
+                d.Dispose();
+            }
 
-            if (deleted)
+            foreach (var id in deletedIds)
             {
                 // 生ストリームキャプチャのライターも閉じる（ハンドルリーク防止）
-                _rawStreamCapture?.CloseSession(sessionId);
+                _rawStreamCapture?.CloseSession(id);
                 // --settings 用 hook 設定ファイルの後始末（残っても実害はないが溜めない）
-                _claudeHookService?.DeleteHookConfigFile(sessionId);
+                _claudeHookService?.DeleteHookConfigFile(id);
                 // --mcp-config 用 MCP 設定ファイルの後始末（接続キーが書かれたファイルなので残さない）
-                _mcpConfigService?.DeleteMcpConfigFile(sessionId);
-                _logger.LogInformation("セッションを完全削除しました: {SessionId}", sessionId);
+                _mcpConfigService?.DeleteMcpConfigFile(id);
+                _logger.LogInformation("セッションを完全削除しました: {SessionId}", id);
+            }
+
+            if (deletedIds.Count > 0)
+            {
                 NotifySessionsChanged();
             }
+
+            return deletedIds;
+        }
+
+        /// <summary>
+        /// 自分自身と、その配下の子セッションを列挙する（親が先・子が後）。
+        /// 階層は worktree の1段だけだが、取りこぼしと循環参照のどちらでも壊れないよう
+        /// 訪問済みを持って推移的にたどる。呼び出しは _lockObject 保持下で行うこと。
+        /// </summary>
+        private List<Guid> CollectSelfAndDescendants(Guid rootId)
+        {
+            var ordered = new List<Guid> { rootId };
+            var visited = new HashSet<Guid> { rootId };
+
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var parentId = ordered[i];
+                foreach (var child in _sessionInfos.Values)
+                {
+                    if (child.ParentSessionId == parentId && visited.Add(child.SessionId))
+                    {
+                        ordered.Add(child.SessionId);
+                    }
+                }
+            }
+
+            return ordered;
         }
 
         /// <summary>

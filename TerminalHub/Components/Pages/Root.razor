@@ -1913,9 +1913,13 @@
 
     private async Task DeleteArchivedSession(Guid sessionId)
     {
-        SessionManager.DeleteSession(sessionId);
-        await DeleteSessionFromStorageAsync(sessionId);
-        bottomPanel?.RemoveMemoTabsForSession(sessionId);
+        // DeleteSession は子セッションも道連れにするので、後始末は「実際に消えた全件」に対して行う。
+        var deletedIds = SessionManager.DeleteSession(sessionId);
+        foreach (var deletedId in deletedIds)
+        {
+            await DeleteSessionFromStorageAsync(deletedId);
+            bottomPanel?.RemoveMemoTabsForSession(deletedId);
+        }
 
         sessions = SessionManager.GetAllSessions().ToList();
         StateHasChanged();
@@ -1926,9 +1930,13 @@
         var archivedSessions = SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
         foreach (var session in archivedSessions)
         {
-            SessionManager.DeleteSession(session.SessionId);
-            await DeleteSessionFromStorageAsync(session.SessionId);
-            bottomPanel?.RemoveMemoTabsForSession(session.SessionId);
+            // 先に消した親の道連れで既に消えている場合があり、そのときは空が返る（後始末も不要）。
+            var deletedIds = SessionManager.DeleteSession(session.SessionId);
+            foreach (var deletedId in deletedIds)
+            {
+                await DeleteSessionFromStorageAsync(deletedId);
+                bottomPanel?.RemoveMemoTabsForSession(deletedId);
+            }
         }
 
         sessions = SessionManager.GetAllSessions().ToList();
