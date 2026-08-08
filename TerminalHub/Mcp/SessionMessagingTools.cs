@@ -44,9 +44,17 @@ namespace TerminalHub.Mcp
     [McpServerToolType]
     public class SessionMessagingTools
     {
-        /// <summary>list_sessions の返却項目。</summary>
+        /// <summary>
+        /// list_sessions の返却項目。
+        /// parentSessionId は worktree セッションの親（UI の一覧で入れ子に表示される関係）。
+        /// 階層は1段だけなので、入れ子の構造ではなくフラット＋親へのポインタで返す
+        /// （親を持たないセッションが大半で、返却形が浅いほど扱いやすい）。
+        /// 入るのは実在する親の GUID だけ（親が削除済みなら null。親がアーカイブ済みなら
+        /// そもそも子ごと一覧に載らない）。
+        /// </summary>
         public record SessionSummary(
             string sessionId,
+            string? parentSessionId,
             string name,
             string terminalType,
             string folderPath,
@@ -73,7 +81,11 @@ namespace TerminalHub.Mcp
             "waiting_user_input(ユーザーの許可/選択待ち。**送信は可能**で、待ちが解消してから自動配送される) / " +
             "not_ready(ConPTY未接続=起動が必要・送信不可)。" +
             "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。" +
-            "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。")]
+            "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。" +
+            "parentSessionId は worktree セッションの親の GUID(親を持たなければ null)。" +
+            "同じ親を持つ項目が兄弟レーンで、そのまま send_to_session の宛先に使える。" +
+            "**返すのは実在する親の GUID だけ**なので、値が入っていれば必ず引ける" +
+            "(ただし呼び出し側のフィルタ引数で親が落ちれば、この応答には現れない)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -86,6 +98,23 @@ namespace TerminalHub.Mcp
             var result = new List<SessionSummary>();
             foreach (var s in sessionManager.GetActiveSessions())
             {
+                // 親を辿れない子は一覧に載せない（宛先として出しても無駄に終わるため）。
+                //
+                // アーカイブ済みの親を持つ子は、子自身が生きていても UI の一覧から姿を消す
+                // （親はアーカイブ除外で親行の候補から外れ、一方で孤児判定は「親が存在するか」
+                // しか見ないため子は孤児にもならない＝どこにも描画されない。これは仕様）。
+                // 人間から見えない＝復元も起動もしてもらえないので、宛先にできない。
+                //
+                // 親が削除済み（＝孤児）の子も同じく載せない。削除は子へカスケードするので
+                // 本来この状態は作られないが、それ以前に溜まった孤児が残っているため念のため弾く。
+                // UI は孤児を最上位に並べるので、ここだけは UI より厳しい扱いになる。
+                if (s.ParentSessionId.HasValue)
+                {
+                    var parent = sessionManager.GetSessionInfo(s.ParentSessionId.Value);
+                    if (parent == null || parent.IsArchived)
+                        continue;
+                }
+
                 if (!string.IsNullOrEmpty(terminalType) &&
                     !string.Equals(s.TerminalType.ToString(), terminalType, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -111,6 +140,8 @@ namespace TerminalHub.Mcp
 
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
+                    // 親を辿れない子は上で弾いてあるので、ここに GUID があれば必ず引ける。
+                    s.ParentSessionId?.ToString(),
                     name,
                     s.TerminalType.ToString(),
                     folder,
