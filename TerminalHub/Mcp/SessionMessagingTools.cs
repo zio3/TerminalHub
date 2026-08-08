@@ -98,17 +98,22 @@ namespace TerminalHub.Mcp
             var result = new List<SessionSummary>();
             foreach (var s in sessionManager.GetActiveSessions())
             {
-                // 親がアーカイブ済みの子は一覧に載せない。
-                // GetActiveSessions() は IsArchived で絞るので子自身は「生きている」が、UI 側の
-                // 一覧では親行ごと消える（親はアーカイブ除外で親行の候補から外れ、一方で孤児判定は
-                // 「親が存在するか」しか見ないため子は孤児にもならない＝どこにも描画されない）。
-                // 人間から見えない＝復元も起動もしてもらえないので、宛先として出しても無駄に終わる。
-                // 親が「削除」された子は UI に孤児として出るので、こちらは載せる（下で親を null にする）。
-                var parent = s.ParentSessionId.HasValue
-                    ? sessionManager.GetSessionInfo(s.ParentSessionId.Value)
-                    : null;
-                if (parent != null && parent.IsArchived)
-                    continue;
+                // 親を辿れない子は一覧に載せない（宛先として出しても無駄に終わるため）。
+                //
+                // アーカイブ済みの親を持つ子は、子自身が生きていても UI の一覧から姿を消す
+                // （親はアーカイブ除外で親行の候補から外れ、一方で孤児判定は「親が存在するか」
+                // しか見ないため子は孤児にもならない＝どこにも描画されない。これは仕様）。
+                // 人間から見えない＝復元も起動もしてもらえないので、宛先にできない。
+                //
+                // 親が削除済み（＝孤児）の子も同じく載せない。削除は子へカスケードするので
+                // 本来この状態は作られないが、それ以前に溜まった孤児が残っているため念のため弾く。
+                // UI は孤児を最上位に並べるので、ここだけは UI より厳しい扱いになる。
+                if (s.ParentSessionId.HasValue)
+                {
+                    var parent = sessionManager.GetSessionInfo(s.ParentSessionId.Value);
+                    if (parent == null || parent.IsArchived)
+                        continue;
+                }
 
                 if (!string.IsNullOrEmpty(terminalType) &&
                     !string.Equals(s.TerminalType.ToString(), terminalType, StringComparison.OrdinalIgnoreCase))
@@ -135,9 +140,8 @@ namespace TerminalHub.Mcp
 
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
-                    // 親が削除済みなら null（UI が孤児を最上位に並べるのと同じ扱い）。
-                    // 実在する親だけを返すので、ここに GUID があれば必ず引ける。
-                    parent != null ? s.ParentSessionId!.Value.ToString() : null,
+                    // 親を辿れない子は上で弾いてあるので、ここに GUID があれば必ず引ける。
+                    s.ParentSessionId?.ToString(),
                     name,
                     s.TerminalType.ToString(),
                     folder,
