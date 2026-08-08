@@ -455,14 +455,20 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             return;
 
         // 依頼元自身の書き込みには通知しない。「終端の書き込みで毎回通知」へ緩めた結果、
-        // 通知文面（update_context に書いて終えよ）→ 依頼元が同じ札へ終端を書く → また通知、
-        // という自己励振ループが成立し得るため、書き込み元＝依頼元をここで断ち切る（レビュー指摘）。
+        // 依頼元が同じ札へ終端を書く → また通知、という自己励振ループが成立し得るため、
+        // 書き込み元＝依頼元をここで断ち切る（レビュー指摘。かつては通知文面自体が
+        // 「update_context に書いて終えよ」とループを誘発していた。文面は改めたが、
+        // 依頼元＝キー付きセッションが札へ書けること自体は変わらないので防波堤として維持）。
         if (!ContextNotifyPolicy.ShouldNotifyRequester(record.RequesterSessionId, writerSessionId))
             return;
 
+        // 通知は報告に徹する。受け手の作法（update_context に書く）をここに書くと、依頼元が
+        // 従って受け手の結果を上書きする混入事故になる。「選択肢を出すな」もスコープが
+        // 決められない指示になるため書かない（その案内は依頼開始時のエンベロープが
+        // 「この依頼を終えるまで」とスコープ付きで持つ）。
         await SendSystemCallbackAsync(requesterId,
-            $"[TerminalHub] 依頼(contextId: {contextId})が {status} になりました。詳細は get_context で取得してください。" +
-            "処理中は選択肢を出さず、必要なことは update_context に書いて終えてください。");
+            $"[TerminalHub] 依頼(contextId: {contextId})が {status} になりました。結果は get_context で取得してください。" +
+            "この通知はあなた(依頼元)への報告です。応答は不要、結果を踏まえて元の作業を続けてください。");
     }
 
     private async Task SendSystemCallbackAsync(Guid requesterSessionId, string text)
