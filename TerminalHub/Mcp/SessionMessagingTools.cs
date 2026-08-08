@@ -82,7 +82,8 @@ namespace TerminalHub.Mcp
             "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。" +
             "parentSessionId は worktree セッションの親の GUID(親を持たなければ null)。" +
             "同じ親を持つ項目が兄弟レーンで、そのまま send_to_session の宛先に使える。" +
-            "親がこの一覧に無いこともある(既に閉じられた場合)。")]
+            "**親がこの一覧に無いこともある**(閉じられた・呼び出し側のフィルタで落ちた)。" +
+            "その場合でも宛先に使えば send_to_session が弾くので、別セッションへ誤送信されることはない。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -120,9 +121,11 @@ namespace TerminalHub.Mcp
 
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
-                    // 親の GUID をそのまま返す（この一覧に載っていない＝親が閉じられている場合もある）。
-                    // 「見つからない親」を隠して null にはしない: 送れば send_to_session が
-                    // 「宛先が見つかりません」で弾くので、静かな誤送信にはならない。
+                    // 親の GUID をそのまま返す。親がこの一覧に居ないことはあり得る
+                    // （閉じられた・アーカイブされた・呼び出し側のフィルタで落ちた）。
+                    // それでも隠して null にはしない: 宛先に使っても send_to_session が
+                    // 弾く（削除済みなら「見つかりません」、アーカイブ済みなら ConPTY が
+                    // 無いので「未起動」）ので、静かな誤送信にはならないため。
                     s.ParentSessionId?.ToString(),
                     name,
                     s.TerminalType.ToString(),
