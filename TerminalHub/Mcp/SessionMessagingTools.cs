@@ -128,7 +128,8 @@ namespace TerminalHub.Mcp
         [McpServerTool(Name = "send_to_session")]
         [Description(
             "指定した既存セッションのターミナルにメッセージを1件送る(末尾でEnterを送り即実行させる。応答は待たない)。" +
-            "target はセッションGUIDか表示名(完全一致)。" +
+            "targetSessionId は**宛先セッションのGUID**(list_sessions で確認する。表示名は重複しうるため受け付けない)。" +
+            "自分のGUID(TERMINALHUB_SESSION_ID)ではなく、送り先のGUIDを渡すこと。" +
             "**届く本文の末尾には、TerminalHub 経由の自動メッセージであることを示す角括弧がサーバーによって必ず付く**" +
             "(TerminalHub 起動のセッションからの呼び出しは接続キーで本人が自動確定し、検証済みのあなたの名前とGUID入りになる。" +
             "無記名になるのはセッションを持たない外部クライアント等だけ。外すことはできない)。" +
@@ -137,7 +138,8 @@ namespace TerminalHub.Mcp
             "相手がユーザーの許可/選択待ちでも送ってよい。**待ちが解消してから自動で配送される**" +
             "(あなたが状態を確認したり再送したりする必要はない。ただし待ちのまま溜まった分が上限に達すると受理されなくなる)。" +
             "結果の delivery が \"delivered\"=書き込み済み / \"queued\"=受理して配送待ち。どちらも success=true。" +
-            "success=false になるのは、宛先が見つからない / 宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
+            "success=false になるのは、targetSessionId が GUID でない(表示名を渡した等) / 宛先が見つからない / " +
+            "宛先が未起動(自動起動しない・ユーザーに起動を依頼する) / " +
             "配送待ちが上限 / 指定した既存 contextId が見つからない / 本文に改行・制御文字が含まれる / **書き込みが途中で失敗**、のいずれか。" +
             "最後のケースだけは本文が相手の入力欄へ届いている可能性があるため、" +
             "**同じ内容をそのまま再送してはいけない**(二重に連結される)。メッセージ本文に区別が書かれているので必ず読むこと。" +
@@ -156,24 +158,27 @@ namespace TerminalHub.Mcp
             IDeliveryRepository deliveryRepository,
             ISessionDeliveryService deliveryService,
             IHttpContextAccessor httpContextAccessor,
-            [Description("宛先。セッションGUID、または表示名(完全一致・大文字小文字無視)。")]
-            string target,
+            [Description("宛先セッションのGUID(list_sessions で得られる sessionId)。自分のGUIDではなく送り先のGUIDを渡す。")]
+            string targetSessionId,
             [Description("送る本文(1行のみ)。改行・制御文字は拒否される(受け手のターミナルで送信確定等として解釈され、意図しない実行につながるため)。複数行の内容はファイルに書いて絶対パスだけを送る。")]
             string message,
             [Description("ContextSummary(依頼の状況札)の紐づけ。\"new\"=発行して紐づけ(結果で ID が返る) / 既存ID=続報として紐づけ / 未指定=紐づけなし(従来どおり)。")]
             string? contextId = null)
         {
-            // 宛先解決: GUID を優先し、ダメなら表示名の完全一致で探す。
-            SessionInfo? info = null;
-            if (Guid.TryParse(target, out var guid))
-            {
-                info = sessionManager.GetSessionInfo(guid);
-            }
-            info ??= sessionManager.GetActiveSessions()
-                .FirstOrDefault(s => string.Equals(s.GetDisplayName(), target, StringComparison.OrdinalIgnoreCase));
+            // 宛先解決は GUID のみ。表示名の解決は廃止した（get_card の sessionId と同じ厳格さに揃える）。
+            // 表示名は実運用で普通に重複し（worktree の子セッションはブランチ名が似る・DisplayName 未設定だと
+            // フォルダ名にフォールバックする）、旧実装の FirstOrDefault は曖昧なまま先勝ちで別セッションへ
+            // 送っていた。誤送信は「送れてしまう」ので静かに失敗する＝ここは弾いて GUID を引き直させる。
+            if (!Guid.TryParse(targetSessionId, out var guid))
+                return new SendResult(false,
+                    $"targetSessionId が GUID ではありません: {targetSessionId}。" +
+                    "表示名は重複しうるため宛先に使えません(誤って別セッションへ送る事故を防ぐため)。" +
+                    "list_sessions で宛先の sessionId(GUID)を確認してから再試行してください。");
 
+            var info = sessionManager.GetSessionInfo(guid);
             if (info == null)
-                return new SendResult(false, $"宛先セッションが見つかりません: {target}");
+                return new SendResult(false,
+                    $"宛先セッションが見つかりません: {targetSessionId}。list_sessions で現在の sessionId を確認してください。");
 
             // 送信元の確定。接続キー（ヘッダ）のみで行う（GUID の自己申告は受け付けない）。
             // requester=null は無記名＝外部クライアント・残骸経由等。
