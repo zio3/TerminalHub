@@ -49,6 +49,8 @@ namespace TerminalHub.Mcp
         /// parentSessionId は worktree セッションの親（UI の一覧で入れ子に表示される関係）。
         /// 階層は1段だけなので、入れ子の構造ではなくフラット＋親へのポインタで返す
         /// （親を持たないセッションが大半で、返却形が浅いほど扱いやすい）。
+        /// 入るのは実在する親の GUID だけ（親が削除済みなら null。親がアーカイブ済みなら
+        /// そもそも子ごと一覧に載らない）。
         /// </summary>
         public record SessionSummary(
             string sessionId,
@@ -82,8 +84,8 @@ namespace TerminalHub.Mcp
             "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。" +
             "parentSessionId は worktree セッションの親の GUID(親を持たなければ null)。" +
             "同じ親を持つ項目が兄弟レーンで、そのまま send_to_session の宛先に使える。" +
-            "**親がこの一覧に無いこともある**(閉じられた・呼び出し側のフィルタで落ちた)。" +
-            "その場合でも宛先に使えば send_to_session が弾くので、別セッションへ誤送信されることはない。")]
+            "**返すのは実在する親の GUID だけ**なので、値が入っていれば必ず引ける" +
+            "(ただし呼び出し側のフィルタ引数で親が落ちれば、この応答には現れない)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -96,6 +98,18 @@ namespace TerminalHub.Mcp
             var result = new List<SessionSummary>();
             foreach (var s in sessionManager.GetActiveSessions())
             {
+                // 親がアーカイブ済みの子は一覧に載せない。
+                // GetActiveSessions() は IsArchived で絞るので子自身は「生きている」が、UI 側の
+                // 一覧では親行ごと消える（親はアーカイブ除外で親行の候補から外れ、一方で孤児判定は
+                // 「親が存在するか」しか見ないため子は孤児にもならない＝どこにも描画されない）。
+                // 人間から見えない＝復元も起動もしてもらえないので、宛先として出しても無駄に終わる。
+                // 親が「削除」された子は UI に孤児として出るので、こちらは載せる（下で親を null にする）。
+                var parent = s.ParentSessionId.HasValue
+                    ? sessionManager.GetSessionInfo(s.ParentSessionId.Value)
+                    : null;
+                if (parent != null && parent.IsArchived)
+                    continue;
+
                 if (!string.IsNullOrEmpty(terminalType) &&
                     !string.Equals(s.TerminalType.ToString(), terminalType, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -121,12 +135,9 @@ namespace TerminalHub.Mcp
 
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
-                    // 親の GUID をそのまま返す。親がこの一覧に居ないことはあり得る
-                    // （閉じられた・アーカイブされた・呼び出し側のフィルタで落ちた）。
-                    // それでも隠して null にはしない: 宛先に使っても send_to_session が
-                    // 弾く（削除済みなら「見つかりません」、アーカイブ済みなら ConPTY が
-                    // 無いので「未起動」）ので、静かな誤送信にはならないため。
-                    s.ParentSessionId?.ToString(),
+                    // 親が削除済みなら null（UI が孤児を最上位に並べるのと同じ扱い）。
+                    // 実在する親だけを返すので、ここに GUID があれば必ず引ける。
+                    parent != null ? s.ParentSessionId!.Value.ToString() : null,
                     name,
                     s.TerminalType.ToString(),
                     folder,
