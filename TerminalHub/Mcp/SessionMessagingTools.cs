@@ -44,9 +44,15 @@ namespace TerminalHub.Mcp
     [McpServerToolType]
     public class SessionMessagingTools
     {
-        /// <summary>list_sessions の返却項目。</summary>
+        /// <summary>
+        /// list_sessions の返却項目。
+        /// parentSessionId は worktree セッションの親（UI の一覧で入れ子に表示される関係）。
+        /// 階層は1段だけなので、入れ子の構造ではなくフラット＋親へのポインタで返す
+        /// （親を持たないセッションが大半で、返却形が浅いほど扱いやすい）。
+        /// </summary>
         public record SessionSummary(
             string sessionId,
+            string? parentSessionId,
             string name,
             string terminalType,
             string folderPath,
@@ -73,7 +79,10 @@ namespace TerminalHub.Mcp
             "waiting_user_input(ユーザーの許可/選択待ち。**送信は可能**で、待ちが解消してから自動配送される) / " +
             "not_ready(ConPTY未接続=起動が必要・送信不可)。" +
             "hasCard=true のセッションは自己紹介カードを持っている(本文は get_card で取得)。" +
-            "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。")]
+            "memo はセッションの短い注釈(「今なにをしているか」やレーン運用の空き/予約札)。" +
+            "parentSessionId は worktree セッションの親の GUID(親を持たなければ null)。" +
+            "同じ親を持つ項目が兄弟レーンで、そのまま send_to_session の宛先に使える。" +
+            "親がこの一覧に無いこともある(既に閉じられた場合)。")]
         public static IEnumerable<SessionSummary> ListSessions(
             ISessionManager sessionManager,
             [Description("種別で絞り込み(ClaudeCode / CodexCLI / GeminiCLI / Terminal / Antigravity / Grok)。未指定なら全種別。")]
@@ -111,6 +120,10 @@ namespace TerminalHub.Mcp
 
                 result.Add(new SessionSummary(
                     s.SessionId.ToString(),
+                    // 親の GUID をそのまま返す（この一覧に載っていない＝親が閉じられている場合もある）。
+                    // 「見つからない親」を隠して null にはしない: 送れば send_to_session が
+                    // 「宛先が見つかりません」で弾くので、静かな誤送信にはならない。
+                    s.ParentSessionId?.ToString(),
                     name,
                     s.TerminalType.ToString(),
                     folder,

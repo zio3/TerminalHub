@@ -137,12 +137,17 @@ TerminalHub が管理中の（アーカイブでない）セッション一覧�
 | フィールド | 型 | 説明 |
 |---|---|---|
 | `sessionId` | string | セッション GUID |
+| `parentSessionId` | string? | worktree セッションの親の GUID（親を持たなければ `null`）。同じ親を持つ項目が兄弟レーン。UI の一覧で入れ子に表示されている関係と同じもの |
 | `name` | string | 表示名 |
 | `terminalType` | string | 種別 |
 | `folderPath` | string | 作業フォルダ |
 | `status` | string | `ready`（受付中。作業中でも相手CLIのキューに積まれる） / `waiting_user_input`（ユーザーの許可/選択待ち。**送信は可能**で、待ち解消後に自動配送される） / `not_ready`（ConPTY未接続=起動が必要・送信不可） |
 | `hasCard` | bool | 自己紹介カードの有無（本文は含めない。`get_card` で取得）。カード持ちだけ読みに行くための当たり付け用 |
 | `memo` | string | セッションのメモ（UI の一覧に出るのと同じ短い札）。worktree レーン運用ではディスパッチャが「タスク無し」＝空きレーンを判別するのに使う（`docs/worktree-lane-operation.md` 参照） |
+
+> **親子関係はフラット＋親へのポインタで返す**（入れ子の構造にはしない）。階層は worktree の1段だけで、親を持たないセッションが大半のため、返却形は浅いほうが扱いやすい。絞り込み引数は用意していない（一覧は全件返るので、同じ `parentSessionId` を持つ項目を数えるだけで兄弟が分かる）。
+>
+> 親が**この一覧に載っていないこともある**（既に閉じられた場合）。その GUID を宛先に使っても `send_to_session` が「宛先が見つかりません」で弾くので、静かな誤送信にはならない。
 
 ### `send_to_session`
 
