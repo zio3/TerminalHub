@@ -1319,6 +1319,8 @@ namespace TerminalHub.Services
         ///
         /// 戻り値は実際に削除した SessionId（親を含む）。呼び出し側はこの全件について
         /// 永続化側（DB・メモタブ等）の後始末を行うこと。
+        /// **並びは子が先・親が最後**で、この順に消せば自己参照 FK に引っかからない
+        /// （順序を変えないこと。詳細は CollectSelfAndDescendants）。
         /// </summary>
         public IReadOnlyList<Guid> DeleteSession(Guid sessionId)
         {
@@ -1398,12 +1400,19 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
-        /// 自分自身と、その配下の子セッションを列挙する（親が先・子が後）。
+        /// 自分自身と、その配下の子セッションを列挙する。**順序は子が先・親が最後**。
+        ///
+        /// 順序が要件なのは呼び出し側の永続化のため。Sessions.ParentSessionId は
+        /// Sessions(SessionId) への自己参照 FK（SessionDbContext の CREATE TABLE）なので、
+        /// 子の行が残ったまま親の行を消すと「FOREIGN KEY constraint failed」で落ちる。
+        /// この順で返しておけば、呼び出し側は返り値を順に消すだけで安全になる。
+        ///
         /// 階層は worktree の1段だけだが、取りこぼしと循環参照のどちらでも壊れないよう
         /// 訪問済みを持って推移的にたどる。呼び出しは _lockObject 保持下で行うこと。
         /// </summary>
         private List<Guid> CollectSelfAndDescendants(Guid rootId)
         {
+            // まず親→子の順に幅優先で集める
             var ordered = new List<Guid> { rootId };
             var visited = new HashSet<Guid> { rootId };
 
@@ -1419,6 +1428,8 @@ namespace TerminalHub.Services
                 }
             }
 
+            // 深い側から消せるよう反転する（幅優先で積んだので、逆順なら必ず子が親より先に来る）
+            ordered.Reverse();
             return ordered;
         }
 
