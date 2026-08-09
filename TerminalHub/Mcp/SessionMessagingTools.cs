@@ -438,7 +438,7 @@ namespace TerminalHub.Mcp
             // 解釈して working のまま回答を書き、依頼元に永遠に伝わらない実害があった（2026-08-02）。
             // 札は「この依頼」単位＝依頼に応えられた時点で completed。working は通知されない事実も明記する。
             return $" [{head} — {from} / contextId: {contextId} — " +
-                   "回答・結果は update_context に status=completed で書く(working は依頼元に通知されない)。途中で相談したいときだけ send_to_session で依頼元へ返す]";
+                   "回答・結果は update_context に status=completed で書く(working は依頼元に通知されない)。この依頼を終えるまで人間への選択肢(AskUserQuestion等)は控え、確認・相談は send_to_session で依頼元へ返す]";
         }
 
         [McpServerTool(Name = "set_memo")]
@@ -586,8 +586,9 @@ namespace TerminalHub.Mcp
         //   依頼元がセッションのときポーリングは原理的に成立しない（送信直後にターンが終わるので
         //   回す主体がいない）ため。禁じているのは「複数の結果を待ち合わせて集める」ことで、
         //   これは「札に購読者が1人いる。終端 status が書かれたら1通配る」というルーティング1本。
-        // - contextId は capability 兼用（知っている=読み書きできる）。A2A の contextId と同じく
-        //   最初の送信時にサーバーが発行して返す。status の語彙は A2A TaskState をそのまま使う。
+        // - contextId は capability 兼用（知っている=読める。書き込みはさらに接続キーによる本人確定が
+        //   必要＝2026-08-08 変更）。A2A の contextId と同じく最初の送信時にサーバーが発行して返す。
+        //   status の語彙は A2A TaskState をそのまま使う。
 
         private static readonly string[] AllowedContextStatuses =
             { "submitted", "working", "completed", "failed", "canceled" };
@@ -615,8 +616,8 @@ namespace TerminalHub.Mcp
             "依頼側が本人確定済みのセッション(TerminalHub 起動のセッションなら通常はそう)の場合、札が終端状態" +
             "(completed / failed / canceled)になった時点で自動通知が届くのでポーリングは不要。" +
             "本人確定の無い外部クライアントは、これをポーリングして進捗・結果を受け取る。" +
-            "ID を知っていれば誰でも読める(ID が読み書きの資格を兼ねる)。" +
-            "updatedBy は最終書き込み者の検証済みセッション名(null なら無記名の書き込み)。")]
+            "ID を知っていれば誰でも読める(書き込みは本人確定済みの接続のみ)。" +
+            "updatedBy は最終書き込み者の検証済みセッション名(TerminalHub (system) は配送失敗等のシステム記録)。")]
         public static async Task<ContextSummaryResult> GetContext(
             IContextRepository contextRepository,
             [Description("対象の contextId。")]
@@ -643,9 +644,9 @@ namespace TerminalHub.Mcp
             "working では通知されない。札は「その依頼」単位なので、依頼(質問・作業)に応えられた時点で " +
             "status=completed と結果の要約をセットで書くこと(あなたに残作業があっても札の完了とは別。" +
             "残作業が終わったら同じ札にもう一度 completed を書けば続報として再通知される)。" +
-            "セッション内からの書き込みは接続キーにより自動で記名される(「どのセッションが書いたか」が" +
+            "書き込みは接続キーで本人確定できる接続のみ(自動で記名され、「どのセッションが書いたか」が" +
             "検証済みで記録され、依頼側が信頼できる。引数で証明を渡す必要はない)。" +
-            "本人確定できない接続からでも書けるが無記名になる(外部クライアント用)。")]
+            "本人確定できない接続(外部クライアント等)からは書けない(読み取りは get_context)。")]
         public static async Task<SendResult> UpdateContext(
             ISessionManager sessionManager,
             IContextRepository contextRepository,
@@ -663,9 +664,15 @@ namespace TerminalHub.Mcp
                 return new SendResult(false,
                     $"status が不正です: {status}。使えるのは {string.Join(" / ", AllowedContextStatuses)} のみ。");
 
-            // 書き込み元の検証。接続キー（ヘッダ）のみで行い、キーの無い接続は無記名で通す
-            // (外部クライアント用。アクセス制御ではなく検証済み署名として機能する)。
+            // 書き込み元の検証。接続キー（ヘッダ）の無い接続（外部クライアント等）は拒否する。
+            // 当初は「無記名でも書ける（キーは ACL でなく署名）」だったが、contextId は受け手の
+            // ターミナルに平文で流れるため、ID を見ただけの第三者が終端 status（偽の完了報告）を
+            // 書けてしまう。無記名書き込みの実利用も無く、塞ぐ方を取った（2026-08-08）。
             var writer = ResolveCaller(sessionManager, httpContextAccessor);
+            if (writer == null)
+                return new SendResult(false,
+                    "本人確定できない接続からは書き込めません(読み取りは get_context を使ってください)。" +
+                    "TerminalHub 起動のセッションであれば、設定「TerminalHub MCP」を ON にして起動し直すとキー付きの接続になります。");
 
             var newStatus = status?.ToLowerInvariant();
             var updated = await contextRepository.UpdateAsync(

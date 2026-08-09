@@ -45,7 +45,10 @@ namespace TerminalHub.Services
     /// <summary>
     /// ContextSummary の永続化リポジトリ。
     /// contextId は send_to_session が発行する推測不能な値で capability を兼ねる
-    /// （知っている=読み書きできる。deliveryId と同じ哲学で認証を別途作らない）。
+    /// （知っている=読める。deliveryId と同じ哲学で読み取りには認証を別途作らない）。
+    /// 書き込みは contextId だけでは足りず、接続キーによる本人確定を要求する
+    /// （2026-08-08 変更。ID は受け手のターミナルに平文で流れるため、ID を見ただけの第三者が
+    /// 偽の完了報告を書けてしまうため。判定は MCP ツール層＝ SessionMessagingTools.UpdateContext）。
     /// </summary>
     public interface IContextRepository
     {

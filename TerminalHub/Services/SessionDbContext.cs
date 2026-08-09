@@ -542,7 +542,8 @@ namespace TerminalHub.Services
         {
             // v10 マイグレーション: ContextSummary（依頼の状況札）テーブル。
             // send_to_session の contextId="new" でサーバーが発行し、get_context/update_context で
-            // 読み書きする。ContextId は推測不能な値で capability を兼ねる（知っている=読み書きできる）。
+            // 読み書きする。ContextId は推測不能な値で capability を兼ねる（知っている=読める。
+            // 書き込みはさらに接続キーによる本人確定が必要＝2026-08-08 変更）。
             // セッションには紐づかない（外部クライアントも依頼主になれる）ため FK なし。
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
