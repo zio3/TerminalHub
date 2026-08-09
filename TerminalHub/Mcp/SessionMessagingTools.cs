@@ -550,8 +550,9 @@ namespace TerminalHub.Mcp
         //   依頼元がセッションのときポーリングは原理的に成立しない（送信直後にターンが終わるので
         //   回す主体がいない）ため。禁じているのは「複数の結果を待ち合わせて集める」ことで、
         //   これは「札に購読者が1人いる。終端 status が書かれたら1通配る」というルーティング1本。
-        // - contextId は capability 兼用（知っている=読み書きできる）。A2A の contextId と同じく
-        //   最初の送信時にサーバーが発行して返す。status の語彙は A2A TaskState をそのまま使う。
+        // - contextId は capability 兼用（知っている=読める。書き込みはさらに接続キーによる本人確定が
+        //   必要＝2026-08-08 変更）。A2A の contextId と同じく最初の送信時にサーバーが発行して返す。
+        //   status の語彙は A2A TaskState をそのまま使う。
 
         private static readonly string[] AllowedContextStatuses =
             { "submitted", "working", "completed", "failed", "canceled" };
