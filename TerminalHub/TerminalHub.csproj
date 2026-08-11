@@ -30,7 +30,7 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.0.0-preview.1" />
     <!-- CVE-2025-6965 (GHSA-2m69-gcr7-jv3q) を回避するため、SQLitePCLRaw を 3.x にオーバーライド -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
-    <PackageReference Include="MQTTnet" Version="5.1.0.1559" />
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
