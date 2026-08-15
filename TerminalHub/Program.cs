@@ -2,6 +2,7 @@ using TerminalHub.Services;
 using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;
+using TerminalHub.Helpers;
 using System.Text.Json;
 using Serilog;
 
@@ -256,6 +257,9 @@ if (!app.Environment.IsDevelopment())
 
 // HTTPSリダイレクトは無効化（ローカル環境での使用を想定）
 // app.UseHttpsRedirection();
+
+// SignalR が long polling に落ちていないかの見張り（詳細は SignalRTransportProbe のコメント参照）
+app.UseSignalRTransportProbe();
 
 app.UseAntiforgery();
 
