@@ -12,6 +12,10 @@ namespace TerminalHub.Helpers
     ///
     /// 判定: WebSocket なら /_blazor?id=... へのリクエストは接続あたり1本（アップグレードして
     /// 開きっぱなし）で終わる。素の HTTP リクエストが何十本も積み上がるのは long polling のときだけ。
+    ///
+    /// 現在は App.razor 側で transport を WebSocket に固定しているので、本来この警告は出ない。
+    /// 古い HTML をキャッシュしたタブや、将来 Blazor 側の仕様が変わった場合の見張りとして残している
+    /// （出たら固定が効いていないということ）。
     /// </summary>
     public static class SignalRTransportProbe
     {

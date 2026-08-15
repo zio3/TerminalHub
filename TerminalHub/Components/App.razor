@@ -45,7 +45,27 @@
 
 <body>
     <TerminalHub.Components.Pages.Root />
-    <script src="_framework/blazor.web.js"></script>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script>
+        // SignalR のトランスポートを WebSocket に固定する（long polling へフォールバックさせない）。
+        //
+        // localhost 前提のアプリなので、WebSocket が張れない状況そのものが異常事態。
+        // 一方 long polling へ落ちると、SignalR は WebSocket へ昇格し直さないため
+        // そのコネクションが生きている限り落ちたまま（実測で3時間以上）になる。
+        // long polling はターミナル出力の1バッチごとに HTTP 往復が発生して重く、
+        // リクエストログも大量に流れるので、静かに劣化するより繋がらない方がよい。
+        // 張れなければ Blazor 標準の「接続が失われました」UI が出る。
+        //
+        // configureSignalR には Blazor が withUrl("_blazor") 済みのビルダーが渡ってくる。
+        // withUrl の第2引数は既存 httpConnectionOptions へマージされるので transport だけ差し替わる。
+        Blazor.start({
+            circuit: {
+                configureSignalR: builder => builder.withUrl("_blazor", {
+                    transport: 1 // HttpTransportType.WebSockets
+                })
+            }
+        });
+    </script>
 
     <script src="js/terminal.js"></script>
     <script src="js/helpers.js"></script>
