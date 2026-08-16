@@ -45,6 +45,16 @@
 
 <body>
     <TerminalHub.Components.Pages.Root />
+
+    <!-- Blazor の初回接続失敗を知らせる帯。blazor.web.js はこの id を探して display:block に
+         するだけなので、置いていないと接続できなかったことが画面に一切出ない。
+         下で transport を WebSocket に固定している以上、これが無いと黙って死ぬ。 -->
+    <div id="blazor-error-ui">
+        サーバーへの接続に失敗しました。
+        <a href="" class="reload">再読み込み</a>
+        <a class="dismiss">×</a>
+    </div>
+
     <script src="_framework/blazor.web.js" autostart="false"></script>
     <script>
         // SignalR のトランスポートを WebSocket に固定する（long polling へフォールバックさせない）。
@@ -54,7 +64,8 @@
         // そのコネクションが生きている限り落ちたまま（実測で3時間以上）になる。
         // long polling はターミナル出力の1バッチごとに HTTP 往復が発生して重く、
         // リクエストログも大量に流れるので、静かに劣化するより繋がらない方がよい。
-        // 張れなければ Blazor 標準の「接続が失われました」UI が出る。
+        // 張れなかった場合、初回接続の失敗は再接続 UI ではなく #blazor-error-ui の帯で出る
+        // （確立済み接続が後から切れたときだけが再接続 UI の担当）。上の div がその受け皿。
         //
         // configureSignalR には Blazor が withUrl("_blazor") 済みのビルダーが渡ってくる。
         // withUrl の第2引数は既存 httpConnectionOptions へマージされるので transport だけ差し替わる。

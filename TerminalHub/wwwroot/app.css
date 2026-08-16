@@ -854,3 +854,36 @@ h1:focus {
 .terminal-context-menu-item:focus-visible {
     background-color: var(--th-sidebar-hover);
 }
+
+/* Blazor の初回接続失敗（WebSocket が張れない等）を知らせる帯。
+   blazor.web.js は #blazor-error-ui を探して display:block にするだけで、
+   要素が無ければ何も表示せず黙って死ぬ。App.razor で transport を WebSocket に
+   固定している以上、張れなかったことが画面で分かる必要があるので必ず置く。
+   （確立済み接続が切れた場合の再接続 UI は Blazor が自前で生成するので別系統） */
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1080;
+    padding: 0.75rem 1.25rem;
+    background-color: #dc3545;
+    color: #fff;
+    font-size: 0.875rem;
+    box-shadow: var(--th-shadow-lg);
+}
+
+#blazor-error-ui a {
+    color: #fff;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#blazor-error-ui .dismiss {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    text-decoration: none;
+    font-size: 1.1rem;
+}
