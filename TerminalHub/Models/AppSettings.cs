@@ -150,6 +150,8 @@ public class SessionDisplaySettings
     public bool ShowGitInfo { get; set; }
     /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（ShowGitInfo が有効な場合のみ意味を持つ）。既定 false。</summary>
     public bool GitChangesOnBadgeClick { get; set; }
+    /// <summary>実使用モデルのバッジを表示する（ClaudeCode / CodexCLI のみ）。既定 false。</summary>
+    public bool ShowModel { get; set; }
     public bool HideInputPanel { get; set; }
     /// <summary>
     /// 入力テキスト欄の下書きをセッションごとに保持するか。既定 true（＝セッション固定）。

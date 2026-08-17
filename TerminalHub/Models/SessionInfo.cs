@@ -190,6 +190,13 @@ namespace TerminalHub.Models
         
         [System.Text.Json.Serialization.JsonIgnore]
         public bool IsWorktree { get; set; }
+
+        /// <summary>
+        /// トランスクリプトから読んだ実使用モデルの短縮名（例: "opus-5"）。取得できない種別では null。
+        /// Git 情報と同じく起動のたびに読み直すため保存しない。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? CurrentModel { get; set; }
         
         // ParentSessionIdは保存して復元時に親子関係を維持
         public Guid? ParentSessionId { get; set; } // Worktreeの場合の親セッション

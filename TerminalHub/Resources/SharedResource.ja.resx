@@ -151,6 +151,9 @@
   <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>ブランチ名バッジ</value></data>
   <data name="Settings.Sessions.Display.GitChangesOnBadgeClick" xml:space="preserve"><value>Gitの変更状態をバッジクリックで表示</value></data>
   <data name="Settings.Sessions.Display.GitChangesOnBadgeClickSub" xml:space="preserve"><value>変更ファイル一覧を表示。変更なしはトースト通知</value></data>
+  <data name="Settings.Sessions.Display.ShowModel" xml:space="preserve"><value>モデルを表示</value></data>
+  <data name="Settings.Sessions.Display.ShowModelSub" xml:space="preserve"><value>Claude Code / Codex のみ</value></data>
+  <data name="Settings.Sessions.Display.ShowModelNote" xml:space="preserve"><value>実際に使われたモデルを記録から読むため、/model で切り替えた直後は前の値のまま表示されます。そのセッションが次に発話すると更新されます。</value></data>
   <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>セッション一覧に表示する追加情報を選択できます。</value></data>
   <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>入力パネル設定</value></data>
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>入力パネルを非表示</value></data>
@@ -574,6 +577,7 @@
   <data name="CommitInfo.CopyHash" xml:space="preserve"><value>ハッシュをコピー</value></data>
   <data name="CommitInfo.Copied" xml:space="preserve"><value>コピーしました</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>リモートコントロール接続中</value></data>
+  <data name="SessionList.Badge.ModelTitle" xml:space="preserve"><value>直近の発話で使われたモデル（切替直後は前の値のまま）</value></data>
   <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} 件</value></data>
   <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>セッション設定</value></data>
   <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>セッション削除</value></data>

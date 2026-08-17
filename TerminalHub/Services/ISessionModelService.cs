@@ -1,0 +1,21 @@
+using TerminalHub.Models;
+
+namespace TerminalHub.Services
+{
+    /// <summary>
+    /// セッションが「実際に今どのモデルで動いているか」を CLI のトランスクリプトから取得する。
+    /// 起動オプションではなく実測値を見るのは、/model による途中切り替えが頻繁に行われるため。
+    /// </summary>
+    public interface ISessionModelService
+    {
+        /// <summary>
+        /// 実使用モデルの短縮名（例: "opus-5", "gpt-5.6-sol"）を取得する。
+        /// 取得できない種別・記録が見つからない場合は null。
+        /// </summary>
+        /// <remarks>
+        /// モデル名は「切り替え後に次に発話したとき」に初めて記録へ残るため、
+        /// 切り替え直後は前の値が返る。これは仕様であり取得失敗ではない。
+        /// </remarks>
+        Task<string?> GetCurrentModelAsync(SessionInfo session);
+    }
+}

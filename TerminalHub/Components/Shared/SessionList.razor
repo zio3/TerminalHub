@@ -118,6 +118,13 @@
                             {
                                 <span class="badge bg-info ms-2">@GetTerminalTypeBadge(session.TerminalType)</span>
                             }
+                            @* 実使用モデル（トランスクリプト由来）。切替直後は次に発話するまで前の値のまま *@
+                            @if (ShowModel && !string.IsNullOrEmpty(session.CurrentModel))
+                            {
+                                <span class="badge bg-dark ms-1" title="@L["SessionList.Badge.ModelTitle"]">
+                                    @session.CurrentModel
+                                </span>
+                            }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
                                 @* クリック領域は赤丸＋Gitアイコンのみに限定（ブランチ名クリックでは履歴を開かない）。
@@ -246,6 +253,7 @@
     [Parameter] public int WidthPercent { get; set; } = 25;
     /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（設定のサブオプション）</summary>
     [Parameter] public bool GitChangesOnBadgeClick { get; set; }
+    [Parameter] public bool ShowModel { get; set; }
     [Parameter] public EventCallback<string> OnShowInfoToast { get; set; }
     [Parameter] public EventCallback<string> OnShowErrorToast { get; set; }
     [Parameter] public EventCallback<string> OnShowSuccessToast { get; set; }

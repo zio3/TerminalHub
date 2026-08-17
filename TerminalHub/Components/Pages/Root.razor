@@ -19,6 +19,7 @@
 @inject INotificationService NotificationService
 @inject IOutputAnalyzerFactory AnalyzerFactory
 @inject IGitService GitService
+@inject ISessionModelService SessionModelService
 @inject ITerminalService TerminalService
 @inject IOutputAnalyzerService OutputAnalyzerService
 @inject IInputHistoryService InputHistoryService
@@ -92,6 +93,7 @@
                      ShowTerminalType=@showTerminalType
                      ShowGitInfo=@showGitInfo
                      GitChangesOnBadgeClick=@gitChangesOnBadgeClick
+                     ShowModel=@showModel
                      OnShowInfoToast="(string msg) => toast?.ShowInfo(msg)"
                      OnShowErrorToast="(string msg) => toast?.ShowError(msg)"
                      OnShowSuccessToast="(string msg) => toast?.ShowSuccess(msg)"
@@ -208,6 +210,7 @@
     private bool showTerminalType = false; // ターミナル種別を表示
     private bool showGitInfo = false; // Git情報を表示
     private bool gitChangesOnBadgeClick = false; // Gitバッジクリックで変更ファイル一覧を表示
+    private bool showModel = false; // 実使用モデルのバッジを表示
     private bool hideInputPanel = false; // 入力パネルを非表示
     private bool perSessionInputText = true; // 入力テキストの下書きをセッションごとに保持（既定ON）
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
@@ -574,6 +577,7 @@
                 showTerminalType = appSettings.Sessions.ShowTerminalType;
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
                 gitChangesOnBadgeClick = appSettings.Sessions.GitChangesOnBadgeClick;
+                showModel = appSettings.Sessions.ShowModel;
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
@@ -758,6 +762,15 @@
                         });
 
                         await Task.WhenAll(tasks);
+
+                        // 起動直後もバッジが出るよう、実使用モデルも同じ裏処理で読む
+                        if (showModel)
+                        {
+                            foreach (var session in sessions.ToList())
+                            {
+                                session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
+                            }
+                        }
 
                         // Git情報取得完了後にUIを更新
                         await InvokeAsync(StateHasChanged);
@@ -1090,13 +1103,32 @@
         StateHasChanged();
     }
 
-    private void HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool hideInputPanel, bool perSessionInputText) settings)
+    private async Task HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool showModel, bool hideInputPanel, bool perSessionInputText) settings)
     {
         showTerminalType = settings.showTerminalType;
         showGitInfo = settings.showGitInfo;
         gitChangesOnBadgeClick = settings.gitChangesOnBadgeClick;
         hideInputPanel = settings.hideInputPanel;
         perSessionInputText = settings.perSessionInputText;
+
+        var modelTurnedOn = settings.showModel && !showModel;
+        showModel = settings.showModel;
+        StateHasChanged();
+
+        // ONにした直後にバッジが空のままだと壊れて見えるので、その場で読みに行く
+        if (modelTurnedOn)
+        {
+            await RefreshAllModelsAsync();
+        }
+    }
+
+    /// <summary>全セッションの実使用モデルを読み直す（バッジ表示ONのときのみ意味を持つ）</summary>
+    private async Task RefreshAllModelsAsync()
+    {
+        foreach (var session in sessions.ToList())
+        {
+            session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
+        }
         StateHasChanged();
     }
 
@@ -3325,7 +3357,21 @@
     private async Task RefreshGitStatus(Guid sessionId)
     {
         var sessionInfo = sessions.FirstOrDefault(s => s.SessionId == sessionId);
-        if (sessionInfo != null && sessionInfo.IsGitRepository)
+        if (sessionInfo == null) return;
+
+        // 実使用モデルも同じタイミングで更新する。ここは発話が終わった直後なので、
+        // トランスクリプトに最新のモデルが記録済みで、切り替えがあれば確実に拾える
+        if (showModel)
+        {
+            var model = await SessionModelService.GetCurrentModelAsync(sessionInfo);
+            if (model != sessionInfo.CurrentModel)
+            {
+                sessionInfo.CurrentModel = model;
+                StateHasChanged();
+            }
+        }
+
+        if (sessionInfo.IsGitRepository)
         {
             // Gitステータスを更新
             var gitInfo = await GitService.GetGitInfoAsync(sessionInfo.FolderPath);
