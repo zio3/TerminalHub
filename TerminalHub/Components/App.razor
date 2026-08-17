@@ -68,8 +68,9 @@
         // そのコネクションが生きている限り落ちたまま（実測で3時間以上）になる。
         // long polling はターミナル出力の1バッチごとに HTTP 往復が発生して重く、
         // リクエストログも大量に流れるので、静かに劣化するより繋がらない方がよい。
-        // 張れなかった場合、初回接続の失敗は再接続 UI ではなく #blazor-error-ui の帯で出る
-        // （確立済み接続が後から切れたときだけが再接続 UI の担当）。上の div がその受け皿。
+        // 張れなかった場合（WebSocket transport の開始失敗）は上の #blazor-error-ui の帯で出る。
+        // 一方 negotiate 自体の失敗は帯の手前で rethrow され再接続層が担当する。
+        // 帯は初回接続の失敗専用ではなく、確立済み回路の JS.Error とも共用。
         //
         // configureSignalR には Blazor が withUrl("_blazor") 済みのビルダーが渡ってくる。
         // withUrl の第2引数は既存 httpConnectionOptions へマージされるので transport だけ差し替わる。
