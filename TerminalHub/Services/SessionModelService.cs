@@ -19,8 +19,10 @@ namespace TerminalHub.Services
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
-        /// <summary>この時間より古い記録は「別のセッションのもの」とみなして拾わない</summary>
-        private static readonly TimeSpan ActiveWithin = TimeSpan.FromHours(24);
+        /// <summary>Codex の rollout 一覧（cwd 付き）を作り直す間隔</summary>
+        private static readonly TimeSpan IndexTtl = TimeSpan.FromMinutes(2);
+        /// <summary>Codex の走査上限。全件でも数百程度だが、増え続ける前提で頭を抑える</summary>
+        private const int CodexScanLimit = 500;
         /// <summary>末尾から読むバイト数。巨大な jsonl 全体を読むと極端に遅くなる</summary>
         private const int TailBytes = 256 * 1024;
 
@@ -84,7 +86,12 @@ namespace TerminalHub.Services
                 .FirstOrDefault(d => string.Equals(ToProjectKey(Path.GetFileName(d)), key, StringComparison.Ordinal));
             if (dir == null) return null;
 
-            var jsonl = NewestRecentFile(Directory.EnumerateFiles(dir, "*.jsonl"));
+            // 更新日時での足切りはしない。長く放置したセッションでもモデルは変わらず有効なため
+            // （フォルダが一致した時点で対象は確定しているので、その中の最新ファイルを見れば足りる）
+            var jsonl = Directory.EnumerateFiles(dir, "*.jsonl")
+                .Select(p => new FileInfo(p))
+                .OrderByDescending(f => f.LastWriteTime)
+                .FirstOrDefault()?.FullName;
             if (jsonl == null) return null;
 
             // 末尾から遡り、最後に assistant が喋ったときのモデルを拾う
@@ -92,7 +99,7 @@ namespace TerminalHub.Services
             {
                 if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
                 var m = ModelRegex.Match(line);
-                if (m.Success) return Shorten(m.Groups[1].Value);
+                if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
             }
             return null;
         }
@@ -113,52 +120,73 @@ namespace TerminalHub.Services
 
         private string? ReadCodexModel(string folderPath)
         {
-            var root = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "sessions");
-            if (!Directory.Exists(root)) return null;
-
-            var cutoff = DateTime.Now - ActiveWithin;
             var target = folderPath.Trim().TrimEnd('\\', '/', ' ');
 
-            var candidates = Directory.EnumerateFiles(root, "rollout-*.jsonl", SearchOption.AllDirectories)
-                .Select(f => new FileInfo(f))
-                .Where(f => f.LastWriteTime >= cutoff)
-                .OrderByDescending(f => f.LastWriteTime)
-                .Take(200);
-
-            foreach (var file in candidates)
+            // 一覧作りはセッション毎にやると同じ走査を人数分繰り返すので、まとめて作って使い回す
+            foreach (var (path, cwd) in GetCodexIndex())
             {
-                var head = ReadHead(file.FullName);
-                if (head == null) continue;
+                if (!string.Equals(cwd, target, StringComparison.OrdinalIgnoreCase)) continue;
 
-                // サブエージェントの記録にはモデル名ではない値（審査エージェント名等）が入るため除外する
-                if (head.Contains("\"thread_source\":\"subagent\"", StringComparison.Ordinal)) continue;
-
-                var cwd = CwdRegex.Match(head);
-                if (!cwd.Success) continue;
-                var recorded = cwd.Groups[1].Value.Replace("\\\\", "\\").Trim().TrimEnd('\\', '/', ' ');
-                if (!string.Equals(recorded, target, StringComparison.OrdinalIgnoreCase)) continue;
-
-                foreach (var line in ReadTailLines(file.FullName).Reverse())
+                foreach (var line in ReadTailLines(path).Reverse())
                 {
                     var m = ModelRegex.Match(line);
-                    if (m.Success) return Shorten(m.Groups[1].Value);
+                    if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
                 }
                 return null;
             }
             return null;
         }
 
+        private List<(string Path, string Cwd)>? _codexIndex;
+        private DateTime _codexIndexAt;
+
+        /// <summary>rollout を新しい順に並べ、先頭行から cwd を取った一覧。サブエージェントは除く</summary>
+        private List<(string Path, string Cwd)> GetCodexIndex()
+        {
+            if (_codexIndex != null && DateTime.UtcNow - _codexIndexAt < IndexTtl) return _codexIndex;
+
+            var index = new List<(string, string)>();
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "sessions");
+            if (!Directory.Exists(root))
+            {
+                _codexIndex = index;
+                _codexIndexAt = DateTime.UtcNow;
+                return index;
+            }
+
+            var files = Directory.EnumerateFiles(root, "rollout-*.jsonl", SearchOption.AllDirectories)
+                .Select(f => new FileInfo(f))
+                .OrderByDescending(f => f.LastWriteTime)
+                .Take(CodexScanLimit);
+
+            foreach (var file in files)
+            {
+                var head = ReadHead(file.FullName);
+                if (head == null) continue;
+
+                // サブエージェントの記録には、モデル名ではない値（審査エージェント名等）が入るため除外する
+                if (head.Contains("\"thread_source\":\"subagent\"", StringComparison.Ordinal)) continue;
+
+                var cwd = CwdRegex.Match(head);
+                if (!cwd.Success) continue;
+
+                index.Add((file.FullName, cwd.Groups[1].Value.Replace("\\\\", "\\").Trim().TrimEnd('\\', '/', ' ')));
+            }
+
+            _codexIndex = index;
+            _codexIndexAt = DateTime.UtcNow;
+            return index;
+        }
+
         // --- 共通 -------------------------------------------------------------
 
-        private static string? NewestRecentFile(IEnumerable<string> paths)
-        {
-            var cutoff = DateTime.Now - ActiveWithin;
-            return paths.Select(p => new FileInfo(p))
-                        .Where(f => f.LastWriteTime >= cutoff)
-                        .OrderByDescending(f => f.LastWriteTime)
-                        .FirstOrDefault()?.FullName;
-        }
+        /// <summary>
+        /// 実モデル名か。Claude Code は API エラー時の代替応答等に "&lt;synthetic&gt;" を記録するので、
+        /// これをバッジに出さないよう弾き、さらに遡って本物のモデルを探す
+        /// </summary>
+        private static bool IsRealModel(string model) =>
+            !string.IsNullOrEmpty(model) && !model.StartsWith('<');
 
         /// <summary>表示用の短縮（"claude-opus-5" -> "opus-5"）</summary>
         private static string Shorten(string model) =>
