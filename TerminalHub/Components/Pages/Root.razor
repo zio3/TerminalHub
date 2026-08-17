@@ -787,6 +787,27 @@
     /// ファイルは既定のアプリで開く。開けたら成功トースト（解決後のフルパス）、
     /// 見つからなければ警告トーストで知らせる。
     /// </summary>
+    /// <summary>
+    /// 先頭の ~ をホームディレクトリへ展開する（~ 単体 / ~\ / ~/ のみ対象）。
+    /// ターミナル出力には ~\AppData\... のような表記が普通に出てくるが、
+    /// Path.IsPathRooted は ~ を相対パス扱いするためセッションのフォルダと
+    /// 連結されて必ず「見つかりません」に落ちていた。
+    /// ~$temp.docx のような ~ 始まりの実ファイル名は展開対象にしない。
+    /// </summary>
+    private static string ExpandHomePath(string path)
+    {
+        if (path.Length == 0 || path[0] != '~')
+            return path;
+        if (path.Length > 1 && path[1] != '\\' && path[1] != '/')
+            return path;
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(home))
+            return path;
+
+        return path.Length == 1 ? home : home.TrimEnd('\\', '/') + path.Substring(1);
+    }
+
     [JSInvokable]
     public Task OnTerminalPathClick(string sessionId, string path)
     {
@@ -803,8 +824,9 @@
             var trimmed = path.Trim();
 
             // 候補パスを解決して実在すれば開く（フォルダ=エクスプローラー / ファイル=既定アプリ）
-            bool TryOpen(string candidate)
+            bool TryOpen(string rawCandidate)
             {
+                var candidate = ExpandHomePath(rawCandidate);
                 string fullPath;
                 try
                 {
@@ -878,8 +900,9 @@
                 return Task.FromResult<string?>(null);
 
             // OnTerminalPathClick と同じ規則で解決する（行番号付き表記のフォールバックも同様）
-            string? Resolve(string candidate)
+            string? Resolve(string rawCandidate)
             {
+                var candidate = ExpandHomePath(rawCandidate);
                 string fullPath;
                 try
                 {
