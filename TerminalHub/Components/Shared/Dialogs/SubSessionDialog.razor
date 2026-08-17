@@ -229,8 +229,11 @@
                                         <option value="">@L["SubSession.ExistingWorktree.Placeholder"]</option>
                                         @foreach (var worktree in availableWorktrees)
                                         {
+                                            @* 表示は worktree 名のみ。以前はブランチ名を括弧で出していたが、
+                                               detached HEAD の worktree はブランチを持たないため「()」になり
+                                               何を選んでいるか分からなかった *@
                                             <option value="@worktree.Path">
-                                                (@worktree.BranchName)
+                                                @WorktreeNaming.GetShortName(ParentSessionPath, worktree.Path)
                                                 @if (worktree.IsMain)
                                                 {
                                                     <text> @L["SubSession.WorktreeMainSuffix"]</text>

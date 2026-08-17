@@ -262,6 +262,15 @@
     private string GetGitBadgeTitle(SessionInfo session)
     {
         var kind = session.IsWorktree ? "Worktree" : L["SessionList.Badge.GitBranch"].Value;
+
+        // detached HEAD はバッジ本体が「@短縮ハッシュ」になり、ブランチ名との区別が付きにくい。
+        // 何を見ているのかはツールチップで補う。
+        if (GitInfo.IsDetachedHead(session.GitBranch))
+        {
+            var sha = session.GitBranch!.Substring(GitInfo.DetachedHeadPrefix.Length);
+            kind = $"{kind} - detached HEAD ({sha})";
+        }
+
         return GitChangesOnBadgeClick
             ? $"{kind} - {L["SessionList.Badge.GitBranchClickHint"].Value}"
             : kind;
