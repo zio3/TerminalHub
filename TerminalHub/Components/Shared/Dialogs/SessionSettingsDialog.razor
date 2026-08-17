@@ -382,6 +382,7 @@
                 LoadSessionInfo();
                 await RefreshMemoExistsAsync();
                 _loadedSessionId = SessionId;
+                copiedKey = null; // 前回対象の「コピーしました」表示を持ち越さない
             }
         }
         else if (!IsVisible)
