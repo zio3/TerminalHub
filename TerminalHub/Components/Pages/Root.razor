@@ -2806,7 +2806,7 @@
                     // 既存Worktree追加
                     if (!string.IsNullOrEmpty(result.WorktreePath))
                     {
-                        newSession = await AddExistingWorktreeSession(subSessionParentSessionId.Value, result.WorktreePath, result.BranchName, result.TerminalType, result.Options);
+                        newSession = await AddExistingWorktreeSession(subSessionParentSessionId.Value, result.WorktreePath, result.TerminalType, result.Options);
                     }
                     break;
 
@@ -2848,8 +2848,10 @@
                         result.UseDetached
                             ? L["Root.Toast.WorktreeCreatedDetached"]
                             : string.Format(L["Root.Toast.WorktreeCreatedFormat"], result.BranchName),
+                    // detached HEAD の worktree はブランチ名を持たない（そのままだと '' になる）ので、
+                    // セッションの表示名と同じ worktree 名を出す
                     SubSessionDialog.SubSessionType.AddExisting =>
-                        string.Format(L["Root.Toast.WorktreeAddedFormat"], result.BranchName),
+                        string.Format(L["Root.Toast.WorktreeAddedFormat"], newSession.DisplayName),
                     SubSessionDialog.SubSessionType.SamePath =>
                         string.Format(L["Root.Toast.SamePathSessionCreatedFormat"], GetSessionTypeName(result.TerminalType)),
                     SubSessionDialog.SubSessionType.NewFolder =>
@@ -2891,7 +2893,7 @@
         };
     }
 
-    private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath, string branchName, TerminalType terminalType, Dictionary<string, string> options)
+    private async Task<SessionInfo?> AddExistingWorktreeSession(Guid parentSessionId, string worktreePath, TerminalType terminalType, Dictionary<string, string> options)
     {
         // 親セッション情報を取得
         var parentSession = SessionManager.GetSessionInfo(parentSessionId);
@@ -2902,9 +2904,16 @@
         }
 
         // 既存のWorktreeをセッションとして追加（親はツリー表示でぶら下がるため省略）
+        //
+        // 表示名は worktree のフォルダ名から親のプレフィックスを落としたもの（worktree-1 等）。
+        // 以前はブランチ名を使っていたが、detached HEAD の worktree はブランチを持たないため
+        // 表示名が空になり、フォルダ名まるごと（AiHackPrd01-worktree-1）へフォールバックしていた。
+        // Worktree 新規作成側も同じサフィックスを表示名にするので、これで両者の見た目が揃う。
+        var displayName = WorktreeNaming.GetShortName(parentSession.FolderPath, worktreePath);
+
         var sessionInfo = await SessionManager.CreateSessionAsync(
             worktreePath,
-            branchName,
+            displayName,
             terminalType,
             options
         );

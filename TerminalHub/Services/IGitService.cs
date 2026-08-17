@@ -131,6 +131,17 @@ namespace TerminalHub.Services
 
     public class GitInfo
     {
+        /// <summary>
+        /// detached HEAD のときに「ブランチ名」の代わりに使う表示の目印。
+        /// この後ろに短縮コミットハッシュが続く（例: <c>@87073f2</c>）。
+        /// ブランチ名に @ 始まりは使えないので、実在のブランチと衝突しない。
+        /// </summary>
+        public const string DetachedHeadPrefix = "@";
+
+        /// <summary>ブランチ名が detached HEAD の表示（<see cref="DetachedHeadPrefix"/> 始まり）かどうか。</summary>
+        public static bool IsDetachedHead(string? branch) =>
+            !string.IsNullOrEmpty(branch) && branch.StartsWith(DetachedHeadPrefix);
+
         public string CurrentBranch { get; set; } = string.Empty;
         public bool HasUncommittedChanges { get; set; }
         public bool IsWorktree { get; set; }
@@ -140,8 +151,11 @@ namespace TerminalHub.Services
     public class WorktreeInfo
     {
         public string Path { get; set; } = string.Empty;
+        /// <summary>ブランチ名（refs/heads/ は除いた短い形）。detached HEAD のときは空。</summary>
         public string BranchName { get; set; } = string.Empty;
         public string? CommitHash { get; set; }
+        /// <summary>detached HEAD で作られた worktree（ブランチに紐づいていない）。</summary>
+        public bool IsDetached { get; set; }
         public bool IsMain { get; set; }
         public bool IsLocked { get; set; }
         public bool IsPrunable { get; set; }

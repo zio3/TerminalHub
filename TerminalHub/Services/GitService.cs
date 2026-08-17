@@ -43,7 +43,20 @@ namespace TerminalHub.Services
             try
             {
                 var result = await ExecuteGitCommandAsync(path, "branch --show-current");
-                return result.Success ? result.Output?.Trim() : null;
+                if (!result.Success)
+                    return null;
+
+                var branch = result.Output?.Trim();
+                if (!string.IsNullOrEmpty(branch))
+                    return branch;
+
+                // detached HEAD では branch --show-current が「成功したうえで空文字」を返す。
+                // 空のままだと UI 側の「ブランチ名が空なら Git バッジを出さない」条件に当たり、
+                // worktree の行から Git 情報が丸ごと消えてしまうので、短縮コミットハッシュを代わりに出す。
+                // ブランチ名と区別できるよう先頭に @ を付ける（git の `HEAD detached at <sha>` に相当）。
+                var head = await ExecuteGitCommandAsync(path, "rev-parse --short HEAD");
+                var sha = head.Success ? head.Output?.Trim() : null;
+                return string.IsNullOrEmpty(sha) ? null : GitInfo.DetachedHeadPrefix + sha;
             }
             catch (Exception ex)
             {
@@ -189,7 +202,11 @@ namespace TerminalHub.Services
                 if (!result.Success || string.IsNullOrEmpty(result.Output))
                     return worktrees;
 
-                var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                // 行末の \r は落としてから判定する。下の `line == "detached"` 等は完全一致なので、
+                // 改行コードが混ざると黙って素通りしてしまう（フラグが立たないだけでエラーは出ない）。
+                var lines = result.Output
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(l => l.TrimEnd('\r'));
                 WorktreeInfo? currentWorktree = null;
 
                 foreach (var line in lines)
@@ -212,7 +229,14 @@ namespace TerminalHub.Services
                         }
                         else if (line.StartsWith("branch "))
                         {
-                            currentWorktree.BranchName = line.Substring("branch ".Length).Trim();
+                            // --porcelain は完全な ref 名（refs/heads/master）で出す。
+                            // 呼び出し側は「master」のような短い名前と突き合わせるので、ここで揃えておく
+                            // （揃っていないと既存 worktree の再利用判定が常に不成立になる）。
+                            var refName = line.Substring("branch ".Length).Trim();
+                            const string headsPrefix = "refs/heads/";
+                            currentWorktree.BranchName = refName.StartsWith(headsPrefix)
+                                ? refName.Substring(headsPrefix.Length)
+                                : refName;
                         }
                         else if (line == "bare")
                         {
@@ -221,7 +245,9 @@ namespace TerminalHub.Services
                         }
                         else if (line == "detached")
                         {
-                            currentWorktree.BranchName = "(detached HEAD)";
+                            // BranchName は空のままにする。ここに "(detached HEAD)" のような表示用の
+                            // 文字列を入れると、ブランチ名との等値比較に紛れ込んで誤判定の元になる
+                            currentWorktree.IsDetached = true;
                         }
                         else if (line == "locked")
                         {
@@ -442,16 +468,21 @@ namespace TerminalHub.Services
                 var outputBuilder = new StringBuilder();
                 var errorBuilder = new StringBuilder();
 
+                // 改行は必ず LF で連結する（AppendLine は Windows だと CRLF を入れてしまう）。
+                // git 自身の出力は LF なので、AppendLine を使うと本来無い \r が混入し、
+                // 呼び出し側が Split('\n') した行の末尾に \r が残る。StartsWith や Trim 併用の
+                // 箇所は無事だが、`line == "detached"` のような完全一致は必ず false になり、
+                // detached worktree を見落とす原因になっていた。
                 process.OutputDataReceived += (sender, e) =>
                 {
                     if (e.Data != null)
-                        outputBuilder.AppendLine(e.Data);
+                        outputBuilder.Append(e.Data).Append('\n');
                 };
 
                 process.ErrorDataReceived += (sender, e) =>
                 {
                     if (e.Data != null)
-                        errorBuilder.AppendLine(e.Data);
+                        errorBuilder.Append(e.Data).Append('\n');
                 };
 
                 process.Start();
