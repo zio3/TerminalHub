@@ -399,9 +399,15 @@ function getBufferLineText(line) {
 // （＝表示上クリック可能なパスと、右クリックで拾うパスが必ず一致する）。
 const FILE_PATH_TOKEN_REGEX = /[^\s"'`()\[\]{}<>|;,！？。、（）「」]*[\\/][^\s"'`()\[\]{}<>|;,！？。、（）「」]*|[^\s"'`()\[\]{}<>|;,！？。、（）「」]+\.[A-Za-z][A-Za-z0-9]{0,7}/g;
 
-// URL検出の正規表現（URLフォールバックリンクプロバイダと右クリックメニューで共有）。
-// WebLinksAddon の内部正規表現には触れないため厳密一致は保証できないが、実用上ほぼ同じ範囲を拾う。
-const URL_TOKEN_REGEX = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+// URL検出の正規表現。ここを唯一の定義とし、WebLinksAddon にも urlRegex オプションで渡す
+// （＝左クリックでリンクになる範囲と、右クリック・フォールバックで拾う範囲が必ず一致する）。
+//
+// 中身は WebLinksAddon 0.12.0 の既定パターンから **本体部分の除外文字から `!` を外した** もの。
+// 既定では `!` が本体に入れないため、`https://www.chatwork.com/#!rid443369592` のような
+// hashbang 形式が `.../#` で切れてリンクにならなかった。
+// 末尾の1文字だけは別の（`!` を含む）除外クラスなので、`http://example.com!` の `!` や
+// 文末の `.` `,` は従来どおり URL に巻き込まれない。
+const URL_TOKEN_REGEX = /(https?|HTTPS?):[/]{2}[^\s"'*(){}|\\\^<>`]*[^\s"':,.!?{}|\\\^~\[\]`()<>]/g;
 
 // ファイルパス検出の設定
 // Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
@@ -625,10 +631,12 @@ function setupUrlDetection(term) {
     if (typeof WebLinksAddon !== 'undefined' && WebLinksAddon.WebLinksAddon) {
         try {
             // WebLinksAddonを作成（URLをクリック可能にする）
-            // 既定ハンドラは直接 window.open するため、コピー動作モードを差し込めるようカスタムハンドラを渡す
+            // 既定ハンドラは直接 window.open するため、コピー動作モードを差し込めるようカスタムハンドラを渡す。
+            // urlRegex には共通の URL_TOKEN_REGEX を渡し、既定パターン（`!` を拾えず hashbang URL が
+            // 途中で切れる）を上書きする。右クリック側と同じ範囲になるのもこれが理由。
             const webLinksAddon = new WebLinksAddon.WebLinksAddon((event, uri) => {
                 if (isPrimaryClick(event)) activateTerminalLink(uri);
-            });
+            }, { urlRegex: new RegExp(URL_TOKEN_REGEX.source) });
             term.loadAddon(webLinksAddon);
             console.log('[URL Detection] WebLinksAddon loaded successfully');
         } catch (error) {
