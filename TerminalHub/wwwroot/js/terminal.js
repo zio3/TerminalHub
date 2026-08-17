@@ -399,6 +399,10 @@ function getBufferLineText(line) {
 // （＝表示上クリック可能なパスと、右クリックで拾うパスが必ず一致する）。
 const FILE_PATH_TOKEN_REGEX = /[^\s"'`()\[\]{}<>|;,！？。、（）「」]*[\\/][^\s"'`()\[\]{}<>|;,！？。、（）「」]*|[^\s"'`()\[\]{}<>|;,！？。、（）「」]+\.[A-Za-z][A-Za-z0-9]{0,7}/g;
 
+// URL検出の正規表現（URLフォールバックリンクプロバイダと右クリックメニューで共有）。
+// WebLinksAddon の内部正規表現には触れないため厳密一致は保証できないが、実用上ほぼ同じ範囲を拾う。
+const URL_TOKEN_REGEX = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+
 // ファイルパス検出の設定
 // Claude Code 等が出力するファイル/フォルダ表記をクリック可能にする。
 // 検出は割り切り: 「/ または \ を含むトークン（末尾まで丸ごと）」と
@@ -641,8 +645,8 @@ function setupUrlDetection(term) {
 
 // WebLinksAddonが使用できない場合のフォールバック実装
 function setupUrlDetectionFallback(term) {
-    // HTTP/HTTPSのURLパターン
-    const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+    // HTTP/HTTPSのURLパターン（右クリック検出と共有の URL_TOKEN_REGEX から都度作る）
+    const urlRegex = new RegExp(URL_TOKEN_REGEX.source, 'g');
     
     // registerLinkProvider による手動リンクプロバイダー登録（xterm.js 6.0 でも利用可能）
     if (typeof term.registerLinkProvider === 'function') {
@@ -708,6 +712,13 @@ function setupUrlDetectionFallback(term) {
 function looksLikePath(text) {
     if (!text || text.length > 4096 || /[\r\n]/.test(text)) return false;
     return /[\\/]/.test(text) || /^[A-Za-z]:/.test(text) || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(text);
+}
+
+// 選択が URL らしいか。URL は / を含むため looksLikePath にも該当してしまう。
+// 先にこちらで判定して URL 用メニューへ振り分ける（パス用の「開く」はファイル解決に行き空振りするため）。
+function looksLikeUrl(text) {
+    if (!text || text.length > 4096 || /[\r\n\s]/.test(text)) return false;
+    return /^https?:\/\//i.test(text);
 }
 
 function closeTerminalContextMenu() {
@@ -777,6 +788,22 @@ function cellFromMouse(term, e) {
     return { col, row: term.buffer.active.viewportY + rowInViewport };
 }
 
+// バッファ上の (col,row) に URL があればその文字列を返す。無ければ null。
+// 「開きたいのではなく URL をコピーしたいだけ」の右クリックを拾う（左クリック＝開くと分離）。
+function urlTokenAtCell(term, col, row) {
+    const line = term.buffer.active.getLine(row);
+    if (!line) return null;
+    const { text: lineText, columns } = getBufferLineText(line);
+    const re = new RegExp(URL_TOKEN_REGEX.source, 'g');
+    let match;
+    while ((match = re.exec(lineText)) !== null) {
+        const startCol = columns[match.index];
+        const endCol = columns[match.index + match[0].length]; // 次文字の開始列＝排他的終端
+        if (col >= startCol && col < endCol) return match[0];
+    }
+    return null;
+}
+
 // バッファ上の (col,row) にパスリンクのトークンがあればその文字列を返す。無ければ null。
 // リンクプロバイダ（setupFilePathDetection）と同じ正規表現・同じ除外条件を用いるため、
 // 「クリック可能なパスとして表示されているトークン」とちょうど一致する。
@@ -802,7 +829,7 @@ function pathTokenAtCell(term, col, row) {
     return null;
 }
 
-// パス対象の共通コンテキストメニュー項目（コピー / 開く / フルパスをコピー）。
+// パス対象の共通コンテキストメニュー項目（コピー / 開く / フルパスをコピー / フォルダを開く）。
 // 選択テキストにもパスリンクにも同じメニューを出すため共通化する。
 function buildPathMenuItems(sessionId, text) {
     return [
@@ -819,6 +846,25 @@ function buildPathMenuItems(sessionId, text) {
                     .catch(() => copyLinkToClipboard(text));
             }
         },
+        {
+            // 親フォルダを Explorer で開いて対象を選択状態にする（ファイルをメール等へ
+            // ドラッグしたいケース向け。ファイルを「開く」のではなく置き場所へ行きたい）
+            label: 'フォルダを開く',
+            action: () => {
+                if (!window.terminalHubDotNetRef) return;
+                window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPathOpenFolder', sessionId, text)
+                    .catch(err => console.error('[Path Detection] open folder failed:', err));
+            }
+        },
+    ];
+}
+
+// URL 対象のコンテキストメニュー項目。メニューから選ぶ操作は意図が明示されているため、
+// コピー動作モード(terminalLinkCopyMode)に関わらず「コピー」はコピー、「開く」は開く。
+function buildUrlMenuItems(uri) {
+    return [
+        { label: 'URLをコピー', action: () => copyLinkToClipboard(uri) },
+        { label: '開く', action: () => window.open(uri, '_blank', 'noopener,noreferrer') },
     ];
 }
 
@@ -841,6 +887,13 @@ function attachSelectionContextMenu(term, element, sessionId) {
         }
 
         if (selection) {
+            // URL は / を含み looksLikePath にも該当するため、先に URL として振り分ける
+            // （パス用メニューだと「開く」がファイル解決に行き空振りする）
+            if (looksLikeUrl(selection)) {
+                e.preventDefault();
+                showTerminalContextMenu(e.clientX, e.clientY, buildUrlMenuItems(selection));
+                return;
+            }
             // パスでなければネイティブメニューの方が有用（DeepL・スペルチェック等）なので出さない
             if (!looksLikePath(selection)) return;
             e.preventDefault();
@@ -848,12 +901,18 @@ function attachSelectionContextMenu(term, element, sessionId) {
             return;
         }
 
-        // (2) 選択が無い場合は、右クリック位置にパスリンクがあればそれを対象にする。
-        //     「開きたいのではなくフルパスが欲しい」ケースを、リンク左クリック（＝開く）と分けて拾う。
+        // (2) 選択が無い場合は、右クリック位置に URL / パスリンクがあればそれを対象にする。
+        //     「開きたいのではなくコピー/フルパスが欲しい」ケースを、リンク左クリック（＝開く）と分けて拾う。
         const cell = cellFromMouse(term, e);
         if (!cell) return;
+        const url = urlTokenAtCell(term, cell.col, cell.row);
+        if (url) {
+            e.preventDefault();
+            showTerminalContextMenu(e.clientX, e.clientY, buildUrlMenuItems(url));
+            return;
+        }
         const token = pathTokenAtCell(term, cell.col, cell.row);
-        if (!token || !looksLikePath(token)) return; // パスリンク上でなければネイティブメニュー
+        if (!token || !looksLikePath(token)) return; // URL/パスリンク上でなければネイティブメニュー
         e.preventDefault();
         showTerminalContextMenu(e.clientX, e.clientY, buildPathMenuItems(sessionId, token));
     };
