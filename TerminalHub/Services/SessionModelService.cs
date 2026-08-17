@@ -19,7 +19,7 @@ namespace TerminalHub.Services
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
-        /// <summary>Codex の rollout 一覧（cwd 付き）を作り直す間隔</summary>
+        /// <summary>Claude のプロジェクト一覧（直接検索が外れたときの保険）を作り直す間隔</summary>
         private static readonly TimeSpan IndexTtl = TimeSpan.FromMinutes(2);
         /// <summary>Codex の走査上限。全件でも数百程度だが、増え続ける前提で頭を抑える</summary>
         private const int CodexScanLimit = 500;
@@ -36,20 +36,12 @@ namespace TerminalHub.Services
 
         public async Task<string?> GetCurrentModelAsync(SessionInfo session)
         {
-            if (string.IsNullOrEmpty(session.FolderPath)) return null;
-
-            // トランスクリプトを持つのは Claude Code と Codex のみ。他種別は対象外
-            if (session.TerminalType != TerminalType.ClaudeCode && session.TerminalType != TerminalType.CodexCLI)
-                return null;
+            if (!IsSupported(session)) return null;
 
             await _lock.WaitAsync();
             try
             {
-                if (_cache.TryGetValue(session.SessionId, out var cached)
-                    && DateTime.UtcNow - cached.ReadAt < CacheTtl)
-                {
-                    return cached.Model;
-                }
+                if (TryGetCached(session.SessionId, out var cached)) return cached;
 
                 var model = await Task.Run(() => session.TerminalType == TerminalType.ClaudeCode
                     ? ReadClaudeModel(session.FolderPath)
@@ -69,21 +61,79 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<IReadOnlyDictionary<Guid, string?>> GetCurrentModelsAsync(IReadOnlyList<SessionInfo> sessions)
+        {
+            var targets = sessions.Where(IsSupported).ToList();
+            var result = new Dictionary<Guid, string?>();
+            if (targets.Count == 0) return result;
+
+            await _lock.WaitAsync();
+            try
+            {
+                var pending = new List<SessionInfo>();
+                foreach (var s in targets)
+                {
+                    if (TryGetCached(s.SessionId, out var cached)) result[s.SessionId] = cached;
+                    else pending.Add(s);
+                }
+                if (pending.Count == 0) return result;
+
+                await Task.Run(() =>
+                {
+                    // Claude は 1 セッション = 1 ディレクトリ直接参照で済むので個別に引く
+                    foreach (var s in pending.Where(s => s.TerminalType == TerminalType.ClaudeCode))
+                    {
+                        result[s.SessionId] = ReadClaudeModel(s.FolderPath);
+                    }
+
+                    // Codex は cwd がファイルの中にしかなく、1 件ずつ引くと同じ走査を人数分繰り返すため、
+                    // 新しい順に1回だけ舐めて、全員分が揃った時点で打ち切る
+                    var codex = pending.Where(s => s.TerminalType == TerminalType.CodexCLI).ToList();
+                    if (codex.Count > 0)
+                    {
+                        foreach (var (id, model) in ResolveCodexBatch(codex)) result[id] = model;
+                    }
+                });
+
+                var now = DateTime.UtcNow;
+                foreach (var s in pending)
+                {
+                    _cache[s.SessionId] = (result.GetValueOrDefault(s.SessionId), now);
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[SessionModelService] モデルの一括取得に失敗");
+                return result;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        private static bool IsSupported(SessionInfo session) =>
+            !string.IsNullOrEmpty(session.FolderPath)
+            && (session.TerminalType == TerminalType.ClaudeCode || session.TerminalType == TerminalType.CodexCLI);
+
+        private bool TryGetCached(Guid sessionId, out string? model)
+        {
+            if (_cache.TryGetValue(sessionId, out var e) && DateTime.UtcNow - e.ReadAt < CacheTtl)
+            {
+                model = e.Model;
+                return true;
+            }
+            model = null;
+            return false;
+        }
+
         // --- Claude Code -----------------------------------------------------
         // ~/.claude/projects/<記号を - に潰した cwd>/<uuid>.jsonl
 
         private string? ReadClaudeModel(string folderPath)
         {
-            var root = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
-            if (!Directory.Exists(root)) return null;
-
-            var key = ToProjectKey(folderPath);
-            if (key == null) return null;
-
-            // ディレクトリ名は既にエンコード済みだが、大文字小文字が揃わないので同じ変換をかけて突き合わせる
-            var dir = Directory.EnumerateDirectories(root)
-                .FirstOrDefault(d => string.Equals(ToProjectKey(Path.GetFileName(d)), key, StringComparison.Ordinal));
+            var dir = FindClaudeProjectDir(folderPath);
             if (dir == null) return null;
 
             // 更新日時での足切りはしない。長く放置したセッションでもモデルは変わらず有効なため
@@ -104,6 +154,44 @@ namespace TerminalHub.Services
             return null;
         }
 
+        /// <summary>
+        /// フォルダ名は cwd から機械的に決まるので、まず組み立てて直接叩く（全列挙は不要）。
+        /// Windows のパス比較は大文字小文字を区別しないため、記録側と綴りが違っても直接ヒットする。
+        /// 外れたときだけ、保険として一覧から突き合わせる。
+        /// </summary>
+        private string? FindClaudeProjectDir(string folderPath)
+        {
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
+            if (!Directory.Exists(root)) return null;
+
+            var key = ToProjectKey(folderPath);
+            if (key == null) return null;
+
+            var direct = Path.Combine(root, key);
+            if (Directory.Exists(direct)) return direct;
+
+            return GetClaudeProjectIndex(root).GetValueOrDefault(key);
+        }
+
+        private Dictionary<string, string>? _claudeIndex;
+        private DateTime _claudeIndexAt;
+
+        private Dictionary<string, string> GetClaudeProjectIndex(string root)
+        {
+            if (_claudeIndex != null && DateTime.UtcNow - _claudeIndexAt < IndexTtl) return _claudeIndex;
+
+            var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dir in Directory.EnumerateDirectories(root))
+            {
+                var k = ToProjectKey(Path.GetFileName(dir));
+                if (k != null) index[k] = dir;
+            }
+            _claudeIndex = index;
+            _claudeIndexAt = DateTime.UtcNow;
+            return index;
+        }
+
         /// <summary>パス -> projects のフォルダ名。末尾の空白や区切りは落としてから記号を潰す</summary>
         private static string? ToProjectKey(string? path)
         {
@@ -112,7 +200,7 @@ namespace TerminalHub.Services
             var sb = new StringBuilder(p.Length);
             foreach (var c in p)
                 sb.Append(char.IsAsciiLetterOrDigit(c) ? c : '-');
-            return sb.ToString().TrimEnd('-').ToLowerInvariant();
+            return sb.ToString().TrimEnd('-');
         }
 
         // --- Codex -----------------------------------------------------------
@@ -120,66 +208,94 @@ namespace TerminalHub.Services
 
         private string? ReadCodexModel(string folderPath)
         {
-            var target = folderPath.Trim().TrimEnd('\\', '/', ' ');
-
-            // 一覧作りはセッション毎にやると同じ走査を人数分繰り返すので、まとめて作って使い回す
-            foreach (var (path, cwd) in GetCodexIndex())
+            var target = NormalizePath(folderPath);
+            foreach (var file in EnumerateRolloutsNewestFirst())
             {
-                if (!string.Equals(cwd, target, StringComparison.OrdinalIgnoreCase)) continue;
-
-                foreach (var line in ReadTailLines(path).Reverse())
-                {
-                    var m = ModelRegex.Match(line);
-                    if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
-                }
-                return null;
+                if (MatchCodexCwd(file, target) is not string path) continue;
+                return ReadCodexModelFromFile(path);
             }
             return null;
         }
 
-        private List<(string Path, string Cwd)>? _codexIndex;
-        private DateTime _codexIndexAt;
-
-        /// <summary>rollout を新しい順に並べ、先頭行から cwd を取った一覧。サブエージェントは除く</summary>
-        private List<(string Path, string Cwd)> GetCodexIndex()
+        /// <summary>
+        /// 複数セッション分をまとめて解決する。新しい順に1回舐め、全員分が埋まったら打ち切る。
+        /// </summary>
+        private Dictionary<Guid, string?> ResolveCodexBatch(List<SessionInfo> sessions)
         {
-            if (_codexIndex != null && DateTime.UtcNow - _codexIndexAt < IndexTtl) return _codexIndex;
+            var result = sessions.ToDictionary(s => s.SessionId, _ => (string?)null);
 
-            var index = new List<(string, string)>();
-            var root = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "sessions");
-            if (!Directory.Exists(root))
+            // 同じフォルダに複数セッションがぶら下がることがあるのでまとめて持つ
+            var wanted = new Dictionary<string, List<Guid>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in sessions)
             {
-                _codexIndex = index;
-                _codexIndexAt = DateTime.UtcNow;
-                return index;
+                var key = NormalizePath(s.FolderPath);
+                if (!wanted.TryGetValue(key, out var ids)) wanted[key] = ids = new List<Guid>();
+                ids.Add(s.SessionId);
             }
 
-            var files = Directory.EnumerateFiles(root, "rollout-*.jsonl", SearchOption.AllDirectories)
-                .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.LastWriteTime)
-                .Take(CodexScanLimit);
-
-            foreach (var file in files)
+            foreach (var file in EnumerateRolloutsNewestFirst())
             {
-                var head = ReadHead(file.FullName);
-                if (head == null) continue;
+                if (wanted.Count == 0) break; // 全員分そろったので、残りは見ない
 
-                // サブエージェントの記録には、モデル名ではない値（審査エージェント名等）が入るため除外する
+                var head = ReadHead(file);
+                if (head == null) continue;
                 if (head.Contains("\"thread_source\":\"subagent\"", StringComparison.Ordinal)) continue;
 
                 var cwd = CwdRegex.Match(head);
                 if (!cwd.Success) continue;
 
-                index.Add((file.FullName, cwd.Groups[1].Value.Replace("\\\\", "\\").Trim().TrimEnd('\\', '/', ' ')));
-            }
+                var recorded = NormalizePath(cwd.Groups[1].Value.Replace("\\\\", "\\"));
+                if (!wanted.TryGetValue(recorded, out var ids)) continue;
 
-            _codexIndex = index;
-            _codexIndexAt = DateTime.UtcNow;
-            return index;
+                var model = ReadCodexModelFromFile(file);
+                foreach (var id in ids) result[id] = model;
+                wanted.Remove(recorded);
+            }
+            return result;
+        }
+
+        /// <summary>先頭行の cwd が target と一致すればそのパスを返す。サブエージェントの記録は除外</summary>
+        private string? MatchCodexCwd(string file, string target)
+        {
+            var head = ReadHead(file);
+            if (head == null) return null;
+
+            // サブエージェントの記録には、モデル名ではない値（審査エージェント名等）が入るため除外する
+            if (head.Contains("\"thread_source\":\"subagent\"", StringComparison.Ordinal)) return null;
+
+            var cwd = CwdRegex.Match(head);
+            if (!cwd.Success) return null;
+
+            var recorded = NormalizePath(cwd.Groups[1].Value.Replace("\\\\", "\\"));
+            return string.Equals(recorded, target, StringComparison.OrdinalIgnoreCase) ? file : null;
+        }
+
+        private string? ReadCodexModelFromFile(string path)
+        {
+            foreach (var line in ReadTailLines(path).Reverse())
+            {
+                var m = ModelRegex.Match(line);
+                if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
+            }
+            return null;
+        }
+
+        private static IEnumerable<string> EnumerateRolloutsNewestFirst()
+        {
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "sessions");
+            if (!Directory.Exists(root)) return Array.Empty<string>();
+
+            return Directory.EnumerateFiles(root, "rollout-*.jsonl", SearchOption.AllDirectories)
+                .Select(f => new FileInfo(f))
+                .OrderByDescending(f => f.LastWriteTime)
+                .Take(CodexScanLimit)
+                .Select(f => f.FullName);
         }
 
         // --- 共通 -------------------------------------------------------------
+
+        private static string NormalizePath(string path) => path.Trim().TrimEnd('\\', '/', ' ');
 
         /// <summary>
         /// 実モデル名か。Claude Code は API エラー時の代替応答等に "&lt;synthetic&gt;" を記録するので、

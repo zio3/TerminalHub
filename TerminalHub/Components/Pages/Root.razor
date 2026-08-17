@@ -766,10 +766,7 @@
                         // 起動直後もバッジが出るよう、実使用モデルも同じ裏処理で読む
                         if (showModel)
                         {
-                            foreach (var session in sessions.ToList())
-                            {
-                                session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
-                            }
+                            await RefreshAllModelsAsync(notify: false);
                         }
 
                         // Git情報取得完了後にUIを更新
@@ -1123,13 +1120,16 @@
     }
 
     /// <summary>全セッションの実使用モデルを読み直す（バッジ表示ONのときのみ意味を持つ）</summary>
-    private async Task RefreshAllModelsAsync()
+    private async Task RefreshAllModelsAsync(bool notify = true)
     {
-        foreach (var session in sessions.ToList())
+        var targets = sessions.ToList();
+        var models = await SessionModelService.GetCurrentModelsAsync(targets);
+        foreach (var session in targets)
         {
-            session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
+            session.CurrentModel = models.GetValueOrDefault(session.SessionId);
         }
-        StateHasChanged();
+        // 起動時の裏処理からは呼び出し側がまとめて再描画するので、その場合は通知しない
+        if (notify) StateHasChanged();
     }
 
     private void HandleClaudeModeSwitchKeyChanged(string key)
