@@ -661,4 +661,6 @@
   <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>セッション再作成エラー: {0}</value></data>
   <data name="Root.Confirm.DeleteSessionFormat" xml:space="preserve"><value>セッション「{0}」を削除しますか？</value></data>
   <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>セッション「{0}」をアーカイブしますか？</value></data>
+  <data name="App.ErrorUi.Message" xml:space="preserve"><value>エラーが発生しました。</value></data>
+  <data name="App.ErrorUi.Reload" xml:space="preserve"><value>再読み込み</value></data>
 </root>

@@ -1,4 +1,6 @@
-﻿@inject TerminalHub.Services.IAppSettingsService AppSettingsService
+﻿@using Microsoft.Extensions.Localization
+@inject TerminalHub.Services.IAppSettingsService AppSettingsService
+@inject IStringLocalizer<SharedResource> L
 @{
     // テーマをサーバーレンダー時点で決定して <html data-bs-theme> に埋め込む。
     // JS interop 経由で後から当てると、初期レンダリング時に一瞬ライトテーマが
@@ -46,12 +48,14 @@
 <body>
     <TerminalHub.Components.Pages.Root />
 
-    <!-- Blazor の初回接続失敗を知らせる帯。blazor.web.js はこの id を探して display:block に
-         するだけなので、置いていないと接続できなかったことが画面に一切出ない。
-         下で transport を WebSocket に固定している以上、これが無いと黙って死ぬ。 -->
+    <!-- Blazor 標準のエラー帯。blazor.web.js はこの id を探して display:block にするだけなので、
+         置いていないとエラーが画面に一切出ない。
+         出る条件は初回接続の失敗だけではなく、確立済み回路のサーバー側未処理例外（JS.Error）も
+         同じ経路を通るため、文言は接続に限定しない汎用のものにしている。
+         下で transport を WebSocket に固定している以上、これが無いと接続失敗時に黙って死ぬ。 -->
     <div id="blazor-error-ui">
-        サーバーへの接続に失敗しました。
-        <a href="" class="reload">再読み込み</a>
+        @L["App.ErrorUi.Message"]
+        <a href="" class="reload">@L["App.ErrorUi.Reload"]</a>
         <a class="dismiss">×</a>
     </div>
 
