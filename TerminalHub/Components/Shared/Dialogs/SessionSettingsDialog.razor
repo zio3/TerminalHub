@@ -35,9 +35,9 @@
                                 <div class="d-flex align-items-start">
                                     <code class="flex-grow-1 me-2 text-break" style="word-wrap: break-word; overflow-wrap: break-word;">@sessionInfo.FolderPath</code>
                                     <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
-                                            @onclick="() => CopyToClipboard(sessionInfo.FolderPath)"
-                                            title="@L["SessionSettings.Info.CopyFolderPath"]">
-                                        <i class="bi bi-clipboard"></i>
+                                            @onclick="() => CopyToClipboard(sessionInfo.FolderPath, CopyKeyFolderPath)"
+                                            title="@(copiedKey == CopyKeyFolderPath ? L["Common.Copied"] : L["SessionSettings.Info.CopyFolderPath"])">
+                                        <i class="bi @(copiedKey == CopyKeyFolderPath ? "bi-check2 text-success" : "bi-clipboard")"></i>
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0 ms-1"
                                             @onclick="() => OpenFolder(sessionInfo.FolderPath)"
@@ -53,9 +53,9 @@
                                 <div class="d-flex align-items-center">
                                     <code class="text-muted small">@sessionInfo.SessionId</code>
                                     <button type="button" class="btn btn-link btn-sm text-muted ms-2"
-                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString())"
-                                            title="@L["SessionSettings.Info.CopySessionId"]">
-                                        <i class="bi bi-clipboard small"></i>
+                                            @onclick="() => CopyToClipboard(sessionInfo.SessionId.ToString(), CopyKeySessionId)"
+                                            title="@(copiedKey == CopyKeySessionId ? L["Common.Copied"] : L["SessionSettings.Info.CopySessionId"])">
+                                        <i class="bi @(copiedKey == CopyKeySessionId ? "bi-check2 text-success" : "bi-clipboard") small"></i>
                                     </button>
                                 </div>
                             </div>
@@ -629,12 +629,17 @@
         return Task.CompletedTask;
     }
 
-    private async Task CopyToClipboard(string text)
+    // コピー成功時にアイコンを ✓ へ切り替えるための対象キー（数秒で元に戻す）。
+    // このダイアログには複数のコピーボタンがあるため bool ではなくキーで保持する
+    private string? copiedKey;
+
+    private async Task CopyToClipboard(string text, string key)
     {
+        var copied = false;
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-            // 成功時の視覚的フィードバックを追加する場合はここに
+            copied = true;
         }
         catch (Exception)
         {
@@ -642,13 +647,30 @@
             try
             {
                 await JSRuntime.InvokeVoidAsync("eval", $"document.execCommand('copy'); var textarea = document.createElement('textarea'); textarea.value = '{text}'; document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea);");
+                copied = true;
             }
             catch
             {
-                // コピーに失敗した場合は何もしない
+                // コピーに失敗した場合は何もしない（フィードバックも出さない）
             }
         }
+
+        if (!copied) return;
+
+        copiedKey = key;
+        StateHasChanged();
+        await Task.Delay(CopiedFeedbackMs);
+        // 待機中に別のボタンが押されていたら、そちらの表示を消さない
+        if (copiedKey == key)
+        {
+            copiedKey = null;
+            StateHasChanged();
+        }
     }
+
+    private const int CopiedFeedbackMs = 2000;
+    private const string CopyKeyFolderPath = "folderPath";
+    private const string CopyKeySessionId = "sessionId";
 
     private void OpenFolder(string path)
     {

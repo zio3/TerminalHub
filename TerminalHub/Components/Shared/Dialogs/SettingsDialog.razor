@@ -827,8 +827,8 @@
                                                 </a>
                                                 <button class="btn btn-outline-secondary btn-sm" type="button"
                                                         @onclick="() => CopyToClipboardText(GetRemoteLaunchAccessUrl())"
-                                                        title="@L["Settings.RemoteLaunch.CopyUrlTitle"]">
-                                                    <i class="bi bi-clipboard"></i>
+                                                        title="@(urlCopied ? L["Common.Copied"] : L["Settings.RemoteLaunch.CopyUrlTitle"])">
+                                                    <i class="bi @(urlCopied ? "bi-check2 text-success" : "bi-clipboard")"></i>
                                                 </button>
                                             </div>
                                             <div class="alert alert-warning mt-2 py-2">
@@ -2152,13 +2152,22 @@
         return $"{Constants.MqttConstants.WebUiBaseUrl}/{remoteLaunchTopicGuid}";
     }
 
+    // コピー成功時にアイコンを ✓ へ切り替える（数秒で元に戻す）
+    private bool urlCopied;
+
     private async Task CopyToClipboardText(string text)
     {
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
         }
-        catch { /* クリップボード API 不許可/回線切断時は失敗するが致命的でないため無視 */ }
+        catch { /* クリップボード API 不許可/回線切断時は失敗するが致命的でないため無視 */ return; }
+
+        urlCopied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        urlCopied = false;
+        StateHasChanged();
     }
 
     private async Task BrowseFavoriteFolder()
