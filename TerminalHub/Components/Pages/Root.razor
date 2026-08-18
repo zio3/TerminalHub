@@ -1130,8 +1130,8 @@
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session == null) return;
 
-        SessionModelService.Invalidate(sessionId);
-        session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
+        // 再起動直後はキャッシュの値が当てにならないので、無視して読み直させる
+        session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session, forceRefresh: true);
         StateHasChanged();
     }
 

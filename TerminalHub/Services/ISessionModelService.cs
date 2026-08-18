@@ -16,7 +16,9 @@ namespace TerminalHub.Services
         /// モデル名は「切り替え後に次に発話したとき」に初めて記録へ残るため、
         /// 切り替え直後は前の値が返る。これは仕様であり取得失敗ではない。
         /// </remarks>
-        Task<string?> GetCurrentModelAsync(SessionInfo session);
+        /// <param name="forceRefresh">true でキャッシュを無視して読み直す。セッション再起動のように、
+        /// 発話を待たずに値が変わりうる場面で使う</param>
+        Task<string?> GetCurrentModelAsync(SessionInfo session, bool forceRefresh = false);
 
         /// <summary>
         /// 複数セッション分をまとめて取得する。1件ずつ引くと同じ走査を人数分繰り返すため、
@@ -24,10 +26,5 @@ namespace TerminalHub.Services
         /// </summary>
         Task<IReadOnlyDictionary<Guid, string?>> GetCurrentModelsAsync(IReadOnlyList<SessionInfo> sessions);
 
-        /// <summary>
-        /// キャッシュを捨てて次回に読み直させる。セッション再起動のように、
-        /// 発話を待たずに値が変わりうる場面で使う。
-        /// </summary>
-        void Invalidate(Guid sessionId);
     }
 }

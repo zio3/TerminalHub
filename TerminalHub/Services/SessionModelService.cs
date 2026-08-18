@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using TerminalHub.Models;
@@ -15,8 +16,9 @@ namespace TerminalHub.Services
         private readonly ILogger<SessionModelService> _logger;
 
         // 直近の取得結果。短時間に何度も呼ばれても実ファイルを読み直さないための緩衝。
-        private readonly Dictionary<Guid, (string? Model, DateTime ReadAt)> _cache = new();
-        private readonly SemaphoreSlim _lock = new(1, 1);
+        // ロックは張らない（取得は読み取り専用で、同時に走っても結果は同じ。
+        // 走査中に他セッションの取得を待たせる方が害が大きい）。
+        private readonly ConcurrentDictionary<Guid, (string? Model, DateTime ReadAt)> _cache = new();
 
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
         /// <summary>Claude のプロジェクト一覧（直接検索が外れたときの保険）を作り直す間隔</summary>
@@ -36,15 +38,14 @@ namespace TerminalHub.Services
             _logger = logger;
         }
 
-        public async Task<string?> GetCurrentModelAsync(SessionInfo session)
+        public async Task<string?> GetCurrentModelAsync(SessionInfo session, bool forceRefresh = false)
         {
             if (!IsSupported(session)) return null;
 
-            await _lock.WaitAsync();
+            if (!forceRefresh && TryGetCached(session.SessionId, out var cached)) return cached;
+
             try
             {
-                if (TryGetCached(session.SessionId, out var cached)) return cached;
-
                 var model = await Task.Run(() => session.TerminalType == TerminalType.ClaudeCode
                     ? ReadClaudeModel(session.FolderPath)
                     : ReadCodexModel(session.FolderPath));
@@ -57,10 +58,6 @@ namespace TerminalHub.Services
                 _logger.LogWarning(ex, "[SessionModelService] モデル取得に失敗: {Path}", session.FolderPath);
                 return null;
             }
-            finally
-            {
-                _lock.Release();
-            }
         }
 
         public async Task<IReadOnlyDictionary<Guid, string?>> GetCurrentModelsAsync(IReadOnlyList<SessionInfo> sessions)
@@ -69,17 +66,16 @@ namespace TerminalHub.Services
             var result = new Dictionary<Guid, string?>();
             if (targets.Count == 0) return result;
 
-            await _lock.WaitAsync();
+            var pending = new List<SessionInfo>();
+            foreach (var s in targets)
+            {
+                if (TryGetCached(s.SessionId, out var cached)) result[s.SessionId] = cached;
+                else pending.Add(s);
+            }
+            if (pending.Count == 0) return result;
+
             try
             {
-                var pending = new List<SessionInfo>();
-                foreach (var s in targets)
-                {
-                    if (TryGetCached(s.SessionId, out var cached)) result[s.SessionId] = cached;
-                    else pending.Add(s);
-                }
-                if (pending.Count == 0) return result;
-
                 await Task.Run(() =>
                 {
                     // Claude は 1 セッション = 1 ディレクトリ直接参照で済むので個別に引く
@@ -109,18 +105,6 @@ namespace TerminalHub.Services
                 _logger.LogWarning(ex, "[SessionModelService] モデルの一括取得に失敗");
                 return result;
             }
-            finally
-            {
-                _lock.Release();
-            }
-        }
-
-        public void Invalidate(Guid sessionId)
-        {
-            // 取得中でも捨てて構わない値なので、ロック待ちはせず取れたときだけ消す
-            if (!_lock.Wait(0)) return;
-            try { _cache.Remove(sessionId); }
-            finally { _lock.Release(); }
         }
 
         private static bool IsSupported(SessionInfo session) =>
@@ -188,12 +172,16 @@ namespace TerminalHub.Services
             return GetClaudeProjectIndex(root).GetValueOrDefault(key);
         }
 
-        private Dictionary<string, string>? _claudeIndex;
-        private DateTime _claudeIndexAt;
+        // 複数スレッドから同時に読まれるので、作りかけを見せないよう完成品を丸ごと差し替える。
+        // 同時に作り直しが走っても結果は同じなので、作成自体は直列化しない。
+        private volatile ClaudeProjectIndex? _claudeIndex;
+
+        private sealed record ClaudeProjectIndex(Dictionary<string, string> Map, DateTime BuiltAt);
 
         private Dictionary<string, string> GetClaudeProjectIndex(string root)
         {
-            if (_claudeIndex != null && DateTime.UtcNow - _claudeIndexAt < IndexTtl) return _claudeIndex;
+            var current = _claudeIndex;
+            if (current != null && DateTime.UtcNow - current.BuiltAt < IndexTtl) return current.Map;
 
             var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var dir in Directory.EnumerateDirectories(root))
@@ -201,8 +189,7 @@ namespace TerminalHub.Services
                 var k = ToProjectKey(Path.GetFileName(dir));
                 if (k != null) index[k] = dir;
             }
-            _claudeIndex = index;
-            _claudeIndexAt = DateTime.UtcNow;
+            _claudeIndex = new ClaudeProjectIndex(index, DateTime.UtcNow);
             return index;
         }
 
