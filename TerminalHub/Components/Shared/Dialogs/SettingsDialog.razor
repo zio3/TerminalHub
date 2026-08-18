@@ -1787,8 +1787,19 @@
             }
 
             // ファイルに設定を保存
+            // このダイアログが編集しないセクションは、いま保存されている値から引き継ぐ。
+            // 下は AppSettings を丸ごと組み立て直す形なので、書き忘れたセクションは
+            // 保存のたびに既定へ戻る（SessionDefaults が実際にそうなっていた）。
+            var current = AppSettingsService.GetSettings();
+
             var settings = new AppSettings
             {
+                // 設定画面では触らないが、アプリが実行中に書き込む値
+                // （最後に確定したターミナル実寸・前回のターミナル種別・
+                //   Claude/Codex の権限モードなど）。引き継がないと、
+                //   設定を保存しただけで起動時サイズが 120x30 に戻ってしまう。
+                SessionDefaults = current.SessionDefaults,
+
                 Notifications = new NotificationSettings
                 {
                     EnableBrowserNotifications = browserNotificationEnabled,
@@ -1884,7 +1895,7 @@
                     PasswordHash = remoteLaunchPasswordCleared
                         ? null
                         : remoteLaunchPassword == Constants.MqttConstants.PasswordDummy || string.IsNullOrEmpty(remoteLaunchPassword)
-                            ? AppSettingsService.GetSettings().RemoteLaunch.PasswordHash
+                            ? current.RemoteLaunch.PasswordHash
                             : MqttService.ComputePasswordHash(remoteLaunchPassword)
                 }
             };
