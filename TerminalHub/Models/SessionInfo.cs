@@ -76,6 +76,11 @@ namespace TerminalHub.Models
         //    プロトコル機能宣言で別物のため、用語衝突を避けて card と呼ぶ）。
         public string Card { get; set; } = string.Empty;
 
+        // このセッションで有効なリンクプラグインの設定（採用の有無・順序・変数）。
+        // プラグイン本体は wwwrootplugins と %LOCALAPPDATA%TerminalHubplugins にあり、
+        // ここが持つのは「このセッションでどう使うか」だけ。DB には JSON で永続化する。
+        public List<LinkPluginSetting> LinkPlugins { get; set; } = new();
+
         // このセッションでだけ表示・送信できるカスタムコマンド（グローバル設定の Commands とは別管理）。
         // クイック送信バーではグローバル分の後ろに連結して表示する。DB には JSON で永続化。
         public List<CustomCommand> SessionCommands { get; set; } = new();

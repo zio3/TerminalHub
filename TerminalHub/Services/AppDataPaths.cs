@@ -23,6 +23,18 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// ユーザープラグイン（リンク化の .js）を置くフォルダ。dev/prod で分けない。
+        /// アプリ更新で消えないよう wwwroot ではなくユーザーデータ側に置く
+        /// （公開リポジトリに社内 URL 等を入れずに済む、という狙いもある）。
+        /// </summary>
+        public static string GetPluginsFolder()
+        {
+            var path = Path.Combine(UserDataRoot, "plugins");
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        /// <summary>
         /// ログ出力先フォルダのフルパス。dev では "logs-dev"、prod では "logs"。
         /// configOverride が指定されていればそちらを優先する (Logging:FolderName 等)。
         /// </summary>

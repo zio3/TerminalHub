@@ -73,13 +73,14 @@ namespace TerminalHub.Services
         Task<GitCommitInfo?> GetCommitInfoAsync(string path, string hash);
 
         /// <summary>
-        /// origin が GitHub リポジトリの場合、指定番号の PR ページ URL を組み立てて返す。
-        /// GitHub の /pull/{n} は対象が Issue なら /issues/{n} へ自動リダイレクトされるため PR/Issue の区別は不要。
+        /// origin のリモート URL をそのまま返す（解釈しない）。
+        /// リンクプラグインへ渡し、owner/repo の切り出しは JS 側の各プラグインが行う
+        /// （GitHub 以外を足すときに C# を触らずに済むようにするため）。
         /// </summary>
         /// <param name="path">リポジトリのパス</param>
-        /// <param name="number">PR/Issue 番号</param>
-        /// <returns>PR ページ URL。origin が github.com でない・取得失敗時は null</returns>
-        Task<string?> GetGitHubPrUrlAsync(string path, int number);
+        /// <returns>origin の URL。取得できない場合は null</returns>
+        Task<string?> GetOriginUrlAsync(string path);
+
     }
 
     /// <summary>

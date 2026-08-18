@@ -37,7 +37,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority, SessionCommands, Card
+                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins
                 FROM Sessions
                 ORDER BY LastAccessedAt DESC");
 
@@ -60,6 +60,7 @@ namespace TerminalHub.Services
                     IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
                     PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
                     SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14)),
+                LinkPlugins = DeserializeLinkPlugins(reader.IsDBNull(16) ? null : reader.GetString(16)),
                     Card = reader.IsDBNull(15) ? "" : reader.GetString(15)
                 };
                 sessions.Add(session);
@@ -83,7 +84,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority, SessionCommands, Card
+                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins
                 FROM Sessions
                 WHERE SessionId = @sessionId",
                 ("@sessionId", sessionId.ToString()));
@@ -110,6 +111,7 @@ namespace TerminalHub.Services
                 IsPinned = !reader.IsDBNull(12) && reader.GetInt64(12) == 1,
                 PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
                 SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14)),
+                LinkPlugins = DeserializeLinkPlugins(reader.IsDBNull(16) ? null : reader.GetString(16)),
                 Card = reader.IsDBNull(15) ? "" : reader.GetString(15)
             };
 
@@ -138,10 +140,10 @@ namespace TerminalHub.Services
                     INSERT INTO Sessions
                     (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                      IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                     IsPinned, PinPriority, SessionCommands, Card)
+                     IsPinned, PinPriority, SessionCommands, Card, LinkPlugins)
                     VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                             @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                            @isPinned, @pinPriority, @sessionCommands, @card)
+                            @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins)
                     ON CONFLICT(SessionId) DO UPDATE SET
                         DisplayName = excluded.DisplayName,
                         FolderPath = excluded.FolderPath,
@@ -157,7 +159,8 @@ namespace TerminalHub.Services
                         IsPinned = excluded.IsPinned,
                         PinPriority = excluded.PinPriority,
                         SessionCommands = excluded.SessionCommands,
-                        Card = excluded.Card",
+                        Card = excluded.Card,
+                        LinkPlugins = excluded.LinkPlugins",
                     ("@sessionId", session.SessionId.ToString()),
                     ("@displayName", session.DisplayName),
                     ("@folderPath", session.FolderPath),
@@ -173,7 +176,8 @@ namespace TerminalHub.Services
                     ("@isPinned", session.IsPinned ? 1 : 0),
                     ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value),
                     ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)),
-                    ("@card", session.Card));
+                    ("@card", session.Card),
+                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)));
 
                 // オプションを保存
                 await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
@@ -187,6 +191,27 @@ namespace TerminalHub.Services
             {
                 transaction.Rollback();
                 throw;
+            }
+        }
+
+        // リンクプラグインのセッション別設定も同様に JSON 文字列で保存する。
+        private static object SerializeLinkPlugins(List<LinkPluginSetting>? plugins)
+        {
+            if (plugins == null || plugins.Count == 0) return DBNull.Value;
+            return System.Text.Json.JsonSerializer.Serialize(plugins);
+        }
+
+        private static List<LinkPluginSetting> DeserializeLinkPlugins(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new List<LinkPluginSetting>();
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<LinkPluginSetting>>(json) ?? new List<LinkPluginSetting>();
+            }
+            catch
+            {
+                // 壊れた JSON でセッションごと読めなくなる方が損なので、設定だけ捨てる
+                return new List<LinkPluginSetting>();
             }
         }
 
@@ -397,10 +422,10 @@ namespace TerminalHub.Services
                         INSERT OR REPLACE INTO Sessions
                         (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                          IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                         IsPinned, PinPriority, SessionCommands, Card)
+                         IsPinned, PinPriority, SessionCommands, Card, LinkPlugins)
                         VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                                 @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                                @isPinned, @pinPriority, @sessionCommands, @card)",
+                                @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins)",
                         ("@sessionId", session.SessionId.ToString()),
                         ("@displayName", session.DisplayName),
                         ("@folderPath", session.FolderPath),
@@ -417,7 +442,8 @@ namespace TerminalHub.Services
                         ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value),
                         // localStorage 移行時も専用コマンド・自己紹介カードを取りこぼさない（列漏れで消えるのを防ぐ）
                         ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)),
-                        ("@card", session.Card));
+                        ("@card", session.Card),
+                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)));
 
                     // オプションを保存
                     await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);

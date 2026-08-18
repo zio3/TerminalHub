@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 13;
+        private const int CurrentSchemaVersion = 14;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -339,6 +339,30 @@ namespace TerminalHub.Services
                 }
                 await SetSchemaVersionAsync(13);
                 _logger.LogInformation("[DB][マイグレーション] v13 適用完了");
+            }
+
+
+            if (currentVersion < 14)
+            {
+                // v14: Sessions に LinkPlugins（リンクプラグインのセッション別設定）を JSON で追加。
+                // 既存行は NULL＝未設定で、読み出し側が空リストとして扱う。
+                _logger.LogInformation("[DB][マイグレーション] v14 適用開始: Sessions に LinkPlugins カラムを追加");
+                await using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    if (!await ColumnExistsAsync(connection, "Sessions", "LinkPlugins"))
+                    {
+                        await connection.ExecuteNonQueryAsync(
+                            "ALTER TABLE Sessions ADD COLUMN LinkPlugins TEXT");
+                        _logger.LogInformation("[DB][マイグレーション] v14: LinkPlugins カラムを追加");
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[DB][マイグレーション] v14: LinkPlugins カラムは既存のためスキップ");
+                    }
+                }
+                await SetSchemaVersionAsync(14);
+                _logger.LogInformation("[DB][マイグレーション] v14 適用完了");
             }
 
             _logger.LogInformation("[DB][マイグレーション] 完了");

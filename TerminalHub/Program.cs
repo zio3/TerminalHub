@@ -308,9 +308,45 @@ app.Use((context, next) =>
     return next();
 });
 
+// ユーザープラグイン（リンク化の .js）を配信する。実体は %LOCALAPPDATA%TerminalHubplugins。
+// ブラウザ側は import() で読み込むため、素の .js として配れれば足りる
+// （eval ではなく import にすることで DevTools でブレークポイントが張れる）。
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(AppDataPaths.GetPluginsFolder()),
+    RequestPath = "/user-plugins"
+});
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// リンクプラグインの一覧。組み込み（wwwroot/plugins）とユーザー（%LOCALAPPDATA%）の両方を返す。
+// ブラウザからはディレクトリを列挙できないため、URL の一覧だけサーバーが供給し、
+// 中身（id や pattern）は import() 後にモジュール自身から読む。
+app.MapGet("/api/plugins", (IWebHostEnvironment env) =>
+{
+    static IEnumerable<object> List(string folder, string source, string baseUrl)
+    {
+        if (!Directory.Exists(folder)) return Array.Empty<object>();
+        return Directory.EnumerateFiles(folder, "*.js")
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .Select(f => (object)new
+            {
+                source,
+                file = Path.GetFileName(f),
+                url = $"{baseUrl}/{Uri.EscapeDataString(Path.GetFileName(f))}",
+                // 更新のたびに URL を変えて import() のキャッシュを外す（編集→再読み込みを速くするため）
+                stamp = new DateTimeOffset(File.GetLastWriteTimeUtc(f)).ToUnixTimeMilliseconds()
+            });
+    }
+
+    var builtin = List(Path.Combine(env.WebRootPath, "plugins"), "builtin", "/plugins");
+    var user = List(AppDataPaths.GetPluginsFolder(), "user", "/user-plugins");
+    // ユーザー側を先に返す。xterm のリンクプロバイダは登録順が優先度になるため、
+    // 自作プラグインが組み込みの解釈に勝てるようにする。
+    return Results.Ok(user.Concat(builtin));
+});
 
 // Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作の HookNotification JSON を直接受ける）。
 // 現在の利用者は --notify --event 経路のみ。将来の hook レス CLI（Antigravity 等）が
