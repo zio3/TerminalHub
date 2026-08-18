@@ -318,9 +318,18 @@ namespace TerminalHub.Services
         private static bool IsRealModel(string model) =>
             !string.IsNullOrEmpty(model) && !model.StartsWith('<');
 
-        /// <summary>表示用の短縮（"claude-opus-5" -> "opus-5"）</summary>
-        private static string Shorten(string model) =>
-            model.StartsWith("claude-", StringComparison.Ordinal) ? model["claude-".Length..] : model;
+        /// <summary>
+        /// 表示用の短縮（"claude-opus-5" -> "opus-5"、
+        /// "claude-haiku-4-5-20251001" -> "haiku-4-5"）。
+        /// 日付入りのIDは一覧で幅を食うだけで、他のモデルと粒度も揃わないため落とす。
+        /// </summary>
+        private static string Shorten(string model)
+        {
+            var s = model.StartsWith("claude-", StringComparison.Ordinal) ? model["claude-".Length..] : model;
+            return DateSuffixRegex.Replace(s, string.Empty);
+        }
+
+        private static readonly Regex DateSuffixRegex = new(@"-\d{8}$", RegexOptions.Compiled);
 
         /// <summary>
         /// 末尾のみを読む。1行=1JSON なので、全体をパースせず行単位で拾えば足りる。
