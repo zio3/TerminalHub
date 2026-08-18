@@ -16,6 +16,7 @@ public class AppSettings
     public RemoteLaunchSettings RemoteLaunch { get; set; } = new();
     public ExperimentalSettings Experimental { get; set; } = new();
     public SessionDefaultsSettings SessionDefaults { get; set; } = new();
+    public SecuritySettings Security { get; set; } = new();
 }
 
 /// <summary>
@@ -177,6 +178,28 @@ public class DevToolsSettings
 /// <summary>
 /// 一般設定
 /// </summary>
+/// <summary>
+/// セキュリティ設定。
+/// 現状はホストフィルタ（DNS リバインディング対策）のみ。
+/// </summary>
+public class SecuritySettings
+{
+    /// <summary>
+    /// ホストフィルタを有効にするか。既定 true。
+    /// 無効にすると、どんな Host ヘッダのリクエストも受け付ける（従来動作）。
+    /// </summary>
+    public bool EnableHostFilter { get; set; } = true;
+
+    /// <summary>
+    /// 自動検出に加えて許可するホスト名。
+    /// 自動検出は「このマシンが自分について知っていること」（localhost / 自ホスト名 /
+    /// 全 NIC の IP）しか拾えないため、外部 DNS にしか存在しない名前はここへ。
+    /// 例: Tailscale の MagicDNS 名 (mypc.tail1a2b.ts.net)、
+    ///     Cloudflare トンネルのドメイン (term.example.com)。
+    /// </summary>
+    public List<string> AdditionalAllowedHosts { get; set; } = new();
+}
+
 public class GeneralSettings
 {
     public string DefaultFolderPath { get; set; } = "";
