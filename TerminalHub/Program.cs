@@ -120,6 +120,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // GitServiceを登録
 builder.Services.AddSingleton<IGitService, GitService>();
+builder.Services.AddSingleton<ISessionModelService, SessionModelService>();
 
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();

@@ -151,6 +151,9 @@
   <data name="Settings.Sessions.Display.ShowGitInfoSub" xml:space="preserve"><value>Branch name badge</value></data>
   <data name="Settings.Sessions.Display.GitChangesOnBadgeClick" xml:space="preserve"><value>Show Git changes on badge click</value></data>
   <data name="Settings.Sessions.Display.GitChangesOnBadgeClickSub" xml:space="preserve"><value>Shows changed files; toast when clean</value></data>
+  <data name="Settings.Sessions.Display.ShowModel" xml:space="preserve"><value>Show model</value></data>
+  <data name="Settings.Sessions.Display.ShowModelSub" xml:space="preserve"><value>Claude Code / Codex only</value></data>
+  <data name="Settings.Sessions.Display.ShowModelNote" xml:space="preserve"><value>The model is read from the transcript, so right after switching with /model the previous value is still shown. It updates once that session speaks again.</value></data>
   <data name="Settings.Sessions.Display.Help" xml:space="preserve"><value>Choose which additional info to display in the session list.</value></data>
   <data name="Settings.Sessions.InputPanel.Label" xml:space="preserve"><value>Input panel settings</value></data>
   <data name="Settings.Sessions.InputPanel.Hide" xml:space="preserve"><value>Hide input panel</value></data>
@@ -574,6 +577,7 @@
   <data name="CommitInfo.CopyHash" xml:space="preserve"><value>Copy hash</value></data>
   <data name="CommitInfo.Copied" xml:space="preserve"><value>Copied</value></data>
   <data name="SessionList.Badge.RemoteControl" xml:space="preserve"><value>Remote control connected</value></data>
+  <data name="SessionList.Badge.ModelTitle" xml:space="preserve"><value>Model used in the latest reply (stale right after switching)</value></data>
   <data name="SessionList.Badge.ChildrenCountFormat" xml:space="preserve"><value>{0} children</value></data>
   <data name="SessionList.Tooltip.Settings" xml:space="preserve"><value>Session settings</value></data>
   <data name="SessionList.Tooltip.Delete" xml:space="preserve"><value>Delete session</value></data>
