@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TerminalHub.Helpers;
 
 namespace TerminalHub.Services
 {
@@ -297,7 +298,28 @@ namespace TerminalHub.Services
             var fullCommand = string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
             var cmdline = $"cmd.exe /c {fullCommand}";
 
-            _logger.LogInformation($"Creating process: {cmdline} in directory: {workingDirectory ?? "current"}");
+            // コンソールには hook 注入の引数を畳んだ要約を、ファイルには全文を出す。
+            // Codex は hook を起動引数で渡すため、そのまま出すと1セッションで数千文字流れて
+            // 他のログが読めなくなる。全文は調査に要るのでファイル側には残す。
+            var directory = workingDirectory ?? "current";
+            var summary = CommandLineSummary.FoldHookArguments(cmdline);
+
+            if (summary.Length == cmdline.Length)
+            {
+                // 畳む対象が無い（Codex 以外など）。出し分けても同じ内容なので普通に1回出す
+                _logger.LogInformation("Creating process: {CommandLine} in directory: {Directory}", cmdline, directory);
+            }
+            else
+            {
+                using (LogSinkRouting.ConsoleOnly())
+                {
+                    _logger.LogInformation("Creating process: {CommandLine} in directory: {Directory}", summary, directory);
+                }
+                using (LogSinkRouting.FileOnly())
+                {
+                    _logger.LogInformation("Creating process: {CommandLine} in directory: {Directory}", cmdline, directory);
+                }
+            }
             
             // XTerm互換のための環境変数を設定
             var envBlock = CreateEnvironmentBlock();

@@ -28,17 +28,23 @@ builder.Host.UseSerilog((context, configuration) =>
     // シンクは Async でラップする（フリーズ調査の実験を兼ねた対策）。
     // 同期シンクだと、コンソールの QuickEdit（画面上のテキスト選択）やディスク停滞で
     // ログを書く全スレッドが巻き添えブロックし、プロセス全体フリーズの形になる。
+    // 既定では両シンクに同じイベントが流れる。ただし LogSinkRouting の目印が付いたものだけは
+    // 片方に寄せる（起動コマンドラインを「コンソールは要約・ファイルは全文」に分けるため）。
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Async(a => a.Console())
-        .WriteTo.Async(a => a.File(
-            logPath,
-            rollingInterval: RollingInterval.Day,
-            retainedFileCountLimit: 7,
-            fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
-            rollOnFileSizeLimit: true,
-            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
+        .WriteTo.Conditional(
+            e => !e.Properties.ContainsKey(LogSinkRouting.FileOnlyProperty),
+            w => w.Async(a => a.Console()))
+        .WriteTo.Conditional(
+            e => !e.Properties.ContainsKey(LogSinkRouting.ConsoleOnlyProperty),
+            w => w.Async(a => a.File(
+                logPath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
+                rollOnFileSizeLimit: true,
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")));
 });
 
 // Add services to the container.
