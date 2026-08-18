@@ -86,6 +86,78 @@
 
                     <hr />
 
+                    <!-- リンクプラグイン: 出力中のトークンを URL リンクにする規則。採用・順序・変数をセッション単位で持つ -->
+                    <div class="mb-3">
+                        <h6 class="text-muted">@L["SessionSettings.LinkPlugins.Header"]</h6>
+                        @if (linkPluginCatalog.Count == 0)
+                        {
+                            <p class="text-muted small mb-0">@L["SessionSettings.LinkPlugins.Empty"]</p>
+                        }
+                        else
+                        {
+                            <p class="text-muted small">
+                                <i class="bi bi-info-circle me-1"></i>@L["SessionSettings.LinkPlugins.Help"]
+                            </p>
+                            <ul class="list-group">
+                                @foreach (var item in editingLinkPlugins)
+                                {
+                                    var meta = linkPluginCatalog.FirstOrDefault(c => c.Id == item.Id);
+                                    var index = editingLinkPlugins.IndexOf(item);
+                                    <li class="list-group-item">
+                                        <div class="d-flex align-items-center">
+                                            <div class="form-check flex-grow-1 mb-0">
+                                                <input class="form-check-input" type="checkbox"
+                                                       checked="@item.Enabled"
+                                                       @onchange="e => SetLinkPluginEnabled(item, e)"
+                                                       id="@($"plugin-{item.Id}")">
+                                                <label class="form-check-label" for="@($"plugin-{item.Id}")">
+                                                    <code>@item.Id</code>
+                                                    @if (meta?.Source == "builtin")
+                                                    {
+                                                        <span class="badge text-bg-secondary ms-1">@L["SessionSettings.LinkPlugins.Builtin"]</span>
+                                                    }
+                                                    @if (meta == null)
+                                                    {
+                                                        <span class="badge text-bg-warning ms-1">@L["SessionSettings.LinkPlugins.Missing"]</span>
+                                                    }
+                                                </label>
+                                            </div>
+                                            @* 上にあるものほど先に登録され、位置を取り合ったときに勝つ *@
+                                            <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                                    title="@L["SessionSettings.LinkPlugins.MoveUp"]"
+                                                    disabled="@(index == 0)"
+                                                    @onclick="() => MoveLinkPlugin(item, -1)">
+                                                <i class="bi bi-arrow-up"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                                    title="@L["SessionSettings.LinkPlugins.MoveDown"]"
+                                                    disabled="@(index == editingLinkPlugins.Count - 1)"
+                                                    @onclick="() => MoveLinkPlugin(item, 1)">
+                                                <i class="bi bi-arrow-down"></i>
+                                            </button>
+                                        </div>
+                                        @if (item.Enabled && meta is not null && meta.Vars.Length > 0)
+                                        {
+                                            <div class="mt-2 ms-4">
+                                                @foreach (var name in meta.Vars)
+                                                {
+                                                    <div class="input-group input-group-sm mb-1">
+                                                        <span class="input-group-text">@name</span>
+                                                        <input type="text" class="form-control"
+                                                               value="@(item.Vars.TryGetValue(name, out var v) ? v : "")"
+                                                               @onchange="e => SetLinkPluginVar(item, name, e)" />
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+
+                    <hr />
+
                     <!-- セッション名の変更 -->
                     <div class="mb-3">
                         <label class="form-label">@L["SessionSettings.DisplayName.Label"]</label>
@@ -329,6 +401,65 @@
     // セッション専用コマンドの編集用バッファ（保存時に sessionInfo へ書き戻す）
     private bool showSessionCommandsDialog = false;
     private List<CustomCommand> editingSessionCommands = new();
+
+    // リンクプラグイン: 読み込まれているものの一覧（JS 側から取得）と、このセッションの設定（編集バッファ）
+    private sealed record LinkPluginMeta(string Id, string Source, string File, string[] Vars);
+    private List<LinkPluginMeta> linkPluginCatalog = new();
+    private List<LinkPluginSetting> editingLinkPlugins = new();
+
+    /// <summary>
+    /// 読み込み済みプラグインとセッション設定を突き合わせて編集バッファを作る。
+    /// 設定に無いものは未採用として末尾に足し、ファイルが消えたものも設定は保持する
+    /// （置き直せば復活する。勝手に捨てると変数の再入力が要るため）。
+    /// </summary>
+    private async Task LoadLinkPluginsAsync(SessionInfo session)
+    {
+        try
+        {
+            var catalog = await JSRuntime.InvokeAsync<LinkPluginMeta[]>("listLinkPlugins");
+            linkPluginCatalog = catalog.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[LinkPlugins] 一覧の取得に失敗");
+            linkPluginCatalog = new();
+        }
+
+        var saved = session.LinkPlugins.Select(p => new LinkPluginSetting
+        {
+            Id = p.Id,
+            Enabled = p.Enabled,
+            Order = p.Order,
+            Vars = new Dictionary<string, string>(p.Vars)
+        }).OrderBy(p => p.Order).ToList();
+
+        foreach (var meta in linkPluginCatalog)
+        {
+            if (saved.Any(s => s.Id == meta.Id)) continue;
+            saved.Add(new LinkPluginSetting { Id = meta.Id, Enabled = false, Order = saved.Count });
+        }
+
+        editingLinkPlugins = saved;
+    }
+
+    private void SetLinkPluginEnabled(LinkPluginSetting item, ChangeEventArgs e)
+    {
+        item.Enabled = e.Value is bool b && b;
+    }
+
+    private void SetLinkPluginVar(LinkPluginSetting item, string name, ChangeEventArgs e)
+    {
+        item.Vars[name] = e.Value?.ToString() ?? "";
+    }
+
+    private void MoveLinkPlugin(LinkPluginSetting item, int delta)
+    {
+        var from = editingLinkPlugins.IndexOf(item);
+        var to = from + delta;
+        if (from < 0 || to < 0 || to >= editingLinkPlugins.Count) return;
+        editingLinkPlugins.RemoveAt(from);
+        editingLinkPlugins.Insert(to, item);
+    }
     /// <summary>専用コマンド編集時のエラー（title 重複など）。null なら非表示。</summary>
     private string? sessionCommandError;
     /// <summary>
@@ -399,6 +530,7 @@
             {
                 LoadSessionInfo();
                 await RefreshMemoExistsAsync();
+                if (sessionInfo != null) await LoadLinkPluginsAsync(sessionInfo);
                 _loadedSessionId = SessionId;
                 copiedKey = null; // 前回対象の「コピーしました」表示を持ち越さない
             }
@@ -623,6 +755,10 @@
 
             // セッション専用コマンドを書き戻す
             sessionInfo.SessionCommands = editingSessionCommands;
+
+            // リンクプラグイン: 表示順をそのまま Order に落とす（上にあるものほど先に登録される）
+            for (var i = 0; i < editingLinkPlugins.Count; i++) editingLinkPlugins[i].Order = i;
+            sessionInfo.LinkPlugins = editingLinkPlugins;
 
             // 保存
             await SessionManager.SaveSessionInfoAsync(sessionInfo);

@@ -3339,6 +3339,9 @@
 
             // 設定ダイアログからは再起動を伴うことがあるため、モデルを読み直す
             await RefreshModelAfterRestartAsync(settingsSessionId.Value);
+
+            // 採用や順序を変えた可能性があるのでリンクプラグインを貼り直す
+            await ApplyLinkPluginsAsync(settingsSessionId.Value);
         }
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み

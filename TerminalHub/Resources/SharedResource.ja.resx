@@ -460,6 +460,13 @@
   <data name="SessionSettings.Info.Header" xml:space="preserve"><value>セッション情報</value></data>
   <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>セッション名:</value></data>
   <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>フォルダ:</value></data>
+  <data name="SessionSettings.LinkPlugins.Header" xml:space="preserve"><value>リンクプラグイン</value></data>
+  <data name="SessionSettings.LinkPlugins.Help" xml:space="preserve"><value>出力中の文字列をリンクにする規則です。上にあるものほど優先されます。</value></data>
+  <data name="SessionSettings.LinkPlugins.Empty" xml:space="preserve"><value>プラグインがありません。%LOCALAPPDATA%TerminalHubplugins に .js を置いてください。</value></data>
+  <data name="SessionSettings.LinkPlugins.Builtin" xml:space="preserve"><value>同梱</value></data>
+  <data name="SessionSettings.LinkPlugins.Missing" xml:space="preserve"><value>見つかりません</value></data>
+  <data name="SessionSettings.LinkPlugins.MoveUp" xml:space="preserve"><value>優先度を上げる</value></data>
+  <data name="SessionSettings.LinkPlugins.MoveDown" xml:space="preserve"><value>優先度を下げる</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>フォルダパスをコピー</value></data>
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>フォルダを開く</value></data>
   <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>セッションID:</value></data>
