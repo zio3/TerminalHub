@@ -50,7 +50,7 @@ namespace TerminalHub.Services
                 if (Volatile.Read(ref _disposeState) != 0)
                     throw new ObjectDisposedException(nameof(ConPtyConnectionService));
 
-            _logger.LogInformation($"Subscribing to session {sessionId}");
+            _logger.LogDebug($"Subscribing to session {sessionId}");
 
             // 同じIDの購読が既にあっても、ConPtySession が別インスタンスなら
             // セッション再起動・再作成で置き換わったということ。古い購読を解除して
@@ -64,7 +64,7 @@ namespace TerminalHub.Services
                     return;
                 }
 
-                _logger.LogInformation($"Session {sessionId} was replaced. Re-subscribing to the new ConPtySession");
+                _logger.LogDebug($"Session {sessionId} was replaced. Re-subscribing to the new ConPtySession");
                 UnsubscribeFromSession(sessionId);
             }
 
@@ -115,7 +115,7 @@ namespace TerminalHub.Services
             conPtySession.DataReceived += dataHandler;
             conPtySession.ProcessExited += exitHandler;
 
-            _logger.LogInformation($"Successfully subscribed to session {sessionId}");
+            _logger.LogDebug($"Successfully subscribed to session {sessionId}");
             }
         }
 
@@ -128,13 +128,13 @@ namespace TerminalHub.Services
             {
                 if (_subscriptions.TryRemove(sessionId, out var subscription))
                 {
-                    _logger.LogInformation($"Unsubscribing from session {sessionId}");
+                    _logger.LogDebug($"Unsubscribing from session {sessionId}");
 
                     // 辞書からの削除とイベント解除をSubscribeToSessionに対して原子的に行う。
                     subscription.ConPtySession.DataReceived -= subscription.DataHandler;
                     subscription.ConPtySession.ProcessExited -= subscription.ExitHandler;
 
-                    _logger.LogInformation($"Successfully unsubscribed from session {sessionId}");
+                    _logger.LogDebug($"Successfully unsubscribed from session {sessionId}");
                 }
             }
         }
@@ -144,7 +144,7 @@ namespace TerminalHub.Services
         /// </summary>
         public void UnsubscribeAll()
         {
-            _logger.LogInformation($"Unsubscribing from all {_subscriptions.Count} sessions");
+            _logger.LogDebug($"Unsubscribing from all {_subscriptions.Count} sessions");
             
             foreach (var sessionId in _subscriptions.Keys.ToList())
             {

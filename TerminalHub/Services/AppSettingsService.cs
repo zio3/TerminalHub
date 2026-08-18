@@ -206,7 +206,7 @@ public class AppSettingsService : IAppSettingsService
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Webhook送信成功: {Event} -> {Url}", p.EventType, webhook.Url);
+                _logger.LogDebug("Webhook送信成功: {Event} -> {Url}", p.EventType, webhook.Url);
             }
             else
             {

@@ -1,10 +1,11 @@
-using TerminalHub.Services;
+﻿using TerminalHub.Services;
 using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;
 using TerminalHub.Helpers;
 using System.Text.Json;
 using Serilog;
+using Serilog.Events;
 
 // CLI モードのチェック
 if (args.Contains("--notify"))
@@ -33,9 +34,12 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
+        // コンソールは Information 以上だけ。診断用の細かいログ（Hook 受信の逐一、WebGL の増減、
+        // WriteStall、FreezeProbe の定期ゲージ等）は Debug に落としてあり、ここで弾かれる。
+        // 全部ファイルには残るので、調べたいときはログファイルを見る。
         .WriteTo.Conditional(
             e => !e.Properties.ContainsKey(LogSinkRouting.FileOnlyProperty),
-            w => w.Async(a => a.Console()))
+            w => w.Async(a => a.Console(restrictedToMinimumLevel: LogEventLevel.Information)))
         .WriteTo.Conditional(
             e => !e.Properties.ContainsKey(LogSinkRouting.ConsoleOnlyProperty),
             w => w.Async(a => a.File(

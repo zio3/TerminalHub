@@ -1286,7 +1286,7 @@
                 var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
                 if (sessionInfo != null)
                 {
-                    Logger.LogInformation("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
+                    Logger.LogDebug("[LastAccessedAt更新] きっかけ: HandleTextInputSend(テキスト送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                     sessionInfo.LastAccessedAt = DateTime.Now;
                     await SaveSessionToStorageAsync(sessionInfo);
                     StateHasChanged();
@@ -1394,7 +1394,7 @@
         var sessionInfo = SessionManager.GetSessionInfo(sessionId);
         if (sessionInfo != null)
         {
-            Logger.LogInformation("[LastAccessedAt更新] きっかけ: セッションを開いたら一番上へ(一覧クリック), セッション: {SessionName}", sessionInfo.GetDisplayName());
+            Logger.LogDebug("[LastAccessedAt更新] きっかけ: セッションを開いたら一番上へ(一覧クリック), セッション: {SessionName}", sessionInfo.GetDisplayName());
             sessionInfo.LastAccessedAt = DateTime.Now;
             await SaveSessionToStorageAsync(sessionInfo);
             StateHasChanged();
@@ -1519,7 +1519,7 @@
             var selectedSession = sessions.FirstOrDefault(s => s.SessionId == sessionId);
             if (_notificationPendingSessions.Remove(sessionId))
             {
-                Logger.LogInformation("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
+                Logger.LogDebug("[通知マーク OFF] きっかけ: SelectSession(セッション選択), セッション: {SessionName}", selectedSession?.GetDisplayName() ?? sessionId.ToString());
                 RecordBellHistory(sessionId, "OFF", null, "SelectSession(セッション選択)");
             }
 
@@ -1625,7 +1625,7 @@
                 if (xtermSize is { Cols: >= 20, Rows: >= 10 } size && activeSession != null &&
                     (activeSession.Cols != size.Cols || activeSession.Rows != size.Rows))
                 {
-                    Logger.LogInformation("[{Caller}] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
+                    Logger.LogDebug("[{Caller}] リプレイ前サイズ同期: {OldCols}x{OldRows} → {Cols}x{Rows}",
                         callerTag, activeSession.Cols, activeSession.Rows, size.Cols, size.Rows);
                     // 必ずエミュレータ → ConPTY の順（再送データより先に画面を空にするため）
                     selectedSession.ResizeTerminalBuffer(size.Cols, size.Rows);
@@ -1655,7 +1655,7 @@
                     {
                         if (!string.IsNullOrEmpty(replaySnapshot.Content))
                         {
-                            Logger.LogInformation("[{Caller}] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
+                            Logger.LogDebug("[{Caller}] バッファ書き込み開始: SessionId={SessionId}, Size={Size}文字",
                                 callerTag, sessionId, replaySnapshot.Content.Length);
                             // 巨大なリプレイを一発で書くと Blazor サーキットの Dispatcher を長時間占有し、
                             // 直後の送信などの UI 操作が書き込み完了まで待たされる。チャンク分割して
@@ -1663,7 +1663,7 @@
                             // ConPTY 入力側など）がチャンクの合間に割り込めるようにする。なお同じロックを
                             // 取るライブ出力書き込みは従来どおりループ全体の完了まで直列化される（順序保証は不変）。
                             await TerminalService.WriteToTerminalChunkedAsync(activeTerminal, replaySnapshot.Content);
-                            Logger.LogInformation("[{Caller}] バッファ書き込み完了", callerTag);
+                            Logger.LogDebug("[{Caller}] バッファ書き込み完了", callerTag);
                         }
                     }
                     finally
@@ -1811,7 +1811,7 @@
                     _liveLockWait.Stop();
                     if (_liveLockWait.ElapsedMilliseconds >= 300)
                     {
-                        Logger.LogInformation(
+                        Logger.LogDebug(
                             "[WriteStall] live書き込みがロック待ち {WaitMs}ms（前面ストリーム停止の疑い） session={SessionId} bytes={Bytes}",
                             _liveLockWait.ElapsedMilliseconds, sessionId.ToString().Substring(0, 8), data.Length);
                     }
@@ -2236,7 +2236,7 @@
             settings.SessionDefaults.LastTerminalRows = pending.Value.Rows;
             AppSettingsService.SaveSettings(settings);
             // デバウンス後に1回だけなので Information でよい（効いているかを実機で確認できるようにする）
-            Logger.LogInformation("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
+            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
         }
         catch (Exception ex)
         {
@@ -2266,7 +2266,7 @@
         }
 
         // source を併記: 「見続けているだけなのに行数増加リサイズが起きる」トリガーを特定する。
-        Logger.LogInformation("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} src={Source} session={SessionId}",
+        Logger.LogDebug("[Resize] ConPTY適用: {PrevCols}x{PrevRows}→{Cols}x{Rows} src={Source} session={SessionId}",
             activeSession.Cols, activeSession.Rows, cols, rows, string.IsNullOrEmpty(source) ? "(none)" : source, shortId);
 
         var selectedSession = sessions.FirstOrDefault(s => s.SessionId == guid);
@@ -2371,7 +2371,7 @@
                 {
                     await TerminalService.WriteToTerminalAsync(activeTerminal, tail);
                 }
-                Logger.LogInformation("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 保持{HoldMs}ms 待機{WaitMs}ms（保持中は前面ストリーム停止・下端へスクロール） session={SessionId}",
+                Logger.LogDebug("[Resize] エミュレータ再同期完了: {Size}文字＋テール{TailSize}文字 保持{HoldMs}ms 待機{WaitMs}ms（保持中は前面ストリーム停止・下端へスクロール） session={SessionId}",
                     snapshot.Content.Length, tail.Length, _resyncHold.ElapsedMilliseconds, _resyncWait.ElapsedMilliseconds, guid.ToString().Substring(0, 8));
             }
             finally
@@ -2532,7 +2532,7 @@
     [JSInvokable]
     public void ReportWebglEvent(string sessionId, string eventType, int liveContexts, int totalTerminals)
     {
-        Logger.LogInformation(
+        Logger.LogDebug(
             "[WebGL] {EventType} session={SessionId} 生存WebGL={LiveContexts} 総ターミナル={TotalTerminals}",
             eventType, sessionId, liveContexts, totalTerminals);
     }
@@ -2633,7 +2633,7 @@
                 var sessionInfo = SessionManager.GetSessionInfo(activeSessionId.Value);
                 if (sessionInfo != null)
                 {
-                    Logger.LogInformation("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
+                    Logger.LogDebug("[LastAccessedAt更新] きっかけ: SendInput(入力送信), セッション: {SessionName}", sessionInfo.GetDisplayName());
                     sessionInfo.LastAccessedAt = DateTime.Now;
                     await SaveSessionToStorageAsync(sessionInfo);
                     StateHasChanged();
@@ -3084,7 +3084,7 @@
                 }
 
                 // ステータスをクリア
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "[ステータスクリア] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}, 旧ステータス: {OldStatus}",
                     session.GetDisplayName(),
                     session.ProcessingStatus ?? "(なし)");
@@ -3097,7 +3097,7 @@
                 // 非アクティブセッションの場合は通知マークを表示
                 if (activeSessionId != sessionId)
                 {
-                    Logger.LogInformation("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
+                    Logger.LogDebug("[通知マーク ON] きっかけ: OnSessionTimeout(タイムアウト完了), セッション: {SessionName}", session.GetDisplayName());
                     SetNotificationBell(sessionId, SessionBellKind.Stopped, "OnSessionTimeout(出力解析の完了検知/5秒タイムアウト)");
                 }
 
@@ -3144,7 +3144,7 @@
         var session = sessions.FirstOrDefault(s => s.SessionId == notification.SessionId);
         if (session == null) return;
 
-        Logger.LogInformation(
+        Logger.LogDebug(
             "[OnHookNotification] イベント: {EventType}, セッション: {SessionName}, 現在のステータス: {Status}",
             eventType,
             session.GetDisplayName(),
@@ -3154,7 +3154,7 @@
         {
             case HookEventType.Stop:
                 // ステータスをクリア（Root.razorのsessionsリスト内のオブジェクトをクリア）
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "[ステータスクリア] きっかけ: OnHookNotification(Stop), セッション: {SessionName}, 旧ステータス: {OldStatus}",
                     session.GetDisplayName(),
                     session.ProcessingStatus ?? "(なし)");
@@ -3171,7 +3171,7 @@
                 // 非アクティブセッションの場合は通知マークを表示（インスタンスごとの通知リストに追加）
                 if (activeSessionId != notification.SessionId)
                 {
-                    Logger.LogInformation("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
+                    Logger.LogDebug("[通知マーク ON] きっかけ: OnHookNotification(Hook通知), セッション: {SessionName}", session.GetDisplayName());
                     SetNotificationBell(notification.SessionId, SessionBellKind.Stopped, "Hook Stop(処理完了)");
                 }
 
@@ -3234,7 +3234,7 @@
                 //                         60秒遅れで再点灯するのを防ぐ。SUPPRESSED として履歴には残る）。
                 if (activeSessionId != notification.SessionId)
                 {
-                    Logger.LogInformation(
+                    Logger.LogDebug(
                         "[通知マーク ON] きっかけ: OnHookNotification({Event}), Message={Message}, セッション: {SessionName}",
                         eventType, notification.Message, session.GetDisplayName());
 
