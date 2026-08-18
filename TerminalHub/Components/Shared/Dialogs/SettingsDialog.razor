@@ -90,6 +90,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "security" ? "active" : "")"
+                                    type="button"
+                                    @onclick="@(() => activeTab = "security")">
+                                <i class="bi bi-shield-lock me-1"></i>@L["Settings.Tab.Security"]
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link @(activeTab == "special" ? "active" : "")"
                                     type="button"
                                     @onclick="@(() => activeTab = "special")">
@@ -899,6 +906,41 @@
                                 }
                             </div>
                         }
+                        else if (activeTab == "security")
+                        {
+                            <div class="tab-pane fade show active">
+                                <small class="text-muted d-block mb-3">
+                                    @L["Settings.Security.Help"]
+                                </small>
+
+                                <div class="mb-3 form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch"
+                                           @bind="enableHostFilter" id="enableHostFilter">
+                                    <label class="form-check-label" for="enableHostFilter">
+                                        @L["Settings.Security.EnableHostFilter"]
+                                    </label>
+                                    <div class="form-text">@L["Settings.Security.EnableHostFilter.Help"]</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="additionalAllowedHosts">
+                                        @L["Settings.Security.AdditionalHosts"]
+                                    </label>
+                                    <textarea class="form-control font-monospace" id="additionalAllowedHosts"
+                                              rows="4" @bind="additionalAllowedHosts"
+                                              placeholder="mypc.tail1a2b.ts.net&#10;term.example.com"></textarea>
+                                    <div class="form-text">@L["Settings.Security.AdditionalHosts.Help"]</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">@L["Settings.Security.DetectedHosts"]</label>
+                                    <div class="border rounded p-2 bg-body-tertiary font-monospace small">
+                                        @string.Join(", ", TerminalHub.Helpers.HostFilter.GetSelfHosts().OrderBy(h => h))
+                                    </div>
+                                    <div class="form-text">@L["Settings.Security.DetectedHosts.Help"]</div>
+                                </div>
+                            </div>
+                        }
                         else if (activeTab == "special")
                         {
                             <div class="tab-pane fade show active">
@@ -1334,6 +1376,10 @@
     // 実際の値はコンポーネント初期化時 (OnInitialized) に設定する。
     // RequestLocalization middleware が culture を差し替えた後で確定させるため。
     private string currentCulture = "en";
+    // セキュリティ（ホストフィルタ）
+    private bool enableHostFilter = true;
+    private string additionalAllowedHosts = "";
+
     private bool remoteLaunchEnabled = false;
     private string remoteLaunchTopicGuid = "";
     private string remoteLaunchPassword = "";
@@ -1560,6 +1606,10 @@
                 [TerminalType.Antigravity] = cliOptions.Antigravity.Select(CloneCliOption).ToList(),
                 [TerminalType.Grok] = cliOptions.Grok.Select(CloneCliOption).ToList(),
             };
+
+            // セキュリティ設定（ホストフィルタ）
+            enableHostFilter = settings.Security.EnableHostFilter;
+            additionalAllowedHosts = string.Join("\n", settings.Security.AdditionalAllowedHosts);
 
             // リモート起動設定
             remoteLaunchEnabled = settings.RemoteLaunch.Enabled;
@@ -1814,6 +1864,18 @@
                     Grok = editingCliOptions.GetValueOrDefault(TerminalType.Grok, new())
                         .Where(o => !string.IsNullOrWhiteSpace(o.Arguments))
                         .Select(CloneCliOption).ToList(),
+                },
+                Security = new SecuritySettings
+                {
+                    EnableHostFilter = enableHostFilter,
+                    AdditionalAllowedHosts = (additionalAllowedHosts ?? "")
+                        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        // 利用者はアドレスバーからコピーしてくるので、スキームやポートが
+                        // 付いたまま入力されうる。Host ヘッダと比較できる形へ寄せて保存する
+                        .Select(TerminalHub.Helpers.HostFilter.Normalize)
+                        .Where(h => !string.IsNullOrWhiteSpace(h))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
                 },
                 RemoteLaunch = new RemoteLaunchSettings
                 {

@@ -668,4 +668,12 @@
   <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>Archive session "{0}"?</value></data>
   <data name="App.ErrorUi.Message" xml:space="preserve"><value>An error has occurred.</value></data>
   <data name="App.ErrorUi.Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="Settings.Tab.Security" xml:space="preserve"><value>Security</value></data>
+  <data name="Settings.Security.Help" xml:space="preserve"><value>Prevents malicious websites from controlling TerminalHub through your browser (DNS rebinding protection). Such attacks reach 127.0.0.1 directly from the browser, so outer layers like Tailscale or Cloudflare cannot stop them.</value></data>
+  <data name="Settings.Security.EnableHostFilter" xml:space="preserve"><value>Accept connections only from allowed host names</value></data>
+  <data name="Settings.Security.EnableHostFilter.Help" xml:space="preserve"><value>Turning this off accepts connections from any host name (previous behaviour). Intended as a temporary workaround if you cannot connect; not recommended for everyday use.</value></data>
+  <data name="Settings.Security.AdditionalHosts" xml:space="preserve"><value>Additional allowed host names</value></data>
+  <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>One per line. Only names that auto-detection cannot find, e.g. a Tailscale MagicDNS name or a Cloudflare tunnel domain. You can paste straight from the address bar; the scheme and port are stripped automatically.</value></data>
+  <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>Automatically allowed host names</value></data>
+  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>Names that point at this PC. They are re-detected on every start, so no configuration is needed when the LAN IP changes. Connecting with a name listed neither here nor in &quot;Additional allowed host names&quot; above is rejected.</value></data>
 </root>

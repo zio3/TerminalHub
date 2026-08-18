@@ -265,6 +265,10 @@ if (!app.Environment.IsDevelopment())
 // HTTPSリダイレクトは無効化（ローカル環境での使用を想定）
 // app.UseHttpsRedirection();
 
+// Host ヘッダの検査（DNS リバインディング対策）。判定に使う設定を読むだけなので軽いが、
+// 拒否すべきリクエストを他のミドルウェアに触らせないよう、できるだけ手前に置く。
+app.UseHostFilter();
+
 // SignalR が long polling に落ちていないかの見張り（詳細は SignalRTransportProbe のコメント参照）
 app.UseSignalRTransportProbe();
 

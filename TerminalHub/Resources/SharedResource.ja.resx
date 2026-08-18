@@ -668,4 +668,12 @@
   <data name="Root.Confirm.ArchiveSessionFormat" xml:space="preserve"><value>セッション「{0}」をアーカイブしますか？</value></data>
   <data name="App.ErrorUi.Message" xml:space="preserve"><value>エラーが発生しました。</value></data>
   <data name="App.ErrorUi.Reload" xml:space="preserve"><value>再読み込み</value></data>
+  <data name="Settings.Tab.Security" xml:space="preserve"><value>セキュリティ</value></data>
+  <data name="Settings.Security.Help" xml:space="preserve"><value>悪意のあるサイトが、あなたのブラウザ経由で TerminalHub を操作するのを防ぐ設定です（DNS リバインディング対策）。この攻撃はブラウザから 127.0.0.1 へ直接届くため、Tailscale や Cloudflare など外側の認証では防げません。</value></data>
+  <data name="Settings.Security.EnableHostFilter" xml:space="preserve"><value>許可したホスト名からのみ接続を受け付ける</value></data>
+  <data name="Settings.Security.EnableHostFilter.Help" xml:space="preserve"><value>オフにすると、どんなホスト名からの接続も受け付けます（従来の動作）。接続できない問題が起きたときの一時的な回避用で、常用は勧めません。</value></data>
+  <data name="Settings.Security.AdditionalHosts" xml:space="preserve"><value>追加で許可するホスト名</value></data>
+  <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>1行に1つ。下の自動検出で拾えない名前だけ書きます。例: Tailscale の MagicDNS 名、Cloudflare トンネルのドメイン。アドレスバーからそのまま貼っても、スキームとポートは自動で取り除きます。</value></data>
+  <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>自動的に許可されているホスト名</value></data>
+  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>この PC 自身を指す名前です。起動のたびに検出し直すので、LAN の IP が変わっても設定は不要です。ここと上の「追加で許可するホスト名」のどちらにも無い名前で接続すると拒否されます。</value></data>
 </root>
