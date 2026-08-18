@@ -675,5 +675,5 @@
   <data name="Settings.Security.AdditionalHosts" xml:space="preserve"><value>追加で許可するホスト名</value></data>
   <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>1行に1つ。下の自動検出で拾えない名前だけ書きます。例: Tailscale の MagicDNS 名、Cloudflare トンネルのドメイン。アドレスバーからそのまま貼っても、スキームとポートは自動で取り除きます。</value></data>
   <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>自動的に許可されているホスト名</value></data>
-  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>この PC 自身を指す名前です。起動のたびに検出し直すので、LAN の IP が変わっても設定は不要です。ここに無い名前で接続すると拒否されます。</value></data>
+  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>この PC 自身を指す名前です。起動のたびに検出し直すので、LAN の IP が変わっても設定は不要です。ここと上の「追加で許可するホスト名」のどちらにも無い名前で接続すると拒否されます。</value></data>
 </root>

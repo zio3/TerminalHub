@@ -675,5 +675,5 @@
   <data name="Settings.Security.AdditionalHosts" xml:space="preserve"><value>Additional allowed host names</value></data>
   <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>One per line. Only names that auto-detection cannot find, e.g. a Tailscale MagicDNS name or a Cloudflare tunnel domain. You can paste straight from the address bar; the scheme and port are stripped automatically.</value></data>
   <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>Automatically allowed host names</value></data>
-  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>Names that point at this PC. They are re-detected on every start, so no configuration is needed when the LAN IP changes. Connecting with a name not listed here is rejected.</value></data>
+  <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>Names that point at this PC. They are re-detected on every start, so no configuration is needed when the LAN IP changes. Connecting with a name listed neither here nor in &quot;Additional allowed host names&quot; above is rejected.</value></data>
 </root>

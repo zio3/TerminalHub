@@ -89,7 +89,11 @@ namespace TerminalHub.Helpers
             return hosts;
         }
 
-        /// <summary>現在有効な許可リスト（自動検出 + 設定の追加分）。診断・設定画面の表示用。</summary>
+        /// <summary>
+        /// 自動検出したこのマシン自身の名前だけを返す（設定の追加分は含まない）。
+        /// 実際の許可判定は、これに <see cref="TerminalHub.Models.SecuritySettings.AdditionalAllowedHosts"/> を
+        /// 加えたもので行う。診断・設定画面の表示用。
+        /// </summary>
         public static IReadOnlyCollection<string> GetSelfHosts() => _selfHosts;
 
         public static IApplicationBuilder UseHostFilter(this IApplicationBuilder app)

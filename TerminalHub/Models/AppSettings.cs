@@ -176,9 +176,6 @@ public class DevToolsSettings
 }
 
 /// <summary>
-/// 一般設定
-/// </summary>
-/// <summary>
 /// セキュリティ設定。
 /// 現状はホストフィルタ（DNS リバインディング対策）のみ。
 /// </summary>
@@ -200,6 +197,9 @@ public class SecuritySettings
     public List<string> AdditionalAllowedHosts { get; set; } = new();
 }
 
+/// <summary>
+/// 一般設定
+/// </summary>
 public class GeneralSettings
 {
     public string DefaultFolderPath { get; set; } = "";
