@@ -1119,6 +1119,22 @@
         }
     }
 
+    /// <summary>
+    /// セッション再起動後にモデルを読み直す。再起動では既定のモデルへ戻ることがあり、
+    /// 次の発話（hook Stop）を待つとその間ずっと古い値を出し続けてしまうため。
+    /// </summary>
+    private async Task RefreshModelAfterRestartAsync(Guid sessionId)
+    {
+        if (!showModel) return;
+
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session == null) return;
+
+        SessionModelService.Invalidate(sessionId);
+        session.CurrentModel = await SessionModelService.GetCurrentModelAsync(session);
+        StateHasChanged();
+    }
+
     /// <summary>全セッションの実使用モデルを読み直す（バッジ表示ONのときのみ意味を持つ）</summary>
     private async Task RefreshAllModelsAsync(bool notify = true)
     {
@@ -3333,6 +3349,9 @@
             {
                 await SaveSessionToStorageAsync(savedSession);
             }
+
+            // 設定ダイアログからは再起動を伴うことがあるため、モデルを読み直す
+            await RefreshModelAfterRestartAsync(settingsSessionId.Value);
         }
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
@@ -3427,6 +3446,8 @@
                 // forceReinit で強制再初期化（activeSessionId を null にしないので BottomPanel は保持される）
                 await SelectSession(sessionId, forceReinit: true);
                 
+                await RefreshModelAfterRestartAsync(sessionId);
+
                 toast?.ShowInfo(L["Root.Toast.SessionRecreatedWithoutContinue"]);
             }
             else

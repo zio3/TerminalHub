@@ -23,5 +23,11 @@ namespace TerminalHub.Services
         /// 起動時など全件を埋めたい場面ではこちらを使う。
         /// </summary>
         Task<IReadOnlyDictionary<Guid, string?>> GetCurrentModelsAsync(IReadOnlyList<SessionInfo> sessions);
+
+        /// <summary>
+        /// キャッシュを捨てて次回に読み直させる。セッション再起動のように、
+        /// 発話を待たずに値が変わりうる場面で使う。
+        /// </summary>
+        void Invalidate(Guid sessionId);
     }
 }

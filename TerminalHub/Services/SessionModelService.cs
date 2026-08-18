@@ -25,6 +25,8 @@ namespace TerminalHub.Services
         private const int CodexScanLimit = 500;
         /// <summary>末尾から読むバイト数。巨大な jsonl 全体を読むと極端に遅くなる</summary>
         private const int TailBytes = 256 * 1024;
+        /// <summary>Claude で遡る記録ファイル数。再起動直後の空ファイルを飛ばすための保険</summary>
+        private const int ClaudeFileLookback = 5;
 
         private static readonly Regex ModelRegex = new("\"model\":\"([^\"]+)\"", RegexOptions.Compiled);
         private static readonly Regex CwdRegex = new("\"cwd\":\"([^\"]+)\"", RegexOptions.Compiled);
@@ -113,6 +115,14 @@ namespace TerminalHub.Services
             }
         }
 
+        public void Invalidate(Guid sessionId)
+        {
+            // 取得中でも捨てて構わない値なので、ロック待ちはせず取れたときだけ消す
+            if (!_lock.Wait(0)) return;
+            try { _cache.Remove(sessionId); }
+            finally { _lock.Release(); }
+        }
+
         private static bool IsSupported(SessionInfo session) =>
             !string.IsNullOrEmpty(session.FolderPath)
             && (session.TerminalType == TerminalType.ClaudeCode || session.TerminalType == TerminalType.CodexCLI);
@@ -136,20 +146,24 @@ namespace TerminalHub.Services
             var dir = FindClaudeProjectDir(folderPath);
             if (dir == null) return null;
 
-            // 更新日時での足切りはしない。長く放置したセッションでもモデルは変わらず有効なため
-            // （フォルダが一致した時点で対象は確定しているので、その中の最新ファイルを見れば足りる）
-            var jsonl = Directory.EnumerateFiles(dir, "*.jsonl")
+            // 更新日時での足切りはしない。長く放置したセッションでもモデルは変わらず有効なため。
+            // 再起動直後は新しい記録がまだ空で、最新ファイルだけ見るとバッジが消えてしまうので、
+            // 見つかるまで新しい順に数件遡る（/model の指定は既定として引き継がれるため直前の値が妥当）
+            var files = Directory.EnumerateFiles(dir, "*.jsonl")
                 .Select(p => new FileInfo(p))
                 .OrderByDescending(f => f.LastWriteTime)
-                .FirstOrDefault()?.FullName;
-            if (jsonl == null) return null;
+                .Take(ClaudeFileLookback)
+                .Select(f => f.FullName);
 
-            // 末尾から遡り、最後に assistant が喋ったときのモデルを拾う
-            foreach (var line in ReadTailLines(jsonl).Reverse())
+            foreach (var jsonl in files)
             {
-                if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
-                var m = ModelRegex.Match(line);
-                if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
+                // 末尾から遡り、最後に assistant が喋ったときのモデルを拾う
+                foreach (var line in ReadTailLines(jsonl).Reverse())
+                {
+                    if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
+                    var m = ModelRegex.Match(line);
+                    if (m.Success && IsRealModel(m.Groups[1].Value)) return Shorten(m.Groups[1].Value);
+                }
             }
             return null;
         }
