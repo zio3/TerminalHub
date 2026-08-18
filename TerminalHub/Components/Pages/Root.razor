@@ -3483,7 +3483,18 @@
         _selectCts?.Cancel();
         _selectCts?.Dispose();
         _selectCts = null;
-        _switchLock.Dispose();
+
+        // **_switchLock は破棄しない。** Cancel はキャンセルを通知するだけで待ちはしないので、
+        // ここに来た時点で SelectSession がロックを持ったまま await の途中にいることがある
+        // （起動直後のリロードで踏みやすい。OnAfterRenderAsync が SelectSession を await
+        // している最中に破棄が重なる）。破棄すると、その SelectSession が finally で
+        // Release() したときに ObjectDisposedException になる。
+        // SelectSession のキャンセル脱出点はどれも finally を通るため、キャンセルするほど
+        // むしろこの経路に入りやすい。
+        //
+        // SemaphoreSlim は AvailableWaitHandle を使わない限りアンマネージド資源を持たないので、
+        // 破棄しないことによる漏れは無い（SessionDeliveryService の宛先ごとのゲートも同じ理由で
+        // 破棄していない）。_terminalWriteLock も破棄しておらず、こちらに揃う形になる。
 
         // ConPtyConnectionServiceのイベントハンドラーを削除
         if (_dataReceivedHandler != null)
