@@ -132,7 +132,7 @@
                                 @* クリック領域は赤丸＋Gitアイコンのみに限定（ブランチ名クリックでは履歴を開かない）。
                                    オプション有効時のみクリックで変更ファイル一覧を表示（stopPropagation でセッション選択を抑止）。
                                    変更 0 件のときはダイアログを開かずトーストで知らせる。 *@
-                                <span class="badge @(session.IsWorktree ? "bg-warning" : "bg-success") ms-1"
+                                <span class="badge @(session.IsWorktree ? "git-badge-worktree" : "bg-success") ms-1"
                                       title="@GetGitBadgeTitle(session)">
                                     <span class="me-1" style="@(GitChangesOnBadgeClick ? "cursor: pointer;" : "")"
                                           @onclick:stopPropagation="GitChangesOnBadgeClick"

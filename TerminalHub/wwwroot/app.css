@@ -1,4 +1,4 @@
-/* ===========================================
+﻿/* ===========================================
    TerminalHub Design System
    =========================================== */
 
@@ -170,6 +170,22 @@ h1:focus {
 
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
+}
+
+/* worktree の Git バッジ。master 側（bg-success）はそのまま。
+   別の色を当てると警告表示のように浮くので、同じ緑の「薄い版＋破線枠」にして
+   本体から派生した仮の存在に見せる。枠の 1px 分はパディングで相殺し、master と高さを揃える。 */
+.git-badge-worktree {
+    background-color: rgba(25, 135, 84, 0.14);
+    color: #146c43;
+    border: 1px dashed rgba(25, 135, 84, 0.55);
+    padding: calc(0.2rem - 1px) calc(0.5rem - 1px);
+}
+
+[data-bs-theme="dark"] .git-badge-worktree {
+    background-color: rgba(45, 190, 130, 0.18);
+    color: #7ed3a6;
+    border-color: rgba(45, 190, 130, 0.5);
 }
 
 /* Git status indicator */
