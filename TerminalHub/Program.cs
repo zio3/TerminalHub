@@ -1,4 +1,4 @@
-﻿using TerminalHub.Services;
+using TerminalHub.Services;
 using TerminalHub.Analyzers;
 using TerminalHub.Components;
 using TerminalHub.Models;

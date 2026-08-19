@@ -2236,7 +2236,7 @@
             settings.SessionDefaults.LastTerminalRows = pending.Value.Rows;
             AppSettingsService.SaveSettings(settings);
             // デバウンス後に1回だけなので Information でよい（効いているかを実機で確認できるようにする）
-            Logger.LogDebug("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
+            Logger.LogInformation("[Resize] 次回の初期サイズとして記録: {Cols}x{Rows}", pending.Value.Cols, pending.Value.Rows);
         }
         catch (Exception ex)
         {
