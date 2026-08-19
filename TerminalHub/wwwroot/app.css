@@ -172,6 +172,26 @@ h1:focus {
     border-color: #929292;
 }
 
+/* worktree の Git バッジ。master 側（bg-success）はそのまま。
+   別の色を当てると警告表示のように浮くので、同じ緑の「薄い版＋破線枠」にして
+   本体から派生した仮の存在に見せる。
+   枠は border ではなく outline で描く。border だとバッジが 1px ぶん大きくなり、
+   相殺しようとパディングを書いても `.session-list-sidebar .badge` の方が詳細度で勝つため
+   効かない（メディアクエリ側にも同じ指定があり、追随も要る）。outline は箱の大きさに
+   影響しないので、master と高さが揃ったままになる。 */
+.git-badge-worktree {
+    background-color: rgba(25, 135, 84, 0.14);
+    color: #146c43;
+    outline: 1px dashed rgba(25, 135, 84, 0.55);
+    outline-offset: -1px;
+}
+
+[data-bs-theme="dark"] .git-badge-worktree {
+    background-color: rgba(45, 190, 130, 0.18);
+    color: #7ed3a6;
+    outline-color: rgba(45, 190, 130, 0.5);
+}
+
 /* Git status indicator */
 .git-status-indicator {
     font-size: 0.3rem;
