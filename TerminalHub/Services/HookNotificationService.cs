@@ -84,7 +84,7 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Hook通知を受信: Event={Event}, SessionId={SessionId}, AgentId={AgentId}, AgentType={AgentType}, Timestamp={Timestamp}",
             notification.Event,
             notification.SessionId,
@@ -156,7 +156,7 @@ public class HookNotificationService : IHookNotificationService
 
     private async Task HandleStopEventAsync(SessionInfo session, HookNotification notification)
     {
-        _logger.LogInformation("Stop イベント処理: Session={SessionName}", session.GetDisplayName());
+        _logger.LogDebug("Stop イベント処理: Session={SessionName}", session.GetDisplayName());
 
         // タイムアウトタイマーを停止（SessionTimeoutを防ぐ）
         _sessionTimerService.StopSessionTimer(session.SessionId);
@@ -182,11 +182,11 @@ public class HookNotificationService : IHookNotificationService
             FolderPath = session.FolderPath,
             Tool = SourceToolName(session)
         });
-        _logger.LogInformation("Stop Webhook を送信(投げっぱなし): Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
+        _logger.LogDebug("Stop Webhook を送信(投げっぱなし): Session={SessionName}, ElapsedSeconds={ElapsedSeconds}",
             session.GetDisplayName(), elapsedSeconds);
 
         // 最終利用時刻を更新（ソート用）
-        _logger.LogInformation("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
+        _logger.LogDebug("[LastAccessedAt更新] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}", session.GetDisplayName());
         session.LastAccessedAt = DateTime.Now;
         try
         {
@@ -199,7 +199,7 @@ public class HookNotificationService : IHookNotificationService
         }
 
         // 処理状態を完全にリセット（SessionTimeoutと同じ項目をクリア）
-        _logger.LogInformation(
+        _logger.LogDebug(
             "[ステータスクリア] きっかけ: HookNotificationService(Stop イベント), セッション: {SessionName}, 旧ステータス: {OldStatus}",
             session.GetDisplayName(),
             session.ProcessingStatus ?? "(なし)");
@@ -230,7 +230,7 @@ public class HookNotificationService : IHookNotificationService
     {
         session.IsCompacting = true;
         await SendSessionHookWebhookAsync(session, notification);
-        _logger.LogInformation("PreCompact イベント処理（compact中入り）: Session={SessionName}", session.GetDisplayName());
+        _logger.LogDebug("PreCompact イベント処理（compact中入り）: Session={SessionName}", session.GetDisplayName());
     }
 
     /// <summary>
@@ -241,7 +241,7 @@ public class HookNotificationService : IHookNotificationService
     {
         session.IsCompacting = false;
         await SendSessionHookWebhookAsync(session, notification);
-        _logger.LogInformation("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
+        _logger.LogDebug("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
     }
 
     /// <summary>
@@ -275,7 +275,7 @@ public class HookNotificationService : IHookNotificationService
             Message = notification.Message,    // Notification 本文（あれば）
             ToolName = notification.ToolName   // PreToolUse の対象ツール名（あれば）
         });
-        _logger.LogInformation("Hook Webhook を送信(投げっぱなし): Event={Event}, Session={SessionName}",
+        _logger.LogDebug("Hook Webhook を送信(投げっぱなし): Event={Event}, Session={SessionName}",
             notification.Event, session.GetDisplayName());
         return Task.CompletedTask;
     }
@@ -310,7 +310,7 @@ public class HookNotificationService : IHookNotificationService
             _logger.LogWarning("SubagentStart に agent_id がありません: Session={SessionName}", session.GetDisplayName());
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SubagentStart イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, session.RunningSubagentCount);
 
@@ -347,7 +347,7 @@ public class HookNotificationService : IHookNotificationService
             removed = session.RemoveRunningSubagent(notification.AgentId);
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SubagentStop イベント処理: Session={SessionName}, AgentId={AgentId}, AgentType={AgentType}, Removed={Removed}, RunningCount={Count}",
             session.GetDisplayName(), notification.AgentId, notification.AgentType, removed, session.RunningSubagentCount);
 
@@ -383,7 +383,7 @@ public class HookNotificationService : IHookNotificationService
             Tool = SourceToolName(session),
             AgentId = notification.AgentId        // サブエージェント ID（受信側で個別キーに使える）
         });
-        _logger.LogInformation(
+        _logger.LogDebug(
             "サブエージェント Webhook 送信(投げっぱなし): Event={Event}, AgentId={AgentId}, AgentType={AgentType}",
             notification.Event, notification.AgentId, notification.AgentType);
         return Task.CompletedTask;
@@ -406,7 +406,7 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
-        _logger.LogInformation("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
+        _logger.LogDebug("UserPromptSubmit イベント処理: Session={SessionName}", session.GetDisplayName());
 
         // 注意: ここでサブエージェント集合をクリアしてはいけない。
         // サブエージェント走行中でも新しいプロンプトは送信でき、UserPromptSubmit は
@@ -418,7 +418,7 @@ public class HookNotificationService : IHookNotificationService
         session.IsCompacting = false;
 
         // 処理開始を記録
-        _logger.LogInformation(
+        _logger.LogDebug(
             "[処理開始] きっかけ: HookNotificationService(UserPromptSubmit イベント), セッション: {SessionName}",
             session.GetDisplayName());
 
@@ -442,7 +442,7 @@ public class HookNotificationService : IHookNotificationService
             FolderPath = session.FolderPath,
             Tool = SourceToolName(session)
         });
-        _logger.LogInformation("UserPromptSubmit Webhook を送信(投げっぱなし): Session={SessionName}", session.GetDisplayName());
+        _logger.LogDebug("UserPromptSubmit Webhook を送信(投げっぱなし): Session={SessionName}", session.GetDisplayName());
     }
 
     /// <summary>
@@ -451,7 +451,7 @@ public class HookNotificationService : IHookNotificationService
     /// </summary>
     private async Task HandleNotificationEventAsync(SessionInfo session, HookNotification notification)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Notification イベント処理: Session={SessionName}, Message={Message}",
             session.GetDisplayName(), notification.Message);
 
@@ -479,7 +479,7 @@ public class HookNotificationService : IHookNotificationService
     /// </summary>
     private async Task HandlePreToolUseEventAsync(SessionInfo session, HookNotification notification)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "PreToolUse イベント処理（ツール={ToolName}、回答待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
 
@@ -503,7 +503,7 @@ public class HookNotificationService : IHookNotificationService
     {
         if (!requiresUserInput)
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "PermissionRequest イベント処理（ツール={ToolName}、Auto-reviewへ委譲、Webhook抑制）: Session={SessionName}",
                 notification.ToolName, session.GetDisplayName());
 
@@ -516,7 +516,7 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "PermissionRequest イベント処理（ツール={ToolName}、承認待ち）: Session={SessionName}",
             notification.ToolName, session.GetDisplayName());
 

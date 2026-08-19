@@ -127,7 +127,7 @@ namespace TerminalHub.Services
                 var previousStatus = session.ProcessingStatus;
                 if (previousStatus != statusText)
                 {
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "[StatusChange] {SessionName}: \"{Previous}\" → \"{Current}\" matched=\"{Matched}\"",
                         session.GetDisplayName(),
                         previousStatus ?? "(idle)",
@@ -226,7 +226,7 @@ namespace TerminalHub.Services
                     }
 
                     // 最終利用時刻を更新（ソート用）
-                    _logger.LogInformation("[LastAccessedAt更新] きっかけ: OutputAnalyzerService(処理完了検出), セッション: {SessionName}", session.GetDisplayName());
+                    _logger.LogDebug("[LastAccessedAt更新] きっかけ: OutputAnalyzerService(処理完了検出), セッション: {SessionName}", session.GetDisplayName());
                     session.LastAccessedAt = DateTime.Now;
                     // fire-and-forget だが、失敗を黙殺せず faulted 時に警告を残す（診断のため）
                     _ = _sessionRepository.SaveSessionAsync(session).ContinueWith(

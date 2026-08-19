@@ -240,7 +240,7 @@ namespace TerminalHub.Services
             ThreadPool.GetMaxThreads(out var maxWorkers, out _);
             ThreadPool.GetAvailableThreads(out var availWorkers, out _);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "[FreezeProbe] 定期ゲージ: hook購読={HookSubs}, sessions変更購読={SessSubs}, セッション数={Sessions}, in-flight={InFlight}, ThreadPool待機={Pending}, ThreadPoolスレッド={TpThreads}, プロセススレッド={ProcThreads}, 使用中ワーカー={BusyWorkers}, ConPTY読み={BlockedInRead}/{ReadLoops}",
                 _hookNotificationService.SubscriberCount,
                 _sessionManager.SessionsChangedSubscriberCount,
