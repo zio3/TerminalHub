@@ -51,6 +51,12 @@ async function loadLinkPlugins() {
                 console.error(`[LinkPlugins] ${entry.file}: url(text, ctx) が関数ではありません`);
                 continue;
             }
+            // g フラグが無いと exec() が lastIndex を見ずに毎回先頭へ戻り、
+            // 検出ループが終わらなくなる（タブごと固まる）。読み込み時に弾く。
+            if (plugin.pattern && !plugin.pattern.global) {
+                console.error(`[LinkPlugins] ${entry.file}: pattern に g フラグがありません`);
+                continue;
+            }
             // 同じ id が両方にあればユーザー側が勝つ（一覧がユーザー先頭で返るため）
             if (loadedPlugins.has(plugin.id)) continue;
 
@@ -67,7 +73,9 @@ async function loadLinkPlugins() {
 
 // 設定画面から呼ぶ: 読み込み済みプラグインの一覧（id と宣言された変数）を返す
 window.listLinkPlugins = async function () {
-    if (loadedPlugins.size === 0) await loadLinkPlugins();
+    // 毎回読み直す。設定画面を開くのは「プラグインを足した／直した直後」がほとんどで、
+    // キャッシュしていると追加したファイルが一覧に出ずブラウザのリロードが要る。
+    await window.reloadLinkPlugins();
     return [...loadedPlugins.values()].map(e => ({
         id: e.plugin.id,
         source: e.source,
