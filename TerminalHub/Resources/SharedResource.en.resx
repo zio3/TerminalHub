@@ -684,9 +684,7 @@
   <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>Names that point at this PC. They are re-detected on every start, so no configuration is needed when the LAN IP changes. Connecting with a name listed neither here nor in &quot;Additional allowed host names&quot; above is rejected.</value></data>
   <data name="SubSession.Tab.Manage" xml:space="preserve"><value>Manage</value></data>
   <data name="SubSession.Manage.Empty" xml:space="preserve"><value>This session has no sub-sessions yet. Use the tabs above to create one.</value></data>
-  <data name="SubSession.Manage.Help" xml:space="preserve"><value>Reorder with the arrows (saved immediately). Clone creates another session in the same folder; Archive removes it from the list (you can restore it later).</value></data>
-  <data name="SubSession.Manage.MoveUp" xml:space="preserve"><value>Move up</value></data>
-  <data name="SubSession.Manage.MoveDown" xml:space="preserve"><value>Move down</value></data>
+  <data name="SubSession.Manage.Help" xml:space="preserve"><value>Drag the handle on the left to reorder (saved immediately). Clone creates another session in the same folder; Archive removes it from the list (you can restore it later).</value></data>
   <data name="SubSession.Manage.Clone" xml:space="preserve"><value>Clone</value></data>
   <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>Create a new session with the same folder and settings</value></data>
   <data name="SubSession.Clone.SourceFormat" xml:space="preserve"><value>Cloning: {0}</value></data>
@@ -701,4 +699,5 @@
   <data name="SubSession.Manage.ArchivedHelp" xml:space="preserve"><value>Sub-sessions that are not shown in the list. Restoring puts them back.</value></data>
   <data name="SubSession.Manage.Restore" xml:space="preserve"><value>Restore</value></data>
   <data name="SubSession.Manage.RestoreTitle" xml:space="preserve"><value>Restore to the list</value></data>
+  <data name="SubSession.Manage.DragHandle" xml:space="preserve"><value>Drag to reorder</value></data>
 </root>

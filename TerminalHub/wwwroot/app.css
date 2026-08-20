@@ -1,4 +1,4 @@
-/* ===========================================
+﻿/* ===========================================
    TerminalHub Design System
    =========================================== */
 
@@ -906,4 +906,13 @@ h1:focus {
     right: 0.75rem;
     text-decoration: none;
     font-size: 1.1rem;
+}
+
+/* サブセッション管理のドラッグハンドル。掴めることが分かるようカーソルを変える */
+.subsession-drag-handle {
+    cursor: grab;
+}
+
+.subsession-drag-handle:active {
+    cursor: grabbing;
 }

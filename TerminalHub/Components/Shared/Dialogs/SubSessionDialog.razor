@@ -85,21 +85,21 @@
                                     {
                                         var index = i;
                                         var child = manageChildren[index];
-                                        <li class="list-group-item d-flex align-items-center gap-2">
-                                            <div class="btn-group-vertical btn-group-sm">
-                                                <button type="button" class="btn btn-outline-secondary py-0"
-                                                        title="@L["SubSession.Manage.MoveUp"]"
-                                                        disabled="@(index == 0 || isProcessing)"
-                                                        @onclick="() => MoveChildAsync(index, -1)">
-                                                    <i class="bi bi-chevron-up"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-outline-secondary py-0"
-                                                        title="@L["SubSession.Manage.MoveDown"]"
-                                                        disabled="@(index == manageChildren.Count - 1 || isProcessing)"
-                                                        @onclick="() => MoveChildAsync(index, 1)">
-                                                    <i class="bi bi-chevron-down"></i>
-                                                </button>
-                                            </div>
+                                        <li class="list-group-item d-flex align-items-center gap-2 @DragRowClass(index)"
+                                            draggable="@(dragArmed ? "true" : "false")"
+                                            @ondragstart="() => OnDragStart(index)"
+                                            @ondragover:preventDefault="true"
+                                            @ondragenter="() => dragOverIndex = index"
+                                            @ondrop="() => OnDropAsync(index)"
+                                            @ondragend="OnDragEnd">
+                                            @* 行全体を draggable にしたままだと、名前の選択やボタン操作が
+                                               ドラッグに化ける。掴んだのがハンドルのときだけ有効化する。 *@
+                                            <span class="text-muted flex-shrink-0 subsession-drag-handle"
+                                                  title="@L["SubSession.Manage.DragHandle"]"
+                                                  @onmousedown="() => dragArmed = true"
+                                                  @onmouseup="() => dragArmed = false">
+                                                <i class="bi bi-grip-vertical"></i>
+                                            </span>
                                             <div class="flex-grow-1 text-truncate">
                                                 <div class="text-truncate">
                                                     @child.GetDisplayName()
@@ -600,17 +600,51 @@
     // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
     private bool archivedExpanded = false;
 
+    // ドラッグ並べ替えの状態。dragArmed はハンドルを掴んだかどうか
+    // （行全体を draggable のままにすると、名前の選択やボタン操作がドラッグに化ける）。
+    private bool dragArmed = false;
+    private int? draggingIndex;
+    private int? dragOverIndex;
+
+    private string DragRowClass(int index)
+    {
+        if (draggingIndex == index)
+            return "opacity-50";
+        // 落ちる先が分かるように、掴んでいる行以外の重なり先だけ線を出す
+        return dragOverIndex == index && draggingIndex.HasValue ? "border-primary" : "";
+    }
+
+    private void OnDragStart(int index)
+    {
+        draggingIndex = index;
+        dragOverIndex = index;
+    }
+
+    private void OnDragEnd()
+    {
+        dragArmed = false;
+        draggingIndex = null;
+        dragOverIndex = null;
+    }
+
     /// <summary>
-    /// 管理タブの1件を上下に動かし、その場で保存する。確定ボタンを介さないのは、
+    /// 掴んだ行を落とした位置へ差し込み、その場で保存する。確定ボタンを介さないのは、
     /// 並べ替えが「操作＝結果」で、キャンセルの意味が薄いため（誤操作は戻せばよい）。
     /// </summary>
-    private async Task MoveChildAsync(int index, int delta)
+    private async Task OnDropAsync(int targetIndex)
     {
-        var target = index + delta;
-        if (index < 0 || index >= manageChildren.Count || target < 0 || target >= manageChildren.Count)
+        var from = draggingIndex;
+        OnDragEnd();
+
+        if (!from.HasValue || from.Value == targetIndex)
+            return;
+        if (from.Value < 0 || from.Value >= manageChildren.Count ||
+            targetIndex < 0 || targetIndex >= manageChildren.Count)
             return;
 
-        (manageChildren[index], manageChildren[target]) = (manageChildren[target], manageChildren[index]);
+        var moving = manageChildren[from.Value];
+        manageChildren.RemoveAt(from.Value);
+        manageChildren.Insert(targetIndex, moving);
 
         if (OnReorder.HasDelegate)
         {
