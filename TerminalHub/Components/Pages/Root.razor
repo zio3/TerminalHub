@@ -1676,10 +1676,9 @@
                 git = new { originUrl, branch = session.GitBranch }
             });
 
-            // 採用しているものだけを順に渡す。登録順がそのまま優先度になる
-            var settings = session.LinkPlugins
-                .Where(p => p.Enabled)
-                .OrderBy(p => p.Order)
+            // 採用しているものだけを順に渡す。登録順がそのまま優先度になる。
+            // 未設定のセッションは既定セットへフォールバックする（LinkPluginDefaults 参照）
+            var settings = LinkPluginDefaults.Resolve(session.LinkPlugins)
                 .Select(p => new { id = p.Id, vars = p.Vars })
                 .ToList();
 

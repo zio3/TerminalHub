@@ -47,8 +47,10 @@ async function loadLinkPlugins() {
                 console.error(`[LinkPlugins] ${entry.file}: id がありません`);
                 continue;
             }
-            if (typeof plugin.url !== 'function') {
-                console.error(`[LinkPlugins] ${entry.file}: url(text, ctx) が関数ではありません`);
+            // detect() は hit に url を持たせて返すので、url() は要らない。
+            // pattern 方式のときだけ url() が要る（ドキュメントの detect-only と揃える）。
+            if (typeof plugin.detect !== 'function' && typeof plugin.url !== 'function') {
+                console.error(`[LinkPlugins] ${entry.file}: detect() か url(text, ctx) のどちらかが要ります`);
                 continue;
             }
             // g フラグが無いと exec() が lastIndex を見ずに毎回先頭へ戻り、
@@ -184,6 +186,11 @@ function* matchPlugin(plugin, lineText, ctx) {
         const start = match.index;
         const end = start + text.length;
 
+        // 空マッチ（/^/g など）だと lastIndex が進まず無限ループになる。
+        // 以降に continue する経路があるので、判定より前にここで必ず進めておく。
+        // プラグインは第三者が書く前提で、壊れた1つがターミナルごと巻き添えにしないようにする。
+        if (re.lastIndex === start) re.lastIndex++;
+
         if (typeof plugin.accept === 'function') {
             const before = lineText.slice(0, start);
             const after = lineText.slice(end);
@@ -196,8 +203,5 @@ function* matchPlugin(plugin, lineText, ctx) {
         if (!url) continue;
 
         yield { start, end, text, url };
-
-        // 空マッチで無限ループしないための保険
-        if (re.lastIndex === start) re.lastIndex++;
     }
 }
