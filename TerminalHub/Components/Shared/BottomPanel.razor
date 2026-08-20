@@ -387,33 +387,6 @@
         return true;
     }
 
-    /// <summary>
-    /// テキスト入力タブへ文字列を流し込み、そのタブを前面に出す（送信はしない）。
-    /// 入力欄の中身は BottomPanel 側の辞書が持つため、ここが唯一の入り口になる。
-    /// </summary>
-    public async Task InsertToInputAsync(string text)
-    {
-        // 使っているタブへ入れる。既定タブ決め打ちだと、2つ目の入力タブで作業中に
-        // 見えていないタブへ入り、そちらの下書きを潰してしまう。
-        var tab = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.TextInput && t.Id == ActiveTabId)
-                  ?? Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.TextInput);
-        if (tab == null) return;
-
-        // 未送信の下書きがあれば消さずに後ろへ足す。書きかけを黙って捨てないため。
-        var current = GetTextInputPanelText(tab.Id);
-        var merged = string.IsNullOrWhiteSpace(current) ? text : current.TrimEnd() + '\n' + text;
-
-        SetTextInputPanelText(tab.Id, merged);
-        if (ActiveTabId != tab.Id)
-        {
-            await SelectTab(tab.Id);
-        }
-        else
-        {
-            StateHasChanged();
-        }
-    }
-
     private string GetTabIcon(BottomPanelTabType type)
     {
         return type switch

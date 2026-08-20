@@ -350,17 +350,12 @@
                         <a class="btn btn-outline-secondary btn-sm" href="/api/plugins/doc" target="_blank" rel="noopener">
                             <i class="bi bi-file-earmark-text me-1"></i>@L["SessionSettings.LinkPlugins.OpenDoc"]
                         </a>
-                        @if (CanAskAi)
-                        {
-                            @* 入力欄へ流し込むだけで送らない。末尾に「作りたいもの」を書き足してから送る前提 *@
-                            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="AskAiToWritePluginAsync">
-                                <i class="bi bi-robot me-1"></i>@L["SessionSettings.LinkPlugins.AskAi"]
-                            </button>
-                        }
                     }
                 </div>
                 <div class="mb-3">
                     <small class="text-muted d-block text-break"><code>@pluginsFolderPath</code></small>
+                    @* このフォルダで CLI の AI を動かして自作する導線。仕様は起動時にここへ置かれる *@
+                    <small class="text-muted d-block">@string.Format(L["SessionSettings.LinkPlugins.FolderHelp"], LinkPluginDocPath.PluginsFolderFileName)</small>
                 </div>
 
                 @if (linkPluginCatalog.Count == 0)
@@ -430,14 +425,12 @@
                     @* 動作確認: 1行打って「何が引っかかって、どのリンクになるか」を見る。
                        実際の検出と同じ経路（matchPlugin）を通すので、ターミナルに出るまで待たなくていい *@
                     <h6 class="text-muted">@L["SessionSettings.LinkPlugins.Test.Header"]</h6>
-                    <div class="input-group input-group-sm mb-2">
-                        <input type="text" class="form-control" @bind="linkPluginTestLine" @bind:event="oninput"
-                               placeholder="@L["SessionSettings.LinkPlugins.Test.Placeholder"]"
-                               @onkeydown="OnLinkPluginTestKeyDown" />
-                        <button type="button" class="btn btn-outline-primary" @onclick="RunLinkPluginTestAsync">
-                            <i class="bi bi-play-fill me-1"></i>@L["SessionSettings.LinkPlugins.Test.Run"]
-                        </button>
-                    </div>
+                    @* 打つそばから結果が変わる。ボタンを押させると「試し忘れ」が起きるうえ、
+                       正規表現を詰めていく作業は1文字ずつ確かめたいため *@
+                    <input type="text" class="form-control form-control-sm mb-2"
+                           value="@linkPluginTestLine"
+                           @oninput="OnLinkPluginTestInputAsync"
+                           placeholder="@L["SessionSettings.LinkPlugins.Test.Placeholder"]" />
                     @if (linkPluginTestResults != null)
                     {
                         @if (linkPluginTestResults.Count == 0)
@@ -493,9 +486,6 @@
     [Parameter] public EventCallback OnMemoRestored { get; set; }
     // 専用コマンドの即時保存通知（追加/編集/削除の都度、呼び出し元が DB へ永続化する）
     [Parameter] public EventCallback OnSessionCommandsChanged { get; set; }
-
-    // 入力欄への流し込み（送信はしない）。リンクプラグインを AI に書かせるプロンプト用
-    [Parameter] public EventCallback<string> OnInsertToInput { get; set; }
 
     private bool showMemoManagement = false;
     private bool anyMemoExists = false;
@@ -572,15 +562,11 @@
     private string pluginsFolderPath = "";
     private bool linkPluginDocAvailable = false;
     private string linkPluginTestLine = "";
+    // 入力ごとに走らせると打鍵のたびに JS 往復が起きるので、最後の入力から少し待つ
+    private int linkPluginTestInputSeq = 0;
     private List<LinkPluginTestHit>? linkPluginTestResults = null;
 
     private sealed record LinkPluginTestHit(string Id, string? Text, string? Url, int Start, bool Won, string? Error);
-
-    /// <summary>
-    /// 「AI に作らせる」を出すか。プロンプトを流し込んでも意味があるのは CLI の AI セッションだけ。
-    /// </summary>
-    private bool CanAskAi =>
-        sessionInfo?.TerminalType is TerminalType.ClaudeCode or TerminalType.CodexCLI;
 
     /// <summary>
     /// 専用ダイアログを開く。開くたびにカタログを取り直し、増えた .js を一覧へ足す。
@@ -620,29 +606,25 @@
     }
 
     /// <summary>
-    /// プラグインを書かせるための定型プロンプトを入力欄へ流し込む（送信はしない）。
-    /// 仕様は中身を貼らずに絶対パスで渡す。CLI の AI は自分で読めるし、
-    /// 貼るとコンテキストを無駄に食って貼り忘れも起きるため。
-    /// 末尾は空けておき、「作りたいもの」をユーザーが書き足してから送る前提。
+    /// テスト欄の入力を受けて、少し待ってから検出を走らせる。
+    /// 1文字ごとに JS を呼ぶと往復が無駄なので、最後の入力から一定時間空いたものだけ実行する。
     /// </summary>
-    private async Task AskAiToWritePluginAsync()
+    private async Task OnLinkPluginTestInputAsync(ChangeEventArgs e)
     {
-        var docPath = LinkPluginDocPath.Get();
-        if (docPath == null) return;
+        linkPluginTestLine = e.Value?.ToString() ?? "";
 
-        var prompt = string.Format(
-            L["SessionSettings.LinkPlugins.AiPrompt"],
-            docPath,
-            AppDataPaths.GetPluginsFolder());
+        if (string.IsNullOrEmpty(linkPluginTestLine))
+        {
+            linkPluginTestResults = null;
+            return;
+        }
 
-        await OnInsertToInput.InvokeAsync(prompt);
-        showLinkPluginsDialog = false;
-        await OnCancel.InvokeAsync();
-    }
+        var seq = ++linkPluginTestInputSeq;
+        await Task.Delay(250);
+        if (seq != linkPluginTestInputSeq) return;   // 続けて打たれたので、こちらは捨てる
 
-    private async Task OnLinkPluginTestKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await RunLinkPluginTestAsync();
+        await RunLinkPluginTestAsync();
+        StateHasChanged();
     }
 
     /// <summary>

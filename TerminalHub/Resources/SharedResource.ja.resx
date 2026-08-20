@@ -469,12 +469,10 @@
   <data name="SessionSettings.LinkPlugins.MoveDown" xml:space="preserve"><value>優先度を下げる</value></data>
   <data name="SessionSettings.LinkPlugins.ManageButton" xml:space="preserve"><value>リンクプラグイン</value></data>
   <data name="SessionSettings.LinkPlugins.OpenFolder" xml:space="preserve"><value>プラグインフォルダを開く</value></data>
+  <data name="SessionSettings.LinkPlugins.FolderHelp" xml:space="preserve"><value>このフォルダで Claude Code や Codex を動かし、{0} を読ませれば自作できます。</value></data>
   <data name="SessionSettings.LinkPlugins.OpenDoc" xml:space="preserve"><value>書き方を開く</value></data>
-  <data name="SessionSettings.LinkPlugins.AskAi" xml:space="preserve"><value>AI に作らせる</value></data>
-  <data name="SessionSettings.LinkPlugins.AiPrompt" xml:space="preserve"><value>リンクプラグインを1つ作ってください。&#10;仕様: {0}&#10;置き場所: {1}&#10;作りたいもの: </value></data>
   <data name="SessionSettings.LinkPlugins.Test.Header" xml:space="preserve"><value>動作テスト</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Placeholder" xml:space="preserve"><value>テストしたい行を貼り付け（例: Fixed #123）</value></data>
-  <data name="SessionSettings.LinkPlugins.Test.Run" xml:space="preserve"><value>試す</value></data>
   <data name="SessionSettings.LinkPlugins.Test.NoMatch" xml:space="preserve"><value>この行では何もリンクになりません。</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Overridden" xml:space="preserve"><value>他が優先</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>フォルダパスをコピー</value></data>

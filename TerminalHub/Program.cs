@@ -483,6 +483,10 @@ app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, stri
 // MCP エンドポイント（/mcp）。Claude Code 等の MCP クライアントがここへ接続する。
 app.MapMcp("/mcp");
 
+// プラグインフォルダに「リンクプラグインの作り方」を置く。フォルダで CLI の AI を動かして
+// 自作する使い方を想定しているため、仕様がフォルダの中にあるほうが早い。
+LinkPluginDocPath.EnsureInPluginsFolder(app.Services.GetRequiredService<ILogger<Program>>());
+
 app.Run();
 return 0;
 

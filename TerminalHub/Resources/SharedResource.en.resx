@@ -469,12 +469,10 @@
   <data name="SessionSettings.LinkPlugins.MoveDown" xml:space="preserve"><value>Lower priority</value></data>
   <data name="SessionSettings.LinkPlugins.ManageButton" xml:space="preserve"><value>Link plugins</value></data>
   <data name="SessionSettings.LinkPlugins.OpenFolder" xml:space="preserve"><value>Open plugins folder</value></data>
+  <data name="SessionSettings.LinkPlugins.FolderHelp" xml:space="preserve"><value>Run Claude Code or Codex in this folder and point it at {0} to write your own.</value></data>
   <data name="SessionSettings.LinkPlugins.OpenDoc" xml:space="preserve"><value>Open the guide</value></data>
-  <data name="SessionSettings.LinkPlugins.AskAi" xml:space="preserve"><value>Ask the AI to write one</value></data>
-  <data name="SessionSettings.LinkPlugins.AiPrompt" xml:space="preserve"><value>Write a link plugin.&#10;Spec: {0}&#10;Put it in: {1}&#10;What I want: </value></data>
   <data name="SessionSettings.LinkPlugins.Test.Header" xml:space="preserve"><value>Try it</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Placeholder" xml:space="preserve"><value>Paste a line to test (e.g. Fixed #123)</value></data>
-  <data name="SessionSettings.LinkPlugins.Test.Run" xml:space="preserve"><value>Run</value></data>
   <data name="SessionSettings.LinkPlugins.Test.NoMatch" xml:space="preserve"><value>Nothing in this line becomes a link.</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Overridden" xml:space="preserve"><value>overridden</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>Copy folder path</value></data>

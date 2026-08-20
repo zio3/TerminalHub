@@ -67,8 +67,7 @@
                        OnCancel="() => showSessionSettingsDialog = false"
                        OnCreateSubSession="HandleCreateSubSessionFromSettings"
                        OnMemoRestored="HandleMemoRestoredFromSettings"
-                       OnSessionCommandsChanged="OnSessionCommandsChanged"
-                       OnInsertToInput="InsertToInputAsync" />
+                       OnSessionCommandsChanged="OnSessionCommandsChanged" />
 <ArchivedSessionsDialog IsVisible="showArchivedSessionsDialog"
                         ArchivedSessions="@GetArchivedSessions()"
                         OnRestoreSession="RestoreArchivedSession"
@@ -1659,15 +1658,6 @@
     /// このセッションで採用しているリンクプラグインを xterm へ登録する。
     /// 受け渡しデータ（origin 等）は検出時に同期で必要なので、登録前に押し込んでおく。
     /// </summary>
-    /// <summary>
-    /// 入力欄へテキストを流し込む（送信はしない）。設定ダイアログの「AI に作らせる」用。
-    /// </summary>
-    private async Task InsertToInputAsync(string text)
-    {
-        if (bottomPanel == null) return;
-        await bottomPanel.InsertToInputAsync(text);
-    }
-
     private async Task ApplyLinkPluginsAsync(Guid sessionId)
     {
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
