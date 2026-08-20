@@ -1938,6 +1938,16 @@
         }
         if (!confirmed) return;
 
+        await ArchiveSessionCoreAsync(sessionId);
+    }
+
+    /// <summary>
+    /// 確認を挟まずにアーカイブする本体。一覧の × は取り消しの手掛かりが無いので confirm を出すが、
+    /// サブセッション管理画面は同じ画面のアーカイブ欄へ移るだけで、その場で戻せる。
+    /// 押すたびに確認が出るほうが煩わしいので、そちらからはここを直接呼ぶ。
+    /// </summary>
+    private async Task ArchiveSessionCoreAsync(Guid sessionId)
+    {
         // 削除時と同様に、このCircuitの購読をセッション破棄前に解除する。
         ConPtyConnection.UnsubscribeFromSession(sessionId);
 
@@ -2900,7 +2910,7 @@
         if (!subSessionParentSessionId.HasValue)
             return;
 
-        await ArchiveSession(sessionId);
+        await ArchiveSessionCoreAsync(sessionId);
         RefreshSubSessionChildren(subSessionParentSessionId.Value);
         StateHasChanged();
     }
@@ -2967,37 +2977,18 @@
                     break;
 
                 case SubSessionDialog.SubSessionType.Clone:
-                    // 既存サブセッションのクローン。フォルダは元と同じで、CLI 種別と名前だけ選び直す
-                    // （同じ worktree に別の CLI を並べる用途）。設定と専用コマンドは下で引き継ぐ。
+                    // クローンは「元のフォルダを指定済みの新規作成」。設定や専用コマンドは引き継がない
+                    // （引き継ぎは SessionOptionsSelector が常に既定値一式を書き出す都合と噛み合わず、
+                    // 起動オプションが黙って緩む事故になったため。同じフォルダに別 CLI を立てる、という
+                    // 本来の用途はフォルダの指定済みだけで足りる）。
                     var cloneSource = result.SourceSessionId.HasValue
                         ? SessionManager.GetSessionInfo(result.SourceSessionId.Value)
                         : null;
                     if (cloneSource != null)
                     {
-                        // 同じ CLI 種別なら元の起動オプションを丸ごと引き継ぐ。ダイアログ側の
-                        // オプション選択と混ぜてはいけない（SessionOptionsSelector は常に
-                        // 「新規の既定値一式」を書き出すので、混ぜると元の read-only／承認拒否／
-                        // ネットワーク無効などが黙って緩む＝権限の意図しない緩和になる）。
-                        // 種別を変えたときは元の値に意味が無いので、選び直した分だけを使う。
-                        var cloneOptions = result.TerminalType == cloneSource.TerminalType
-                            ? new Dictionary<string, string>(cloneSource.Options)
-                            : new Dictionary<string, string>(result.Options);
-
                         newSession = await SessionManager.CreateSamePathSessionAsync(
-                            subSessionParentSessionId.Value, cloneSource.FolderPath, result.TerminalType, cloneOptions,
+                            subSessionParentSessionId.Value, cloneSource.FolderPath, result.TerminalType, result.Options,
                             string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
-
-                        if (newSession != null)
-                        {
-                            // 専用コマンドとリンクプラグイン設定を引き継ぐ。参照を共有すると
-                            // 片方の編集がもう片方に及ぶので、必ず複製して渡す。
-                            newSession.SessionCommands = cloneSource.SessionCommands
-                                .Select(c => c.Clone())
-                                .ToList();
-                            newSession.LinkPlugins = cloneSource.LinkPlugins
-                                .Select(p => p.Clone())
-                                .ToList();
-                        }
                     }
                     break;
             }

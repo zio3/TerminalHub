@@ -269,22 +269,6 @@ public class CustomCommand
     /// 人間が UI で編集したら false に落とす（手を入れた時点で人間のものとして扱う）。
     /// </summary>
     public bool CreatedByAgent { get; set; } = false;
-
-    /// <summary>
-    /// 同じ内容の別インスタンスを作る。セッションのクローンで使う。
-    /// 参照を共有すると、片方のセッションでの編集がもう片方に及ぶため。
-    /// </summary>
-    public CustomCommand Clone() => new()
-    {
-        Title = Title,
-        CommandText = CommandText,
-        Type = Type,
-        KeyName = KeyName,
-        GroupName = GroupName,
-        SendMode = SendMode,
-        PropagateToChildren = PropagateToChildren,
-        CreatedByAgent = CreatedByAgent
-    };
 }
 
 /// <summary>

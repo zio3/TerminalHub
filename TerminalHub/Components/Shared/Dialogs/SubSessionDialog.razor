@@ -174,7 +174,10 @@
                     }
                     else if (activeTab == TabType.Clone && cloneSource != null)
                     {
-                        <!-- クローン作成（元のフォルダ・設定・専用コマンドを引き継ぐ） -->
+                        @* クローンは「元のフォルダを指定済みの新規作成」でしかない。
+                           設定の引き継ぎは、SessionOptionsSelector が常に新規の既定値一式を
+                           書き出す都合と噛み合わず、権限が黙って緩む事故のもとだった
+                           （Codex レビュー P1）。作成タブと同じ素直な作りに戻す。 *@
                         <div class="tab-pane fade show active">
                             <div class="alert alert-info">
                                 <i class="bi bi-copy me-2"></i>
@@ -189,51 +192,16 @@
                                 <small class="form-text text-muted">@L["SubSession.SessionName.Help"]</small>
                             </div>
 
-                            <div class="mb-3">
-                                <label class="form-label">@L["SubSession.Clone.TerminalType"]</label>
-                                <select class="form-select" value="@((int)selectedTerminalType)"
-                                        @onchange="OnCloneTerminalTypeChanged">
-                                    @foreach (var type in CloneSelectableTypes)
-                                    {
-                                        <option value="@((int)type)">@type</option>
-                                    }
-                                </select>
+                            <!-- セッションオプション選択（作成タブと同じ） -->
+                            <div class="mt-3">
+                                <SessionOptionsSelector @ref="optionsSelectorClone"
+                                                      SelectedType="selectedTerminalType"
+                                                      SelectedTypeChanged="OnTerminalTypeChanged"
+                                                      @bind-StartupCommand="startupCommand"
+                                                      ClaudeOptions="claudeOptions"
+                                                      GeminiOptions="geminiOptions"
+                                                      CodexOptions="codexOptions" />
                             </div>
-
-                            @* 同じ種別なら元セッションの起動オプションをそのまま引き継ぐ。ここで
-                               SessionOptionsSelector を出すと、セレクタが常に「新規の既定値一式」を
-                               書き出すため、元の read-only／承認拒否／ネットワーク無効などが黙って
-                               緩む（Codex レビュー指摘の P1）。種別を変えたときだけ、その種別の
-                               設定を選ばせる。 *@
-                            @if (selectedTerminalType == cloneSource.TerminalType)
-                            {
-                                <div class="alert alert-secondary mb-0">
-                                    <i class="bi bi-info-circle me-2"></i>@L["SubSession.Clone.Info"]
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="alert alert-warning">
-                                    <i class="bi bi-exclamation-triangle me-2"></i>
-                                    @if (cloneTypeForcedFromDisabled)
-                                    {
-                                        @string.Format(L["SubSession.Clone.SourceTypeDisabledInfo"], cloneSource.TerminalType)
-                                    }
-                                    else
-                                    {
-                                        @L["SubSession.Clone.TypeChangedInfo"]
-                                    }
-                                </div>
-                                <div class="mt-3">
-                                    <SessionOptionsSelector @ref="optionsSelectorClone"
-                                                          SelectedType="selectedTerminalType"
-                                                          SelectedTypeChanged="OnTerminalTypeChanged"
-                                                          @bind-StartupCommand="startupCommand"
-                                                          ClaudeOptions="claudeOptions"
-                                                          GeminiOptions="geminiOptions"
-                                                          CodexOptions="codexOptions" />
-                                </div>
-                            }
                         </div>
                     }
                     else if (activeTab == TabType.Create)
@@ -630,8 +598,6 @@
     // 複製にするのは、保存が失敗しても親の一覧を巻き込まないため。
     private List<SessionInfo> manageChildren = new();
     private SessionInfo? cloneSource;
-    // 元の種別が設定で無効だったため別種別へ寄せたか（理由を画面に出し分けるため）
-    private bool cloneTypeForcedFromDisabled = false;
     // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
     private bool archivedExpanded = false;
 
@@ -685,18 +651,15 @@
     }
 
     /// <summary>
-    /// クローン画面へ入る。CLI 種別の初期値は元セッションのものにする
-    /// （「同じフォルダで別の CLI を立てる」用途でも、まず元と同じ状態から出発できるほうが迷わない）。
+    /// クローン画面へ入る。中身は「元のフォルダを指定済みの新規作成」なので、
+    /// 初期値も新規作成と同じにする（元の設定は引き継がない）。
     /// </summary>
     private void StartClone(SessionInfo source)
     {
         cloneSource = source;
-        cloneTypeForcedFromDisabled = !IsTerminalTypeAvailable(source.TerminalType);
-        // 元の種別が設定で無効化されていたら、そのままでは「無効な CLI をクローンで復活できる」
-        // 抜け道になる。選べる種別の先頭へ寄せて、種別変更として扱わせる。
         selectedTerminalType = IsTerminalTypeAvailable(source.TerminalType)
             ? source.TerminalType
-            : CloneSelectableTypes.First();
+            : SelectableTerminalTypes.First();
         sessionName = "";
         startupCommand = "";
         claudeOptions = new();
@@ -711,11 +674,9 @@
         activeTab = TabType.Manage;
     }
 
-    // クローンで選び直せる CLI 種別。GeminiCLI は廃止済みなので出さない
-    // （永続化互換のため enum 値だけ残っている）。設定で無効にした CLI も出さない
-    // ＝ SessionOptionsSelector が選択肢を隠すのと同じ規則にする（ここだけ素通しだと、
-    // 設定を迂回して無効な CLI を起動できてしまう）。
-    private IEnumerable<TerminalType> CloneSelectableTypes =>
+    // 設定で無効にした CLI は選ばせない（SessionOptionsSelector が選択肢を隠すのと同じ規則）。
+    // ダイアログを開くときの寄せ直しに使う。
+    private IEnumerable<TerminalType> SelectableTerminalTypes =>
         new[]
         {
             TerminalType.ClaudeCode,
@@ -735,18 +696,6 @@
         TerminalType.Terminal => true,
         _ => false
     };
-
-    private void OnCloneTerminalTypeChanged(ChangeEventArgs e)
-    {
-        // Enum.IsDefined だけだと、選択肢に出していない種別（廃止済みの GeminiCLI や
-        // 設定で無効にした CLI）を値の細工で通せてしまうので、出している集合で照合する。
-        if (int.TryParse(e.Value?.ToString(), out var value) &&
-            Enum.IsDefined(typeof(TerminalType), value) &&
-            CloneSelectableTypes.Contains((TerminalType)value))
-        {
-            selectedTerminalType = (TerminalType)value;
-        }
-    }
 
     /// <summary>
     /// サブセッションをアーカイブする（一覧から消す）。ConPTY は落ちるので、
@@ -860,7 +809,7 @@
             // （Codex レビュー指摘。クローン以外の作成タブに残っていた迂回）。
             selectedTerminalType = IsTerminalTypeAvailable(ParentTerminalType)
                 ? ParentTerminalType
-                : CloneSelectableTypes.First();
+                : SelectableTerminalTypes.First();
 
             // 直近の選択を LocalStorage から復元
             await LoadLastBranchSelectionMode();
