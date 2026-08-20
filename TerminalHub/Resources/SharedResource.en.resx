@@ -474,6 +474,8 @@
   <data name="SessionSettings.LinkPlugins.Test.Header" xml:space="preserve"><value>Try it</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Placeholder" xml:space="preserve"><value>Paste a line to test (e.g. Fixed #123)</value></data>
   <data name="SessionSettings.LinkPlugins.Test.NoMatch" xml:space="preserve"><value>Nothing in this line becomes a link.</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.Origin" xml:space="preserve"><value>origin: {0}</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.NoOrigin" xml:space="preserve"><value>No origin (not a Git repository, or origin is unset). The bundled github-pr plugin builds URLs from origin, so nothing becomes a link.</value></data>
   <data name="SessionSettings.LinkPlugins.Test.Overridden" xml:space="preserve"><value>overridden</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>Copy folder path</value></data>
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>Open folder</value></data>

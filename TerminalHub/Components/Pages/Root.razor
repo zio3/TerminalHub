@@ -1665,9 +1665,9 @@
 
         try
         {
-            var originUrl = session.IsGitRepository
-                ? await GitService.GetOriginUrlAsync(session.FolderPath)
-                : null;
+            // IsGitRepository はセッション読み込み時の判定なので、これを条件にすると
+            // あとから git init した場合などに取り逃す。リポジトリでなければ null が返るだけ
+            var originUrl = await GitService.GetOriginUrlAsync(session.FolderPath);
 
             await JSRuntime.InvokeVoidAsync("setSessionPluginContext", sessionId.ToString(), new
             {

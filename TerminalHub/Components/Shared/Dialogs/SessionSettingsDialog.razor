@@ -433,6 +433,18 @@
                            placeholder="@L["SessionSettings.LinkPlugins.Test.Placeholder"]" />
                     @if (linkPluginTestResults != null)
                     {
+                        @* 同梱の github-pr は origin から owner/repo を組み立てるため、
+                           origin が無い・github 以外だと何も起きない。理由が分かるよう出す *@
+                        <small class="text-muted d-block mb-1">
+                            @if (string.IsNullOrEmpty(linkPluginTestOrigin))
+                            {
+                                @L["SessionSettings.LinkPlugins.Test.NoOrigin"]
+                            }
+                            else
+                            {
+                                @string.Format(L["SessionSettings.LinkPlugins.Test.Origin"], linkPluginTestOrigin)
+                            }
+                        </small>
                         @if (linkPluginTestResults.Count == 0)
                         {
                             <p class="text-muted small mb-0">@L["SessionSettings.LinkPlugins.Test.NoMatch"]</p>
@@ -565,6 +577,8 @@
     // 入力ごとに走らせると打鍵のたびに JS 往復が起きるので、最後の入力から少し待つ
     private int linkPluginTestInputSeq = 0;
     private List<LinkPluginTestHit>? linkPluginTestResults = null;
+    // 直近のテストで使った origin。リンクにならない理由の大半がここなので画面に出す
+    private string? linkPluginTestOrigin = null;
 
     private sealed record LinkPluginTestHit(string Id, string? Text, string? Url, int Start, bool Won, string? Error);
 
@@ -638,9 +652,10 @@
 
         try
         {
-            var originUrl = sessionInfo.IsGitRepository
-                ? await GitService.GetOriginUrlAsync(sessionInfo.FolderPath)
-                : null;
+            // IsGitRepository はセッション読み込み時の判定なので、これを条件にすると
+            // あとから git init した場合などに取り逃す。リポジトリでなければ null が返るだけ
+            var originUrl = await GitService.GetOriginUrlAsync(sessionInfo.FolderPath);
+            linkPluginTestOrigin = originUrl;
 
             await JSRuntime.InvokeVoidAsync("setSessionPluginContext", sessionInfo.SessionId.ToString(), new
             {
