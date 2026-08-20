@@ -702,4 +702,5 @@
   <data name="SubSession.Manage.DragHandle" xml:space="preserve"><value>Drag to reorder</value></data>
   <data name="SubSession.Clone.TerminalType" xml:space="preserve"><value>CLI type</value></data>
   <data name="SubSession.Clone.TypeChangedInfo" xml:space="preserve"><value>Because you changed the type, the original startup options are not carried over. Choose them here (session commands and link plugin settings are still carried over).</value></data>
+  <data name="SubSession.Clone.SourceTypeDisabledInfo" xml:space="preserve"><value>The source session's type ({0}) is disabled in settings and cannot be selected. Pick an enabled type instead. Startup options are not carried over (session commands and link plugin settings still are).</value></data>
 </root>

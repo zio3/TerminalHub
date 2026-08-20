@@ -702,4 +702,5 @@
   <data name="SubSession.Manage.DragHandle" xml:space="preserve"><value>ドラッグで並べ替え</value></data>
   <data name="SubSession.Clone.TerminalType" xml:space="preserve"><value>CLI の種別</value></data>
   <data name="SubSession.Clone.TypeChangedInfo" xml:space="preserve"><value>種別を変えたため、元の起動オプションは引き継ぎません。ここで選び直してください（専用コマンドとリンクプラグイン設定は引き継ぎます）。</value></data>
+  <data name="SubSession.Clone.SourceTypeDisabledInfo" xml:space="preserve"><value>元のセッションの種別（{0}）は設定で無効になっているため選べません。有効な種別を選び直してください。起動オプションは引き継ぎません（専用コマンドとリンクプラグイン設定は引き継ぎます）。</value></data>
 </root>

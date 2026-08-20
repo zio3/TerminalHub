@@ -214,7 +214,15 @@
                             else
                             {
                                 <div class="alert alert-warning">
-                                    <i class="bi bi-exclamation-triangle me-2"></i>@L["SubSession.Clone.TypeChangedInfo"]
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    @if (cloneTypeForcedFromDisabled)
+                                    {
+                                        @string.Format(L["SubSession.Clone.SourceTypeDisabledInfo"], cloneSource.TerminalType)
+                                    }
+                                    else
+                                    {
+                                        @L["SubSession.Clone.TypeChangedInfo"]
+                                    }
                                 </div>
                                 <div class="mt-3">
                                     <SessionOptionsSelector @ref="optionsSelectorClone"
@@ -622,6 +630,8 @@
     // 複製にするのは、保存が失敗しても親の一覧を巻き込まないため。
     private List<SessionInfo> manageChildren = new();
     private SessionInfo? cloneSource;
+    // 元の種別が設定で無効だったため別種別へ寄せたか（理由を画面に出し分けるため）
+    private bool cloneTypeForcedFromDisabled = false;
     // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
     private bool archivedExpanded = false;
 
@@ -681,9 +691,10 @@
     private void StartClone(SessionInfo source)
     {
         cloneSource = source;
+        cloneTypeForcedFromDisabled = !IsTerminalTypeAvailable(source.TerminalType);
         // 元の種別が設定で無効化されていたら、そのままでは「無効な CLI をクローンで復活できる」
         // 抜け道になる。選べる種別の先頭へ寄せて、種別変更として扱わせる。
-        selectedTerminalType = IsCloneTypeAvailable(source.TerminalType)
+        selectedTerminalType = IsTerminalTypeAvailable(source.TerminalType)
             ? source.TerminalType
             : CloneSelectableTypes.First();
         sessionName = "";
@@ -712,9 +723,9 @@
             TerminalType.Antigravity,
             TerminalType.Grok,
             TerminalType.Terminal
-        }.Where(IsCloneTypeAvailable);
+        }.Where(IsTerminalTypeAvailable);
 
-    private bool IsCloneTypeAvailable(TerminalType type) => type switch
+    private bool IsTerminalTypeAvailable(TerminalType type) => type switch
     {
         TerminalType.ClaudeCode => Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true),
         TerminalType.CodexCLI => Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true),
@@ -843,8 +854,13 @@
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
             folderSuffix = "";
-            // 親セッションの TerminalType を初期値として引き継ぐ
-            selectedTerminalType = ParentTerminalType;
+            // 親セッションの TerminalType を初期値として引き継ぐ。ただし設定で無効化された
+            // CLI だったら寄せ直す。SessionOptionsSelector はその種別のラジオを隠すだけで
+            // SelectedType は保持するため、種別を触らずに実行すると無効な CLI が起動できてしまう
+            // （Codex レビュー指摘。クローン以外の作成タブに残っていた迂回）。
+            selectedTerminalType = IsTerminalTypeAvailable(ParentTerminalType)
+                ? ParentTerminalType
+                : CloneSelectableTypes.First();
 
             // 直近の選択を LocalStorage から復元
             await LoadLastBranchSelectionMode();
