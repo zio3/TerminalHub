@@ -1,4 +1,4 @@
-﻿namespace TerminalHub.Models
+namespace TerminalHub.Models
 {
     /// <summary>
     /// セッションごとのリンクプラグイン設定。
