@@ -688,7 +688,7 @@
   <data name="SubSession.Manage.Clone" xml:space="preserve"><value>クローン</value></data>
   <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>同じフォルダ・設定で新しいセッションを作る</value></data>
   <data name="SubSession.Clone.SourceFormat" xml:space="preserve"><value>クローン元: {0}</value></data>
-  <data name="SubSession.Clone.Info" xml:space="preserve"><value>作業フォルダ・セッション設定・専用コマンドを引き継ぎます。CLI の種別と名前はここで選び直せます。</value></data>
+  <data name="SubSession.Clone.Info" xml:space="preserve"><value>作業フォルダ・起動オプション・専用コマンド・リンクプラグイン設定をそのまま引き継ぎます。</value></data>
   <data name="SubSession.Clone.Back" xml:space="preserve"><value>一覧へ戻る</value></data>
   <data name="SubSession.Button.Clone" xml:space="preserve"><value>クローン作成</value></data>
   <data name="Root.Toast.SubSessionClonedFormat" xml:space="preserve"><value>{0} のクローンを作成しました</value></data>
@@ -700,4 +700,6 @@
   <data name="SubSession.Manage.Restore" xml:space="preserve"><value>戻す</value></data>
   <data name="SubSession.Manage.RestoreTitle" xml:space="preserve"><value>一覧へ戻す</value></data>
   <data name="SubSession.Manage.DragHandle" xml:space="preserve"><value>ドラッグで並べ替え</value></data>
+  <data name="SubSession.Clone.TerminalType" xml:space="preserve"><value>CLI の種別</value></data>
+  <data name="SubSession.Clone.TypeChangedInfo" xml:space="preserve"><value>種別を変えたため、元の起動オプションは引き継ぎません。ここで選び直してください（専用コマンドとリンクプラグイン設定は引き継ぎます）。</value></data>
 </root>

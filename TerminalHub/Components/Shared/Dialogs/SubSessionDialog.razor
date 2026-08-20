@@ -86,18 +86,19 @@
                                         var index = i;
                                         var child = manageChildren[index];
                                         <li class="list-group-item d-flex align-items-center gap-2 @DragRowClass(index)"
-                                            draggable="@(dragArmed ? "true" : "false")"
-                                            @ondragstart="() => OnDragStart(index)"
                                             @ondragover:preventDefault="true"
                                             @ondragenter="() => dragOverIndex = index"
-                                            @ondrop="() => OnDropAsync(index)"
-                                            @ondragend="OnDragEnd">
-                                            @* 行全体を draggable にしたままだと、名前の選択やボタン操作が
-                                               ドラッグに化ける。掴んだのがハンドルのときだけ有効化する。 *@
+                                            @ondrop="() => OnDropAsync(index)">
+                                            @* ドラッグ元はハンドルだけ。行ごと draggable にすると名前の選択や
+                                               ボタン操作がドラッグに化けるが、mousedown で立てるフラグ方式だと
+                                               ハンドル外で mouseup したときに解除されず残る（Codex レビュー
+                                               指摘の P2）。ハンドル自体を draggable にすれば状態を持たずに済む。
+                                               受け側（dragover/drop）は行のままなので、行のどこへ落としてもよい。 *@
                                             <span class="text-muted flex-shrink-0 subsession-drag-handle"
                                                   title="@L["SubSession.Manage.DragHandle"]"
-                                                  @onmousedown="() => dragArmed = true"
-                                                  @onmouseup="() => dragArmed = false">
+                                                  draggable="true"
+                                                  @ondragstart="() => OnDragStart(index)"
+                                                  @ondragend="OnDragEnd">
                                                 <i class="bi bi-grip-vertical"></i>
                                             </span>
                                             <div class="flex-grow-1 text-truncate">
@@ -187,20 +188,43 @@
                                 <small class="form-text text-muted">@L["SubSession.SessionName.Help"]</small>
                             </div>
 
-                            <!-- セッションオプション選択（CLI 種別はここで選び直す） -->
-                            <div class="mt-3">
-                                <SessionOptionsSelector @ref="optionsSelectorClone"
-                                                      SelectedType="selectedTerminalType"
-                                                      SelectedTypeChanged="OnTerminalTypeChanged"
-                                                      @bind-StartupCommand="startupCommand"
-                                                      ClaudeOptions="claudeOptions"
-                                                      GeminiOptions="geminiOptions"
-                                                      CodexOptions="codexOptions" />
+                            <div class="mb-3">
+                                <label class="form-label">@L["SubSession.Clone.TerminalType"]</label>
+                                <select class="form-select" value="@((int)selectedTerminalType)"
+                                        @onchange="OnCloneTerminalTypeChanged">
+                                    @foreach (var type in CloneSelectableTypes)
+                                    {
+                                        <option value="@((int)type)">@type</option>
+                                    }
+                                </select>
                             </div>
 
-                            <div class="alert alert-secondary mt-3 mb-0">
-                                <i class="bi bi-info-circle me-2"></i>@L["SubSession.Clone.Info"]
-                            </div>
+                            @* 同じ種別なら元セッションの起動オプションをそのまま引き継ぐ。ここで
+                               SessionOptionsSelector を出すと、セレクタが常に「新規の既定値一式」を
+                               書き出すため、元の read-only／承認拒否／ネットワーク無効などが黙って
+                               緩む（Codex レビュー指摘の P1）。種別を変えたときだけ、その種別の
+                               設定を選ばせる。 *@
+                            @if (selectedTerminalType == cloneSource.TerminalType)
+                            {
+                                <div class="alert alert-secondary mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>@L["SubSession.Clone.Info"]
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>@L["SubSession.Clone.TypeChangedInfo"]
+                                </div>
+                                <div class="mt-3">
+                                    <SessionOptionsSelector @ref="optionsSelectorClone"
+                                                          SelectedType="selectedTerminalType"
+                                                          SelectedTypeChanged="OnTerminalTypeChanged"
+                                                          @bind-StartupCommand="startupCommand"
+                                                          ClaudeOptions="claudeOptions"
+                                                          GeminiOptions="geminiOptions"
+                                                          CodexOptions="codexOptions" />
+                                </div>
+                            }
                         </div>
                     }
                     else if (activeTab == TabType.Create)
@@ -600,9 +624,7 @@
     // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
     private bool archivedExpanded = false;
 
-    // ドラッグ並べ替えの状態。dragArmed はハンドルを掴んだかどうか
-    // （行全体を draggable のままにすると、名前の選択やボタン操作がドラッグに化ける）。
-    private bool dragArmed = false;
+    // ドラッグ並べ替えの状態。掴んでいる行と、いま重なっている行だけを持つ。
     private int? draggingIndex;
     private int? dragOverIndex;
 
@@ -622,7 +644,6 @@
 
     private void OnDragEnd()
     {
-        dragArmed = false;
         draggingIndex = null;
         dragOverIndex = null;
     }
@@ -672,6 +693,26 @@
     {
         cloneSource = null;
         activeTab = TabType.Manage;
+    }
+
+    // クローンで選び直せる CLI 種別。GeminiCLI は廃止済みなので出さない
+    // （永続化互換のため enum 値だけ残っている）。
+    private static readonly TerminalType[] CloneSelectableTypes = new[]
+    {
+        TerminalType.ClaudeCode,
+        TerminalType.CodexCLI,
+        TerminalType.Antigravity,
+        TerminalType.Grok,
+        TerminalType.Terminal
+    };
+
+    private void OnCloneTerminalTypeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value) &&
+            Enum.IsDefined(typeof(TerminalType), value))
+        {
+            selectedTerminalType = (TerminalType)value;
+        }
     }
 
     /// <summary>

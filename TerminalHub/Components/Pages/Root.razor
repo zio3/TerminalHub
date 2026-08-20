@@ -2974,16 +2974,14 @@
                         : null;
                     if (cloneSource != null)
                     {
-                        // 元のオプションを土台にして、画面で選び直した分で上書きする。
-                        // ただし CLI 種別を変えたときは持ち込まない（Claude 用の値を Codex に
-                        // 渡しても意味がなく、起動引数として害になりうるため）。
+                        // 同じ CLI 種別なら元の起動オプションを丸ごと引き継ぐ。ダイアログ側の
+                        // オプション選択と混ぜてはいけない（SessionOptionsSelector は常に
+                        // 「新規の既定値一式」を書き出すので、混ぜると元の read-only／承認拒否／
+                        // ネットワーク無効などが黙って緩む＝権限の意図しない緩和になる）。
+                        // 種別を変えたときは元の値に意味が無いので、選び直した分だけを使う。
                         var cloneOptions = result.TerminalType == cloneSource.TerminalType
                             ? new Dictionary<string, string>(cloneSource.Options)
-                            : new Dictionary<string, string>();
-                        foreach (var (key, value) in result.Options)
-                        {
-                            cloneOptions[key] = value;
-                        }
+                            : new Dictionary<string, string>(result.Options);
 
                         newSession = await SessionManager.CreateSamePathSessionAsync(
                             subSessionParentSessionId.Value, cloneSource.FolderPath, result.TerminalType, cloneOptions,
