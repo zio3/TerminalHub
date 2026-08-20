@@ -37,7 +37,7 @@ export default {
 |---|---|---|
 | `id` | ○ | 識別子。設定画面に出る。他と重複しないもの |
 | `pattern` | △ | 検出する正規表現。**`g` フラグを必ず付ける**（無いものは読み込み時に弾かれる） |
-| `url` | ○ | `(text, ctx) => string \| null`。リンク先。`null` を返すとリンクにしない |
+| `url` | △ | `(text, ctx) => string \| null`。リンク先。`null` を返すとリンクにしない。`pattern` 方式では必須（`detect` 方式は hit 側に `url` を入れるため不要） |
 | `accept` | | `({ text, before, after, line, ctx }) => boolean`。誤検出を弾く |
 | `vars` | | `['baseUrl']` のような文字列配列。セッション設定に入力欄が出る |
 | `detect` | | `(line, ctx) => [{ start, end, text, url }]`。`pattern` で表現できないとき用 |

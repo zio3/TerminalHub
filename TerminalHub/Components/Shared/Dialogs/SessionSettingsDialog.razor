@@ -433,10 +433,19 @@
             Vars = new Dictionary<string, string>(p.Vars)
         }).OrderBy(p => p.Order).ToList();
 
+        // 一度も保存していないセッションは既定セット（同梱プラグイン）を有効として見せる。
+        // ここで見えている状態がそのまま保存されるので、実際の適用（Root 側のフォールバック）と揃う。
+        var untouched = session.LinkPlugins.Count == 0;
+
         foreach (var meta in linkPluginCatalog)
         {
             if (saved.Any(s => s.Id == meta.Id)) continue;
-            saved.Add(new LinkPluginSetting { Id = meta.Id, Enabled = false, Order = saved.Count });
+            saved.Add(new LinkPluginSetting
+            {
+                Id = meta.Id,
+                Enabled = untouched && LinkPluginDefaults.IsDefaultEnabled(meta.Id),
+                Order = saved.Count
+            });
         }
 
         editingLinkPlugins = saved;
