@@ -131,10 +131,16 @@
                             @if (ArchivedChildSessions.Count > 0)
                             {
                                 <div class="mt-4">
-                                    <h6 class="text-muted">
+                                    @* 既定は畳んで件数だけ。戻す操作は稀なので、常時開いていると
+                                       本命の（一覧に出ている）サブセッションが下へ押しやられる。 *@
+                                    <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none px-0"
+                                            @onclick="() => archivedExpanded = !archivedExpanded">
+                                        <i class="bi @(archivedExpanded ? "bi-chevron-down" : "bi-chevron-right") me-1"></i>
                                         <i class="bi bi-archive me-1"></i>@L["SubSession.Manage.ArchivedHeading"]
                                         <span class="badge bg-secondary ms-1">@ArchivedChildSessions.Count</span>
-                                    </h6>
+                                    </button>
+                                    @if (archivedExpanded)
+                                    {
                                     <small class="text-muted d-block mb-2">@L["SubSession.Manage.ArchivedHelp"]</small>
                                     <ul class="list-group">
                                         @foreach (var archived in ArchivedChildSessions)
@@ -159,6 +165,7 @@
                                             </li>
                                         }
                                     </ul>
+                                    }
                                 </div>
                             }
                         </div>
@@ -590,6 +597,8 @@
     // 複製にするのは、保存が失敗しても親の一覧を巻き込まないため。
     private List<SessionInfo> manageChildren = new();
     private SessionInfo? cloneSource;
+    // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
+    private bool archivedExpanded = false;
 
     /// <summary>
     /// 管理タブの1件を上下に動かし、その場で保存する。確定ボタンを介さないのは、
@@ -729,6 +738,7 @@
             // 入り口を「管理」に一本化したので、既定は常に管理タブ（作成はそこから選ぶ）。
             manageChildren = ChildSessions.ToList();
             cloneSource = null;
+            archivedExpanded = false;
             activeTab = TabType.Manage;
             branchName = "";
             errorMessage = "";
