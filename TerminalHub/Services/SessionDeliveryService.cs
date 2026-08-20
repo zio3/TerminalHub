@@ -470,7 +470,14 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 「誰が終わらせたか」と「結果の要約」を本文に載せる。ID だけだと、札を複数抱えた
         // 依頼元は照合するまで何の通知か分からず、結果を見るのに get_context が必ず要る。
         // 担当名と要約が載っていれば大半はその場で済む（=無駄なツール呼び出しが減る）。
-        var worker = string.IsNullOrWhiteSpace(record.UpdatedByName) ? "外部クライアント" : record.UpdatedByName;
+        //
+        // 担当名も要約と同じサニタイズを通す。表示名は人間が自由入力するもので、`\r` が
+        // 混ざれば受け手の TUI がそこを送信確定と解釈し、エンベロープより手前だけが
+        // 「マーカー無し＝人間の指示」として実行される（PR #188 で本文について塞いだのと
+        // 同じ迂回。本文に埋め込むものは経路を問わず1行へ潰す）。
+        var worker = FlattenForNotice(record.UpdatedByName);
+        if (worker.Length == 0)
+            worker = "外部クライアント";
         var summary = FormatSummaryForNotice(record.Summary, out var truncated);
 
         var notice = $"[TerminalHub] 依頼(contextId: {contextId}) {status}（担当: {worker}）";
@@ -488,19 +495,17 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     }
 
     /// <summary>
-    /// 結果要約を通知本文へ埋め込める形に整える。エンベロープ付きの1行として送るため、
-    /// 改行・制御文字は空白へ潰し、長すぎるものは切り詰めて truncated で知らせる
-    /// （切り詰めたときは呼び出し側が get_context への誘導を足す）。
+    /// 通知本文へ埋め込む文字列を1行へ潰す。エンベロープ付きの1行として送るため、
+    /// 改行・制御文字は空白へ寄せ、連続する空白は1つにまとめる。
     /// </summary>
-    private static string FormatSummaryForNotice(string? summary, out bool truncated)
+    private static string FlattenForNotice(string? text)
     {
-        truncated = false;
-        if (string.IsNullOrWhiteSpace(summary))
+        if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
 
-        var sb = new System.Text.StringBuilder(summary.Length);
+        var sb = new System.Text.StringBuilder(text.Length);
         var lastWasSpace = false;
-        foreach (var ch in summary)
+        foreach (var ch in text)
         {
             var isSpace = char.IsWhiteSpace(ch) || char.IsControl(ch);
             if (isSpace)
@@ -514,12 +519,28 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             lastWasSpace = false;
         }
 
-        var flat = sb.ToString().TrimEnd();
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// 結果要約を通知本文へ埋め込める形に整える。1行へ潰したうえで、長すぎるものは
+    /// 切り詰めて truncated で知らせる（切り詰めたときは呼び出し側が get_context への誘導を足す）。
+    /// </summary>
+    private static string FormatSummaryForNotice(string? summary, out bool truncated)
+    {
+        truncated = false;
+        var flat = FlattenForNotice(summary);
         if (flat.Length <= SummaryNoticeMaxLength)
             return flat;
 
         truncated = true;
-        return flat[..SummaryNoticeMaxLength];
+        // 切り詰め位置がサロゲートペアの途中だと孤立サロゲートが末尾に残り、以降の
+        // UTF-8 変換や JSON 化で文字化け・例外になる。要約は CLI が書くもので絵文字が
+        // 普通に入るため、境界に当たったら1つ手前で切る。
+        var cut = SummaryNoticeMaxLength;
+        if (char.IsHighSurrogate(flat[cut - 1]))
+            cut--;
+        return flat[..cut].TrimEnd();
     }
 
     /// <summary>通知本文へ載せる要約の上限文字数。超えた分は get_context 側で読ませる。</summary>
