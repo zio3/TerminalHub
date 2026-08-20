@@ -83,7 +83,7 @@
                                 <span class="badge bg-secondary ms-1">@editingSessionCommands.Count</span>
                             }
                         </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenLinkPluginsDialog">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenLinkPluginsDialogAsync">
                             <i class="bi bi-link-45deg me-1"></i>@L["SessionSettings.LinkPlugins.ManageButton"]
                             @if (editingLinkPlugins.Count(p => p.Enabled) > 0)
                             {
@@ -516,16 +516,7 @@
     /// </summary>
     private async Task LoadLinkPluginsAsync(SessionInfo session)
     {
-        try
-        {
-            var catalog = await JSRuntime.InvokeAsync<LinkPluginMeta[]>("listLinkPlugins");
-            linkPluginCatalog = catalog.ToList();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "[LinkPlugins] 一覧の取得に失敗");
-            linkPluginCatalog = new();
-        }
+        await RefreshLinkPluginCatalogAsync();
 
         var saved = session.LinkPlugins.Select(p => new LinkPluginSetting
         {
@@ -551,12 +542,33 @@
         }
 
         editingLinkPlugins = saved;
+        linkPluginsUntouched = untouched;
+    }
+
+    /// <summary>
+    /// 読み込み済みプラグインの一覧（カタログ）を取り直す。JS 側は呼ぶたびに .js を読み直すので、
+    /// 「フォルダを開く → .js を足す → 画面を開き直す」で反映される。
+    /// </summary>
+    private async Task RefreshLinkPluginCatalogAsync()
+    {
+        try
+        {
+            var catalog = await JSRuntime.InvokeAsync<LinkPluginMeta[]>("listLinkPlugins");
+            linkPluginCatalog = catalog.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[LinkPlugins] 一覧の取得に失敗");
+            linkPluginCatalog = new();
+        }
     }
 
 
     // ===== リンクプラグイン管理ダイアログ =====
 
     private bool showLinkPluginsDialog = false;
+    // このセッションが一度も保存していないか（あとから増えた同梱プラグインの既定採用の判断に使う）
+    private bool linkPluginsUntouched = false;
     private string pluginsFolderPath = "";
     private bool linkPluginDocAvailable = false;
     private string linkPluginTestLine = "";
@@ -570,12 +582,33 @@
     private bool CanAskAi =>
         sessionInfo?.TerminalType is TerminalType.ClaudeCode or TerminalType.CodexCLI;
 
-    private void OpenLinkPluginsDialog()
+    /// <summary>
+    /// 専用ダイアログを開く。開くたびにカタログを取り直し、増えた .js を一覧へ足す。
+    /// 「フォルダを開く → .js を書く → この画面を開き直す」が主な導線なので、
+    /// ここで読み直さないと外側の設定ごと閉じ直すまで反映されない。
+    /// 編集中の採用・順序・変数（未保存）は保持し、差分だけを足し引きする。
+    /// </summary>
+    private async Task OpenLinkPluginsDialogAsync()
     {
         pluginsFolderPath = AppDataPaths.GetPluginsFolder();
         linkPluginDocAvailable = LinkPluginDocPath.Get() != null;
         linkPluginTestResults = null;
         showLinkPluginsDialog = true;
+
+        await RefreshLinkPluginCatalogAsync();
+
+        // 増えたものを末尾に足す。消えたものは残す（設定に無いファイルは
+        // 「見つかりません」表示のまま。置き直せば復活し、変数の再入力も要らない）
+        foreach (var meta in linkPluginCatalog)
+        {
+            if (editingLinkPlugins.Any(s => s.Id == meta.Id)) continue;
+            editingLinkPlugins.Add(new LinkPluginSetting
+            {
+                Id = meta.Id,
+                Enabled = linkPluginsUntouched && LinkPluginDefaults.IsDefaultEnabled(meta.Id),
+                Order = editingLinkPlugins.Count
+            });
+        }
     }
 
     private void CloseLinkPluginsDialog() => showLinkPluginsDialog = false;
