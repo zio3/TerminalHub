@@ -1,4 +1,4 @@
-namespace TerminalHub.Models
+﻿namespace TerminalHub.Models
 {
     /// <summary>
     /// セッションごとのリンクプラグイン設定。
@@ -22,5 +22,17 @@ namespace TerminalHub.Models
 
         /// <summary>プラグインへ渡す変数（.js の vars 宣言に対応）。URL の組み立て等に使う</summary>
         public Dictionary<string, string> Vars { get; set; } = new();
+
+        /// <summary>
+        /// 同じ内容の別インスタンスを作る。セッションのクローンで使う。
+        /// Vars も新しい辞書に写す（共有すると片方の編集がもう片方に及ぶため）。
+        /// </summary>
+        public LinkPluginSetting Clone() => new()
+        {
+            Id = Id,
+            Enabled = Enabled,
+            Order = Order,
+            Vars = new Dictionary<string, string>(Vars)
+        };
     }
 }

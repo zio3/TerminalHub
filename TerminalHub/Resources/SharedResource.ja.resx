@@ -471,7 +471,7 @@
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>フォルダを開く</value></data>
   <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>セッションID:</value></data>
   <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>セッションIDをコピー</value></data>
-  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>サブセッションを作成</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>サブセッションを管理</value></data>
   <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>メモ管理</value></data>
   <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>表示名</value></data>
   <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>セッションの表示名</value></data>
@@ -494,7 +494,7 @@
   <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>設定は保存されましたが、セッションの再起動に失敗しました。</value></data>
 
   <!-- SubSession Dialog -->
-  <data name="SubSession.Title" xml:space="preserve"><value>サブセッション作成</value></data>
+  <data name="SubSession.Title" xml:space="preserve"><value>サブセッション管理</value></data>
   <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>親セッション: {0}</value></data>
   <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>Worktree 新規作成</value></data>
   <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>既存 Worktree 追加</value></data>
@@ -682,4 +682,17 @@
   <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>1行に1つ。下の自動検出で拾えない名前だけ書きます。例: Tailscale の MagicDNS 名、Cloudflare トンネルのドメイン。アドレスバーからそのまま貼っても、スキームとポートは自動で取り除きます。</value></data>
   <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>自動的に許可されているホスト名</value></data>
   <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>この PC 自身を指す名前です。起動のたびに検出し直すので、LAN の IP が変わっても設定は不要です。ここと上の「追加で許可するホスト名」のどちらにも無い名前で接続すると拒否されます。</value></data>
+  <data name="SubSession.Tab.Manage" xml:space="preserve"><value>管理</value></data>
+  <data name="SubSession.Manage.Empty" xml:space="preserve"><value>このセッションにはまだサブセッションがありません。上のタブから作成できます。</value></data>
+  <data name="SubSession.Manage.Help" xml:space="preserve"><value>矢印で並べ替えます（すぐ保存されます）。クローンは同じフォルダに別のセッションを作ります。</value></data>
+  <data name="SubSession.Manage.MoveUp" xml:space="preserve"><value>上へ</value></data>
+  <data name="SubSession.Manage.MoveDown" xml:space="preserve"><value>下へ</value></data>
+  <data name="SubSession.Manage.Clone" xml:space="preserve"><value>クローン</value></data>
+  <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>同じフォルダ・設定で新しいセッションを作る</value></data>
+  <data name="SubSession.Clone.SourceFormat" xml:space="preserve"><value>クローン元: {0}</value></data>
+  <data name="SubSession.Clone.Info" xml:space="preserve"><value>作業フォルダ・セッション設定・専用コマンドを引き継ぎます。CLI の種別と名前はここで選び直せます。</value></data>
+  <data name="SubSession.Clone.Back" xml:space="preserve"><value>一覧へ戻る</value></data>
+  <data name="SubSession.Button.Clone" xml:space="preserve"><value>クローン作成</value></data>
+  <data name="Root.Toast.SubSessionClonedFormat" xml:space="preserve"><value>{0} のクローンを作成しました</value></data>
+  <data name="Root.Toast.SubSessionReorderFailedFormat" xml:space="preserve"><value>並べ替えの保存に失敗しました: {0}</value></data>
 </root>

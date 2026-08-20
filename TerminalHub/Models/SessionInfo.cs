@@ -205,7 +205,14 @@ namespace TerminalHub.Models
         
         // ParentSessionIdは保存して復元時に親子関係を維持
         public Guid? ParentSessionId { get; set; } // Worktreeの場合の親セッション
-        
+
+        /// <summary>
+        /// 兄弟セッションの中での並び順（サブセッション管理画面での手動並べ替え用）。
+        /// 既定は 0 で、同値は作成日時で解決する＝並べ替えていない DB は従来どおり作成日時順になる。
+        /// 新規サブセッションは兄弟の最大値+1 を貰うので、並べ替え済みの列の末尾に付く。
+        /// </summary>
+        public int SortOrder { get; set; } = 0;
+
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasContinueErrorOccurred { get; set; } // --continueエラーが発生済みかどうか
 

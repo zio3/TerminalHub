@@ -37,7 +37,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins
+                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins, SortOrder
                 FROM Sessions
                 ORDER BY LastAccessedAt DESC");
 
@@ -61,6 +61,7 @@ namespace TerminalHub.Services
                     PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
                     SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14)),
                 LinkPlugins = DeserializeLinkPlugins(reader.IsDBNull(16) ? null : reader.GetString(16)),
+                SortOrder = reader.IsDBNull(17) ? 0 : (int)reader.GetInt64(17),
                     Card = reader.IsDBNull(15) ? "" : reader.GetString(15)
                 };
                 sessions.Add(session);
@@ -84,7 +85,7 @@ namespace TerminalHub.Services
             await using var reader = await connection.ExecuteReaderAsync(@"
                 SELECT SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                        IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins
+                       IsPinned, PinPriority, SessionCommands, Card, LinkPlugins, SortOrder
                 FROM Sessions
                 WHERE SessionId = @sessionId",
                 ("@sessionId", sessionId.ToString()));
@@ -112,6 +113,7 @@ namespace TerminalHub.Services
                 PinPriority = reader.IsDBNull(13) ? null : (int)reader.GetInt64(13),
                 SessionCommands = DeserializeSessionCommands(reader.IsDBNull(14) ? null : reader.GetString(14)),
                 LinkPlugins = DeserializeLinkPlugins(reader.IsDBNull(16) ? null : reader.GetString(16)),
+                SortOrder = reader.IsDBNull(17) ? 0 : (int)reader.GetInt64(17),
                 Card = reader.IsDBNull(15) ? "" : reader.GetString(15)
             };
 
@@ -140,10 +142,10 @@ namespace TerminalHub.Services
                     INSERT INTO Sessions
                     (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                      IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                     IsPinned, PinPriority, SessionCommands, Card, LinkPlugins)
+                     IsPinned, PinPriority, SessionCommands, Card, LinkPlugins, SortOrder)
                     VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                             @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                            @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins)
+                            @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins, @sortOrder)
                     ON CONFLICT(SessionId) DO UPDATE SET
                         DisplayName = excluded.DisplayName,
                         FolderPath = excluded.FolderPath,
@@ -160,7 +162,8 @@ namespace TerminalHub.Services
                         PinPriority = excluded.PinPriority,
                         SessionCommands = excluded.SessionCommands,
                         Card = excluded.Card,
-                        LinkPlugins = excluded.LinkPlugins",
+                        LinkPlugins = excluded.LinkPlugins,
+                        SortOrder = excluded.SortOrder",
                     ("@sessionId", session.SessionId.ToString()),
                     ("@displayName", session.DisplayName),
                     ("@folderPath", session.FolderPath),
@@ -177,7 +180,8 @@ namespace TerminalHub.Services
                     ("@pinPriority", session.PinPriority.HasValue ? (object)session.PinPriority.Value : DBNull.Value),
                     ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)),
                     ("@card", session.Card),
-                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)));
+                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)),
+                    ("@sortOrder", session.SortOrder));
 
                 // オプションを保存
                 await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);
@@ -270,6 +274,39 @@ namespace TerminalHub.Services
                 UPDATE Sessions SET Card = @card WHERE SessionId = @sessionId",
                 ("@sessionId", sessionId.ToString()),
                 ("@card", card));
+        }
+
+        /// <summary>
+        /// 兄弟セッションの並び順だけをまとめて更新する。サブセッション管理画面の並べ替えで使う。
+        /// 行全体の upsert にしないのは、並べ替えは「順序だけを動かす操作」であり、
+        /// 画面が持っている SessionInfo で他の列まで書き戻すと、その間に MCP 等が
+        /// 書いたメモ・専用コマンドを巻き戻しかねないため（UpdateSessionCommandsAsync と同じ理由）。
+        /// </summary>
+        public async Task UpdateSortOrdersAsync(IReadOnlyList<(Guid SessionId, int SortOrder)> orders)
+        {
+            if (orders.Count == 0)
+                return;
+
+            await using var connection = _dbContext.CreateConnection();
+            await connection.OpenAsync();
+
+            await using var transaction = connection.BeginTransaction();
+            try
+            {
+                foreach (var (sessionId, sortOrder) in orders)
+                {
+                    await connection.ExecuteNonQueryAsync(@"
+                        UPDATE Sessions SET SortOrder = @sortOrder WHERE SessionId = @sessionId",
+                        ("@sessionId", sessionId.ToString()),
+                        ("@sortOrder", sortOrder));
+                }
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
         /// <summary>
@@ -422,10 +459,10 @@ namespace TerminalHub.Services
                         INSERT OR REPLACE INTO Sessions
                         (SessionId, DisplayName, FolderPath, FolderName, CreatedAt, LastAccessedAt,
                          IsActive, TerminalType, Memo, IsArchived, ArchivedAt, ParentSessionId,
-                         IsPinned, PinPriority, SessionCommands, Card, LinkPlugins)
+                         IsPinned, PinPriority, SessionCommands, Card, LinkPlugins, SortOrder)
                         VALUES (@sessionId, @displayName, @folderPath, @folderName, @createdAt, @lastAccessedAt,
                                 @isActive, @terminalType, @memo, @isArchived, @archivedAt, @parentSessionId,
-                                @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins)",
+                                @isPinned, @pinPriority, @sessionCommands, @card, @linkPlugins, @sortOrder)",
                         ("@sessionId", session.SessionId.ToString()),
                         ("@displayName", session.DisplayName),
                         ("@folderPath", session.FolderPath),
@@ -443,7 +480,8 @@ namespace TerminalHub.Services
                         // localStorage 移行時も専用コマンド・自己紹介カードを取りこぼさない（列漏れで消えるのを防ぐ）
                         ("@sessionCommands", SerializeSessionCommands(session.SessionCommands)),
                         ("@card", session.Card),
-                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)));
+                    ("@linkPlugins", SerializeLinkPlugins(session.LinkPlugins)),
+                        ("@sortOrder", session.SortOrder));
 
                     // オプションを保存
                     await SaveSessionOptionsAsync(connection, session.SessionId, session.Options);

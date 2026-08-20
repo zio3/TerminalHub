@@ -1,4 +1,4 @@
-@using TerminalHub.Models
+﻿@using TerminalHub.Models
 @using TerminalHub.Services
 @using Microsoft.Extensions.Localization
 @inject IGitService GitService
@@ -26,6 +26,16 @@
 
                 <!-- タブナビゲーション -->
                 <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabType.Manage ? "active" : "")"
+                                @onclick="@(() => activeTab = TabType.Manage)">
+                            <i class="bi bi-list-ul me-1"></i>@L["SubSession.Tab.Manage"]
+                            @if (manageChildren.Count > 0)
+                            {
+                                <span class="badge bg-secondary ms-1">@manageChildren.Count</span>
+                            }
+                        </button>
+                    </li>
                     @if (IsGitRepository)
                     {
                         <li class="nav-item">
@@ -57,7 +67,94 @@
                 
                 <!-- タブコンテンツ -->
                 <div class="tab-content">
-                    @if (activeTab == TabType.Create)
+                    @if (activeTab == TabType.Manage)
+                    {
+                        <!-- サブセッション管理（並べ替え・クローン） -->
+                        <div class="tab-pane fade show active">
+                            @if (manageChildren.Count == 0)
+                            {
+                                <div class="alert alert-secondary mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>@L["SubSession.Manage.Empty"]
+                                </div>
+                            }
+                            else
+                            {
+                                <small class="text-muted d-block mb-2">@L["SubSession.Manage.Help"]</small>
+                                <ul class="list-group">
+                                    @for (var i = 0; i < manageChildren.Count; i++)
+                                    {
+                                        var index = i;
+                                        var child = manageChildren[index];
+                                        <li class="list-group-item d-flex align-items-center gap-2">
+                                            <div class="btn-group-vertical btn-group-sm">
+                                                <button type="button" class="btn btn-outline-secondary py-0"
+                                                        title="@L["SubSession.Manage.MoveUp"]"
+                                                        disabled="@(index == 0 || isProcessing)"
+                                                        @onclick="() => MoveChildAsync(index, -1)">
+                                                    <i class="bi bi-chevron-up"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary py-0"
+                                                        title="@L["SubSession.Manage.MoveDown"]"
+                                                        disabled="@(index == manageChildren.Count - 1 || isProcessing)"
+                                                        @onclick="() => MoveChildAsync(index, 1)">
+                                                    <i class="bi bi-chevron-down"></i>
+                                                </button>
+                                            </div>
+                                            <div class="flex-grow-1 text-truncate">
+                                                <div class="text-truncate">
+                                                    @child.GetDisplayName()
+                                                    <span class="badge bg-info ms-1">@child.TerminalType</span>
+                                                </div>
+                                                <small class="text-muted text-truncate d-block" title="@child.FolderPath">
+                                                    @child.FolderPath
+                                                </small>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0"
+                                                    title="@L["SubSession.Manage.CloneTitle"]"
+                                                    disabled="@isProcessing"
+                                                    @onclick="() => StartClone(child)">
+                                                <i class="bi bi-copy me-1"></i>@L["SubSession.Manage.Clone"]
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+                    else if (activeTab == TabType.Clone && cloneSource != null)
+                    {
+                        <!-- クローン作成（元のフォルダ・設定・専用コマンドを引き継ぐ） -->
+                        <div class="tab-pane fade show active">
+                            <div class="alert alert-info">
+                                <i class="bi bi-copy me-2"></i>
+                                @string.Format(L["SubSession.Clone.SourceFormat"], cloneSource.GetDisplayName())
+                                <div class="small text-truncate mt-1" title="@cloneSource.FolderPath">@cloneSource.FolderPath</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">@L["SubSession.SessionName"]</label>
+                                <input type="text" class="form-control" @bind="sessionName"
+                                       placeholder="@L["SubSession.SessionName.Placeholder"]" />
+                                <small class="form-text text-muted">@L["SubSession.SessionName.Help"]</small>
+                            </div>
+
+                            <!-- セッションオプション選択（CLI 種別はここで選び直す） -->
+                            <div class="mt-3">
+                                <SessionOptionsSelector @ref="optionsSelectorClone"
+                                                      SelectedType="selectedTerminalType"
+                                                      SelectedTypeChanged="OnTerminalTypeChanged"
+                                                      @bind-StartupCommand="startupCommand"
+                                                      ClaudeOptions="claudeOptions"
+                                                      GeminiOptions="geminiOptions"
+                                                      CodexOptions="codexOptions" />
+                            </div>
+
+                            <div class="alert alert-secondary mt-3 mb-0">
+                                <i class="bi bi-info-circle me-2"></i>@L["SubSession.Clone.Info"]
+                            </div>
+                        </div>
+                    }
+                    else if (activeTab == TabType.Create)
                     {
                         <!-- 新規Worktree作成 -->
                         <div class="tab-pane active">
@@ -355,10 +452,19 @@
                 <ErrorAlert @bind-ErrorMessage="errorMessage" />
             </div>
             <div class="modal-footer">
+                @if (activeTab == TabType.Clone)
+                {
+                    <button type="button" class="btn btn-outline-secondary me-auto" @onclick="CancelClone" disabled="@isProcessing">
+                        <i class="bi bi-arrow-left me-1"></i>@L["SubSession.Clone.Back"]
+                    </button>
+                }
                 <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@isProcessing">
-                    @L["Common.Cancel"]
+                    @(activeTab == TabType.Manage ? L["Common.Close"] : L["Common.Cancel"])
                 </button>
-                <button type="button" class="btn btn-success" @onclick="ProcessOperation" 
+                @* 管理タブの操作は行ごとのボタンで完結する（並べ替えは即時保存）ので、実行ボタンは出さない *@
+                @if (activeTab != TabType.Manage)
+                {
+                <button type="button" class="btn btn-success" @onclick="ProcessOperation"
                         disabled="@(!CanProcess || isProcessing)">
                     @if (isProcessing)
                     {
@@ -370,6 +476,7 @@
                     }
                     @GetButtonText()
                 </button>
+                }
             </div>
         </div>
     </div>
@@ -382,6 +489,10 @@
     [Parameter] public bool IsGitRepository { get; set; }
     [Parameter] public TerminalType ParentTerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public EventCallback<SubSessionResult> OnSubSessionOperation { get; set; }
+    /// <summary>この親に属するサブセッション（表示順）。管理タブの並べ替え・クローンの対象。</summary>
+    [Parameter] public List<SessionInfo> ChildSessions { get; set; } = new();
+    /// <summary>並べ替え結果（新しい表示順の SessionId 列）。即時保存させるため、確定ボタンは介さない。</summary>
+    [Parameter] public EventCallback<List<Guid>> OnReorder { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private TabType activeTab = TabType.Create;
@@ -425,6 +536,52 @@
     private SessionOptionsSelector? optionsSelectorSamePath;
     private SessionOptionsSelector? optionsSelectorExistingWorktree;
     private SessionOptionsSelector? optionsSelectorNewFolder;
+    private SessionOptionsSelector? optionsSelectorClone;
+
+    // 管理タブが扱う並び。親から渡された順を複製して持ち、並べ替えのたびに即時保存する。
+    // 複製にするのは、保存が失敗しても親の一覧を巻き込まないため。
+    private List<SessionInfo> manageChildren = new();
+    private SessionInfo? cloneSource;
+
+    /// <summary>
+    /// 管理タブの1件を上下に動かし、その場で保存する。確定ボタンを介さないのは、
+    /// 並べ替えが「操作＝結果」で、キャンセルの意味が薄いため（誤操作は戻せばよい）。
+    /// </summary>
+    private async Task MoveChildAsync(int index, int delta)
+    {
+        var target = index + delta;
+        if (index < 0 || index >= manageChildren.Count || target < 0 || target >= manageChildren.Count)
+            return;
+
+        (manageChildren[index], manageChildren[target]) = (manageChildren[target], manageChildren[index]);
+
+        if (OnReorder.HasDelegate)
+        {
+            await OnReorder.InvokeAsync(manageChildren.Select(c => c.SessionId).ToList());
+        }
+    }
+
+    /// <summary>
+    /// クローン画面へ入る。CLI 種別の初期値は元セッションのものにする
+    /// （「同じフォルダで別の CLI を立てる」用途でも、まず元と同じ状態から出発できるほうが迷わない）。
+    /// </summary>
+    private void StartClone(SessionInfo source)
+    {
+        cloneSource = source;
+        selectedTerminalType = source.TerminalType;
+        sessionName = "";
+        startupCommand = "";
+        claudeOptions = new();
+        geminiOptions = new();
+        codexOptions = new();
+        activeTab = TabType.Clone;
+    }
+
+    private void CancelClone()
+    {
+        cloneSource = null;
+        activeTab = TabType.Manage;
+    }
     private TerminalType selectedTerminalType = TerminalType.Terminal;
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
@@ -455,6 +612,8 @@
                 TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
                 TabType.SamePath => true,
                 TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath),
+                // クローンは元セッションのフォルダをそのまま使うので、入力必須の項目は無い
+                TabType.Clone => cloneSource != null,
                 _ => false
             };
         }
@@ -496,8 +655,11 @@
         // IsVisibleがfalseからtrueに変わった時のみ初期化
         if (IsVisible && !_wasVisible)
         {
-            // ダイアログが表示されたときにリセット
-            activeTab = IsGitRepository ? TabType.Create : TabType.NewFolder;
+            // ダイアログが表示されたときにリセット。
+            // 入り口を「管理」に一本化したので、既定は常に管理タブ（作成はそこから選ぶ）。
+            manageChildren = ChildSessions.ToList();
+            cloneSource = null;
+            activeTab = TabType.Manage;
             branchName = "";
             errorMessage = "";
             isProcessing = false;
@@ -558,6 +720,7 @@
                     TabType.Existing => SubSessionType.AddExisting,
                     TabType.SamePath => SubSessionType.SamePath,
                     TabType.NewFolder => SubSessionType.NewFolder,
+                    TabType.Clone => SubSessionType.Clone,
                     _ => SubSessionType.CreateNew
                 },
                 BranchName = activeTab == TabType.Create
@@ -578,15 +741,17 @@
                     TabType.Existing => optionsSelectorExistingWorktree?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.SamePath => optionsSelectorSamePath?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.NewFolder => optionsSelectorNewFolder?.GetOptions() ?? new Dictionary<string, string>(),
+                    TabType.Clone => optionsSelectorClone?.GetOptions() ?? new Dictionary<string, string>(),
                     _ => new Dictionary<string, string>()
                 },
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch,
                 UseDetached = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.Detached,
                 FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : "",
-                // セッション名は SamePath/NewFolder タブのみ有効。未入力なら空(=受け取り側で自動命名)
-                SessionName = (activeTab == TabType.SamePath || activeTab == TabType.NewFolder)
+                // セッション名は SamePath/NewFolder/Clone タブのみ有効。未入力なら空(=受け取り側で自動命名)
+                SessionName = (activeTab == TabType.SamePath || activeTab == TabType.NewFolder || activeTab == TabType.Clone)
                     ? sessionName?.Trim() ?? ""
-                    : ""
+                    : "",
+                SourceSessionId = activeTab == TabType.Clone ? cloneSource?.SessionId : null
             };
 
             // Create タブの選択結果を「直近の選択」として LocalStorage に保存
@@ -850,6 +1015,7 @@
             TabType.Existing => "folder-plus",
             TabType.SamePath => "folder",
             TabType.NewFolder => "folder-plus",
+            TabType.Clone => "copy",
             _ => "plus-circle"
         };
     }
@@ -862,6 +1028,7 @@
             TabType.Existing => L["SubSession.Button.Existing"],
             TabType.SamePath => L["SubSession.Button.SamePath"],
             TabType.NewFolder => L["SubSession.Button.NewFolder"],
+            TabType.Clone => L["SubSession.Button.Clone"],
             _ => L["Common.Create"]
         };
     }
@@ -884,6 +1051,8 @@
         public string FolderSuffix { get; set; } = "";
         // ユーザー指定のセッション名(任意)。空なら受け取り側で自動命名する
         public string SessionName { get; set; } = "";
+        // クローン元のサブセッション。Clone のときだけ入る（フォルダと引き継ぐ設定の取得元）
+        public Guid? SourceSessionId { get; set; }
     }
 
     public enum SubSessionType
@@ -891,7 +1060,8 @@
         CreateNew,
         AddExisting,
         SamePath,
-        NewFolder
+        NewFolder,
+        Clone
     }
 
     private enum BranchSelectionMode
@@ -904,9 +1074,12 @@
 
     private enum TabType
     {
+        Manage,
         Create,
         Existing,
         SamePath,
-        NewFolder
+        NewFolder,
+        // 管理タブの行から入る派生画面。タブ見出しは持たない（クローン元が決まって初めて意味を持つため）
+        Clone
     }
 }

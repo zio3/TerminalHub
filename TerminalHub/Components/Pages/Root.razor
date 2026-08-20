@@ -31,6 +31,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ISessionRepository SessionRepository
 @inject IExplorerLauncherService ExplorerLauncher
 @implements IAsyncDisposable
 @rendermode InteractiveServer
@@ -59,6 +60,8 @@
                          ParentSessionPath="@subSessionParentSessionPath"
                          IsGitRepository="@subSessionParentSessionIsGitRepository"
                          ParentTerminalType="@subSessionParentTerminalType"
+                         ChildSessions="@subSessionChildren"
+                         OnReorder="OnSubSessionReorder"
                          OnSubSessionOperation="OnSubSessionOperation"
                          OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
@@ -232,6 +235,8 @@
     private SessionInfo? bottomPanelSession;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
+    // サブセッション管理タブへ渡す子セッション（ダイアログを開いた時点の並び）
+    private List<SessionInfo> subSessionChildren = new();
     private string? subSessionParentSessionName = null;
     private Guid? subSessionParentSessionId = null;
     private string? subSessionParentSessionPath = null;
@@ -2810,7 +2815,51 @@
             subSessionParentSessionPath = session.FolderPath;
             subSessionParentSessionIsGitRepository = session.IsGitRepository;
             subSessionParentTerminalType = session.TerminalType;
+            // 管理タブに出す並びは一覧と同じ規則（SortOrder → 作成日時）にする。
+            // アーカイブ済みは一覧に出ていないので、ここでも対象外にする。
+            subSessionChildren = sessions
+                .Where(s => s.ParentSessionId == sessionId && !s.IsArchived)
+                .OrderBy(s => s.SortOrder)
+                .ThenBy(s => s.CreatedAt)
+                .ToList();
             showSubSessionDialog = true;
+        }
+    }
+
+    /// <summary>
+    /// サブセッション管理画面での並べ替えを受けて、SortOrder を振り直して保存する。
+    /// 保存はダイアログを閉じるのを待たない（並べ替えは操作＝結果なので、
+    /// 閉じ方によって結果が変わると混乱するため）。
+    /// </summary>
+    private async Task OnSubSessionReorder(List<Guid> orderedSessionIds)
+    {
+        try
+        {
+            var orders = new List<(Guid SessionId, int SortOrder)>();
+            for (var i = 0; i < orderedSessionIds.Count; i++)
+            {
+                var target = SessionManager.GetSessionInfo(orderedSessionIds[i]);
+                if (target == null)
+                    continue;
+                // 末尾に足される新規サブセッションのために、詰めた連番をそのまま採用する
+                target.SortOrder = i;
+                orders.Add((target.SessionId, i));
+            }
+
+            await SessionRepository.UpdateSortOrdersAsync(orders);
+
+            sessions = SessionManager.GetAllSessions().ToList();
+            subSessionChildren = sessions
+                .Where(s => s.ParentSessionId == subSessionParentSessionId && !s.IsArchived)
+                .OrderBy(s => s.SortOrder)
+                .ThenBy(s => s.CreatedAt)
+                .ToList();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Sub-session reorder failed");
+            toast?.ShowError(string.Format(L["Root.Toast.SubSessionReorderFailedFormat"], ex.Message));
         }
     }
 
@@ -2863,6 +2912,53 @@
                             string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
                     }
                     break;
+
+                case SubSessionDialog.SubSessionType.Clone:
+                    // 既存サブセッションのクローン。フォルダは元と同じで、CLI 種別と名前だけ選び直す
+                    // （同じ worktree に別の CLI を並べる用途）。設定と専用コマンドは下で引き継ぐ。
+                    var cloneSource = result.SourceSessionId.HasValue
+                        ? SessionManager.GetSessionInfo(result.SourceSessionId.Value)
+                        : null;
+                    if (cloneSource != null)
+                    {
+                        // 元のオプションを土台にして、画面で選び直した分で上書きする。
+                        // ただし CLI 種別を変えたときは持ち込まない（Claude 用の値を Codex に
+                        // 渡しても意味がなく、起動引数として害になりうるため）。
+                        var cloneOptions = result.TerminalType == cloneSource.TerminalType
+                            ? new Dictionary<string, string>(cloneSource.Options)
+                            : new Dictionary<string, string>();
+                        foreach (var (key, value) in result.Options)
+                        {
+                            cloneOptions[key] = value;
+                        }
+
+                        newSession = await SessionManager.CreateSamePathSessionAsync(
+                            subSessionParentSessionId.Value, cloneSource.FolderPath, result.TerminalType, cloneOptions,
+                            string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
+
+                        if (newSession != null)
+                        {
+                            // 専用コマンドとリンクプラグイン設定を引き継ぐ。参照を共有すると
+                            // 片方の編集がもう片方に及ぶので、必ず複製して渡す。
+                            newSession.SessionCommands = cloneSource.SessionCommands
+                                .Select(c => c.Clone())
+                                .ToList();
+                            newSession.LinkPlugins = cloneSource.LinkPlugins
+                                .Select(p => p.Clone())
+                                .ToList();
+                        }
+                    }
+                    break;
+            }
+
+            if (newSession != null)
+            {
+                // 並べ替え済みの列の末尾に付ける（既定 0 のままだと先頭に割り込む）
+                var siblingMax = sessions
+                    .Where(s => s.ParentSessionId == subSessionParentSessionId && s.SessionId != newSession.SessionId)
+                    .Select(s => (int?)s.SortOrder)
+                    .Max();
+                newSession.SortOrder = (siblingMax ?? -1) + 1;
             }
 
             if (newSession != null)
@@ -2890,6 +2986,8 @@
                         string.Format(L["Root.Toast.SamePathSessionCreatedFormat"], GetSessionTypeName(result.TerminalType)),
                     SubSessionDialog.SubSessionType.NewFolder =>
                         string.Format(L["Root.Toast.NewFolderSessionCreatedFormat"], result.WorktreePath),
+                    SubSessionDialog.SubSessionType.Clone =>
+                        string.Format(L["Root.Toast.SubSessionClonedFormat"], newSession.GetDisplayName()),
                     _ => L["Root.Toast.SessionCreated"]
                 };
 
