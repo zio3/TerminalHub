@@ -61,7 +61,10 @@
                          IsGitRepository="@subSessionParentSessionIsGitRepository"
                          ParentTerminalType="@subSessionParentTerminalType"
                          ChildSessions="@subSessionChildren"
+                         ArchivedChildSessions="@subSessionArchivedChildren"
                          OnReorder="OnSubSessionReorder"
+                         OnArchiveChild="OnSubSessionArchive"
+                         OnRestoreChild="OnSubSessionRestore"
                          OnSubSessionOperation="OnSubSessionOperation"
                          OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
@@ -237,6 +240,8 @@
     private bool showSubSessionDialog = false;
     // サブセッション管理タブへ渡す子セッション（ダイアログを開いた時点の並び）
     private List<SessionInfo> subSessionChildren = new();
+    // 同じ親のアーカイブ済みサブセッション（管理タブから戻せるようにするため）
+    private List<SessionInfo> subSessionArchivedChildren = new();
     private string? subSessionParentSessionName = null;
     private Guid? subSessionParentSessionId = null;
     private string? subSessionParentSessionPath = null;
@@ -2822,6 +2827,7 @@
                 .OrderBy(s => s.SortOrder)
                 .ThenBy(s => s.CreatedAt)
                 .ToList();
+            RefreshSubSessionArchivedChildren(sessionId);
             showSubSessionDialog = true;
         }
     }
@@ -2861,6 +2867,53 @@
             Logger.LogError(ex, "Sub-session reorder failed");
             toast?.ShowError(string.Format(L["Root.Toast.SubSessionReorderFailedFormat"], ex.Message));
         }
+    }
+
+    /// <summary>
+    /// 管理タブに渡す一覧を作り直す。アーカイブ済みは戻す操作しかないので、
+    /// 並べ替えの対象にせずアーカイブ日時（新しい順）で並べる。
+    /// </summary>
+    private void RefreshSubSessionChildren(Guid parentSessionId)
+    {
+        subSessionChildren = sessions
+            .Where(s => s.ParentSessionId == parentSessionId && !s.IsArchived)
+            .OrderBy(s => s.SortOrder)
+            .ThenBy(s => s.CreatedAt)
+            .ToList();
+        RefreshSubSessionArchivedChildren(parentSessionId);
+    }
+
+    private void RefreshSubSessionArchivedChildren(Guid parentSessionId)
+    {
+        subSessionArchivedChildren = SessionManager.GetAllSessions()
+            .Where(s => s.ParentSessionId == parentSessionId && s.IsArchived)
+            .OrderByDescending(s => s.ArchivedAt ?? s.CreatedAt)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 管理タブからサブセッションをアーカイブする（＝一覧から消す）。
+    /// 一覧の × と同じ経路を通す＝挙動を二重に持たない。
+    /// </summary>
+    private async Task OnSubSessionArchive(Guid sessionId)
+    {
+        if (!subSessionParentSessionId.HasValue)
+            return;
+
+        await ArchiveSession(sessionId);
+        RefreshSubSessionChildren(subSessionParentSessionId.Value);
+        StateHasChanged();
+    }
+
+    /// <summary>管理タブからアーカイブ済みサブセッションを一覧へ戻す。</summary>
+    private async Task OnSubSessionRestore(Guid sessionId)
+    {
+        if (!subSessionParentSessionId.HasValue)
+            return;
+
+        await RestoreArchivedSession(sessionId);
+        RefreshSubSessionChildren(subSessionParentSessionId.Value);
+        StateHasChanged();
     }
 
     private async Task OnSubSessionOperation(SubSessionDialog.SubSessionResult result)

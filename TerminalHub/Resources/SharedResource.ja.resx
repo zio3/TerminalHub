@@ -684,7 +684,7 @@
   <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>この PC 自身を指す名前です。起動のたびに検出し直すので、LAN の IP が変わっても設定は不要です。ここと上の「追加で許可するホスト名」のどちらにも無い名前で接続すると拒否されます。</value></data>
   <data name="SubSession.Tab.Manage" xml:space="preserve"><value>管理</value></data>
   <data name="SubSession.Manage.Empty" xml:space="preserve"><value>このセッションにはまだサブセッションがありません。上のタブから作成できます。</value></data>
-  <data name="SubSession.Manage.Help" xml:space="preserve"><value>矢印で並べ替えます（すぐ保存されます）。クローンは同じフォルダに別のセッションを作ります。</value></data>
+  <data name="SubSession.Manage.Help" xml:space="preserve"><value>矢印で並べ替えます（すぐ保存されます）。クローンは同じフォルダに別のセッションを作り、アーカイブは一覧から消します（あとで戻せます）。</value></data>
   <data name="SubSession.Manage.MoveUp" xml:space="preserve"><value>上へ</value></data>
   <data name="SubSession.Manage.MoveDown" xml:space="preserve"><value>下へ</value></data>
   <data name="SubSession.Manage.Clone" xml:space="preserve"><value>クローン</value></data>
@@ -695,4 +695,10 @@
   <data name="SubSession.Button.Clone" xml:space="preserve"><value>クローン作成</value></data>
   <data name="Root.Toast.SubSessionClonedFormat" xml:space="preserve"><value>{0} のクローンを作成しました</value></data>
   <data name="Root.Toast.SubSessionReorderFailedFormat" xml:space="preserve"><value>並べ替えの保存に失敗しました: {0}</value></data>
+  <data name="SubSession.Manage.Archive" xml:space="preserve"><value>アーカイブ</value></data>
+  <data name="SubSession.Manage.ArchiveTitle" xml:space="preserve"><value>一覧から消す（レコードは残り、あとで戻せます）</value></data>
+  <data name="SubSession.Manage.ArchivedHeading" xml:space="preserve"><value>アーカイブ済み</value></data>
+  <data name="SubSession.Manage.ArchivedHelp" xml:space="preserve"><value>一覧に出ていないサブセッションです。戻すと再び一覧に並びます。</value></data>
+  <data name="SubSession.Manage.Restore" xml:space="preserve"><value>戻す</value></data>
+  <data name="SubSession.Manage.RestoreTitle" xml:space="preserve"><value>一覧へ戻す</value></data>
 </root>

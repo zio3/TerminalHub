@@ -115,9 +115,51 @@
                                                     @onclick="() => StartClone(child)">
                                                 <i class="bi bi-copy me-1"></i>@L["SubSession.Manage.Clone"]
                                             </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                                    title="@L["SubSession.Manage.ArchiveTitle"]"
+                                                    disabled="@isProcessing"
+                                                    @onclick="() => ArchiveChildAsync(child)">
+                                                <i class="bi bi-archive me-1"></i>@L["SubSession.Manage.Archive"]
+                                            </button>
                                         </li>
                                     }
                                 </ul>
+                            }
+
+                            @* アーカイブ済みもここに出す。「一覧から消したいだけ」の受け皿がアーカイブなので、
+                               戻す操作までこの画面で完結しないと、アーカイブ一覧を探しに行く羽目になる。 *@
+                            @if (ArchivedChildSessions.Count > 0)
+                            {
+                                <div class="mt-4">
+                                    <h6 class="text-muted">
+                                        <i class="bi bi-archive me-1"></i>@L["SubSession.Manage.ArchivedHeading"]
+                                        <span class="badge bg-secondary ms-1">@ArchivedChildSessions.Count</span>
+                                    </h6>
+                                    <small class="text-muted d-block mb-2">@L["SubSession.Manage.ArchivedHelp"]</small>
+                                    <ul class="list-group">
+                                        @foreach (var archived in ArchivedChildSessions)
+                                        {
+                                            var archivedChild = archived;
+                                            <li class="list-group-item d-flex align-items-center gap-2 opacity-75">
+                                                <div class="flex-grow-1 text-truncate">
+                                                    <div class="text-truncate">
+                                                        @archivedChild.GetDisplayName()
+                                                        <span class="badge bg-secondary ms-1">@archivedChild.TerminalType</span>
+                                                    </div>
+                                                    <small class="text-muted text-truncate d-block" title="@archivedChild.FolderPath">
+                                                        @archivedChild.FolderPath
+                                                    </small>
+                                                </div>
+                                                <button type="button" class="btn btn-outline-success btn-sm flex-shrink-0"
+                                                        title="@L["SubSession.Manage.RestoreTitle"]"
+                                                        disabled="@isProcessing"
+                                                        @onclick="() => RestoreChildAsync(archivedChild)">
+                                                    <i class="bi bi-arrow-counterclockwise me-1"></i>@L["SubSession.Manage.Restore"]
+                                                </button>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
                             }
                         </div>
                     }
@@ -493,6 +535,12 @@
     [Parameter] public List<SessionInfo> ChildSessions { get; set; } = new();
     /// <summary>並べ替え結果（新しい表示順の SessionId 列）。即時保存させるため、確定ボタンは介さない。</summary>
     [Parameter] public EventCallback<List<Guid>> OnReorder { get; set; }
+    /// <summary>この親に属するアーカイブ済みサブセッション。管理タブから戻せるようにするため。</summary>
+    [Parameter] public List<SessionInfo> ArchivedChildSessions { get; set; } = new();
+    /// <summary>サブセッションをアーカイブする（＝一覧から消す）。</summary>
+    [Parameter] public EventCallback<Guid> OnArchiveChild { get; set; }
+    /// <summary>アーカイブ済みサブセッションを一覧へ戻す。</summary>
+    [Parameter] public EventCallback<Guid> OnRestoreChild { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private TabType activeTab = TabType.Create;
@@ -581,6 +629,28 @@
     {
         cloneSource = null;
         activeTab = TabType.Manage;
+    }
+
+    /// <summary>
+    /// サブセッションをアーカイブする（一覧から消す）。ConPTY は落ちるので、
+    /// 「動かしたまま隠す」用途には使えない＝隠れて動き続けるセッションは作らない。
+    /// </summary>
+    private async Task ArchiveChildAsync(SessionInfo child)
+    {
+        if (!OnArchiveChild.HasDelegate)
+            return;
+
+        // 先に手元の並びからも抜く。親が返してくるまで消えないと、押した手応えが無い。
+        manageChildren.RemoveAll(c => c.SessionId == child.SessionId);
+        await OnArchiveChild.InvokeAsync(child.SessionId);
+    }
+
+    private async Task RestoreChildAsync(SessionInfo child)
+    {
+        if (!OnRestoreChild.HasDelegate)
+            return;
+
+        await OnRestoreChild.InvokeAsync(child.SessionId);
     }
     private TerminalType selectedTerminalType = TerminalType.Terminal;
     private string startupCommand = "";
@@ -691,7 +761,18 @@
                 await LoadAvailableWorktrees();
             }
         }
-        
+        else if (IsVisible)
+        {
+            // 開いたまま親側で増減したとき（アーカイブ・復元・作成）に追随する。
+            // 並べ替え直後の再描画でも通るので、順序ではなく「顔ぶれ」が変わったときだけ作り直す
+            // （毎回作り直すと、保存が返る前の手元の並びを親の古い並びで上書きしてしまう）。
+            var currentIds = manageChildren.Select(c => c.SessionId).ToHashSet();
+            if (!currentIds.SetEquals(ChildSessions.Select(c => c.SessionId)))
+            {
+                manageChildren = ChildSessions.ToList();
+            }
+        }
+
         _wasVisible = IsVisible;
     }
 
