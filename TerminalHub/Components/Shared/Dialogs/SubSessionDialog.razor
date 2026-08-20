@@ -6,6 +6,7 @@
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
 @inject IStringLocalizer<SharedResource> L
+@inject IConfiguration Configuration
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -680,7 +681,11 @@
     private void StartClone(SessionInfo source)
     {
         cloneSource = source;
-        selectedTerminalType = source.TerminalType;
+        // 元の種別が設定で無効化されていたら、そのままでは「無効な CLI をクローンで復活できる」
+        // 抜け道になる。選べる種別の先頭へ寄せて、種別変更として扱わせる。
+        selectedTerminalType = IsCloneTypeAvailable(source.TerminalType)
+            ? source.TerminalType
+            : CloneSelectableTypes.First();
         sessionName = "";
         startupCommand = "";
         claudeOptions = new();
@@ -696,20 +701,37 @@
     }
 
     // クローンで選び直せる CLI 種別。GeminiCLI は廃止済みなので出さない
-    // （永続化互換のため enum 値だけ残っている）。
-    private static readonly TerminalType[] CloneSelectableTypes = new[]
+    // （永続化互換のため enum 値だけ残っている）。設定で無効にした CLI も出さない
+    // ＝ SessionOptionsSelector が選択肢を隠すのと同じ規則にする（ここだけ素通しだと、
+    // 設定を迂回して無効な CLI を起動できてしまう）。
+    private IEnumerable<TerminalType> CloneSelectableTypes =>
+        new[]
+        {
+            TerminalType.ClaudeCode,
+            TerminalType.CodexCLI,
+            TerminalType.Antigravity,
+            TerminalType.Grok,
+            TerminalType.Terminal
+        }.Where(IsCloneTypeAvailable);
+
+    private bool IsCloneTypeAvailable(TerminalType type) => type switch
     {
-        TerminalType.ClaudeCode,
-        TerminalType.CodexCLI,
-        TerminalType.Antigravity,
-        TerminalType.Grok,
-        TerminalType.Terminal
+        TerminalType.ClaudeCode => Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true),
+        TerminalType.CodexCLI => Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true),
+        TerminalType.Antigravity => Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true),
+        TerminalType.Grok => Configuration.GetValue<bool>("ExternalTools:UseGrokCli", true),
+        // 素のターミナルは外部 CLI を伴わないので常に選べる
+        TerminalType.Terminal => true,
+        _ => false
     };
 
     private void OnCloneTerminalTypeChanged(ChangeEventArgs e)
     {
+        // Enum.IsDefined だけだと、選択肢に出していない種別（廃止済みの GeminiCLI や
+        // 設定で無効にした CLI）を値の細工で通せてしまうので、出している集合で照合する。
         if (int.TryParse(e.Value?.ToString(), out var value) &&
-            Enum.IsDefined(typeof(TerminalType), value))
+            Enum.IsDefined(typeof(TerminalType), value) &&
+            CloneSelectableTypes.Contains((TerminalType)value))
         {
             selectedTerminalType = (TerminalType)value;
         }
