@@ -50,6 +50,58 @@ export default {
 
 `pattern` か `detect` のどちらかが要る。
 
+### accept に渡るもの
+
+`before` は**行頭から一致の直前まで全部**、`after` は**一致の直後から行末まで全部**
+（数文字ではない）。なので前後を見るときは `/…$/` と `/^…/` のアンカー付きで書く。
+
+```js
+accept: ({ before, after }) => !/\[Image\s$/.test(before) && !/^-\d/.test(after)
+```
+
+### vars の値
+
+宣言しただけで一度も入力していない変数は **`undefined`**（キーそのものが無い）。
+一度入れてから空にすると **空文字**。両方あり得るので、読むときは
+`(ctx.vars.baseUrl ?? '').trim()` のように畳んでから使う。空なら `null` を返して
+リンクにしないのが行儀のいい書き方（設定し忘れが「壊れた」ではなく「まだ効かない」になる）。
+
+### 重い処理を書かない
+
+`url` / `accept` / `detect` は**表示される行ごと・有効なプラグインごとに**呼ばれる。
+スクロール中も走るので、ここでの重い処理はそのままターミナルの重さになる。
+正規表現と文字列操作の範囲に収めること（通信もストレージも触れない）。
+
+## detect で書く
+
+`pattern` の1発では表現できないとき（同じ行の複数トークンを組にする、
+前後の文脈で URL を変える等）に使う。返すのは配列で、`url` は各要素が持つ。
+
+```js
+export default {
+    id: 'log-level-docs',
+    detect: (line) => {
+        const hits = [];
+        const re = /(ERROR|WARN)/g;
+        let m;
+        while ((m = re.exec(line)) !== null) {
+            hits.push({
+                start: m.index,
+                end: m.index + m[0].length,
+                text: m[0],
+                url: `https://example.com/docs/logging#${m[0].toLowerCase()}`
+            });
+        }
+        return hits;
+    }
+};
+```
+
+`start` / `end` は **`line` の文字位置**（JavaScript の文字列インデックス＝UTF-16 コード単位）。
+`line` は ANSI エスケープを取り除いたあとの表示文字だけの行なので、色や装飾を数える必要はない。
+全角文字が混じっていても、桁への変換はホスト側がやるのでプラグインは文字位置だけ考えればいい。
+`url` が無い要素は捨てられる。範囲外の位置を返すと表示がずれるので、必ず `line` の中に収めること。
+
 ## ctx に入っているもの
 
 ```js
@@ -120,6 +172,12 @@ export default {
   アプリ側の設定に従う。プラグインからは選べない
 
 プラグインは「この文字列は、この URL である」と申告するだけの純粋な関数。
+
+## サンプル
+
+すぐ使える例がリポジトリの [`docs/link-plugin-samples/`](link-plugin-samples/) にある
+（`github-fixed` / `jira` / `backlog`）。プラグインフォルダにコピーして、
+設定画面で変数を入れれば動く。自作の雛形にも使える。
 
 ## この仕様書の使い方
 
