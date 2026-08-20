@@ -6,6 +6,7 @@
 @inject IAppSettingsService AppSettingsService
 @inject IFolderPickerService FolderPicker
 @inject IStringLocalizer<SharedResource> L
+@inject IConfiguration Configuration
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -26,6 +27,16 @@
 
                 <!-- タブナビゲーション -->
                 <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabType.Manage ? "active" : "")"
+                                @onclick="@(() => activeTab = TabType.Manage)">
+                            <i class="bi bi-list-ul me-1"></i>@L["SubSession.Tab.Manage"]
+                            @if (manageChildren.Count > 0)
+                            {
+                                <span class="badge bg-secondary ms-1">@manageChildren.Count</span>
+                            }
+                        </button>
+                    </li>
                     @if (IsGitRepository)
                     {
                         <li class="nav-item">
@@ -57,7 +68,143 @@
                 
                 <!-- タブコンテンツ -->
                 <div class="tab-content">
-                    @if (activeTab == TabType.Create)
+                    @if (activeTab == TabType.Manage)
+                    {
+                        <!-- サブセッション管理（並べ替え・クローン） -->
+                        <div class="tab-pane fade show active">
+                            @if (manageChildren.Count == 0)
+                            {
+                                <div class="alert alert-secondary mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>@L["SubSession.Manage.Empty"]
+                                </div>
+                            }
+                            else
+                            {
+                                <small class="text-muted d-block mb-2">@L["SubSession.Manage.Help"]</small>
+                                <ul class="list-group">
+                                    @for (var i = 0; i < manageChildren.Count; i++)
+                                    {
+                                        var index = i;
+                                        var child = manageChildren[index];
+                                        <li class="list-group-item d-flex align-items-center gap-2 @DragRowClass(index)"
+                                            @ondragover:preventDefault="true"
+                                            @ondragenter="() => dragOverIndex = index"
+                                            @ondrop="() => OnDropAsync(index)">
+                                            @* ドラッグ元はハンドルだけ。行ごと draggable にすると名前の選択や
+                                               ボタン操作がドラッグに化けるが、mousedown で立てるフラグ方式だと
+                                               ハンドル外で mouseup したときに解除されず残る（Codex レビュー
+                                               指摘の P2）。ハンドル自体を draggable にすれば状態を持たずに済む。
+                                               受け側（dragover/drop）は行のままなので、行のどこへ落としてもよい。 *@
+                                            <span class="text-muted flex-shrink-0 subsession-drag-handle"
+                                                  title="@L["SubSession.Manage.DragHandle"]"
+                                                  draggable="true"
+                                                  @ondragstart="() => OnDragStart(index)"
+                                                  @ondragend="OnDragEnd">
+                                                <i class="bi bi-grip-vertical"></i>
+                                            </span>
+                                            <div class="flex-grow-1 text-truncate">
+                                                <div class="text-truncate">
+                                                    @child.GetDisplayName()
+                                                    <span class="badge bg-info ms-1">@child.TerminalType</span>
+                                                </div>
+                                                <small class="text-muted text-truncate d-block" title="@child.FolderPath">
+                                                    @child.FolderPath
+                                                </small>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0"
+                                                    title="@L["SubSession.Manage.CloneTitle"]"
+                                                    disabled="@isProcessing"
+                                                    @onclick="() => StartClone(child)">
+                                                <i class="bi bi-copy me-1"></i>@L["SubSession.Manage.Clone"]
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0"
+                                                    title="@L["SubSession.Manage.ArchiveTitle"]"
+                                                    disabled="@isProcessing"
+                                                    @onclick="() => ArchiveChildAsync(child)">
+                                                <i class="bi bi-archive me-1"></i>@L["SubSession.Manage.Archive"]
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+
+                            @* アーカイブ済みもここに出す。「一覧から消したいだけ」の受け皿がアーカイブなので、
+                               戻す操作までこの画面で完結しないと、アーカイブ一覧を探しに行く羽目になる。 *@
+                            @if (ArchivedChildSessions.Count > 0)
+                            {
+                                <div class="mt-4">
+                                    @* 既定は畳んで件数だけ。戻す操作は稀なので、常時開いていると
+                                       本命の（一覧に出ている）サブセッションが下へ押しやられる。 *@
+                                    <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none px-0"
+                                            @onclick="() => archivedExpanded = !archivedExpanded">
+                                        <i class="bi @(archivedExpanded ? "bi-chevron-down" : "bi-chevron-right") me-1"></i>
+                                        <i class="bi bi-archive me-1"></i>@L["SubSession.Manage.ArchivedHeading"]
+                                        <span class="badge bg-secondary ms-1">@ArchivedChildSessions.Count</span>
+                                    </button>
+                                    @if (archivedExpanded)
+                                    {
+                                    <small class="text-muted d-block mb-2">@L["SubSession.Manage.ArchivedHelp"]</small>
+                                    <ul class="list-group">
+                                        @foreach (var archived in ArchivedChildSessions)
+                                        {
+                                            var archivedChild = archived;
+                                            <li class="list-group-item d-flex align-items-center gap-2 opacity-75">
+                                                <div class="flex-grow-1 text-truncate">
+                                                    <div class="text-truncate">
+                                                        @archivedChild.GetDisplayName()
+                                                        <span class="badge bg-secondary ms-1">@archivedChild.TerminalType</span>
+                                                    </div>
+                                                    <small class="text-muted text-truncate d-block" title="@archivedChild.FolderPath">
+                                                        @archivedChild.FolderPath
+                                                    </small>
+                                                </div>
+                                                <button type="button" class="btn btn-outline-success btn-sm flex-shrink-0"
+                                                        title="@L["SubSession.Manage.RestoreTitle"]"
+                                                        disabled="@isProcessing"
+                                                        @onclick="() => RestoreChildAsync(archivedChild)">
+                                                    <i class="bi bi-arrow-counterclockwise me-1"></i>@L["SubSession.Manage.Restore"]
+                                                </button>
+                                            </li>
+                                        }
+                                    </ul>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (activeTab == TabType.Clone && cloneSource != null)
+                    {
+                        @* クローンは「元のフォルダを指定済みの新規作成」でしかない。
+                           設定の引き継ぎは、SessionOptionsSelector が常に新規の既定値一式を
+                           書き出す都合と噛み合わず、権限が黙って緩む事故のもとだった
+                           （Codex レビュー P1）。作成タブと同じ素直な作りに戻す。 *@
+                        <div class="tab-pane fade show active">
+                            <div class="alert alert-info">
+                                <i class="bi bi-copy me-2"></i>
+                                @string.Format(L["SubSession.Clone.SourceFormat"], cloneSource.GetDisplayName())
+                                <div class="small text-truncate mt-1" title="@cloneSource.FolderPath">@cloneSource.FolderPath</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">@L["SubSession.SessionName"]</label>
+                                <input type="text" class="form-control" @bind="sessionName"
+                                       placeholder="@L["SubSession.SessionName.Placeholder"]" />
+                                <small class="form-text text-muted">@L["SubSession.SessionName.Help"]</small>
+                            </div>
+
+                            <!-- セッションオプション選択（作成タブと同じ） -->
+                            <div class="mt-3">
+                                <SessionOptionsSelector @ref="optionsSelectorClone"
+                                                      SelectedType="selectedTerminalType"
+                                                      SelectedTypeChanged="OnTerminalTypeChanged"
+                                                      @bind-StartupCommand="startupCommand"
+                                                      ClaudeOptions="claudeOptions"
+                                                      GeminiOptions="geminiOptions"
+                                                      CodexOptions="codexOptions" />
+                            </div>
+                        </div>
+                    }
+                    else if (activeTab == TabType.Create)
                     {
                         <!-- 新規Worktree作成 -->
                         <div class="tab-pane active">
@@ -355,10 +502,19 @@
                 <ErrorAlert @bind-ErrorMessage="errorMessage" />
             </div>
             <div class="modal-footer">
+                @if (activeTab == TabType.Clone)
+                {
+                    <button type="button" class="btn btn-outline-secondary me-auto" @onclick="CancelClone" disabled="@isProcessing">
+                        <i class="bi bi-arrow-left me-1"></i>@L["SubSession.Clone.Back"]
+                    </button>
+                }
                 <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@isProcessing">
-                    @L["Common.Cancel"]
+                    @(activeTab == TabType.Manage ? L["Common.Close"] : L["Common.Cancel"])
                 </button>
-                <button type="button" class="btn btn-success" @onclick="ProcessOperation" 
+                @* 管理タブの操作は行ごとのボタンで完結する（並べ替えは即時保存）ので、実行ボタンは出さない *@
+                @if (activeTab != TabType.Manage)
+                {
+                <button type="button" class="btn btn-success" @onclick="ProcessOperation"
                         disabled="@(!CanProcess || isProcessing)">
                     @if (isProcessing)
                     {
@@ -370,6 +526,7 @@
                     }
                     @GetButtonText()
                 </button>
+                }
             </div>
         </div>
     </div>
@@ -382,6 +539,16 @@
     [Parameter] public bool IsGitRepository { get; set; }
     [Parameter] public TerminalType ParentTerminalType { get; set; } = TerminalType.Terminal;
     [Parameter] public EventCallback<SubSessionResult> OnSubSessionOperation { get; set; }
+    /// <summary>この親に属するサブセッション（表示順）。管理タブの並べ替え・クローンの対象。</summary>
+    [Parameter] public List<SessionInfo> ChildSessions { get; set; } = new();
+    /// <summary>並べ替え結果（新しい表示順の SessionId 列）。即時保存させるため、確定ボタンは介さない。</summary>
+    [Parameter] public EventCallback<List<Guid>> OnReorder { get; set; }
+    /// <summary>この親に属するアーカイブ済みサブセッション。管理タブから戻せるようにするため。</summary>
+    [Parameter] public List<SessionInfo> ArchivedChildSessions { get; set; } = new();
+    /// <summary>サブセッションをアーカイブする（＝一覧から消す）。</summary>
+    [Parameter] public EventCallback<Guid> OnArchiveChild { get; set; }
+    /// <summary>アーカイブ済みサブセッションを一覧へ戻す。</summary>
+    [Parameter] public EventCallback<Guid> OnRestoreChild { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
     private TabType activeTab = TabType.Create;
@@ -425,6 +592,132 @@
     private SessionOptionsSelector? optionsSelectorSamePath;
     private SessionOptionsSelector? optionsSelectorExistingWorktree;
     private SessionOptionsSelector? optionsSelectorNewFolder;
+    private SessionOptionsSelector? optionsSelectorClone;
+
+    // 管理タブが扱う並び。親から渡された順を複製して持ち、並べ替えのたびに即時保存する。
+    // 複製にするのは、保存が失敗しても親の一覧を巻き込まないため。
+    private List<SessionInfo> manageChildren = new();
+    private SessionInfo? cloneSource;
+    // アーカイブ欄の開閉。既定は畳む（戻す操作は稀で、件数さえ見えれば足りるため）
+    private bool archivedExpanded = false;
+
+    // ドラッグ並べ替えの状態。掴んでいる行と、いま重なっている行だけを持つ。
+    private int? draggingIndex;
+    private int? dragOverIndex;
+
+    private string DragRowClass(int index)
+    {
+        if (draggingIndex == index)
+            return "opacity-50";
+        // 落ちる先が分かるように、掴んでいる行以外の重なり先だけ線を出す
+        return dragOverIndex == index && draggingIndex.HasValue ? "border-primary" : "";
+    }
+
+    private void OnDragStart(int index)
+    {
+        draggingIndex = index;
+        dragOverIndex = index;
+    }
+
+    private void OnDragEnd()
+    {
+        draggingIndex = null;
+        dragOverIndex = null;
+    }
+
+    /// <summary>
+    /// 掴んだ行を落とした位置へ差し込み、その場で保存する。確定ボタンを介さないのは、
+    /// 並べ替えが「操作＝結果」で、キャンセルの意味が薄いため（誤操作は戻せばよい）。
+    /// </summary>
+    private async Task OnDropAsync(int targetIndex)
+    {
+        var from = draggingIndex;
+        OnDragEnd();
+
+        if (!from.HasValue || from.Value == targetIndex)
+            return;
+        if (from.Value < 0 || from.Value >= manageChildren.Count ||
+            targetIndex < 0 || targetIndex >= manageChildren.Count)
+            return;
+
+        var moving = manageChildren[from.Value];
+        manageChildren.RemoveAt(from.Value);
+        manageChildren.Insert(targetIndex, moving);
+
+        if (OnReorder.HasDelegate)
+        {
+            await OnReorder.InvokeAsync(manageChildren.Select(c => c.SessionId).ToList());
+        }
+    }
+
+    /// <summary>
+    /// クローン画面へ入る。中身は「元のフォルダを指定済みの新規作成」なので、
+    /// 初期値も新規作成と同じにする（元の設定は引き継がない）。
+    /// </summary>
+    private void StartClone(SessionInfo source)
+    {
+        cloneSource = source;
+        selectedTerminalType = IsTerminalTypeAvailable(source.TerminalType)
+            ? source.TerminalType
+            : SelectableTerminalTypes.First();
+        sessionName = "";
+        startupCommand = "";
+        claudeOptions = new();
+        geminiOptions = new();
+        codexOptions = new();
+        activeTab = TabType.Clone;
+    }
+
+    private void CancelClone()
+    {
+        cloneSource = null;
+        activeTab = TabType.Manage;
+    }
+
+    // 設定で無効にした CLI は選ばせない（SessionOptionsSelector が選択肢を隠すのと同じ規則）。
+    // ダイアログを開くときの寄せ直しに使う。
+    private IEnumerable<TerminalType> SelectableTerminalTypes =>
+        new[]
+        {
+            TerminalType.ClaudeCode,
+            TerminalType.CodexCLI,
+            TerminalType.Antigravity,
+            TerminalType.Grok,
+            TerminalType.Terminal
+        }.Where(IsTerminalTypeAvailable);
+
+    private bool IsTerminalTypeAvailable(TerminalType type) => type switch
+    {
+        TerminalType.ClaudeCode => Configuration.GetValue<bool>("ExternalTools:UseClaudeCode", true),
+        TerminalType.CodexCLI => Configuration.GetValue<bool>("ExternalTools:UseCodexCli", true),
+        TerminalType.Antigravity => Configuration.GetValue<bool>("ExternalTools:UseAntigravityCli", true),
+        TerminalType.Grok => Configuration.GetValue<bool>("ExternalTools:UseGrokCli", true),
+        // 素のターミナルは外部 CLI を伴わないので常に選べる
+        TerminalType.Terminal => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// サブセッションをアーカイブする（一覧から消す）。ConPTY は落ちるので、
+    /// 「動かしたまま隠す」用途には使えない＝隠れて動き続けるセッションは作らない。
+    /// </summary>
+    private async Task ArchiveChildAsync(SessionInfo child)
+    {
+        if (!OnArchiveChild.HasDelegate)
+            return;
+
+        // 先に手元の並びからも抜く。親が返してくるまで消えないと、押した手応えが無い。
+        manageChildren.RemoveAll(c => c.SessionId == child.SessionId);
+        await OnArchiveChild.InvokeAsync(child.SessionId);
+    }
+
+    private async Task RestoreChildAsync(SessionInfo child)
+    {
+        if (!OnRestoreChild.HasDelegate)
+            return;
+
+        await OnRestoreChild.InvokeAsync(child.SessionId);
+    }
     private TerminalType selectedTerminalType = TerminalType.Terminal;
     private string startupCommand = "";
     private SessionOptionsSelector.ClaudeCodeOptions claudeOptions = new();
@@ -455,6 +748,8 @@
                 TabType.Existing => IsGitRepository && !string.IsNullOrWhiteSpace(selectedWorktreePath),
                 TabType.SamePath => true,
                 TabType.NewFolder => !string.IsNullOrWhiteSpace(newFolderPath),
+                // クローンは元セッションのフォルダをそのまま使うので、入力必須の項目は無い
+                TabType.Clone => cloneSource != null,
                 _ => false
             };
         }
@@ -496,16 +791,25 @@
         // IsVisibleがfalseからtrueに変わった時のみ初期化
         if (IsVisible && !_wasVisible)
         {
-            // ダイアログが表示されたときにリセット
-            activeTab = IsGitRepository ? TabType.Create : TabType.NewFolder;
+            // ダイアログが表示されたときにリセット。
+            // 入り口を「管理」に一本化したので、既定は常に管理タブ（作成はそこから選ぶ）。
+            manageChildren = ChildSessions.ToList();
+            cloneSource = null;
+            archivedExpanded = false;
+            activeTab = TabType.Manage;
             branchName = "";
             errorMessage = "";
             isProcessing = false;
             branchSelectionMode = BranchSelectionMode.NewBranch;
             selectedExistingBranch = "";
             folderSuffix = "";
-            // 親セッションの TerminalType を初期値として引き継ぐ
-            selectedTerminalType = ParentTerminalType;
+            // 親セッションの TerminalType を初期値として引き継ぐ。ただし設定で無効化された
+            // CLI だったら寄せ直す。SessionOptionsSelector はその種別のラジオを隠すだけで
+            // SelectedType は保持するため、種別を触らずに実行すると無効な CLI が起動できてしまう
+            // （Codex レビュー指摘。クローン以外の作成タブに残っていた迂回）。
+            selectedTerminalType = IsTerminalTypeAvailable(ParentTerminalType)
+                ? ParentTerminalType
+                : SelectableTerminalTypes.First();
 
             // 直近の選択を LocalStorage から復元
             await LoadLastBranchSelectionMode();
@@ -529,7 +833,18 @@
                 await LoadAvailableWorktrees();
             }
         }
-        
+        else if (IsVisible)
+        {
+            // 開いたまま親側で増減したとき（アーカイブ・復元・作成）に追随する。
+            // 並べ替え直後の再描画でも通るので、順序ではなく「顔ぶれ」が変わったときだけ作り直す
+            // （毎回作り直すと、保存が返る前の手元の並びを親の古い並びで上書きしてしまう）。
+            var currentIds = manageChildren.Select(c => c.SessionId).ToHashSet();
+            if (!currentIds.SetEquals(ChildSessions.Select(c => c.SessionId)))
+            {
+                manageChildren = ChildSessions.ToList();
+            }
+        }
+
         _wasVisible = IsVisible;
     }
 
@@ -558,6 +873,7 @@
                     TabType.Existing => SubSessionType.AddExisting,
                     TabType.SamePath => SubSessionType.SamePath,
                     TabType.NewFolder => SubSessionType.NewFolder,
+                    TabType.Clone => SubSessionType.Clone,
                     _ => SubSessionType.CreateNew
                 },
                 BranchName = activeTab == TabType.Create
@@ -578,15 +894,17 @@
                     TabType.Existing => optionsSelectorExistingWorktree?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.SamePath => optionsSelectorSamePath?.GetOptions() ?? new Dictionary<string, string>(),
                     TabType.NewFolder => optionsSelectorNewFolder?.GetOptions() ?? new Dictionary<string, string>(),
+                    TabType.Clone => optionsSelectorClone?.GetOptions() ?? new Dictionary<string, string>(),
                     _ => new Dictionary<string, string>()
                 },
                 UseExistingBranch = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.ExistingBranch,
                 UseDetached = activeTab == TabType.Create && branchSelectionMode == BranchSelectionMode.Detached,
                 FolderSuffix = activeTab == TabType.Create ? folderSuffix?.Trim() ?? "" : "",
-                // セッション名は SamePath/NewFolder タブのみ有効。未入力なら空(=受け取り側で自動命名)
-                SessionName = (activeTab == TabType.SamePath || activeTab == TabType.NewFolder)
+                // セッション名は SamePath/NewFolder/Clone タブのみ有効。未入力なら空(=受け取り側で自動命名)
+                SessionName = (activeTab == TabType.SamePath || activeTab == TabType.NewFolder || activeTab == TabType.Clone)
                     ? sessionName?.Trim() ?? ""
-                    : ""
+                    : "",
+                SourceSessionId = activeTab == TabType.Clone ? cloneSource?.SessionId : null
             };
 
             // Create タブの選択結果を「直近の選択」として LocalStorage に保存
@@ -850,6 +1168,7 @@
             TabType.Existing => "folder-plus",
             TabType.SamePath => "folder",
             TabType.NewFolder => "folder-plus",
+            TabType.Clone => "copy",
             _ => "plus-circle"
         };
     }
@@ -862,6 +1181,7 @@
             TabType.Existing => L["SubSession.Button.Existing"],
             TabType.SamePath => L["SubSession.Button.SamePath"],
             TabType.NewFolder => L["SubSession.Button.NewFolder"],
+            TabType.Clone => L["SubSession.Button.Clone"],
             _ => L["Common.Create"]
         };
     }
@@ -884,6 +1204,8 @@
         public string FolderSuffix { get; set; } = "";
         // ユーザー指定のセッション名(任意)。空なら受け取り側で自動命名する
         public string SessionName { get; set; } = "";
+        // クローン元のサブセッション。Clone のときだけ入る（フォルダと引き継ぐ設定の取得元）
+        public Guid? SourceSessionId { get; set; }
     }
 
     public enum SubSessionType
@@ -891,7 +1213,8 @@
         CreateNew,
         AddExisting,
         SamePath,
-        NewFolder
+        NewFolder,
+        Clone
     }
 
     private enum BranchSelectionMode
@@ -904,9 +1227,12 @@
 
     private enum TabType
     {
+        Manage,
         Create,
         Existing,
         SamePath,
-        NewFolder
+        NewFolder,
+        // 管理タブの行から入る派生画面。タブ見出しは持たない（クローン元が決まって初めて意味を持つため）
+        Clone
     }
 }

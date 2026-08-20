@@ -409,10 +409,13 @@
             group.Add(session);
             processed.Add(session.SessionId);
 
-            // 子セッションは常に作成日時順
+            // 子セッションはサブセッション管理画面で決めた並び順。SortOrder が同値なら作成日時で解決する
+            // （並べ替えたことがない DB は全行 0 なので、従来どおり作成日時順のまま）。
+            // 親のソートキー（最終アクセス順など）は子には効かせない＝人が決めた並びを勝手に崩さない。
             var sortedChildren = filteredSessions
                 .Where(s => s.ParentSessionId == session.SessionId)
-                .OrderBy(s => s.CreatedAt);
+                .OrderBy(s => s.SortOrder)
+                .ThenBy(s => s.CreatedAt);
 
             // 親セッションが展開されている場合のみ子セッションを表示
             if (session.IsExpanded)

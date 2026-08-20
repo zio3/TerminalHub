@@ -31,6 +31,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ISessionRepository SessionRepository
 @inject IExplorerLauncherService ExplorerLauncher
 @implements IAsyncDisposable
 @rendermode InteractiveServer
@@ -59,6 +60,11 @@
                          ParentSessionPath="@subSessionParentSessionPath"
                          IsGitRepository="@subSessionParentSessionIsGitRepository"
                          ParentTerminalType="@subSessionParentTerminalType"
+                         ChildSessions="@subSessionChildren"
+                         ArchivedChildSessions="@subSessionArchivedChildren"
+                         OnReorder="OnSubSessionReorder"
+                         OnArchiveChild="OnSubSessionArchive"
+                         OnRestoreChild="OnSubSessionRestore"
                          OnSubSessionOperation="OnSubSessionOperation"
                          OnCancel="() => showSubSessionDialog = false" />
 <SessionSettingsDialog IsVisible="showSessionSettingsDialog"
@@ -232,6 +238,10 @@
     private SessionInfo? bottomPanelSession;
     private bool showSettingsDialog = false;
     private bool showSubSessionDialog = false;
+    // サブセッション管理タブへ渡す子セッション（ダイアログを開いた時点の並び）
+    private List<SessionInfo> subSessionChildren = new();
+    // 同じ親のアーカイブ済みサブセッション（管理タブから戻せるようにするため）
+    private List<SessionInfo> subSessionArchivedChildren = new();
     private string? subSessionParentSessionName = null;
     private Guid? subSessionParentSessionId = null;
     private string? subSessionParentSessionPath = null;
@@ -1928,6 +1938,16 @@
         }
         if (!confirmed) return;
 
+        await ArchiveSessionCoreAsync(sessionId);
+    }
+
+    /// <summary>
+    /// 確認を挟まずにアーカイブする本体。一覧の × は取り消しの手掛かりが無いので confirm を出すが、
+    /// サブセッション管理画面は同じ画面のアーカイブ欄へ移るだけで、その場で戻せる。
+    /// 押すたびに確認が出るほうが煩わしいので、そちらからはここを直接呼ぶ。
+    /// </summary>
+    private async Task ArchiveSessionCoreAsync(Guid sessionId)
+    {
         // 削除時と同様に、このCircuitの購読をセッション破棄前に解除する。
         ConPtyConnection.UnsubscribeFromSession(sessionId);
 
@@ -2810,8 +2830,100 @@
             subSessionParentSessionPath = session.FolderPath;
             subSessionParentSessionIsGitRepository = session.IsGitRepository;
             subSessionParentTerminalType = session.TerminalType;
+            // 管理タブに出す並びは一覧と同じ規則（SortOrder → 作成日時）にする。
+            // アーカイブ済みは一覧に出ていないので、ここでも対象外にする。
+            subSessionChildren = sessions
+                .Where(s => s.ParentSessionId == sessionId && !s.IsArchived)
+                .OrderBy(s => s.SortOrder)
+                .ThenBy(s => s.CreatedAt)
+                .ToList();
+            RefreshSubSessionArchivedChildren(sessionId);
             showSubSessionDialog = true;
         }
+    }
+
+    /// <summary>
+    /// サブセッション管理画面での並べ替えを受けて、SortOrder を振り直して保存する。
+    /// 保存はダイアログを閉じるのを待たない（並べ替えは操作＝結果なので、
+    /// 閉じ方によって結果が変わると混乱するため）。
+    /// </summary>
+    private async Task OnSubSessionReorder(List<Guid> orderedSessionIds)
+    {
+        try
+        {
+            var orders = new List<(Guid SessionId, int SortOrder)>();
+            for (var i = 0; i < orderedSessionIds.Count; i++)
+            {
+                var target = SessionManager.GetSessionInfo(orderedSessionIds[i]);
+                if (target == null)
+                    continue;
+                // 末尾に足される新規サブセッションのために、詰めた連番をそのまま採用する
+                target.SortOrder = i;
+                orders.Add((target.SessionId, i));
+            }
+
+            await SessionRepository.UpdateSortOrdersAsync(orders);
+
+            sessions = SessionManager.GetAllSessions().ToList();
+            subSessionChildren = sessions
+                .Where(s => s.ParentSessionId == subSessionParentSessionId && !s.IsArchived)
+                .OrderBy(s => s.SortOrder)
+                .ThenBy(s => s.CreatedAt)
+                .ToList();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Sub-session reorder failed");
+            toast?.ShowError(string.Format(L["Root.Toast.SubSessionReorderFailedFormat"], ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 管理タブに渡す一覧を作り直す。アーカイブ済みは戻す操作しかないので、
+    /// 並べ替えの対象にせずアーカイブ日時（新しい順）で並べる。
+    /// </summary>
+    private void RefreshSubSessionChildren(Guid parentSessionId)
+    {
+        subSessionChildren = sessions
+            .Where(s => s.ParentSessionId == parentSessionId && !s.IsArchived)
+            .OrderBy(s => s.SortOrder)
+            .ThenBy(s => s.CreatedAt)
+            .ToList();
+        RefreshSubSessionArchivedChildren(parentSessionId);
+    }
+
+    private void RefreshSubSessionArchivedChildren(Guid parentSessionId)
+    {
+        subSessionArchivedChildren = SessionManager.GetAllSessions()
+            .Where(s => s.ParentSessionId == parentSessionId && s.IsArchived)
+            .OrderByDescending(s => s.ArchivedAt ?? s.CreatedAt)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 管理タブからサブセッションをアーカイブする（＝一覧から消す）。
+    /// 一覧の × と同じ経路を通す＝挙動を二重に持たない。
+    /// </summary>
+    private async Task OnSubSessionArchive(Guid sessionId)
+    {
+        if (!subSessionParentSessionId.HasValue)
+            return;
+
+        await ArchiveSessionCoreAsync(sessionId);
+        RefreshSubSessionChildren(subSessionParentSessionId.Value);
+        StateHasChanged();
+    }
+
+    /// <summary>管理タブからアーカイブ済みサブセッションを一覧へ戻す。</summary>
+    private async Task OnSubSessionRestore(Guid sessionId)
+    {
+        if (!subSessionParentSessionId.HasValue)
+            return;
+
+        await RestoreArchivedSession(sessionId);
+        RefreshSubSessionChildren(subSessionParentSessionId.Value);
+        StateHasChanged();
     }
 
     private async Task OnSubSessionOperation(SubSessionDialog.SubSessionResult result)
@@ -2863,6 +2975,32 @@
                             string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
                     }
                     break;
+
+                case SubSessionDialog.SubSessionType.Clone:
+                    // クローンは「元のフォルダを指定済みの新規作成」。設定や専用コマンドは引き継がない
+                    // （引き継ぎは SessionOptionsSelector が常に既定値一式を書き出す都合と噛み合わず、
+                    // 起動オプションが黙って緩む事故になったため。同じフォルダに別 CLI を立てる、という
+                    // 本来の用途はフォルダの指定済みだけで足りる）。
+                    var cloneSource = result.SourceSessionId.HasValue
+                        ? SessionManager.GetSessionInfo(result.SourceSessionId.Value)
+                        : null;
+                    if (cloneSource != null)
+                    {
+                        newSession = await SessionManager.CreateSamePathSessionAsync(
+                            subSessionParentSessionId.Value, cloneSource.FolderPath, result.TerminalType, result.Options,
+                            string.IsNullOrWhiteSpace(result.SessionName) ? null : result.SessionName);
+                    }
+                    break;
+            }
+
+            if (newSession != null)
+            {
+                // 並べ替え済みの列の末尾に付ける（既定 0 のままだと先頭に割り込む）
+                var siblingMax = sessions
+                    .Where(s => s.ParentSessionId == subSessionParentSessionId && s.SessionId != newSession.SessionId)
+                    .Select(s => (int?)s.SortOrder)
+                    .Max();
+                newSession.SortOrder = (siblingMax ?? -1) + 1;
             }
 
             if (newSession != null)
@@ -2890,6 +3028,8 @@
                         string.Format(L["Root.Toast.SamePathSessionCreatedFormat"], GetSessionTypeName(result.TerminalType)),
                     SubSessionDialog.SubSessionType.NewFolder =>
                         string.Format(L["Root.Toast.NewFolderSessionCreatedFormat"], result.WorktreePath),
+                    SubSessionDialog.SubSessionType.Clone =>
+                        string.Format(L["Root.Toast.SubSessionClonedFormat"], newSession.GetDisplayName()),
                     _ => L["Root.Toast.SessionCreated"]
                 };
 

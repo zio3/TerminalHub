@@ -471,7 +471,7 @@
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>Session ID:</value></data>
   <data name="SessionSettings.Info.CopySessionId" xml:space="preserve"><value>Copy session ID</value></data>
-  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>Create sub-session</value></data>
+  <data name="SessionSettings.CreateSubSession" xml:space="preserve"><value>Manage sub-sessions</value></data>
   <data name="SessionSettings.OpenMemoManagement" xml:space="preserve"><value>Manage memos</value></data>
   <data name="SessionSettings.DisplayName.Label" xml:space="preserve"><value>Display name</value></data>
   <data name="SessionSettings.DisplayName.Placeholder" xml:space="preserve"><value>Custom name (optional)</value></data>
@@ -494,7 +494,7 @@
   <data name="SessionSettings.RestartFailed" xml:space="preserve"><value>Settings were saved, but session restart failed.</value></data>
 
   <!-- SubSession Dialog -->
-  <data name="SubSession.Title" xml:space="preserve"><value>Create Sub-session</value></data>
+  <data name="SubSession.Title" xml:space="preserve"><value>Manage Sub-sessions</value></data>
   <data name="SubSession.ParentSessionFormat" xml:space="preserve"><value>Parent session: {0}</value></data>
   <data name="SubSession.Tab.CreateWorktree" xml:space="preserve"><value>New worktree</value></data>
   <data name="SubSession.Tab.ExistingWorktree" xml:space="preserve"><value>Existing worktree</value></data>
@@ -682,4 +682,21 @@
   <data name="Settings.Security.AdditionalHosts.Help" xml:space="preserve"><value>One per line. Only names that auto-detection cannot find, e.g. a Tailscale MagicDNS name or a Cloudflare tunnel domain. You can paste straight from the address bar; the scheme and port are stripped automatically.</value></data>
   <data name="Settings.Security.DetectedHosts" xml:space="preserve"><value>Automatically allowed host names</value></data>
   <data name="Settings.Security.DetectedHosts.Help" xml:space="preserve"><value>Names that point at this PC. They are re-detected on every start, so no configuration is needed when the LAN IP changes. Connecting with a name listed neither here nor in &quot;Additional allowed host names&quot; above is rejected.</value></data>
+  <data name="SubSession.Tab.Manage" xml:space="preserve"><value>Manage</value></data>
+  <data name="SubSession.Manage.Empty" xml:space="preserve"><value>This session has no sub-sessions yet. Use the tabs above to create one.</value></data>
+  <data name="SubSession.Manage.Help" xml:space="preserve"><value>Drag the handle on the left to reorder (saved immediately). Clone creates another session in the same folder; Archive removes it from the list (you can restore it later).</value></data>
+  <data name="SubSession.Manage.Clone" xml:space="preserve"><value>Clone</value></data>
+  <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>Create a new session in the same folder (settings are not carried over)</value></data>
+  <data name="SubSession.Clone.SourceFormat" xml:space="preserve"><value>Cloning: {0}</value></data>
+  <data name="SubSession.Clone.Back" xml:space="preserve"><value>Back to list</value></data>
+  <data name="SubSession.Button.Clone" xml:space="preserve"><value>Create clone</value></data>
+  <data name="Root.Toast.SubSessionClonedFormat" xml:space="preserve"><value>Cloned {0}</value></data>
+  <data name="Root.Toast.SubSessionReorderFailedFormat" xml:space="preserve"><value>Failed to save the new order: {0}</value></data>
+  <data name="SubSession.Manage.Archive" xml:space="preserve"><value>Archive</value></data>
+  <data name="SubSession.Manage.ArchiveTitle" xml:space="preserve"><value>Remove from the list (the record is kept and can be restored)</value></data>
+  <data name="SubSession.Manage.ArchivedHeading" xml:space="preserve"><value>Archived</value></data>
+  <data name="SubSession.Manage.ArchivedHelp" xml:space="preserve"><value>Sub-sessions that are not shown in the list. Restoring puts them back.</value></data>
+  <data name="SubSession.Manage.Restore" xml:space="preserve"><value>Restore</value></data>
+  <data name="SubSession.Manage.RestoreTitle" xml:space="preserve"><value>Restore to the list</value></data>
+  <data name="SubSession.Manage.DragHandle" xml:space="preserve"><value>Drag to reorder</value></data>
 </root>

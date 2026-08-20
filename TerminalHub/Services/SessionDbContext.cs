@@ -10,7 +10,7 @@ namespace TerminalHub.Services
     {
         private readonly string _connectionString;
         private readonly ILogger<SessionDbContext> _logger;
-        private const int CurrentSchemaVersion = 14;
+        private const int CurrentSchemaVersion = 15;
 
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private bool _initialized = false;
@@ -363,6 +363,30 @@ namespace TerminalHub.Services
                 }
                 await SetSchemaVersionAsync(14);
                 _logger.LogInformation("[DB][マイグレーション] v14 適用完了");
+            }
+
+            if (currentVersion < 15)
+            {
+                // v15: Sessions に SortOrder（兄弟の中での並び順）を追加。
+                // 既存行は既定値 0 で揃うため、同値を作成日時で解決する読み出し側の並びは
+                // 従来（作成日時順）と変わらない＝並べ替えるまで見た目は動かない。
+                _logger.LogInformation("[DB][マイグレーション] v15 適用開始: Sessions に SortOrder カラムを追加");
+                await using (var connection = new SqliteConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    if (!await ColumnExistsAsync(connection, "Sessions", "SortOrder"))
+                    {
+                        await connection.ExecuteNonQueryAsync(
+                            "ALTER TABLE Sessions ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0");
+                        _logger.LogInformation("[DB][マイグレーション] v15: SortOrder カラムを追加");
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[DB][マイグレーション] v15: SortOrder カラムは既存のためスキップ");
+                    }
+                }
+                await SetSchemaVersionAsync(15);
+                _logger.LogInformation("[DB][マイグレーション] v15 適用完了");
             }
 
             _logger.LogInformation("[DB][マイグレーション] 完了");
