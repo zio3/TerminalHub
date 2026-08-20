@@ -686,7 +686,7 @@
   <data name="SubSession.Manage.Empty" xml:space="preserve"><value>This session has no sub-sessions yet. Use the tabs above to create one.</value></data>
   <data name="SubSession.Manage.Help" xml:space="preserve"><value>Drag the handle on the left to reorder (saved immediately). Clone creates another session in the same folder; Archive removes it from the list (you can restore it later).</value></data>
   <data name="SubSession.Manage.Clone" xml:space="preserve"><value>Clone</value></data>
-  <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>Create a new session with the same folder and settings</value></data>
+  <data name="SubSession.Manage.CloneTitle" xml:space="preserve"><value>Create a new session in the same folder (settings are not carried over)</value></data>
   <data name="SubSession.Clone.SourceFormat" xml:space="preserve"><value>Cloning: {0}</value></data>
   <data name="SubSession.Clone.Back" xml:space="preserve"><value>Back to list</value></data>
   <data name="SubSession.Button.Clone" xml:space="preserve"><value>Create clone</value></data>
