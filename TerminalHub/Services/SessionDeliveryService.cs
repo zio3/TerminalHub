@@ -466,10 +466,64 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         // 従って受け手の結果を上書きする混入事故になる。「選択肢を出すな」もスコープが
         // 決められない指示になるため書かない（その案内は依頼開始時のエンベロープが
         // 「この依頼を終えるまで」とスコープ付きで持つ）。
-        await SendSystemCallbackAsync(requesterId,
-            $"[TerminalHub] 依頼(contextId: {contextId})が {status} になりました。結果は get_context で取得してください。" +
-            "この通知はあなた(依頼元)への報告です。応答は不要、結果を踏まえて元の作業を続けてください。");
+        //
+        // 「誰が終わらせたか」と「結果の要約」を本文に載せる。ID だけだと、札を複数抱えた
+        // 依頼元は照合するまで何の通知か分からず、結果を見るのに get_context が必ず要る。
+        // 担当名と要約が載っていれば大半はその場で済む（=無駄なツール呼び出しが減る）。
+        var worker = string.IsNullOrWhiteSpace(record.UpdatedByName) ? "外部クライアント" : record.UpdatedByName;
+        var summary = FormatSummaryForNotice(record.Summary, out var truncated);
+
+        var notice = $"[TerminalHub] 依頼(contextId: {contextId}) {status}（担当: {worker}）";
+        if (summary.Length > 0)
+            notice += $": {summary}";
+        // 要約が無い/切り詰めたときだけ get_context へ誘導する。常に書くと、本文で足りている
+        // ケースでも律儀に叩かれてターンを1つ余計に消費する。
+        if (summary.Length == 0 || truncated)
+            notice += " 全文は get_context で取得。";
+        // 返信不要であることだけ短く添える。理由の説明は send_to_session のツール説明が持つ
+        // （ツール定義はセッション中ずっとコンテキストに載るので、毎回書くより確実）。
+        notice += " (応答不要)";
+
+        await SendSystemCallbackAsync(requesterId, notice);
     }
+
+    /// <summary>
+    /// 結果要約を通知本文へ埋め込める形に整える。エンベロープ付きの1行として送るため、
+    /// 改行・制御文字は空白へ潰し、長すぎるものは切り詰めて truncated で知らせる
+    /// （切り詰めたときは呼び出し側が get_context への誘導を足す）。
+    /// </summary>
+    private static string FormatSummaryForNotice(string? summary, out bool truncated)
+    {
+        truncated = false;
+        if (string.IsNullOrWhiteSpace(summary))
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder(summary.Length);
+        var lastWasSpace = false;
+        foreach (var ch in summary)
+        {
+            var isSpace = char.IsWhiteSpace(ch) || char.IsControl(ch);
+            if (isSpace)
+            {
+                if (sb.Length > 0 && !lastWasSpace)
+                    sb.Append(' ');
+                lastWasSpace = true;
+                continue;
+            }
+            sb.Append(ch);
+            lastWasSpace = false;
+        }
+
+        var flat = sb.ToString().TrimEnd();
+        if (flat.Length <= SummaryNoticeMaxLength)
+            return flat;
+
+        truncated = true;
+        return flat[..SummaryNoticeMaxLength];
+    }
+
+    /// <summary>通知本文へ載せる要約の上限文字数。超えた分は get_context 側で読ませる。</summary>
+    private const int SummaryNoticeMaxLength = 120;
 
     private async Task SendSystemCallbackAsync(Guid requesterSessionId, string text)
     {
