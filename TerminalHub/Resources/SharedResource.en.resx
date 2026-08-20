@@ -460,6 +460,13 @@
   <data name="SessionSettings.Info.Header" xml:space="preserve"><value>Session info</value></data>
   <data name="SessionSettings.Info.SessionName" xml:space="preserve"><value>Session name:</value></data>
   <data name="SessionSettings.Info.Folder" xml:space="preserve"><value>Folder:</value></data>
+  <data name="SessionSettings.LinkPlugins.Header" xml:space="preserve"><value>Link plugins</value></data>
+  <data name="SessionSettings.LinkPlugins.Help" xml:space="preserve"><value>Rules that turn text in the output into links. Higher in the list wins.</value></data>
+  <data name="SessionSettings.LinkPlugins.Empty" xml:space="preserve"><value>No plugins found. Put .js files in %LOCALAPPDATA%TerminalHubplugins.</value></data>
+  <data name="SessionSettings.LinkPlugins.Builtin" xml:space="preserve"><value>built-in</value></data>
+  <data name="SessionSettings.LinkPlugins.Missing" xml:space="preserve"><value>missing</value></data>
+  <data name="SessionSettings.LinkPlugins.MoveUp" xml:space="preserve"><value>Raise priority</value></data>
+  <data name="SessionSettings.LinkPlugins.MoveDown" xml:space="preserve"><value>Lower priority</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>Copy folder path</value></data>
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>Session ID:</value></data>
@@ -646,7 +653,6 @@
   <data name="Root.Toast.FolderOpenedFormat" xml:space="preserve"><value>Opened folder: {0}</value></data>
   <data name="Root.Toast.FileOpenedFormat" xml:space="preserve"><value>Opened file: {0}</value></data>
   <data name="Root.Toast.CommitNotFoundFormat" xml:space="preserve"><value>Commit not found: {0}</value></data>
-  <data name="Root.Toast.PrNotOnGitHubFormat" xml:space="preserve"><value>Not a GitHub repository, cannot open: {0}</value></data>
   <data name="Root.Toast.TerminalDisposed" xml:space="preserve"><value>Terminal disposed</value></data>
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>Terminal dispose error: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>Terminal recreated</value></data>

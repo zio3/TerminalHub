@@ -1019,59 +1019,6 @@
         }
     }
 
-    /// <summary>
-    /// ターミナル内の PR/Issue 番号（#123）がクリックされた時の処理（JavaScript から呼び出される）。
-    /// セッションの作業フォルダの origin が GitHub なら該当 PR ページを解決する。
-    /// 外部ブラウザを開く＝外部遷移するため、コピー動作モード（モバイル全画面向け）を尊重する:
-    /// copyMode=true のときは開かずに URL を返し、JS 側でクリップボードへコピーさせる。
-    /// GitHub 以外・解決不可なら警告トーストのみで null を返す（クリックしても無害）。
-    /// </summary>
-    /// <returns>コピー動作モードでコピーすべき URL。開いた場合・解決不可なら null</returns>
-    [JSInvokable]
-    public async Task<string?> OnTerminalPrNumberClick(string sessionId, string prText, bool copyMode)
-    {
-        try
-        {
-            if (!Guid.TryParse(sessionId, out var guid))
-                return null;
-
-            var session = sessions.FirstOrDefault(s => s.SessionId == guid);
-            var basePath = session?.FolderPath;
-            if (string.IsNullOrEmpty(basePath) || string.IsNullOrWhiteSpace(prText))
-                return null;
-
-            // "#123" から数字だけ取り出す
-            var digits = new string(prText.Where(char.IsDigit).ToArray());
-            if (!int.TryParse(digits, out var number) || number <= 0)
-                return null;
-
-            var url = await GitService.GetGitHubPrUrlAsync(basePath, number);
-            if (string.IsNullOrEmpty(url))
-            {
-                // origin が GitHub でない or 取得失敗（誤検出クリック含む・無害）
-                toast?.ShowWarning(string.Format(L["Root.Toast.PrNotOnGitHubFormat"], prText.Trim()));
-                return null;
-            }
-
-            if (copyMode)
-            {
-                // 開かずに URL を返す（JS 側で copyLinkToClipboard する）
-                return url;
-            }
-
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true,
-            });
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "[PrNumberClick] PR ページを開けませんでした: {PrText}", prText);
-            return null;
-        }
-    }
 
     private async Task AddSession()
     {
@@ -1702,6 +1649,46 @@
     {
         terminalDotNetRef ??= DotNetObjectReference.Create<object>(this);
         activeTerminal = await TerminalService.InitializeTerminalAsync(sessionId, terminalDotNetRef, terminalFontSize);
+
+        // リンクプラグインはターミナル単位で登録するため、作り直すたびに貼り直す
+        await ApplyLinkPluginsAsync(sessionId);
+    }
+
+    /// <summary>
+    /// このセッションで採用しているリンクプラグインを xterm へ登録する。
+    /// 受け渡しデータ（origin 等）は検出時に同期で必要なので、登録前に押し込んでおく。
+    /// </summary>
+    private async Task ApplyLinkPluginsAsync(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session == null) return;
+
+        try
+        {
+            var originUrl = session.IsGitRepository
+                ? await GitService.GetOriginUrlAsync(session.FolderPath)
+                : null;
+
+            await JSRuntime.InvokeVoidAsync("setSessionPluginContext", sessionId.ToString(), new
+            {
+                folderPath = session.FolderPath,
+                terminalType = session.TerminalType.ToString(),
+                git = new { originUrl, branch = session.GitBranch }
+            });
+
+            // 採用しているものだけを順に渡す。登録順がそのまま優先度になる
+            var settings = session.LinkPlugins
+                .Where(p => p.Enabled)
+                .OrderBy(p => p.Order)
+                .Select(p => new { id = p.Id, vars = p.Vars })
+                .ToList();
+
+            await JSRuntime.InvokeVoidAsync("applyLinkPlugins", sessionId.ToString(), settings);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[LinkPlugins] 登録に失敗: {SessionId}", sessionId);
+        }
     }
 
     private async Task ProcessReceivedData(Guid sessionId, string data, bool capturedByReplay)
@@ -3352,6 +3339,9 @@
 
             // 設定ダイアログからは再起動を伴うことがあるため、モデルを読み直す
             await RefreshModelAfterRestartAsync(settingsSessionId.Value);
+
+            // 採用や順序を変えた可能性があるのでリンクプラグインを貼り直す
+            await ApplyLinkPluginsAsync(settingsSessionId.Value);
         }
 
         // セッションが再起動された場合、ターミナルコンポーネントも再読み込み
