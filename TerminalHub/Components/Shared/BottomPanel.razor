@@ -387,6 +387,26 @@
         return true;
     }
 
+    /// <summary>
+    /// テキスト入力タブへ文字列を流し込み、そのタブを前面に出す（送信はしない）。
+    /// 入力欄の中身は BottomPanel 側の辞書が持つため、ここが唯一の入り口になる。
+    /// </summary>
+    public async Task InsertToInputAsync(string text)
+    {
+        var tab = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.TextInput);
+        if (tab == null) return;
+
+        SetTextInputPanelText(tab.Id, text);
+        if (ActiveTabId != tab.Id)
+        {
+            await SelectTab(tab.Id);
+        }
+        else
+        {
+            StateHasChanged();
+        }
+    }
+
     private string GetTabIcon(BottomPanelTabType type)
     {
         return type switch
