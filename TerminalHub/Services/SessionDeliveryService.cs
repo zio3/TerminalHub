@@ -68,9 +68,16 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
 
     /// <summary>
     /// 本文送信から Enter までの待ち。Codex 等の TUI CLI は本文取り込み前に \r が来ると
-    /// 送信確定されず入力欄で止まるため、UI の SendInput と同じく 0.2 秒挟む。
+    /// 送信確定されず入力欄で止まるため、間を挟む。
+    ///
+    /// UI の SendInput と同じ 0.2 秒だったが、その値でも取りこぼしが出る（本文は入力欄に
+    /// 入っているのに未提出のまま止まり、人間が手で Enter を押すまで進まない。Claude Code /
+    /// Codex どちらでも観測）。この経路は自動メッセージの配送で人間が待っていないので、
+    /// 待ちを倍にしても誰も気づかない。UI 側は人が待つので伸ばさず、ここだけ 0.4 秒にする。
+    /// 根治ではない（TUI 側の取りこぼしなので確率を下げるだけ）。頻発するなら
+    /// UserPromptSubmit hook を ACK にした Enter 再送ウォッチドッグへ進む。
     /// </summary>
-    private static readonly TimeSpan SubmitDelay = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan SubmitDelay = TimeSpan.FromMilliseconds(400);
 
     /// <summary>
     /// システムが札へ書き込むときの記名。接続キー検証からしか設定されない値なので
