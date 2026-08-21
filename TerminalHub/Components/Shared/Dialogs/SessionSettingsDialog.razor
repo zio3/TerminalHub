@@ -374,7 +374,7 @@
                                     <div class="form-check flex-grow-1 mb-0">
                                         <input class="form-check-input" type="checkbox"
                                                checked="@item.Enabled"
-                                               @onchange="e => SetLinkPluginEnabled(item, e)"
+                                               @onchange="async e => await SetLinkPluginEnabled(item, e)"
                                                id="@($"plugin-{item.Id}")">
                                         <label class="form-check-label" for="@($"plugin-{item.Id}")">
                                             <code>@item.Id</code>
@@ -392,13 +392,13 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
                                             title="@L["SessionSettings.LinkPlugins.MoveUp"]"
                                             disabled="@(index == 0)"
-                                            @onclick="() => MoveLinkPlugin(item, -1)">
+                                            @onclick="async () => await MoveLinkPlugin(item, -1)">
                                         <i class="bi bi-arrow-up"></i>
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
                                             title="@L["SessionSettings.LinkPlugins.MoveDown"]"
                                             disabled="@(index == editingLinkPlugins.Count - 1)"
-                                            @onclick="() => MoveLinkPlugin(item, 1)">
+                                            @onclick="async () => await MoveLinkPlugin(item, 1)">
                                         <i class="bi bi-arrow-down"></i>
                                     </button>
                                 </div>
@@ -411,7 +411,7 @@
                                                 <span class="input-group-text">@name</span>
                                                 <input type="text" class="form-control"
                                                        value="@(item.Vars.TryGetValue(name, out var v) ? v : "")"
-                                                       @onchange="e => SetLinkPluginVar(item, name, e)" />
+                                                       @onchange="async e => await SetLinkPluginVar(item, name, e)" />
                                             </div>
                                         }
                                     </div>
@@ -592,7 +592,6 @@
     {
         pluginsFolderPath = AppDataPaths.GetPluginsFolder();
         linkPluginDocAvailable = LinkPluginDocPath.Get() != null;
-        linkPluginTestResults = null;
         showLinkPluginsDialog = true;
 
         await RefreshLinkPluginCatalogAsync();
@@ -609,9 +608,22 @@
                 Order = editingLinkPlugins.Count
             });
         }
+
+        // 前回の入力が残っているなら、増えた .js を含めて取り直す
+        // （文字列だけ残って結果が消えていると「反映されていない」に見える）
+        linkPluginTestResults = null;
+        if (!string.IsNullOrEmpty(linkPluginTestLine))
+        {
+            await RunLinkPluginTestAsync();
+        }
     }
 
-    private void CloseLinkPluginsDialog() => showLinkPluginsDialog = false;
+    private void CloseLinkPluginsDialog()
+    {
+        showLinkPluginsDialog = false;
+        // 待機中のタスクを無効化する（閉じたあとに走らせない）
+        linkPluginTestInputSeq++;
+    }
 
     private void OpenPluginsFolder()
     {
@@ -619,13 +631,22 @@
         ExplorerLauncher.OpenFolder(AppDataPaths.GetPluginsFolder());
     }
 
-    /// <summary>
-    /// テスト欄の入力を受けて、少し待ってから検出を走らせる。
-    /// 1文字ごとに JS を呼ぶと往復が無駄なので、最後の入力から一定時間空いたものだけ実行する。
-    /// </summary>
     private async Task OnLinkPluginTestInputAsync(ChangeEventArgs e)
     {
         linkPluginTestLine = e.Value?.ToString() ?? "";
+        await ScheduleLinkPluginTestAsync();
+    }
+
+    /// <summary>
+    /// 少し待ってから検出を走らせる。1文字ごと・チェックのたびに JS を呼ぶと往復が無駄なので、
+    /// 最後の操作から一定時間空いたものだけ実行する。
+    ///
+    /// シーケンスは何よりも先に進める。空入力で先に return すると、直前の入力で待っている
+    /// タスクが生き残り、消したあとに古い結果が表示される。
+    /// </summary>
+    private async Task ScheduleLinkPluginTestAsync()
+    {
+        var seq = ++linkPluginTestInputSeq;
 
         if (string.IsNullOrEmpty(linkPluginTestLine))
         {
@@ -633,9 +654,8 @@
             return;
         }
 
-        var seq = ++linkPluginTestInputSeq;
         await Task.Delay(250);
-        if (seq != linkPluginTestInputSeq) return;   // 続けて打たれたので、こちらは捨てる
+        if (seq != linkPluginTestInputSeq) return;   // 続けて操作されたので、こちらは捨てる
 
         await RunLinkPluginTestAsync();
         StateHasChanged();
@@ -683,17 +703,21 @@
         }
     }
 
-    private void SetLinkPluginEnabled(LinkPluginSetting item, ChangeEventArgs e)
+    // 採用・変数・順序はどれも結果を変える。変えたら追従しないと、
+    // 「文字列を貼る → 変数を入れる」という普通の手順で古い結果を見ることになる
+    private async Task SetLinkPluginEnabled(LinkPluginSetting item, ChangeEventArgs e)
     {
         item.Enabled = e.Value is bool b && b;
+        await ScheduleLinkPluginTestAsync();
     }
 
-    private void SetLinkPluginVar(LinkPluginSetting item, string name, ChangeEventArgs e)
+    private async Task SetLinkPluginVar(LinkPluginSetting item, string name, ChangeEventArgs e)
     {
         item.Vars[name] = e.Value?.ToString() ?? "";
+        await ScheduleLinkPluginTestAsync();
     }
 
-    private void MoveLinkPlugin(LinkPluginSetting item, int delta)
+    private async Task MoveLinkPlugin(LinkPluginSetting item, int delta)
     {
         var from = editingLinkPlugins.IndexOf(item);
         var to = from + delta;
