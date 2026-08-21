@@ -467,6 +467,16 @@
   <data name="SessionSettings.LinkPlugins.Missing" xml:space="preserve"><value>見つかりません</value></data>
   <data name="SessionSettings.LinkPlugins.MoveUp" xml:space="preserve"><value>優先度を上げる</value></data>
   <data name="SessionSettings.LinkPlugins.MoveDown" xml:space="preserve"><value>優先度を下げる</value></data>
+  <data name="SessionSettings.LinkPlugins.ManageButton" xml:space="preserve"><value>リンクプラグイン</value></data>
+  <data name="SessionSettings.LinkPlugins.OpenFolder" xml:space="preserve"><value>プラグインフォルダを開く</value></data>
+  <data name="SessionSettings.LinkPlugins.FolderHelp" xml:space="preserve"><value>このフォルダで Claude Code や Codex を動かし、{0} を読ませれば自作できます。</value></data>
+  <data name="SessionSettings.LinkPlugins.OpenDoc" xml:space="preserve"><value>書き方を開く</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.Header" xml:space="preserve"><value>動作テスト</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.Placeholder" xml:space="preserve"><value>テストしたい行を貼り付け（例: Fixed #123）</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.NoMatch" xml:space="preserve"><value>この行では何もリンクになりません。</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.Origin" xml:space="preserve"><value>origin: {0}</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.NoOrigin" xml:space="preserve"><value>origin を取得できません（Git リポジトリでないか、origin が未設定）。同梱の github-pr は origin から URL を組み立てるため、この状態では何もリンクになりません。</value></data>
+  <data name="SessionSettings.LinkPlugins.Test.Overridden" xml:space="preserve"><value>他が優先</value></data>
   <data name="SessionSettings.Info.CopyFolderPath" xml:space="preserve"><value>フォルダパスをコピー</value></data>
   <data name="SessionSettings.Info.OpenFolder" xml:space="preserve"><value>フォルダを開く</value></data>
   <data name="SessionSettings.Info.SessionId" xml:space="preserve"><value>セッションID:</value></data>

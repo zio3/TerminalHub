@@ -356,6 +356,15 @@ app.MapGet("/api/plugins", (IWebHostEnvironment env) =>
     return Results.Ok(user.Concat(builtin));
 });
 
+// リンクプラグインの書き方（docs/link-plugin-authoring.md）。設定画面の「書き方を開く」から読む。
+// ブラウザで開いて読めればいいので text/plain で返す（ダウンロードにしない）。
+app.MapGet("/api/plugins/doc", () =>
+{
+    var path = LinkPluginDocPath.Get();
+    if (path == null) return Results.NotFound();
+    return Results.File(path, "text/plain; charset=utf-8");
+});
+
 // Hook 通知 API エンドポイント（汎用形式: TerminalHub 自作の HookNotification JSON を直接受ける）。
 // 現在の利用者は --notify --event 経路のみ。将来の hook レス CLI（Antigravity 等）が
 // 共通 HookNotification 形式で送る場合の受け皿として維持する（RunNotifyModeAsync のコメント参照）。
@@ -473,6 +482,10 @@ app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, stri
 
 // MCP エンドポイント（/mcp）。Claude Code 等の MCP クライアントがここへ接続する。
 app.MapMcp("/mcp");
+
+// プラグインフォルダに「リンクプラグインの作り方」を置く。フォルダで CLI の AI を動かして
+// 自作する使い方を想定しているため、仕様がフォルダの中にあるほうが早い。
+LinkPluginDocPath.EnsureInPluginsFolder(app.Services.GetRequiredService<ILogger<Program>>());
 
 app.Run();
 return 0;

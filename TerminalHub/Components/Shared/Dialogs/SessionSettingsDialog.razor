@@ -10,6 +10,7 @@
 @inject ISessionMemoRepository MemoRepository
 @inject IStringLocalizer<SharedResource> L
 @inject IExplorerLauncherService ExplorerLauncher
+@inject IGitService GitService
 
 <div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="display: @(IsVisible ? "block" : "none"); background-color: var(--th-surface-overlay);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -82,79 +83,17 @@
                                 <span class="badge bg-secondary ms-1">@editingSessionCommands.Count</span>
                             }
                         </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenLinkPluginsDialogAsync">
+                            <i class="bi bi-link-45deg me-1"></i>@L["SessionSettings.LinkPlugins.ManageButton"]
+                            @if (editingLinkPlugins.Count(p => p.Enabled) > 0)
+                            {
+                                @* 有効な数だけ出す。同梱ぶんが常に一覧に並ぶので、総数だと常に数字が出て情報にならない *@
+                                <span class="badge bg-secondary ms-1">@editingLinkPlugins.Count(p => p.Enabled)</span>
+                            }
+                        </button>
                     </div>
 
                     <hr />
-
-                    <!-- リンクプラグイン: 出力中のトークンを URL リンクにする規則。採用・順序・変数をセッション単位で持つ -->
-                    <div class="mb-3">
-                        <h6 class="text-muted">@L["SessionSettings.LinkPlugins.Header"]</h6>
-                        @if (linkPluginCatalog.Count == 0)
-                        {
-                            <p class="text-muted small mb-0">@L["SessionSettings.LinkPlugins.Empty"]</p>
-                        }
-                        else
-                        {
-                            <p class="text-muted small">
-                                <i class="bi bi-info-circle me-1"></i>@L["SessionSettings.LinkPlugins.Help"]
-                            </p>
-                            <ul class="list-group">
-                                @foreach (var item in editingLinkPlugins)
-                                {
-                                    var meta = linkPluginCatalog.FirstOrDefault(c => c.Id == item.Id);
-                                    var index = editingLinkPlugins.IndexOf(item);
-                                    <li class="list-group-item">
-                                        <div class="d-flex align-items-center">
-                                            <div class="form-check flex-grow-1 mb-0">
-                                                <input class="form-check-input" type="checkbox"
-                                                       checked="@item.Enabled"
-                                                       @onchange="e => SetLinkPluginEnabled(item, e)"
-                                                       id="@($"plugin-{item.Id}")">
-                                                <label class="form-check-label" for="@($"plugin-{item.Id}")">
-                                                    <code>@item.Id</code>
-                                                    @if (meta?.Source == "builtin")
-                                                    {
-                                                        <span class="badge text-bg-secondary ms-1">@L["SessionSettings.LinkPlugins.Builtin"]</span>
-                                                    }
-                                                    @if (meta == null)
-                                                    {
-                                                        <span class="badge text-bg-warning ms-1">@L["SessionSettings.LinkPlugins.Missing"]</span>
-                                                    }
-                                                </label>
-                                            </div>
-                                            @* 上にあるものほど先に登録され、位置を取り合ったときに勝つ *@
-                                            <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
-                                                    title="@L["SessionSettings.LinkPlugins.MoveUp"]"
-                                                    disabled="@(index == 0)"
-                                                    @onclick="() => MoveLinkPlugin(item, -1)">
-                                                <i class="bi bi-arrow-up"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
-                                                    title="@L["SessionSettings.LinkPlugins.MoveDown"]"
-                                                    disabled="@(index == editingLinkPlugins.Count - 1)"
-                                                    @onclick="() => MoveLinkPlugin(item, 1)">
-                                                <i class="bi bi-arrow-down"></i>
-                                            </button>
-                                        </div>
-                                        @if (item.Enabled && meta is not null && meta.Vars.Length > 0)
-                                        {
-                                            <div class="mt-2 ms-4">
-                                                @foreach (var name in meta.Vars)
-                                                {
-                                                    <div class="input-group input-group-sm mb-1">
-                                                        <span class="input-group-text">@name</span>
-                                                        <input type="text" class="form-control"
-                                                               value="@(item.Vars.TryGetValue(name, out var v) ? v : "")"
-                                                               @onchange="e => SetLinkPluginVar(item, name, e)" />
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                    </li>
-                                }
-                            </ul>
-                        }
-                    </div>
 
                     <hr />
 
@@ -385,6 +324,171 @@
                    ShowPropagateOption="IsParentSession"
                    OnSave="HandleSessionCommandSave" />
 
+<!-- リンクプラグイン管理ダイアログ（編集バッファ editingLinkPlugins を直接操作。本体ダイアログの保存で確定）
+     出力中のトークンを URL リンクにする規則。採用・順序・変数をセッション単位で持つ -->
+<div class="modal fade @(showLinkPluginsDialog ? "show" : "")" tabindex="-1" style="display: @(showLinkPluginsDialog ? "block" : "none"); background-color: var(--th-surface-overlay);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-link-45deg me-2"></i>@L["SessionSettings.LinkPlugins.Header"]
+                </h5>
+                <button type="button" class="btn-close" @onclick="CloseLinkPluginsDialog"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    <i class="bi bi-info-circle me-1"></i>@L["SessionSettings.LinkPlugins.Help"]
+                </p>
+
+                @* 「読む → 書かせる → 置く」をこの画面で完結させるための動線 *@
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenPluginsFolder">
+                        <i class="bi bi-folder2-open me-1"></i>@L["SessionSettings.LinkPlugins.OpenFolder"]
+                    </button>
+                    @if (linkPluginDocAvailable)
+                    {
+                        <a class="btn btn-outline-secondary btn-sm" href="/api/plugins/doc" target="_blank" rel="noopener">
+                            <i class="bi bi-file-earmark-text me-1"></i>@L["SessionSettings.LinkPlugins.OpenDoc"]
+                        </a>
+                    }
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted d-block text-break"><code>@pluginsFolderPath</code></small>
+                    @* このフォルダで CLI の AI を動かして自作する導線。仕様は起動時にここへ置かれる *@
+                    <small class="text-muted d-block">@string.Format(L["SessionSettings.LinkPlugins.FolderHelp"], LinkPluginDocPath.PluginsFolderFileName)</small>
+                </div>
+
+                @if (linkPluginCatalog.Count == 0)
+                {
+                    <p class="text-muted small mb-0">@L["SessionSettings.LinkPlugins.Empty"]</p>
+                }
+                else
+                {
+                    <ul class="list-group">
+                        @foreach (var item in editingLinkPlugins)
+                        {
+                            var meta = linkPluginCatalog.FirstOrDefault(c => c.Id == item.Id);
+                            var index = editingLinkPlugins.IndexOf(item);
+                            <li class="list-group-item">
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check flex-grow-1 mb-0">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@item.Enabled"
+                                               @onchange="async e => await SetLinkPluginEnabled(item, e)"
+                                               id="@($"plugin-{item.Id}")">
+                                        <label class="form-check-label" for="@($"plugin-{item.Id}")">
+                                            <code>@item.Id</code>
+                                            @if (meta?.Source == "builtin")
+                                            {
+                                                <span class="badge text-bg-secondary ms-1">@L["SessionSettings.LinkPlugins.Builtin"]</span>
+                                            }
+                                            @if (meta == null)
+                                            {
+                                                <span class="badge text-bg-warning ms-1">@L["SessionSettings.LinkPlugins.Missing"]</span>
+                                            }
+                                        </label>
+                                    </div>
+                                    @* 上にあるものほど先に登録され、位置を取り合ったときに勝つ *@
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                            title="@L["SessionSettings.LinkPlugins.MoveUp"]"
+                                            disabled="@(index == 0)"
+                                            @onclick="async () => await MoveLinkPlugin(item, -1)">
+                                        <i class="bi bi-arrow-up"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                            title="@L["SessionSettings.LinkPlugins.MoveDown"]"
+                                            disabled="@(index == editingLinkPlugins.Count - 1)"
+                                            @onclick="async () => await MoveLinkPlugin(item, 1)">
+                                        <i class="bi bi-arrow-down"></i>
+                                    </button>
+                                </div>
+                                @if (item.Enabled && meta is not null && meta.Vars.Length > 0)
+                                {
+                                    <div class="mt-2 ms-4">
+                                        @foreach (var name in meta.Vars)
+                                        {
+                                            <div class="input-group input-group-sm mb-1">
+                                                <span class="input-group-text">@name</span>
+                                                <input type="text" class="form-control"
+                                                       value="@(item.Vars.TryGetValue(name, out var v) ? v : "")"
+                                                       @onchange="async e => await SetLinkPluginVar(item, name, e)" />
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+
+                    <hr />
+
+                    @* 動作確認: 1行打って「何が引っかかって、どのリンクになるか」を見る。
+                       実際の検出と同じ経路（matchPlugin）を通すので、ターミナルに出るまで待たなくていい *@
+                    <h6 class="text-muted">@L["SessionSettings.LinkPlugins.Test.Header"]</h6>
+                    @* 打つそばから結果が変わる。ボタンを押させると「試し忘れ」が起きるうえ、
+                       正規表現を詰めていく作業は1文字ずつ確かめたいため *@
+                    <input type="text" class="form-control form-control-sm mb-2"
+                           value="@linkPluginTestLine"
+                           @oninput="OnLinkPluginTestInputAsync"
+                           placeholder="@L["SessionSettings.LinkPlugins.Test.Placeholder"]" />
+                    @if (linkPluginTestResults != null)
+                    {
+                        @* 同梱の github-pr は origin から owner/repo を組み立てるため、
+                           origin が無い・github 以外だと何も起きない。理由が分かるよう出す *@
+                        <small class="text-muted d-block mb-1">
+                            @if (string.IsNullOrEmpty(linkPluginTestOrigin))
+                            {
+                                @L["SessionSettings.LinkPlugins.Test.NoOrigin"]
+                            }
+                            else
+                            {
+                                @string.Format(L["SessionSettings.LinkPlugins.Test.Origin"], linkPluginTestOrigin)
+                            }
+                        </small>
+                        @if (linkPluginTestResults.Count == 0)
+                        {
+                            <p class="text-muted small mb-0">@L["SessionSettings.LinkPlugins.Test.NoMatch"]</p>
+                        }
+                        else
+                        {
+                            <ul class="list-group list-group-sm">
+                                @foreach (var hit in linkPluginTestResults)
+                                {
+                                    <li class="list-group-item py-1 px-2 small @(hit.Won ? "" : "text-muted")">
+                                        @if (hit.Error != null)
+                                        {
+                                            <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                                            <code>@hit.Id</code>
+                                            <span class="ms-2">@hit.Error</span>
+                                        }
+                                        else
+                                        {
+                                            <code>@hit.Text</code>
+                                            <i class="bi bi-arrow-right mx-2"></i>
+                                            <span class="text-break">@hit.Url</span>
+                                            <span class="badge bg-secondary bg-opacity-25 text-muted ms-2" style="font-weight: normal;">@hit.Id</span>
+                                            @if (!hit.Won)
+                                            {
+                                                @* 同じ位置を先に取られている。実際の画面ではこちらは出ない *@
+                                                <span class="badge text-bg-warning ms-1">@L["SessionSettings.LinkPlugins.Test.Overridden"]</span>
+                                            }
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseLinkPluginsDialog">
+                    @L["Common.Close"]
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public Guid? SessionId { get; set; }
@@ -414,16 +518,7 @@
     /// </summary>
     private async Task LoadLinkPluginsAsync(SessionInfo session)
     {
-        try
-        {
-            var catalog = await JSRuntime.InvokeAsync<LinkPluginMeta[]>("listLinkPlugins");
-            linkPluginCatalog = catalog.ToList();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "[LinkPlugins] 一覧の取得に失敗");
-            linkPluginCatalog = new();
-        }
+        await RefreshLinkPluginCatalogAsync();
 
         var saved = session.LinkPlugins.Select(p => new LinkPluginSetting
         {
@@ -449,25 +544,189 @@
         }
 
         editingLinkPlugins = saved;
+        linkPluginsUntouched = untouched;
     }
 
-    private void SetLinkPluginEnabled(LinkPluginSetting item, ChangeEventArgs e)
+    /// <summary>
+    /// 読み込み済みプラグインの一覧（カタログ）を取り直す。JS 側は呼ぶたびに .js を読み直すので、
+    /// 「フォルダを開く → .js を足す → 画面を開き直す」で反映される。
+    /// </summary>
+    private async Task RefreshLinkPluginCatalogAsync()
+    {
+        try
+        {
+            var catalog = await JSRuntime.InvokeAsync<LinkPluginMeta[]>("listLinkPlugins");
+            linkPluginCatalog = catalog.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[LinkPlugins] 一覧の取得に失敗");
+            linkPluginCatalog = new();
+        }
+    }
+
+
+    // ===== リンクプラグイン管理ダイアログ =====
+
+    private bool showLinkPluginsDialog = false;
+    // このセッションが一度も保存していないか（あとから増えた同梱プラグインの既定採用の判断に使う）
+    private bool linkPluginsUntouched = false;
+    private string pluginsFolderPath = "";
+    private bool linkPluginDocAvailable = false;
+    private string linkPluginTestLine = "";
+    // 入力ごとに走らせると打鍵のたびに JS 往復が起きるので、最後の入力から少し待つ
+    private int linkPluginTestInputSeq = 0;
+    private List<LinkPluginTestHit>? linkPluginTestResults = null;
+    // 直近のテストで使った origin。リンクにならない理由の大半がここなので画面に出す
+    private string? linkPluginTestOrigin = null;
+
+    private sealed record LinkPluginTestHit(string Id, string? Text, string? Url, int Start, bool Won, string? Error);
+
+    /// <summary>
+    /// 専用ダイアログを開く。開くたびにカタログを取り直し、増えた .js を一覧へ足す。
+    /// 「フォルダを開く → .js を書く → この画面を開き直す」が主な導線なので、
+    /// ここで読み直さないと外側の設定ごと閉じ直すまで反映されない。
+    /// 編集中の採用・順序・変数（未保存）は保持し、差分だけを足し引きする。
+    /// </summary>
+    private async Task OpenLinkPluginsDialogAsync()
+    {
+        pluginsFolderPath = AppDataPaths.GetPluginsFolder();
+        linkPluginDocAvailable = LinkPluginDocPath.Get() != null;
+        showLinkPluginsDialog = true;
+
+        await RefreshLinkPluginCatalogAsync();
+
+        // 増えたものを末尾に足す。消えたものは残す（設定に無いファイルは
+        // 「見つかりません」表示のまま。置き直せば復活し、変数の再入力も要らない）
+        foreach (var meta in linkPluginCatalog)
+        {
+            if (editingLinkPlugins.Any(s => s.Id == meta.Id)) continue;
+            editingLinkPlugins.Add(new LinkPluginSetting
+            {
+                Id = meta.Id,
+                Enabled = linkPluginsUntouched && LinkPluginDefaults.IsDefaultEnabled(meta.Id),
+                Order = editingLinkPlugins.Count
+            });
+        }
+
+        // 前回の入力が残っているなら、増えた .js を含めて取り直す
+        // （文字列だけ残って結果が消えていると「反映されていない」に見える）
+        linkPluginTestResults = null;
+        if (!string.IsNullOrEmpty(linkPluginTestLine))
+        {
+            await RunLinkPluginTestAsync();
+        }
+    }
+
+    private void CloseLinkPluginsDialog()
+    {
+        showLinkPluginsDialog = false;
+        // 待機中のタスクを無効化する（閉じたあとに走らせない）
+        linkPluginTestInputSeq++;
+    }
+
+    private void OpenPluginsFolder()
+    {
+        // GetPluginsFolder は無ければ作るので、初回でも空のフォルダが開く
+        ExplorerLauncher.OpenFolder(AppDataPaths.GetPluginsFolder());
+    }
+
+    private async Task OnLinkPluginTestInputAsync(ChangeEventArgs e)
+    {
+        linkPluginTestLine = e.Value?.ToString() ?? "";
+        await ScheduleLinkPluginTestAsync();
+    }
+
+    /// <summary>
+    /// 少し待ってから検出を走らせる。1文字ごと・チェックのたびに JS を呼ぶと往復が無駄なので、
+    /// 最後の操作から一定時間空いたものだけ実行する。
+    ///
+    /// シーケンスは何よりも先に進める。空入力で先に return すると、直前の入力で待っている
+    /// タスクが生き残り、消したあとに古い結果が表示される。
+    /// </summary>
+    private async Task ScheduleLinkPluginTestAsync()
+    {
+        var seq = ++linkPluginTestInputSeq;
+
+        if (string.IsNullOrEmpty(linkPluginTestLine))
+        {
+            linkPluginTestResults = null;
+            return;
+        }
+
+        await Task.Delay(250);
+        if (seq != linkPluginTestInputSeq) return;   // 続けて操作されたので、こちらは捨てる
+
+        await RunLinkPluginTestAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// テスト欄の1行に、いま編集中の採用・順序・変数をそのまま当てる。
+    /// 検出は実際と同じ JS 側の matchPlugin を通る（テストは通るのに本番は違う、を避ける）。
+    /// ctx も本番と同じものを押し込んでから走らせる（origin を見るプラグインが動かないため）。
+    /// </summary>
+    private async Task RunLinkPluginTestAsync()
+    {
+        if (sessionInfo == null) return;
+
+        try
+        {
+            // IsGitRepository はセッション読み込み時の判定なので、これを条件にすると
+            // あとから git init した場合などに取り逃す。リポジトリでなければ null が返るだけ
+            var originUrl = await GitService.GetOriginUrlAsync(sessionInfo.FolderPath);
+            linkPluginTestOrigin = originUrl;
+
+            await JSRuntime.InvokeVoidAsync("setSessionPluginContext", sessionInfo.SessionId.ToString(), new
+            {
+                folderPath = sessionInfo.FolderPath,
+                terminalType = sessionInfo.TerminalType.ToString(),
+                git = new { originUrl, branch = sessionInfo.GitBranch }
+            });
+
+            var settings = editingLinkPlugins
+                .Where(p => p.Enabled)
+                .Select(p => new { id = p.Id, vars = p.Vars })
+                .ToList();
+
+            var hits = await JSRuntime.InvokeAsync<LinkPluginTestHit[]>(
+                "testLinkPlugins", sessionInfo.SessionId.ToString(), linkPluginTestLine, settings);
+            linkPluginTestResults = hits.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[LinkPlugins] テストの実行に失敗");
+            linkPluginTestResults = new List<LinkPluginTestHit>
+            {
+                new("", null, null, 0, false, ex.Message)
+            };
+        }
+    }
+
+    // 採用・変数・順序はどれも結果を変える。変えたら追従しないと、
+    // 「文字列を貼る → 変数を入れる」という普通の手順で古い結果を見ることになる
+    private async Task SetLinkPluginEnabled(LinkPluginSetting item, ChangeEventArgs e)
     {
         item.Enabled = e.Value is bool b && b;
+        await ScheduleLinkPluginTestAsync();
     }
 
-    private void SetLinkPluginVar(LinkPluginSetting item, string name, ChangeEventArgs e)
+    private async Task SetLinkPluginVar(LinkPluginSetting item, string name, ChangeEventArgs e)
     {
         item.Vars[name] = e.Value?.ToString() ?? "";
+        await ScheduleLinkPluginTestAsync();
     }
 
-    private void MoveLinkPlugin(LinkPluginSetting item, int delta)
+    private async Task MoveLinkPlugin(LinkPluginSetting item, int delta)
     {
         var from = editingLinkPlugins.IndexOf(item);
         var to = from + delta;
         if (from < 0 || to < 0 || to >= editingLinkPlugins.Count) return;
         editingLinkPlugins.RemoveAt(from);
         editingLinkPlugins.Insert(to, item);
+
+        // 順序は重なったヒットの勝ち負けを変えるので、結果も取り直す
+        await ScheduleLinkPluginTestAsync();
     }
     /// <summary>専用コマンド編集時のエラー（title 重複など）。null なら非表示。</summary>
     private string? sessionCommandError;

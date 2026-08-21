@@ -25,6 +25,13 @@
     <ProjectReference Include="..\TerminalHub.Terminal\TerminalHub.Terminal.csproj" />
   </ItemGroup>
 
+  <!-- リンクプラグインの書き方。設定画面から開けるようにするため出力先へ配る。
+       正本は docs/ の1つだけ（wwwroot にコピーを置くと片方だけ直す事故が起きる）。 -->
+  <ItemGroup>
+    <Content Include="..\docs\link-plugin-authoring.md" Link="docs\link-plugin-authoring.md"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.1.0" />

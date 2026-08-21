@@ -696,6 +696,20 @@
                                 createdSession.SessionCommands = sessionInfo.SessionCommands;
                             }
 
+                            // リンクプラグインの設定と自己紹介カードも同じ理由で復元する。
+                            // どちらも DB には保存されているが、CreateSessionAsync が作る新しい
+                            // SessionInfo は空なので、ここでコピーしないと再起動後の最初の保存
+                            // （git ステータス更新など）で DB からも消える。
+                            if (sessionInfo.LinkPlugins != null && sessionInfo.LinkPlugins.Count > 0)
+                            {
+                                createdSession.LinkPlugins = sessionInfo.LinkPlugins;
+                            }
+
+                            if (!string.IsNullOrEmpty(sessionInfo.Card))
+                            {
+                                createdSession.Card = sessionInfo.Card;
+                            }
+
                             await SessionManager.SaveSessionInfoAsync(createdSession);
                         }
 
@@ -1675,9 +1689,9 @@
 
         try
         {
-            var originUrl = session.IsGitRepository
-                ? await GitService.GetOriginUrlAsync(session.FolderPath)
-                : null;
+            // IsGitRepository はセッション読み込み時の判定なので、これを条件にすると
+            // あとから git init した場合などに取り逃す。リポジトリでなければ null が返るだけ
+            var originUrl = await GitService.GetOriginUrlAsync(session.FolderPath);
 
             await JSRuntime.InvokeVoidAsync("setSessionPluginContext", sessionId.ToString(), new
             {

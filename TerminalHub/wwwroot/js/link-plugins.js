@@ -124,6 +124,47 @@ window.applyLinkPlugins = async function (sessionId, settings) {
     registeredProviders.set(sessionId, disposables);
 };
 
+// 設定画面のテスト欄から呼ぶ: 1行のテキストに対して、採用中のプラグインを順に当てて
+// 「何が引っかかって、どのリンクになるか」を返す。実際の検出と同じ matchPlugin を通すので、
+// テストは通るのに本番では違う、が起きない。ターミナルも xterm も要らない。
+window.testLinkPlugins = async function (sessionId, line, settings) {
+    if (loadedPlugins.size === 0) await loadLinkPlugins();
+
+    const taken = [];   // 先に登録したものが位置を取る（xterm の登録順＝優先度と同じ規則）
+    const results = [];
+    for (const setting of settings ?? []) {
+        const entry = loadedPlugins.get(setting.id);
+        if (!entry) continue;
+
+        const ctx = {
+            ...(sessionContexts.get(sessionId) ?? {}),
+            sessionId,
+            vars: setting.vars ?? {},
+            line
+        };
+
+        try {
+            for (const hit of matchPlugin(entry.plugin, line, ctx)) {
+                // 既に取られている位置に重なったものは、実際の画面でも表に出ない
+                const overlapped = taken.some(t => hit.start < t.end && t.start < hit.end);
+                if (!overlapped) taken.push({ start: hit.start, end: hit.end });
+                results.push({
+                    id: setting.id,
+                    text: hit.text,
+                    url: hit.url,
+                    start: hit.start,
+                    won: !overlapped,
+                    error: null
+                });
+            }
+        } catch (e) {
+            results.push({ id: setting.id, text: null, url: null, start: 0, won: false, error: String(e?.message ?? e) });
+        }
+    }
+    results.sort((a, b) => a.start - b.start);
+    return results;
+};
+
 function registerPluginProvider(term, sessionId, plugin, vars) {
     const linkProvider = {
         provideLinks: (bufferLineNumber, callback) => {
@@ -166,12 +207,20 @@ function registerPluginProvider(term, sessionId, plugin, vars) {
     return term.registerLinkProvider(linkProvider);
 }
 
+// 1行あたりのヒット数の上限。壊れた（あるいは緩すぎる）プラグインが
+// 1行から大量のリンクを作ってブラウザを止めるのを防ぐ。
+const MAX_HITS_PER_LINE = 200;
+
 // プラグインの宣言から実際のマッチを取り出す。
 // detect() があればそれを使い、無ければ pattern + accept + url の糖衣として扱う。
 function* matchPlugin(plugin, lineText, ctx) {
+    let hits = 0;
     if (typeof plugin.detect === 'function') {
         for (const hit of plugin.detect(lineText, ctx) ?? []) {
-            if (hit && hit.url) yield hit;
+            if (hit && hit.url) {
+                yield hit;
+                if (++hits >= MAX_HITS_PER_LINE) return;
+            }
         }
         return;
     }
@@ -203,5 +252,6 @@ function* matchPlugin(plugin, lineText, ctx) {
         if (!url) continue;
 
         yield { start, end, text, url };
+        if (++hits >= MAX_HITS_PER_LINE) return;
     }
 }
