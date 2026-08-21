@@ -724,6 +724,9 @@
         if (from < 0 || to < 0 || to >= editingLinkPlugins.Count) return;
         editingLinkPlugins.RemoveAt(from);
         editingLinkPlugins.Insert(to, item);
+
+        // 順序は重なったヒットの勝ち負けを変えるので、結果も取り直す
+        await ScheduleLinkPluginTestAsync();
     }
     /// <summary>専用コマンド編集時のエラー（title 重複など）。null なら非表示。</summary>
     private string? sessionCommandError;
