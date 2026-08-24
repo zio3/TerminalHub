@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -43,6 +43,9 @@ namespace TerminalHub.Services
 
         /// <summary>末尾から読むバイト数。1発話分の usage が入っていれば足りる</summary>
         private const int TailBytes = 128 * 1024;
+
+        /// <summary>読み直すときの上限。1行が既定の幅を超えていたときだけここまで広げる</summary>
+        private const int MaxTailBytes = 4 * 1024 * 1024;
 
 
         public SessionContextService(ILogger<SessionContextService> logger, IClaudeTranscriptLocator transcriptLocator)
@@ -112,12 +115,33 @@ namespace TerminalHub.Services
             var path = ResolveTranscript(session);
             if (path == null) return null;
 
+            // まず既定の幅で読む。1行が読み取り幅を超えていた場合だけ、広げて読み直す
+            // （巨大なツール結果や長い応答で、最新の1行が 128KB を超えることがある。
+            //  その行を丸ごと捨てると、1つ前の古い usage を最新として出し続けてしまう）
+            var usage = ReadFrom(path, TailBytes, out var droppedHead);
+            // 何も見つからなかったときも読み直す。捨てた行の痕跡は、探しているキーが
+            // 窓の外まで押し出されていれば残らないため、断片の中身だけを当てにしない
+            if (droppedHead != null && (usage == null || LooksRelevant(droppedHead)))
+            {
+                return ReadFrom(path, MaxTailBytes, out _) ?? usage;
+            }
+            return usage;
+        }
+
+        /// <summary>捨てた千切れ行に、探しているものの痕跡があるか</summary>
+        private static bool LooksRelevant(string fragment) =>
+            fragment.Contains("\"usage\":", StringComparison.Ordinal)
+            || fragment.Contains("\"compact_boundary\"", StringComparison.Ordinal);
+
+        private SessionContextUsage? ReadFrom(string path, int tailBytes, out string? droppedHead)
+        {
+            droppedHead = null;
             try
             {
                 // 末尾から遡り、最初に見つかった「本編の assistant 発話」の usage を採る。
                 // サブエージェント（isSidechain:true）の発話は別コンテキストなので飛ばす
                 // ——拾ってしまうと、Task 実行中だけ数字が small に化ける。
-                foreach (var line in TranscriptTail.ReadTailLines(path, TailBytes).Reverse())
+                foreach (var line in TranscriptTail.ReadTailLines(path, tailBytes, out droppedHead).Reverse())
                 {
                     // usage より後ろに畳んだ記録があれば、そちらが現在のサイズ。
                     // usage は「最後に送ったリクエスト」の値で、compact の要約リクエスト自体は
@@ -205,23 +229,37 @@ namespace TerminalHub.Services
                 var root = doc.RootElement;
                 if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
 
-                if (!root.TryGetProperty("type", out var type) || type.GetString() != "system") return null;
-                if (!root.TryGetProperty("subtype", out var sub) || sub.GetString() != "compact_boundary") return null;
+                // 値の型まで確かめてから読む。JsonElement は型が違うと例外を投げるが、
+                // ここは呼び出し元の広い catch に飲まれて「バッジが黙って消える」経路になる
+                if (!TryGetString(root, "type", out var type) || type != "system") return null;
+                if (!TryGetString(root, "subtype", out var sub) || sub != "compact_boundary") return null;
                 // サブエージェントが畳んだ記録は本編のサイズではない
                 if (root.TryGetProperty("isSidechain", out var side)
                     && side.ValueKind == System.Text.Json.JsonValueKind.True) return null;
 
                 if (!root.TryGetProperty("compactMetadata", out var meta)) return null;
+                if (meta.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
                 if (!meta.TryGetProperty("postTokens", out var post)) return null;
+                if (post.ValueKind != System.Text.Json.JsonValueKind.Number) return null;
                 if (!post.TryGetInt32(out var tokens) || tokens <= 0) return null;
 
                 // 畳む要約リクエストも本物の API 要求なので、キャッシュはこの時点で温まっている
                 return new SessionContextUsage(tokens, ReadTimestamp(line) ?? DateTime.UtcNow);
             }
-            catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException)
+            catch (System.Text.Json.JsonException)
             {
                 return null; // 末尾読みの境界で行頭が欠けている等
             }
+        }
+
+        /// <summary>文字列として入っている値だけを取り出す（型が違えば false）</summary>
+        private static bool TryGetString(System.Text.Json.JsonElement parent, string name, out string? value)
+        {
+            value = null;
+            if (!parent.TryGetProperty(name, out var e)) return false;
+            if (e.ValueKind != System.Text.Json.JsonValueKind.String) return false;
+            value = e.GetString();
+            return true;
         }
 
         /// <summary>
