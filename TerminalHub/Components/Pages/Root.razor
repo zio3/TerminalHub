@@ -226,6 +226,8 @@
     private int contextMinSizeK = 50; // バッジを出す下限（K トークン。0 で下限なし）
     // 残り時間の表示は時間の経過だけで変わるので、イベントではなく定期的に描き直す
     private System.Threading.Timer? contextUsageTimer;
+    // Circuit 破棄済みの印。破棄後に遅れて走る裏処理がタイマーを張り直すのを防ぐ
+    private bool _disposed;
     private bool hideInputPanel = false; // 入力パネルを非表示
     private bool perSessionInputText = true; // 入力テキストの下書きをセッションごとに保持（既定ON）
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
@@ -599,7 +601,7 @@
                 showModel = appSettings.Sessions.ShowModel;
                 showContextSize = appSettings.Sessions.ShowContextSize;
                 contextCacheAware = appSettings.Sessions.ContextCacheAware;
-                contextMinSizeK = appSettings.Sessions.ContextMinSizeK;
+                contextMinSizeK = ClampContextMinSizeK(appSettings.Sessions.ContextMinSizeK);
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
@@ -778,6 +780,11 @@
                     sessionsToPopulateGitInfo.Add(session.SessionId);
                 }
             }
+            // コンテキスト量の初期読みと定期更新は Git 情報の取得とは独立に始める。
+            // 同じ裏処理に相乗りさせると、Git 情報が既に揃っている再接続では
+            // ブロックごと実行されず、バッジが出ないままになる。
+            StartContextUsageTracking();
+
             if (sessionsToPopulateGitInfo.Count > 0)
             {
                 _ = Task.Run(async () =>
@@ -804,10 +811,6 @@
                         {
                             await RefreshAllModelsAsync(notify: false);
                         }
-
-                        // コンテキスト量も同様。あわせて定期更新を張る
-                        await RefreshAllContextUsagesAsync(notify: false);
-                        UpdateContextUsageTimer();
 
                         // Git情報取得完了後にUIを更新
                         await InvokeAsync(StateHasChanged);
@@ -1095,7 +1098,7 @@
         hideInputPanel = settings.HideInputPanel;
         perSessionInputText = settings.PerSessionInputText;
         contextCacheAware = settings.ContextCacheAware;
-        contextMinSizeK = settings.ContextMinSizeK;
+        contextMinSizeK = ClampContextMinSizeK(settings.ContextMinSizeK);
 
         var modelTurnedOn = settings.ShowModel && !showModel;
         showModel = settings.ShowModel;
@@ -1165,9 +1168,42 @@
     /// バッジ表示の ON/OFF に合わせて定期更新を張り直す。
     /// OFF のときはタイマーごと止める（読むファイルも再描画も無駄になるため）。
     /// </summary>
+    /// <summary>
+    /// バッジの表示下限を実用範囲に丸める。app-settings.json を直接編集された場合も
+    /// ここを通るので、設定ダイアログを経由しない値でも一覧が壊れない。
+    /// </summary>
+    private static int ClampContextMinSizeK(int value) => Math.Clamp(value, 0, 1000);
+
+    /// <summary>
+    /// 起動時の初期読みと定期更新の開始。Git 情報の取得とは独立に呼ぶ。
+    /// </summary>
+    private void StartContextUsageTracking()
+    {
+        if (!showContextSize) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAllContextUsagesAsync(notify: false);
+                    UpdateContextUsageTimer();
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "コンテキスト量の初期読みに失敗");
+            }
+        });
+    }
+
     private void UpdateContextUsageTimer()
     {
-        if (!showContextSize)
+        // 破棄後に遅れて届いた裏処理でタイマーを作り直さない
+        // （作ると破棄済み Circuit を掴んだまま生き続ける）
+        if (_disposed || !showContextSize)
         {
             contextUsageTimer?.Dispose();
             contextUsageTimer = null;
@@ -3763,7 +3799,9 @@
 
     public async ValueTask DisposeAsync()
     {
-        // コンテキスト量の定期更新を止める
+        // コンテキスト量の定期更新を止める（先に印を付けてから止める。
+        // 逆順だと、止めた直後に遅れてきた裏処理が張り直してしまう）
+        _disposed = true;
         contextUsageTimer?.Dispose();
         contextUsageTimer = null;
 

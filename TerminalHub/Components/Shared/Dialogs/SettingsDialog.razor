@@ -1975,7 +1975,7 @@
             // セッション表示設定の変更を通知
             await OnSessionDisplaySettingsChanged.InvokeAsync(new SessionDisplaySettingsChange(
                 showTerminalType, showGitInfo, gitChangesOnBadgeClick, showModel,
-                showContextSize, contextCacheAware, contextMinSizeK,
+                showContextSize, contextCacheAware, Math.Clamp(contextMinSizeK, 0, 1000),
                 hideInputPanel, perSessionInputText));
 
             // モード切替キーの変更を通知
