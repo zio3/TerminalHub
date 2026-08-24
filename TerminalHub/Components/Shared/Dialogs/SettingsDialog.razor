@@ -512,6 +512,39 @@
                                             <span class="text-muted small">（@L["Settings.Sessions.Display.ShowModelSub"]）</span>
                                         </label>
                                     </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="showContextSize" id="showContextSize">
+                                        <label class="form-check-label" for="showContextSize">
+                                            <i class="bi bi-thermometer-half me-1"></i>@L["Settings.Sessions.Display.ShowContextSize"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.Display.ShowContextSizeSub"]）</span>
+                                        </label>
+                                    </div>
+                                    @* コンテキスト量バッジのサブオプション（本体がOFFなら無効化） *@
+                                    <div class="form-check ms-4">
+                                        <input class="form-check-input" type="checkbox" @bind="contextCacheAware" id="contextCacheAware" disabled="@(!showContextSize)">
+                                        <label class="form-check-label" for="contextCacheAware">
+                                            @L["Settings.Sessions.Display.ContextCacheAware"]
+                                            <span class="text-muted small">（@L["Settings.Sessions.Display.ContextCacheAwareSub"]）</span>
+                                        </label>
+                                    </div>
+                                    <div class="d-flex align-items-center ms-4 mt-1">
+                                        <label class="form-label mb-0 me-2" for="contextMinSizeK">
+                                            @L["Settings.Sessions.Display.ContextMinSize"]
+                                        </label>
+                                        <div class="input-group input-group-sm" style="width: 8rem;">
+                                            <input type="number" class="form-control" id="contextMinSizeK" min="0" max="1000"
+                                                   @bind="contextMinSizeK" disabled="@(!showContextSize)">
+                                            <span class="input-group-text">K</span>
+                                        </div>
+                                        <span class="text-muted small ms-2">（@L["Settings.Sessions.Display.ContextMinSizeSub"]）</span>
+                                    </div>
+                                    @if (showContextSize)
+                                    {
+                                        <p class="text-muted small ms-4 mt-1 mb-0">
+                                            <i class="bi bi-exclamation-circle me-1"></i>
+                                            @L["Settings.Sessions.Display.ContextNote"]
+                                        </p>
+                                    }
                                     @* 反映の遅れは仕様なので、問い合わせになる前に理由を書いておく *@
                                     @if (showModel)
                                     {
@@ -1397,6 +1430,9 @@
     private bool showGitInfo = false;
     private bool gitChangesOnBadgeClick = false;
     private bool showModel = false;
+    private bool showContextSize = false;
+    private bool contextCacheAware = true;
+    private int contextMinSizeK = 50;
     private bool hideInputPanel = false;
     private bool perSessionInputText = true;
     private bool terminalLinkCopyMode = false;
@@ -1440,7 +1476,7 @@
     [Parameter] public EventCallback<string> OnSessionSortModeChanged { get; set; }
     [Parameter] public string SessionSortMode { get; set; } = "lastAccessed";
     [Parameter] public EventCallback<string> OnClaudeModeSwitchKeyChanged { get; set; }
-    [Parameter] public EventCallback<(bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool showModel, bool hideInputPanel, bool perSessionInputText)> OnSessionDisplaySettingsChanged { get; set; }
+    [Parameter] public EventCallback<SessionDisplaySettingsChange> OnSessionDisplaySettingsChanged { get; set; }
     [Parameter] public EventCallback<double> OnSessionListScaleChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalFontSizeChanged { get; set; }
     [Parameter] public EventCallback<int> OnTerminalHeightPercentChanged { get; set; }
@@ -1559,6 +1595,10 @@
             showGitInfo = settings.Sessions.ShowGitInfo;
             gitChangesOnBadgeClick = settings.Sessions.GitChangesOnBadgeClick;
             showModel = settings.Sessions.ShowModel;
+            showContextSize = settings.Sessions.ShowContextSize;
+            contextCacheAware = settings.Sessions.ContextCacheAware;
+            // 桁を打ち間違えても一覧が壊れないよう、受け取る値をここで丸める
+            contextMinSizeK = Math.Clamp(settings.Sessions.ContextMinSizeK, 0, 1000);
             hideInputPanel = settings.Sessions.HideInputPanel;
             perSessionInputText = settings.Sessions.PerSessionInputText;
 
@@ -1822,6 +1862,9 @@
                     ShowGitInfo = showGitInfo,
                     GitChangesOnBadgeClick = gitChangesOnBadgeClick,
                     ShowModel = showModel,
+                    ShowContextSize = showContextSize,
+                    ContextCacheAware = contextCacheAware,
+                    ContextMinSizeK = Math.Clamp(contextMinSizeK, 0, 1000),
                     HideInputPanel = hideInputPanel,
                     PerSessionInputText = perSessionInputText
                 },
@@ -1930,7 +1973,10 @@
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);
 
             // セッション表示設定の変更を通知
-            await OnSessionDisplaySettingsChanged.InvokeAsync((showTerminalType, showGitInfo, gitChangesOnBadgeClick, showModel, hideInputPanel, perSessionInputText));
+            await OnSessionDisplaySettingsChanged.InvokeAsync(new SessionDisplaySettingsChange(
+                showTerminalType, showGitInfo, gitChangesOnBadgeClick, showModel,
+                showContextSize, contextCacheAware, contextMinSizeK,
+                hideInputPanel, perSessionInputText));
 
             // モード切替キーの変更を通知
             await OnClaudeModeSwitchKeyChanged.InvokeAsync(claudeModeSwitchKey);

@@ -153,6 +153,21 @@ public class SessionDisplaySettings
     public bool GitChangesOnBadgeClick { get; set; }
     /// <summary>実使用モデルのバッジを表示する（ClaudeCode / CodexCLI のみ）。既定 false。</summary>
     public bool ShowModel { get; set; }
+
+    /// <summary>コンテキスト量（トークン数）のバッジを表示する（ClaudeCode のみ）。既定 false。</summary>
+    public bool ShowContextSize { get; set; }
+
+    /// <summary>
+    /// コンテキスト量バッジでプロンプトキャッシュの残り時間を色で示す（ShowContextSize 有効時のみ意味を持つ）。
+    /// 既定 true。false にすると常に灰色＝数字だけの計器になる。
+    /// </summary>
+    public bool ContextCacheAware { get; set; } = true;
+
+    /// <summary>
+    /// コンテキスト量バッジを出す下限（1000 トークン単位）。既定 50（＝50K 未満は表示しない）。
+    /// 0 以下で下限なし（常に表示）。細いセッションは冷えても損しないので、既定では隠す。
+    /// </summary>
+    public int ContextMinSizeK { get; set; } = 50;
     public bool HideInputPanel { get; set; }
     /// <summary>
     /// 入力テキスト欄の下書きをセッションごとに保持するか。既定 true（＝セッション固定）。
@@ -162,6 +177,22 @@ public class SessionDisplaySettings
     /// </summary>
     public bool PerSessionInputText { get; set; } = true;
 }
+
+/// <summary>
+/// セッション表示設定のうち、設定ダイアログから Root へ通知する分だけを束ねたもの。
+/// 項目が増えるたびにタプルの要素が伸びて読めなくなるため record にした
+/// （名前で受け渡せるので、増えても呼び出し側の並び順に依存しない）。
+/// </summary>
+public record SessionDisplaySettingsChange(
+    bool ShowTerminalType,
+    bool ShowGitInfo,
+    bool GitChangesOnBadgeClick,
+    bool ShowModel,
+    bool ShowContextSize,
+    bool ContextCacheAware,
+    int ContextMinSizeK,
+    bool HideInputPanel,
+    bool PerSessionInputText);
 
 /// <summary>
 /// 開発ツール設定

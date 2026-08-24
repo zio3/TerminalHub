@@ -51,6 +51,9 @@ public class HookNotification
     /// <summary>ツール名（PreToolUse 等の tool_name。AskUserQuestion 判別用）</summary>
     public string? ToolName { get; set; }
 
+    /// <summary>トランスクリプト(.jsonl)の絶対パス（Claude Code のみ。コンテキスト量バッジ用）</summary>
+    public string? TranscriptPath { get; set; }
+
     /// <summary>タイムスタンプ</summary>
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 

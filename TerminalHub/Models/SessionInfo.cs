@@ -202,6 +202,22 @@ namespace TerminalHub.Models
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public string? CurrentModel { get; set; }
+
+        /// <summary>
+        /// コンテキスト量バッジの表示値（トークン数と最終記録時刻）。取得できないときは null。
+        /// トランスクリプト由来なので保存しない（起動のたびに読み直す）。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public SessionContextUsage? ContextUsage { get; set; }
+
+        /// <summary>
+        /// Claude Code の hook が知らせてきたトランスクリプトのパス。
+        /// 同じフォルダに複数セッションがぶら下がる場合、フォルダからの推測では
+        /// どちらの記録か決められないため、hook が飛んだセッションはこれを正とする。
+        /// hook が最低1回飛ぶまでは null（その間はフォルダからの推測で代用する）。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? TranscriptPath { get; set; }
         
         // ParentSessionIdは保存して復元時に親子関係を維持
         public Guid? ParentSessionId { get; set; } // Worktreeの場合の親セッション
