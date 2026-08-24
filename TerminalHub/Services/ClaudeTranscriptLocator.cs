@@ -103,8 +103,17 @@ namespace TerminalHub.Services
         /// <summary>
         /// 末尾のみを読む。書き込み中のファイルを掴むため ReadWrite 共有で開く。
         /// </summary>
-        public static IReadOnlyList<string> ReadTailLines(string path, int tailBytes)
+        public static IReadOnlyList<string> ReadTailLines(string path, int tailBytes) =>
+            ReadTailLines(path, tailBytes, out _);
+
+        /// <summary>
+        /// 末尾のみを読む。捨てた千切れ行を <paramref name="droppedHead"/> で返す。
+        /// 呼び出し側は、そこに欲しい情報の痕跡があれば読む量を増やして読み直せる
+        /// （1行が読み取り幅を超えると、その行＝最新の記録を丸ごと取りこぼすため）。
+        /// </summary>
+        public static IReadOnlyList<string> ReadTailLines(string path, int tailBytes, out string? droppedHead)
         {
+            droppedHead = null;
             try
             {
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -114,7 +123,12 @@ namespace TerminalHub.Services
                 var read = fs.Read(buf, 0, buf.Length);
                 var lines = Encoding.UTF8.GetString(buf, 0, read).Split('\n');
                 // 途中から読んだ場合、先頭行は千切れているので捨てる
-                return start > 0 && lines.Length > 1 ? lines[1..] : lines;
+                if (start > 0 && lines.Length > 1)
+                {
+                    droppedHead = lines[0];
+                    return lines[1..];
+                }
+                return lines;
             }
             catch
             {

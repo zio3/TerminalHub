@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -43,6 +43,9 @@ namespace TerminalHub.Services
 
         /// <summary>末尾から読むバイト数。1発話分の usage が入っていれば足りる</summary>
         private const int TailBytes = 128 * 1024;
+
+        /// <summary>読み直すときの上限。1行が既定の幅を超えていたときだけここまで広げる</summary>
+        private const int MaxTailBytes = 4 * 1024 * 1024;
 
 
         public SessionContextService(ILogger<SessionContextService> logger, IClaudeTranscriptLocator transcriptLocator)
@@ -112,15 +115,41 @@ namespace TerminalHub.Services
             var path = ResolveTranscript(session);
             if (path == null) return null;
 
+            // まず既定の幅で読む。1行が読み取り幅を超えていた場合だけ、広げて読み直す
+            // （巨大なツール結果や長い応答で、最新の1行が 128KB を超えることがある。
+            //  その行を丸ごと捨てると、1つ前の古い usage を最新として出し続けてしまう）
+            var usage = ReadFrom(path, TailBytes, out var droppedHead);
+            // 何も見つからなかったときも読み直す。捨てた行の痕跡は、探しているキーが
+            // 窓の外まで押し出されていれば残らないため、断片の中身だけを当てにしない
+            if (droppedHead != null && (usage == null || LooksRelevant(droppedHead)))
+            {
+                return ReadFrom(path, MaxTailBytes, out _) ?? usage;
+            }
+            return usage;
+        }
+
+        /// <summary>捨てた千切れ行に、探しているものの痕跡があるか</summary>
+        private static bool LooksRelevant(string fragment) =>
+            fragment.Contains("\"usage\":", StringComparison.Ordinal)
+            || fragment.Contains("\"compact_boundary\"", StringComparison.Ordinal);
+
+        private SessionContextUsage? ReadFrom(string path, int tailBytes, out string? droppedHead)
+        {
+            droppedHead = null;
             try
             {
-                var lastWrite = File.GetLastWriteTimeUtc(path);
-
                 // 末尾から遡り、最初に見つかった「本編の assistant 発話」の usage を採る。
                 // サブエージェント（isSidechain:true）の発話は別コンテキストなので飛ばす
                 // ——拾ってしまうと、Task 実行中だけ数字が small に化ける。
-                foreach (var line in TranscriptTail.ReadTailLines(path, TailBytes).Reverse())
+                foreach (var line in TranscriptTail.ReadTailLines(path, tailBytes, out droppedHead).Reverse())
                 {
+                    // usage より後ろに畳んだ記録があれば、そちらが現在のサイズ。
+                    // usage は「最後に送ったリクエスト」の値で、compact の要約リクエスト自体は
+                    // 畳む前の満杯のコンテキストを読むため、畳んだ直後は数字が縮まない。
+                    // 記録には畳んだ後の実サイズ（postTokens）が入っているのでそれを使う。
+                    // 次の本物の発話が来れば usage の方が新しくなり、自然にこの経路を抜ける
+                    if (ReadCompactBoundary(line) is { } compacted) return compacted;
+
                     if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
                     if (line.Contains("\"isSidechain\":true", StringComparison.Ordinal)) continue;
 
@@ -132,7 +161,11 @@ namespace TerminalHub.Services
                         + ReadInt(usage, "cache_read_input_tokens");
                     if (tokens <= 0) continue;
 
-                    return new SessionContextUsage(tokens, lastWrite);
+                    // 最終活動時刻は、この usage を記録した発話自身の timestamp を採る。
+                    // ファイルの更新日時は使えない: mode / atis-latch / bridge-session といった
+                    // タイムスタンプを持たないメタレコードが API リクエスト無しで追記され、
+                    // 何日も冷えたセッションが「数分前」に見えてしまう（2026-08-25 実測）
+                    return new SessionContextUsage(tokens, ReadTimestamp(line) ?? File.GetLastWriteTimeUtc(path));
                 }
             }
             catch (Exception ex)
@@ -177,6 +210,86 @@ namespace TerminalHub.Services
                 else if (line[k] == '}' && --depth == 0) return line[open..(k + 1)];
             }
             return null; // 行が途中で切れている（末尾読みの境界）
+        }
+
+        /// <summary>
+        /// 「会話を畳んだ」記録なら、畳んだ後のサイズと時刻を返す。違えば null。
+        ///
+        /// 文字列の有無だけで判定してはいけない: compact_boundary という語は会話本文にも現れうる
+        /// （この機能の実装中に、まさに自分の発話が引っかかった）。型まで見て本物だけを採る。
+        /// </summary>
+        private static SessionContextUsage? ReadCompactBoundary(string line)
+        {
+            // 大半の行は無関係なので、JSON を組み立てる前に安く落とす
+            if (!line.Contains("\"compact_boundary\"", StringComparison.Ordinal)) return null;
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+
+                // 値の型まで確かめてから読む。JsonElement は型が違うと例外を投げるが、
+                // ここは呼び出し元の広い catch に飲まれて「バッジが黙って消える」経路になる
+                if (!TryGetString(root, "type", out var type) || type != "system") return null;
+                if (!TryGetString(root, "subtype", out var sub) || sub != "compact_boundary") return null;
+                // サブエージェントが畳んだ記録は本編のサイズではない
+                if (root.TryGetProperty("isSidechain", out var side)
+                    && side.ValueKind == System.Text.Json.JsonValueKind.True) return null;
+
+                if (!root.TryGetProperty("compactMetadata", out var meta)) return null;
+                if (meta.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                if (!meta.TryGetProperty("postTokens", out var post)) return null;
+                if (post.ValueKind != System.Text.Json.JsonValueKind.Number) return null;
+                if (!post.TryGetInt32(out var tokens) || tokens <= 0) return null;
+
+                // 畳む要約リクエストも本物の API 要求なので、キャッシュはこの時点で温まっている
+                return new SessionContextUsage(tokens, ReadTimestamp(line) ?? DateTime.UtcNow);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null; // 末尾読みの境界で行頭が欠けている等
+            }
+        }
+
+        /// <summary>文字列として入っている値だけを取り出す（型が違えば false）</summary>
+        private static bool TryGetString(System.Text.Json.JsonElement parent, string name, out string? value)
+        {
+            value = null;
+            if (!parent.TryGetProperty(name, out var e)) return false;
+            if (e.ValueKind != System.Text.Json.JsonValueKind.String) return false;
+            value = e.GetString();
+            return true;
+        }
+
+        /// <summary>
+        /// レコード直下の timestamp（ISO8601・UTC）を読む。無ければ null。
+        /// 発話本文の中にも同名のキーが現れうるため、入れ子の中は見ない。
+        /// </summary>
+        private static DateTime? ReadTimestamp(string line)
+        {
+            // ここは採用が確定した1行にしか来ないので、素直に JSON として読む。
+            // 文字列の走査で済ませないのは、発話本文に括弧が入ると入れ子の深さが狂うため
+            // （数値しか現れない usage の中とは事情が違う）
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                if (!doc.RootElement.TryGetProperty("timestamp", out var ts)) return null;
+                if (ts.ValueKind != System.Text.Json.JsonValueKind.String) return null;
+
+                return DateTime.TryParse(
+                    ts.GetString(), null,
+                    // 記録は末尾 Z の UTC。Z が欠けていても UTC とみなす（ローカル時刻に化けさせない）
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var parsed)
+                    ? parsed
+                    : null;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null; // 末尾読みの境界で行頭が欠けている等
+            }
         }
 
         /// <summary>
