@@ -127,6 +127,12 @@
                                     @session.CurrentModel
                                 </span>
                             }
+                            @* コンテキスト量。色はプロンプトキャッシュの温度で、切れかけ(黄/赤)のときだけ目を引く。
+                               灰色は「温度の情報が無い」= 考慮OFF か、すでに冷えている *@
+                            @if (ShowContextSize && GetContextBadge(session) is { } ctx)
+                            {
+                                <span class="badge @ctx.CssClass ms-1" title="@ctx.Title">@ctx.Text</span>
+                            }
                             @if (ShowGitInfo && session.IsGitRepository && !string.IsNullOrEmpty(session.GitBranch))
                             {
                                 @* クリック領域は赤丸＋Gitアイコンのみに限定（ブランチ名クリックでは履歴を開かない）。
@@ -256,6 +262,12 @@
     /// <summary>Git バッジのクリックで変更ファイル一覧を表示する（設定のサブオプション）</summary>
     [Parameter] public bool GitChangesOnBadgeClick { get; set; }
     [Parameter] public bool ShowModel { get; set; }
+    /// <summary>コンテキスト量バッジを表示する（設定）</summary>
+    [Parameter] public bool ShowContextSize { get; set; }
+    /// <summary>コンテキスト量バッジでキャッシュの残り時間を色で示す（サブオプション）</summary>
+    [Parameter] public bool ContextCacheAware { get; set; } = true;
+    /// <summary>コンテキスト量バッジを出す下限（K トークン）。0 以下で下限なし</summary>
+    [Parameter] public int ContextMinSizeK { get; set; } = 50;
     [Parameter] public EventCallback<string> OnShowInfoToast { get; set; }
     [Parameter] public EventCallback<string> OnShowErrorToast { get; set; }
     [Parameter] public EventCallback<string> OnShowSuccessToast { get; set; }
@@ -268,6 +280,66 @@
     private List<GitChangedFile>? gitChangesFiles;
     // 多重クリックによる並行取得を防ぐ
     private bool isGitChangesLoading;
+
+    /// <summary>プロンプトキャッシュの寿命。最後の API 要求から 1 時間（サブスクの既定）</summary>
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(60);
+    /// <summary>この残り時間を切ったら黄</summary>
+    private static readonly TimeSpan CacheWarnAt = TimeSpan.FromMinutes(15);
+    /// <summary>この残り時間を切ったら赤</summary>
+    private static readonly TimeSpan CacheDangerAt = TimeSpan.FromMinutes(10);
+
+    private record ContextBadge(string Text, string CssClass, string Title);
+
+    /// <summary>
+    /// コンテキスト量バッジの表示内容。下限未満・取得できない場合は null（＝出さない）。
+    ///
+    /// 色が付くのは「切れかけの15分間」だけで、通り過ぎれば灰色に落ちる。
+    /// つまり色 = 今なら間に合う、灰色 = もう手遅れ、と一意に読める。
+    /// </summary>
+    private ContextBadge? GetContextBadge(SessionInfo session)
+    {
+        var usage = session.ContextUsage;
+        if (usage == null) return null;
+
+        var sizeK = usage.Tokens / 1000;
+        if (ContextMinSizeK > 0 && sizeK < ContextMinSizeK) return null;
+
+        var text = $"{sizeK}K";
+        var sizeTitle = string.Format(L["SessionList.Badge.ContextTitleFormat"], usage.Tokens.ToString("N0"));
+
+        // 考慮OFF: 温度の情報を持たないので常に灰色（数字だけの計器）
+        if (!ContextCacheAware)
+        {
+            return new ContextBadge(text, "text-bg-secondary", sizeTitle);
+        }
+
+        // 処理中は API 応答待ちで記録が伸びず、実際より冷たく見える。温かい側に倒す
+        var isProcessing = session.ProcessingStartTime.HasValue;
+        var remaining = isProcessing
+            ? CacheTtl
+            : CacheTtl - (DateTime.UtcNow - usage.LastActivityUtc);
+
+        if (remaining <= TimeSpan.Zero)
+        {
+            return new ContextBadge(text, "text-bg-secondary",
+                $"{sizeTitle} / {L["SessionList.Badge.ContextCacheCold"]}");
+        }
+
+        var left = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+
+        if (remaining > CacheWarnAt)
+        {
+            var warm = string.Format(L["SessionList.Badge.ContextCacheWarmFormat"], left);
+            return new ContextBadge(text, "text-bg-primary", $"{sizeTitle} / {warm}");
+        }
+
+        var css = remaining <= CacheDangerAt ? "text-bg-danger" : "text-bg-warning";
+        var expiring = string.Format(L["SessionList.Badge.ContextCacheExpiringFormat"], left);
+        return new ContextBadge(
+            string.Format(L["SessionList.Badge.ContextRemainingFormat"], sizeK, left),
+            css,
+            $"{sizeTitle} / {expiring}");
+    }
 
     private string GetGitBadgeTitle(SessionInfo session)
     {

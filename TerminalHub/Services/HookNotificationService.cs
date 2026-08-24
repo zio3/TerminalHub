@@ -100,6 +100,14 @@ public class HookNotificationService : IHookNotificationService
             return;
         }
 
+        // Claude Code はどの hook でもトランスクリプトのパスを添えてくる。
+        // コンテキスト量バッジが読む先を厳密に決められるので、来たら覚えておく
+        // （フォルダからの推測は、同じフォルダに複数セッションがいると取り違える）。
+        if (!string.IsNullOrEmpty(notification.TranscriptPath))
+        {
+            session.TranscriptPath = notification.TranscriptPath;
+        }
+
         var permissionRequestRequiresUserInput = eventType != HookEventType.PermissionRequest ||
             CodexProcessOptionsSnapshot.ResolvePermissionRequestRequiresUserInput(
                 session.RunningCodexOptions, session.Options);

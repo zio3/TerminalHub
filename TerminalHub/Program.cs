@@ -124,7 +124,9 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // GitServiceを登録
 builder.Services.AddSingleton<IGitService, GitService>();
+builder.Services.AddSingleton<IClaudeTranscriptLocator, ClaudeTranscriptLocator>();
 builder.Services.AddSingleton<ISessionModelService, SessionModelService>();
+builder.Services.AddSingleton<ISessionContextService, SessionContextService>();
 
 // OutputAnalyzerFactoryを登録
 builder.Services.AddSingleton<IOutputAnalyzerFactory, OutputAnalyzerFactory>();
@@ -388,6 +390,7 @@ app.MapPost("/api/hook/claude/{sessionId:guid}",
         AgentType = payload.AgentType,
         Message = payload.Message,
         ToolName = payload.ToolName,
+        TranscriptPath = payload.TranscriptPath,
         Timestamp = DateTime.UtcNow
     };
     await hookService.HandleHookNotificationAsync(notification);

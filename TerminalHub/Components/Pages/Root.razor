@@ -20,6 +20,7 @@
 @inject IOutputAnalyzerFactory AnalyzerFactory
 @inject IGitService GitService
 @inject ISessionModelService SessionModelService
+@inject ISessionContextService SessionContextService
 @inject ITerminalService TerminalService
 @inject IOutputAnalyzerService OutputAnalyzerService
 @inject IInputHistoryService InputHistoryService
@@ -100,6 +101,9 @@
                      ShowGitInfo=@showGitInfo
                      GitChangesOnBadgeClick=@gitChangesOnBadgeClick
                      ShowModel=@showModel
+                     ShowContextSize=@showContextSize
+                     ContextCacheAware=@contextCacheAware
+                     ContextMinSizeK=@contextMinSizeK
                      OnShowInfoToast="(string msg) => toast?.ShowInfo(msg)"
                      OnShowErrorToast="(string msg) => toast?.ShowError(msg)"
                      OnShowSuccessToast="(string msg) => toast?.ShowSuccess(msg)"
@@ -217,6 +221,13 @@
     private bool showGitInfo = false; // Git情報を表示
     private bool gitChangesOnBadgeClick = false; // Gitバッジクリックで変更ファイル一覧を表示
     private bool showModel = false; // 実使用モデルのバッジを表示
+    private bool showContextSize = false; // コンテキスト量のバッジを表示
+    private bool contextCacheAware = true; // キャッシュの残り時間を色で示す
+    private int contextMinSizeK = 50; // バッジを出す下限（K トークン。0 で下限なし）
+    // 残り時間の表示は時間の経過だけで変わるので、イベントではなく定期的に描き直す
+    private System.Threading.Timer? contextUsageTimer;
+    // Circuit 破棄済みの印。破棄後に遅れて走る裏処理がタイマーを張り直すのを防ぐ
+    private bool _disposed;
     private bool hideInputPanel = false; // 入力パネルを非表示
     private bool perSessionInputText = true; // 入力テキストの下書きをセッションごとに保持（既定ON）
     private bool isMobileSidebarOpen = false; // モバイルサイドバーの開閉状態
@@ -588,6 +599,9 @@
                 showGitInfo = appSettings.Sessions.ShowGitInfo;
                 gitChangesOnBadgeClick = appSettings.Sessions.GitChangesOnBadgeClick;
                 showModel = appSettings.Sessions.ShowModel;
+                showContextSize = appSettings.Sessions.ShowContextSize;
+                contextCacheAware = appSettings.Sessions.ContextCacheAware;
+                contextMinSizeK = ClampContextMinSizeK(appSettings.Sessions.ContextMinSizeK);
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
@@ -766,6 +780,11 @@
                     sessionsToPopulateGitInfo.Add(session.SessionId);
                 }
             }
+            // コンテキスト量の初期読みと定期更新は Git 情報の取得とは独立に始める。
+            // 同じ裏処理に相乗りさせると、Git 情報が既に揃っている再接続では
+            // ブロックごと実行されず、バッジが出ないままになる。
+            StartContextUsageTracking();
+
             if (sessionsToPopulateGitInfo.Count > 0)
             {
                 _ = Task.Run(async () =>
@@ -1071,22 +1090,32 @@
         StateHasChanged();
     }
 
-    private async Task HandleSessionDisplaySettingsChanged((bool showTerminalType, bool showGitInfo, bool gitChangesOnBadgeClick, bool showModel, bool hideInputPanel, bool perSessionInputText) settings)
+    private async Task HandleSessionDisplaySettingsChanged(SessionDisplaySettingsChange settings)
     {
-        showTerminalType = settings.showTerminalType;
-        showGitInfo = settings.showGitInfo;
-        gitChangesOnBadgeClick = settings.gitChangesOnBadgeClick;
-        hideInputPanel = settings.hideInputPanel;
-        perSessionInputText = settings.perSessionInputText;
+        showTerminalType = settings.ShowTerminalType;
+        showGitInfo = settings.ShowGitInfo;
+        gitChangesOnBadgeClick = settings.GitChangesOnBadgeClick;
+        hideInputPanel = settings.HideInputPanel;
+        perSessionInputText = settings.PerSessionInputText;
+        contextCacheAware = settings.ContextCacheAware;
+        contextMinSizeK = ClampContextMinSizeK(settings.ContextMinSizeK);
 
-        var modelTurnedOn = settings.showModel && !showModel;
-        showModel = settings.showModel;
+        var modelTurnedOn = settings.ShowModel && !showModel;
+        showModel = settings.ShowModel;
+
+        var contextTurnedOn = settings.ShowContextSize && !showContextSize;
+        showContextSize = settings.ShowContextSize;
+        UpdateContextUsageTimer();
         StateHasChanged();
 
         // ONにした直後にバッジが空のままだと壊れて見えるので、その場で読みに行く
         if (modelTurnedOn)
         {
             await RefreshAllModelsAsync();
+        }
+        if (contextTurnedOn)
+        {
+            await RefreshAllContextUsagesAsync();
         }
     }
 
@@ -1117,6 +1146,85 @@
         }
         // 起動時の裏処理からは呼び出し側がまとめて再描画するので、その場合は通知しない
         if (notify) StateHasChanged();
+    }
+
+    /// <summary>
+    /// 全セッションのコンテキスト量を読み直す（バッジ表示ONのときのみ意味を持つ）。
+    /// </summary>
+    private async Task RefreshAllContextUsagesAsync(bool notify = true)
+    {
+        if (!showContextSize) return;
+
+        var targets = sessions.ToList();
+        var usages = await SessionContextService.GetContextUsagesAsync(targets);
+        foreach (var session in targets)
+        {
+            session.ContextUsage = usages.GetValueOrDefault(session.SessionId);
+        }
+        if (notify) StateHasChanged();
+    }
+
+    /// <summary>
+    /// バッジ表示の ON/OFF に合わせて定期更新を張り直す。
+    /// OFF のときはタイマーごと止める（読むファイルも再描画も無駄になるため）。
+    /// </summary>
+    /// <summary>
+    /// バッジの表示下限を実用範囲に丸める。app-settings.json を直接編集された場合も
+    /// ここを通るので、設定ダイアログを経由しない値でも一覧が壊れない。
+    /// </summary>
+    private static int ClampContextMinSizeK(int value) => Math.Clamp(value, 0, 1000);
+
+    /// <summary>
+    /// 起動時の初期読みと定期更新の開始。Git 情報の取得とは独立に呼ぶ。
+    /// </summary>
+    private void StartContextUsageTracking()
+    {
+        if (!showContextSize) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAllContextUsagesAsync(notify: false);
+                    UpdateContextUsageTimer();
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "コンテキスト量の初期読みに失敗");
+            }
+        });
+    }
+
+    private void UpdateContextUsageTimer()
+    {
+        // 破棄後に遅れて届いた裏処理でタイマーを作り直さない
+        // （作ると破棄済み Circuit を掴んだまま生き続ける）
+        if (_disposed || !showContextSize)
+        {
+            contextUsageTimer?.Dispose();
+            contextUsageTimer = null;
+            return;
+        }
+
+        if (contextUsageTimer != null) return;
+
+        // 60秒間隔。残り時間の表示は分単位なので、この粗さで足りる
+        contextUsageTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(async () => await RefreshAllContextUsagesAsync());
+            }
+            catch (Exception ex)
+            {
+                // Circuit 切断後に発火することがある。ここで落とすとタイマーごと死ぬので握る
+                Logger.LogDebug(ex, "コンテキスト量の定期更新に失敗");
+            }
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 
     private void HandleClaudeModeSwitchKeyChanged(string key)
@@ -3533,6 +3641,19 @@
             }
         }
 
+        // コンテキスト量も発話直後が読みどき（この時点で usage が記録済み）。
+        // 定期更新（60秒）を待たずに、増えた分をその場で反映する
+        if (showContextSize)
+        {
+            var usages = await SessionContextService.GetContextUsagesAsync(new[] { sessionInfo }, forceRefresh: true);
+            var usage = usages.GetValueOrDefault(sessionInfo.SessionId);
+            if (usage != null && usage != sessionInfo.ContextUsage)
+            {
+                sessionInfo.ContextUsage = usage;
+                StateHasChanged();
+            }
+        }
+
         if (sessionInfo.IsGitRepository)
         {
             // Gitステータスを更新
@@ -3678,6 +3799,12 @@
 
     public async ValueTask DisposeAsync()
     {
+        // コンテキスト量の定期更新を止める（先に印を付けてから止める。
+        // 逆順だと、止めた直後に遅れてきた裏処理が張り直してしまう）
+        _disposed = true;
+        contextUsageTimer?.Dispose();
+        contextUsageTimer = null;
+
         // 保留中のエミュレータ再同期をキャンセル
         _emulatorResyncCts?.Cancel();
         _emulatorResyncCts?.Dispose();

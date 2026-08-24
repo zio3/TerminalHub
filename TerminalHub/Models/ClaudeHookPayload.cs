@@ -35,4 +35,12 @@ public class ClaudeHookPayload
     /// <summary>PreToolUse 等で実行対象のツール名が入る（matcher で AskUserQuestion に絞って登録）。</summary>
     [JsonPropertyName("tool_name")]
     public string? ToolName { get; set; }
+
+    /// <summary>
+    /// このセッションのトランスクリプト（.jsonl）の絶対パス。公式ドキュメント記載の共通フィールド。
+    /// コンテキスト量バッジが「どの記録を読むか」を厳密に決めるために使う
+    /// （フォルダからの推測だと、同じフォルダの複数セッションを取り違える）。
+    /// </summary>
+    [JsonPropertyName("transcript_path")]
+    public string? TranscriptPath { get; set; }
 }
