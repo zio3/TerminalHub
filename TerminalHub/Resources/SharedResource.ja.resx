@@ -715,8 +715,8 @@
   <data name="Settings.Sessions.Display.ContextCacheAwareSub" xml:space="preserve"><value>残り15分で黄、10分で赤</value></data>
   <data name="Settings.Sessions.Display.ContextMinSize" xml:space="preserve"><value>表示する下限</value></data>
   <data name="Settings.Sessions.Display.ContextMinSizeSub" xml:space="preserve"><value>0 で下限なし（常に表示）</value></data>
-  <data name="Settings.Sessions.Display.ContextNote" xml:space="preserve"><value>記録から読むため、そのセッションが次に発話するまで数字は変わりません。キャッシュの残り時間は最後の発話からの経過で計算します。</value></data>
-  <data name="SessionList.Badge.ContextTitleFormat" xml:space="preserve"><value>コンテキスト {0} トークン</value></data>
+  <data name="Settings.Sessions.Display.ContextNote" xml:space="preserve"><value>記録から読むため、そのセッションが次に発話するまで数字は変わりません。最後に送信したリクエストの実測値なので、CLI の /context（次に送るとしたらの見積もり）とは差が出ます。キャッシュの残り時間は最後の発話からの経過で計算します。</value></data>
+  <data name="SessionList.Badge.ContextTitleFormat" xml:space="preserve"><value>コンテキスト {0} トークン（最後に送信した時点）</value></data>
   <data name="SessionList.Badge.ContextCacheWarmFormat" xml:space="preserve"><value>キャッシュ有効（残り約{0}分）</value></data>
   <data name="SessionList.Badge.ContextCacheExpiringFormat" xml:space="preserve"><value>キャッシュが切れるまで約{0}分。切れると次回の読み込みが約20倍のコストになります。</value></data>
   <data name="SessionList.Badge.ContextCacheCold" xml:space="preserve"><value>キャッシュ切れ。次回は再読み込みになります。</value></data>

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 using TerminalHub.Models;
 
 namespace TerminalHub.Services
@@ -45,8 +44,6 @@ namespace TerminalHub.Services
         /// <summary>末尾から読むバイト数。1発話分の usage が入っていれば足りる</summary>
         private const int TailBytes = 128 * 1024;
 
-        private static readonly Regex UsageRegex = new(
-            "\"usage\":\\{(?<body>[^}]*)\\}", RegexOptions.Compiled);
 
         public SessionContextService(ILogger<SessionContextService> logger, IClaudeTranscriptLocator transcriptLocator)
         {
@@ -127,13 +124,12 @@ namespace TerminalHub.Services
                     if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
                     if (line.Contains("\"isSidechain\":true", StringComparison.Ordinal)) continue;
 
-                    var m = UsageRegex.Match(line);
-                    if (!m.Success) continue;
+                    var usage = ExtractUsage(line);
+                    if (usage == null) continue;
 
-                    var body = m.Groups["body"].Value;
-                    var tokens = ReadInt(body, "input_tokens")
-                        + ReadInt(body, "cache_creation_input_tokens")
-                        + ReadInt(body, "cache_read_input_tokens");
+                    var tokens = ReadInt(usage, "input_tokens")
+                        + ReadInt(usage, "cache_creation_input_tokens")
+                        + ReadInt(usage, "cache_read_input_tokens");
                     if (tokens <= 0) continue;
 
                     return new SessionContextUsage(tokens, lastWrite);
@@ -159,17 +155,58 @@ namespace TerminalHub.Services
             return _transcriptLocator.EnumerateNewestFirst(session.FolderPath, 1).FirstOrDefault();
         }
 
-        /// <summary>usage 本体（"a":1,"b":2 …）から数値を1つ取り出す。無ければ 0</summary>
-        private static int ReadInt(string body, string key)
+        /// <summary>
+        /// 1行から usage オブジェクトを丸ごと切り出す。
+        ///
+        /// usage には server_tool_use / cache_creation / iterations といった入れ子が入るため、
+        /// 「最初の閉じ括弧まで」で切ると必要なフィールドを取りこぼすことがある
+        /// （しかも 0 が返るだけで静かに壊れる）。括弧の対応を数えて全体を取る。
+        /// </summary>
+        private static string? ExtractUsage(string line)
+        {
+            var i = line.IndexOf("\"usage\":", StringComparison.Ordinal);
+            if (i < 0) return null;
+
+            var open = line.IndexOf('{', i);
+            if (open < 0) return null;
+
+            var depth = 0;
+            for (var k = open; k < line.Length; k++)
+            {
+                if (line[k] == '{') depth++;
+                else if (line[k] == '}' && --depth == 0) return line[open..(k + 1)];
+            }
+            return null; // 行が途中で切れている（末尾読みの境界）
+        }
+
+        /// <summary>
+        /// usage から数値フィールドを1つ取り出す。無ければ 0。
+        ///
+        /// iterations の中に同名のキーが入っているため、入れ子の中は見ない
+        /// （直下のものだけを採る）。文字列値は現れない前提だが、括弧の深さで判定するので
+        /// 順序が変わっても取り違えない。
+        /// </summary>
+        private static int ReadInt(string usage, string key)
         {
             var needle = $"\"{key}\":";
-            var i = body.IndexOf(needle, StringComparison.Ordinal);
-            if (i < 0) return 0;
+            var depth = 0;
 
-            i += needle.Length;
-            var end = i;
-            while (end < body.Length && char.IsAsciiDigit(body[end])) end++;
-            return end > i && int.TryParse(body.AsSpan(i, end - i), out var v) ? v : 0;
+            for (var i = 0; i < usage.Length; i++)
+            {
+                var c = usage[i];
+                if (c == '{' || c == '[') { depth++; continue; }
+                if (c == '}' || c == ']') { depth--; continue; }
+
+                // usage オブジェクトの直下（開き括弧のぶんで depth==1）だけを見る
+                if (depth != 1 || c != '"') continue;
+                if (string.CompareOrdinal(usage, i, needle, 0, needle.Length) != 0) continue;
+
+                var v = i + needle.Length;
+                var end = v;
+                while (end < usage.Length && char.IsAsciiDigit(usage[end])) end++;
+                return end > v && int.TryParse(usage.AsSpan(v, end - v), out var parsed) ? parsed : 0;
+            }
+            return 0;
         }
     }
 }

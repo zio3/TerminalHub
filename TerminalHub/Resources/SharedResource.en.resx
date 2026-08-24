@@ -715,8 +715,8 @@
   <data name="Settings.Sessions.Display.ContextCacheAwareSub" xml:space="preserve"><value>yellow at 15 min left, red at 10 min</value></data>
   <data name="Settings.Sessions.Display.ContextMinSize" xml:space="preserve"><value>Minimum size to show</value></data>
   <data name="Settings.Sessions.Display.ContextMinSizeSub" xml:space="preserve"><value>0 for no minimum (always show)</value></data>
-  <data name="Settings.Sessions.Display.ContextNote" xml:space="preserve"><value>The size is read from the transcript, so it does not change until that session speaks again. Remaining cache time is calculated from the last utterance.</value></data>
-  <data name="SessionList.Badge.ContextTitleFormat" xml:space="preserve"><value>Context: {0} tokens</value></data>
+  <data name="Settings.Sessions.Display.ContextNote" xml:space="preserve"><value>The size is read from the transcript, so it does not change until that session speaks again. It is the measured size of the last request sent, so it differs from the CLI's /context (an estimate for the next request). Remaining cache time is calculated from the last utterance.</value></data>
+  <data name="SessionList.Badge.ContextTitleFormat" xml:space="preserve"><value>Context: {0} tokens (as of the last request sent)</value></data>
   <data name="SessionList.Badge.ContextCacheWarmFormat" xml:space="preserve"><value>Cache is warm (about {0} min left)</value></data>
   <data name="SessionList.Badge.ContextCacheExpiringFormat" xml:space="preserve"><value>About {0} min until the cache expires. Once it does, the next read costs roughly 20x.</value></data>
   <data name="SessionList.Badge.ContextCacheCold" xml:space="preserve"><value>Cache expired. The next turn will re-read the whole context.</value></data>
