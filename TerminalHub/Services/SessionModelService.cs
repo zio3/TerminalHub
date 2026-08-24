@@ -14,6 +14,7 @@ namespace TerminalHub.Services
     public class SessionModelService : ISessionModelService
     {
         private readonly ILogger<SessionModelService> _logger;
+        private readonly IClaudeTranscriptLocator _transcriptLocator;
 
         // 直近の取得結果。短時間に何度も呼ばれても実ファイルを読み直さないための緩衝。
         // ロックは張らない（取得は読み取り専用で、同時に走っても結果は同じ。
@@ -21,8 +22,6 @@ namespace TerminalHub.Services
         private readonly ConcurrentDictionary<Guid, (string? Model, DateTime ReadAt)> _cache = new();
 
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(15);
-        /// <summary>Claude のプロジェクト一覧（直接検索が外れたときの保険）を作り直す間隔</summary>
-        private static readonly TimeSpan IndexTtl = TimeSpan.FromMinutes(2);
         /// <summary>Codex の走査上限。全件でも数百程度だが、増え続ける前提で頭を抑える</summary>
         private const int CodexScanLimit = 500;
         /// <summary>末尾から読むバイト数。巨大な jsonl 全体を読むと極端に遅くなる</summary>
@@ -33,9 +32,10 @@ namespace TerminalHub.Services
         private static readonly Regex ModelRegex = new("\"model\":\"([^\"]+)\"", RegexOptions.Compiled);
         private static readonly Regex CwdRegex = new("\"cwd\":\"([^\"]+)\"", RegexOptions.Compiled);
 
-        public SessionModelService(ILogger<SessionModelService> logger)
+        public SessionModelService(ILogger<SessionModelService> logger, IClaudeTranscriptLocator transcriptLocator)
         {
             _logger = logger;
+            _transcriptLocator = transcriptLocator;
         }
 
         public async Task<string?> GetCurrentModelAsync(SessionInfo session, bool forceRefresh = false)
@@ -127,19 +127,10 @@ namespace TerminalHub.Services
 
         private string? ReadClaudeModel(string folderPath)
         {
-            var dir = FindClaudeProjectDir(folderPath);
-            if (dir == null) return null;
-
             // 更新日時での足切りはしない。長く放置したセッションでもモデルは変わらず有効なため。
             // 再起動直後は新しい記録がまだ空で、最新ファイルだけ見るとバッジが消えてしまうので、
             // 見つかるまで新しい順に数件遡る（/model の指定は既定として引き継がれるため直前の値が妥当）
-            var files = Directory.EnumerateFiles(dir, "*.jsonl")
-                .Select(p => new FileInfo(p))
-                .OrderByDescending(f => f.LastWriteTime)
-                .Take(ClaudeFileLookback)
-                .Select(f => f.FullName);
-
-            foreach (var jsonl in files)
+            foreach (var jsonl in _transcriptLocator.EnumerateNewestFirst(folderPath, ClaudeFileLookback))
             {
                 // 末尾から遡り、最後に assistant が喋ったときのモデルを拾う
                 foreach (var line in ReadTailLines(jsonl).Reverse())
@@ -150,58 +141,6 @@ namespace TerminalHub.Services
                 }
             }
             return null;
-        }
-
-        /// <summary>
-        /// フォルダ名は cwd から機械的に決まるので、まず組み立てて直接叩く（全列挙は不要）。
-        /// Windows のパス比較は大文字小文字を区別しないため、記録側と綴りが違っても直接ヒットする。
-        /// 外れたときだけ、保険として一覧から突き合わせる。
-        /// </summary>
-        private string? FindClaudeProjectDir(string folderPath)
-        {
-            var root = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "projects");
-            if (!Directory.Exists(root)) return null;
-
-            var key = ToProjectKey(folderPath);
-            if (key == null) return null;
-
-            var direct = Path.Combine(root, key);
-            if (Directory.Exists(direct)) return direct;
-
-            return GetClaudeProjectIndex(root).GetValueOrDefault(key);
-        }
-
-        // 複数スレッドから同時に読まれるので、作りかけを見せないよう完成品を丸ごと差し替える。
-        // 同時に作り直しが走っても結果は同じなので、作成自体は直列化しない。
-        private volatile ClaudeProjectIndex? _claudeIndex;
-
-        private sealed record ClaudeProjectIndex(Dictionary<string, string> Map, DateTime BuiltAt);
-
-        private Dictionary<string, string> GetClaudeProjectIndex(string root)
-        {
-            var current = _claudeIndex;
-            if (current != null && DateTime.UtcNow - current.BuiltAt < IndexTtl) return current.Map;
-
-            var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var dir in Directory.EnumerateDirectories(root))
-            {
-                var k = ToProjectKey(Path.GetFileName(dir));
-                if (k != null) index[k] = dir;
-            }
-            _claudeIndex = new ClaudeProjectIndex(index, DateTime.UtcNow);
-            return index;
-        }
-
-        /// <summary>パス -> projects のフォルダ名。末尾の空白や区切りは落としてから記号を潰す</summary>
-        private static string? ToProjectKey(string? path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return null;
-            var p = path.Trim().TrimEnd('\\', '/', ' ');
-            var sb = new StringBuilder(p.Length);
-            foreach (var c in p)
-                sb.Append(char.IsAsciiLetterOrDigit(c) ? c : '-');
-            return sb.ToString().TrimEnd('-');
         }
 
         // --- Codex -----------------------------------------------------------
@@ -318,43 +257,9 @@ namespace TerminalHub.Services
 
         private static readonly Regex DateSuffixRegex = new(@"-\d{8}$", RegexOptions.Compiled);
 
-        /// <summary>
-        /// 末尾のみを読む。1行=1JSON なので、全体をパースせず行単位で拾えば足りる。
-        /// 書き込み中のファイルを掴むため ReadWrite 共有で開く。
-        /// </summary>
-        private static IReadOnlyList<string> ReadTailLines(string path)
-        {
-            try
-            {
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var start = Math.Max(0, fs.Length - TailBytes);
-                fs.Seek(start, SeekOrigin.Begin);
-                var buf = new byte[fs.Length - start];
-                var read = fs.Read(buf, 0, buf.Length);
-                var lines = Encoding.UTF8.GetString(buf, 0, read).Split('\n');
-                // 途中から読んだ場合、先頭行は千切れているので捨てる
-                return start > 0 && lines.Length > 1 ? lines[1..] : lines;
-            }
-            catch
-            {
-                return Array.Empty<string>();
-            }
-        }
+        private static IReadOnlyList<string> ReadTailLines(string path) =>
+            TranscriptTail.ReadTailLines(path, TailBytes);
 
-        /// <summary>先頭行（session_meta）だけを読む</summary>
-        private static string? ReadHead(string path, int bytes = 8192)
-        {
-            try
-            {
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var buf = new byte[Math.Min(bytes, fs.Length)];
-                var read = fs.Read(buf, 0, buf.Length);
-                return Encoding.UTF8.GetString(buf, 0, read).Split('\n').FirstOrDefault();
-            }
-            catch
-            {
-                return null;
-            }
-        }
+        private static string? ReadHead(string path) => TranscriptTail.ReadHead(path);
     }
 }
