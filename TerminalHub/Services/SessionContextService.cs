@@ -119,6 +119,13 @@ namespace TerminalHub.Services
                 // ——拾ってしまうと、Task 実行中だけ数字が small に化ける。
                 foreach (var line in TranscriptTail.ReadTailLines(path, TailBytes).Reverse())
                 {
+                    // usage より後ろに畳んだ記録があれば、そちらが現在のサイズ。
+                    // usage は「最後に送ったリクエスト」の値で、compact の要約リクエスト自体は
+                    // 畳む前の満杯のコンテキストを読むため、畳んだ直後は数字が縮まない。
+                    // 記録には畳んだ後の実サイズ（postTokens）が入っているのでそれを使う。
+                    // 次の本物の発話が来れば usage の方が新しくなり、自然にこの経路を抜ける
+                    if (ReadCompactBoundary(line) is { } compacted) return compacted;
+
                     if (!line.Contains("\"type\":\"assistant\"", StringComparison.Ordinal)) continue;
                     if (line.Contains("\"isSidechain\":true", StringComparison.Ordinal)) continue;
 
@@ -179,6 +186,42 @@ namespace TerminalHub.Services
                 else if (line[k] == '}' && --depth == 0) return line[open..(k + 1)];
             }
             return null; // 行が途中で切れている（末尾読みの境界）
+        }
+
+        /// <summary>
+        /// 「会話を畳んだ」記録なら、畳んだ後のサイズと時刻を返す。違えば null。
+        ///
+        /// 文字列の有無だけで判定してはいけない: compact_boundary という語は会話本文にも現れうる
+        /// （この機能の実装中に、まさに自分の発話が引っかかった）。型まで見て本物だけを採る。
+        /// </summary>
+        private static SessionContextUsage? ReadCompactBoundary(string line)
+        {
+            // 大半の行は無関係なので、JSON を組み立てる前に安く落とす
+            if (!line.Contains("\"compact_boundary\"", StringComparison.Ordinal)) return null;
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+
+                if (!root.TryGetProperty("type", out var type) || type.GetString() != "system") return null;
+                if (!root.TryGetProperty("subtype", out var sub) || sub.GetString() != "compact_boundary") return null;
+                // サブエージェントが畳んだ記録は本編のサイズではない
+                if (root.TryGetProperty("isSidechain", out var side)
+                    && side.ValueKind == System.Text.Json.JsonValueKind.True) return null;
+
+                if (!root.TryGetProperty("compactMetadata", out var meta)) return null;
+                if (!meta.TryGetProperty("postTokens", out var post)) return null;
+                if (!post.TryGetInt32(out var tokens) || tokens <= 0) return null;
+
+                // 畳む要約リクエストも本物の API 要求なので、キャッシュはこの時点で温まっている
+                return new SessionContextUsage(tokens, ReadTimestamp(line) ?? DateTime.UtcNow);
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException)
+            {
+                return null; // 末尾読みの境界で行頭が欠けている等
+            }
         }
 
         /// <summary>
