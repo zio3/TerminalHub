@@ -114,8 +114,6 @@ namespace TerminalHub.Services
 
             try
             {
-                var lastWrite = File.GetLastWriteTimeUtc(path);
-
                 // 末尾から遡り、最初に見つかった「本編の assistant 発話」の usage を採る。
                 // サブエージェント（isSidechain:true）の発話は別コンテキストなので飛ばす
                 // ——拾ってしまうと、Task 実行中だけ数字が small に化ける。
@@ -132,7 +130,11 @@ namespace TerminalHub.Services
                         + ReadInt(usage, "cache_read_input_tokens");
                     if (tokens <= 0) continue;
 
-                    return new SessionContextUsage(tokens, lastWrite);
+                    // 最終活動時刻は、この usage を記録した発話自身の timestamp を採る。
+                    // ファイルの更新日時は使えない: mode / atis-latch / bridge-session といった
+                    // タイムスタンプを持たないメタレコードが API リクエスト無しで追記され、
+                    // 何日も冷えたセッションが「数分前」に見えてしまう（2026-08-25 実測）
+                    return new SessionContextUsage(tokens, ReadTimestamp(line) ?? File.GetLastWriteTimeUtc(path));
                 }
             }
             catch (Exception ex)
@@ -177,6 +179,36 @@ namespace TerminalHub.Services
                 else if (line[k] == '}' && --depth == 0) return line[open..(k + 1)];
             }
             return null; // 行が途中で切れている（末尾読みの境界）
+        }
+
+        /// <summary>
+        /// レコード直下の timestamp（ISO8601・UTC）を読む。無ければ null。
+        /// 発話本文の中にも同名のキーが現れうるため、入れ子の中は見ない。
+        /// </summary>
+        private static DateTime? ReadTimestamp(string line)
+        {
+            // ここは採用が確定した1行にしか来ないので、素直に JSON として読む。
+            // 文字列の走査で済ませないのは、発話本文に括弧が入ると入れ子の深さが狂うため
+            // （数値しか現れない usage の中とは事情が違う）
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                if (!doc.RootElement.TryGetProperty("timestamp", out var ts)) return null;
+                if (ts.ValueKind != System.Text.Json.JsonValueKind.String) return null;
+
+                return DateTime.TryParse(
+                    ts.GetString(), null,
+                    // 記録は末尾 Z の UTC。Z が欠けていても UTC とみなす（ローカル時刻に化けさせない）
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var parsed)
+                    ? parsed
+                    : null;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null; // 末尾読みの境界で行頭が欠けている等
+            }
         }
 
         /// <summary>
