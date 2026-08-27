@@ -313,11 +313,11 @@
             return new ContextBadge(text, "text-bg-secondary", sizeTitle);
         }
 
-        // 処理中は API 応答待ちで記録が伸びず、実際より冷たく見える。温かい側に倒す
-        var isProcessing = session.ProcessingStartTime.HasValue;
-        var remaining = isProcessing
-            ? CacheTtl
-            : CacheTtl - (DateTime.UtcNow - usage.LastActivityUtc);
+        // 処理中は API 応答待ちで記録が伸びず、実際より冷たく見える。
+        // 処理開始＝本物のリクエストを投げた時刻なので、それを活動時刻とみなして温かい側に倒す。
+        // 満タン固定にはしない（処理中フラグが残ったセッションが永久に「残り60分」になるため。
+        // Stop hook は撃ち漏らすことがあり、フラグは放っておくと立ちっぱなしになる）
+        var remaining = CacheTtl - (DateTime.UtcNow - GetCacheBasisUtc(session, usage));
 
         if (remaining <= TimeSpan.Zero)
         {
@@ -339,6 +339,18 @@
             string.Format(L["SessionList.Badge.ContextRemainingFormat"], sizeK, left),
             css,
             $"{sizeTitle} / {expiring}");
+    }
+
+    /// <summary>
+    /// キャッシュ残り時間の起点。処理中なら処理開始時刻（＝直近に API を叩いた時刻）と
+    /// 記録上の最終活動時刻の新しい方を採る。
+    /// ProcessingStartTime はローカル時刻（DateTime.Now）で入るので UTC に揃える。
+    /// </summary>
+    private static DateTime GetCacheBasisUtc(SessionInfo session, SessionContextUsage usage)
+    {
+        if (session.ProcessingStartTime is not { } started) return usage.LastActivityUtc;
+        var startedUtc = started.ToUniversalTime();
+        return startedUtc > usage.LastActivityUtc ? startedUtc : usage.LastActivityUtc;
     }
 
     private string GetGitBadgeTitle(SessionInfo session)
