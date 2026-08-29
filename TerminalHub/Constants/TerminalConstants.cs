@@ -57,6 +57,12 @@
             if (options.TryGetValue("permission-mode", out var permMode))
             {
                 if (permMode == "bypass") args.Add("--dangerously-skip-permissions");
+                // auto-allow-bypass: オートモードで起動しつつ、Shift+Tab の切替候補に bypass を残す。
+                // Pro/Max/Team のターミナルなら Claude Code 側の既定も auto だが、Enterprise・API キー・
+                // -p・Bedrock 系・インストール直後の初回セッションは default 起動なので明示しておく。
+                // --allow-dangerously-skip-permissions は「選択肢に加える」フラグで、
+                // 即バイパス固定の --dangerously-skip-permissions とは別物。
+                else if (permMode == "auto-allow-bypass") args.Add("--permission-mode auto --allow-dangerously-skip-permissions");
                 else if (permMode == "auto") args.Add("--permission-mode auto");
             }
             else if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")

@@ -250,7 +250,7 @@
 
     // 復元値ホワイトリスト: 設定ファイルが手動編集等で汚染された場合に
     // 不正値で起動引数が壊れるのを防ぐ。SessionOptionsSelector の UI 選択肢と一致させる。
-    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
+    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto-allow-bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };

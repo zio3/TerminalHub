@@ -352,10 +352,13 @@
   <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>Auto-approves all operations unconditionally (dangerous)</value></data>
   <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>Auto</value></data>
   <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoAllowBypassLabel" xml:space="preserve"><value>Auto+Bypass</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoAllowBypassTitle" xml:space="preserve"><value>Starts in auto mode and keeps bypass available via Shift+Tab</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>Default</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>Prompts for confirmation on every operation</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>Auto-approves all operations unconditionally (--dangerously-skip-permissions).</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>Auto-approves low-risk operations and prompts only for high-risk ones (--permission-mode auto).</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAutoAllowBypass" xml:space="preserve"><value>Starts in auto mode while keeping bypass as a switchable option (--permission-mode auto --allow-dangerously-skip-permissions).</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>Prompts for confirmation on every operation.</value></data>
   <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>Resume previous session (--continue)</value></data>
   <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>Browser integration (--chrome)</value></data>
