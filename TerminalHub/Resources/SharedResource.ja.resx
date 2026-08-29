@@ -352,10 +352,13 @@
   <data name="SessionOptions.Claude.PermissionMode.BypassTitle" xml:space="preserve"><value>全操作を無条件で自動承認します（危険）</value></data>
   <data name="SessionOptions.Claude.PermissionMode.AutoLabel" xml:space="preserve"><value>オートモード</value></data>
   <data name="SessionOptions.Claude.PermissionMode.AutoTitle" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoAllowBypassLabel" xml:space="preserve"><value>Auto+Bypass可</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.AutoAllowBypassTitle" xml:space="preserve"><value>オートモードで起動し、Shift+Tab でバイパスに切り替えられるようにします</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultLabel" xml:space="preserve"><value>デフォルト</value></data>
   <data name="SessionOptions.Claude.PermissionMode.DefaultTitle" xml:space="preserve"><value>全ての操作で都度確認を求めます</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpBypass" xml:space="preserve"><value>全操作を無条件で自動承認します（--dangerously-skip-permissions）。</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpAuto" xml:space="preserve"><value>低リスク操作を自動承認し、高リスク操作のみ確認を求めます（--permission-mode auto）。</value></data>
+  <data name="SessionOptions.Claude.PermissionMode.HelpAutoAllowBypass" xml:space="preserve"><value>オートモードで起動しつつ、バイパスを切替候補に残します（--permission-mode auto --allow-dangerously-skip-permissions）。</value></data>
   <data name="SessionOptions.Claude.PermissionMode.HelpDefault" xml:space="preserve"><value>全ての操作で都度確認を求めます。</value></data>
   <data name="SessionOptions.Claude.Continue" xml:space="preserve"><value>直前のセッションに接続 (--continue)</value></data>
   <data name="SessionOptions.Claude.Chrome" xml:space="preserve"><value>ブラウザ連携 (--chrome)</value></data>

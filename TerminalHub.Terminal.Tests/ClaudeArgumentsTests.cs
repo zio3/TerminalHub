@@ -43,6 +43,21 @@ public sealed class ClaudeArgumentsTests
     }
 
     [Fact]
+    public void AutoAllowBypassはオート起動とバイパス許可の両方を出す()
+    {
+        // --allow-dangerously-skip-permissions は bypass を切替候補に加えるだけで既定にはしない。
+        // --dangerously-skip-permissions（即バイパス固定）と取り違えないための番人。
+        var options = new Dictionary<string, string>
+        {
+            ["permission-mode"] = "auto-allow-bypass"
+        };
+
+        Assert.Equal(
+            "--permission-mode auto --allow-dangerously-skip-permissions",
+            TerminalConstants.BuildClaudeCodeArgs(options));
+    }
+
+    [Fact]
     public void McpConfigはユーザー指定の引数より前に置かれる()
     {
         // --mcp-config は複数指定でマージされる。ユーザーが自分で書いた指定を後ろに置くことで、

@@ -84,12 +84,23 @@
                         @L["SessionOptions.Claude.PermissionMode.AutoLabel"]
                     </label>
 
-                    <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermDefault{UniqueId}")"
-                           checked="@(ClaudeOptions.PermissionMode == "default")"
-                           @onchange="@(() => ClaudeOptions.PermissionMode = "default")" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="@($"claudePermDefault{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.DefaultTitle"]">
-                        @L["SessionOptions.Claude.PermissionMode.DefaultLabel"]
+                    <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermAutoAllow{UniqueId}")"
+                           checked="@(ClaudeOptions.PermissionMode == "auto-allow-bypass")"
+                           @onchange="@(() => ClaudeOptions.PermissionMode = "auto-allow-bypass")" autocomplete="off">
+                    <label class="btn btn-outline-warning btn-sm" for="@($"claudePermAutoAllow{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.AutoAllowBypassTitle"]">
+                        @L["SessionOptions.Claude.PermissionMode.AutoAllowBypassLabel"]
                     </label>
+
+                    @* デフォルトは選択肢から外したが、既にその設定で保存されたセッションを開いたときだけ
+                       選択状態が消えないようボタンを残す（新規には出さない）。 *@
+                    @if (ClaudeOptions.PermissionMode == "default")
+                    {
+                        <input type="radio" class="btn-check" name="@($"claudePermMode{UniqueId}")" id="@($"claudePermDefault{UniqueId}")"
+                               checked="true" autocomplete="off">
+                        <label class="btn btn-outline-primary btn-sm" for="@($"claudePermDefault{UniqueId}")" title="@L["SessionOptions.Claude.PermissionMode.DefaultTitle"]">
+                            @L["SessionOptions.Claude.PermissionMode.DefaultLabel"]
+                        </label>
+                    }
                 </div>
                 @if (!string.IsNullOrWhiteSpace(GetPermissionModeHelp()))
                 {
@@ -735,7 +746,8 @@
 
     public class ClaudeCodeOptions
     {
-        public string PermissionMode { get; set; } = "bypass"; // "bypass" | "auto" | "default"
+        // "bypass" | "auto-allow-bypass" | "auto" | "default"(旧データのみ・UIの選択肢からは撤去)
+        public string PermissionMode { get; set; } = "bypass";
         public bool Continue { get; set; } = true;
         public bool ChromeMode { get; set; } = false;
         public string ExtraArgs { get; set; } = "";
@@ -787,6 +799,7 @@
         return ClaudeOptions.PermissionMode switch
         {
             "bypass" => L["SessionOptions.Claude.PermissionMode.HelpBypass"],
+            "auto-allow-bypass" => L["SessionOptions.Claude.PermissionMode.HelpAutoAllowBypass"],
             "auto" => L["SessionOptions.Claude.PermissionMode.HelpAuto"],
             "default" => L["SessionOptions.Claude.PermissionMode.HelpDefault"],
             _ => ""

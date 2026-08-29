@@ -572,7 +572,7 @@
     // 直近の CLI モード選択は AppSettings.SessionDefaults(ファイル) から読む
     // (値の発生源は SessionCreateDialog に一元化。SubSession 側は読むだけで書き戻さない)。
 
-    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto", "default" };
+    private static readonly HashSet<string> ValidClaudePermissionModes = new() { "bypass", "auto-allow-bypass", "auto", "default" };
     private static readonly HashSet<string> ValidGeminiApprovalModes = new() { "default", "auto_edit", "yolo" };
     private static readonly HashSet<string> ValidCodexSandboxModes = new() { "", "read-only", "workspace-write", "danger-full-access" };
     private static readonly HashSet<string> ValidCodexApprovalPolicies = new() { "", "untrusted", "on-request", "never" };

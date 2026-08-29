@@ -57,6 +57,10 @@
             if (options.TryGetValue("permission-mode", out var permMode))
             {
                 if (permMode == "bypass") args.Add("--dangerously-skip-permissions");
+                // auto-allow-bypass: オートモードで起動しつつ、Shift+Tab の切替候補に bypass を残す。
+                // --allow-dangerously-skip-permissions は「選択肢に加えるだけ」で既定にはしない
+                // （--dangerously-skip-permissions とは別物）。
+                else if (permMode == "auto-allow-bypass") args.Add("--permission-mode auto --allow-dangerously-skip-permissions");
                 else if (permMode == "auto") args.Add("--permission-mode auto");
             }
             else if (options.ContainsKey("bypass-mode") && options["bypass-mode"] == "true")
