@@ -307,6 +307,15 @@
         var text = $"{sizeK}K";
         var sizeTitle = string.Format(L["SessionList.Badge.ContextTitleFormat"], usage.Tokens.ToString("N0"));
 
+        // compact 直後は、畳んだ後のサイズがまだ記録に現れない（Claude Code は次の発話まで
+        // 何も書かない）。畳む前の数字を平然と出すと「compact が効いていない」ように見えるので、
+        // 未確定であることを示す。次の発話で記録が追いつけば自動的に通常表示へ戻る
+        if (session.IsContextUsageStaleAfterCompact)
+        {
+            return new ContextBadge(
+                $"{text}?", "text-bg-secondary", L["SessionList.Badge.ContextAfterCompact"]);
+        }
+
         // 考慮OFF: 温度の情報を持たないので常に灰色（数字だけの計器）
         if (!ContextCacheAware)
         {

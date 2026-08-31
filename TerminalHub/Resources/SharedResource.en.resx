@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     i18n shared resources (English - canonical)
@@ -724,4 +724,5 @@
   <data name="SessionList.Badge.ContextCacheExpiringFormat" xml:space="preserve"><value>About {0} min until the cache expires. Once it does, the next read costs roughly 20x.</value></data>
   <data name="SessionList.Badge.ContextCacheCold" xml:space="preserve"><value>Cache expired. The next turn will re-read the whole context.</value></data>
   <data name="SessionList.Badge.ContextRemainingFormat" xml:space="preserve"><value>{0}K &#183; {1}m</value></data>
+  <data name="SessionList.Badge.ContextAfterCompact" xml:space="preserve"><value>Just compacted. The size after compaction does not appear in the transcript until this session speaks again, so the number shown is the pre-compaction value.</value></data>
 </root>

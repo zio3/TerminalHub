@@ -9,7 +9,12 @@ namespace TerminalHub.Services
     /// </summary>
     /// <param name="Tokens">直近の assistant 発話時点のコンテキスト量</param>
     /// <param name="LastActivityUtc">トランスクリプトの最終更新時刻（UTC）</param>
-    public record SessionContextUsage(int Tokens, DateTime LastActivityUtc);
+    /// <param name="FromCompactBoundary">
+    /// 畳んだ記録（compact_boundary の postTokens）から採った値か。
+    /// PostCompact hook を受けた後もこれが false のままなら、記録がまだ追いついていない
+    /// ＝表示中の数字は畳む前のもの、と判定できる（バッジの「未確定」表示に使う）。
+    /// </param>
+    public record SessionContextUsage(int Tokens, DateTime LastActivityUtc, bool FromCompactBoundary = false);
 
     public interface ISessionContextService
     {
@@ -244,7 +249,7 @@ namespace TerminalHub.Services
                 if (!post.TryGetInt32(out var tokens) || tokens <= 0) return null;
 
                 // 畳む要約リクエストも本物の API 要求なので、キャッシュはこの時点で温まっている
-                return new SessionContextUsage(tokens, ReadTimestamp(line) ?? DateTime.UtcNow);
+                return new SessionContextUsage(tokens, ReadTimestamp(line) ?? DateTime.UtcNow, FromCompactBoundary: true);
             }
             catch (System.Text.Json.JsonException)
             {
