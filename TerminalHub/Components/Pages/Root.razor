@@ -702,9 +702,9 @@
                             createdSession.PinPriority = sessionInfo.PinPriority;
 
                             // サブセッション管理画面で決めた並び順も復元する。
-                            // ここで漏らすと in-memory が既定の 0 に戻るだけでなく、
-                            // 直後の SaveSessionInfoAsync で DB にも 0 が書き戻され、
-                            // 「再起動したら並び順が作成日時順に戻る」になる。
+                            // ここで漏らすと in-memory が既定の 0 に戻り、
+                            // その後の Git 状態更新や hook を契機としたストレージ保存で
+                            // DB にも 0 が書き戻される（保存済みの並び順ごと失われる）。
                             createdSession.SortOrder = sessionInfo.SortOrder;
 
                             // セッション専用コマンドを復元。
