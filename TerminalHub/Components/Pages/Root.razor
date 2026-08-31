@@ -701,6 +701,12 @@
                             createdSession.IsPinned = sessionInfo.IsPinned;
                             createdSession.PinPriority = sessionInfo.PinPriority;
 
+                            // サブセッション管理画面で決めた並び順も復元する。
+                            // ここで漏らすと in-memory が既定の 0 に戻り、
+                            // その後の Git 状態更新や hook を契機としたストレージ保存で
+                            // DB にも 0 が書き戻される（保存済みの並び順ごと失われる）。
+                            createdSession.SortOrder = sessionInfo.SortOrder;
+
                             // セッション専用コマンドを復元。
                             // CreateSessionAsync は空の SessionCommands で新規 SessionInfo を作るため、
                             // ここでコピーし忘れると、アプリ再起動後に in-memory が空になり、
