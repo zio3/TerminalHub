@@ -153,6 +153,18 @@ namespace TerminalHub.Models
         public bool IsCompacting { get; set; }
 
         /// <summary>
+        /// 最後に PostCompact hook を受け取った時刻（UTC）。compact 済みの事実だけを覚えておく。
+        ///
+        /// Claude Code は畳んだ直後にはトランスクリプトへ何も書かず、次の発話が来たときに
+        /// まとめて compact_boundary を書き出す。そのためコンテキスト量バッジは
+        /// 「畳んだのに数字が変わらない」状態になる。読み取り側では区別できないので、
+        /// hook が知らせてきたこの時刻と付き合わせて「未確定」と表示するために持つ。
+        /// トランスクリプトが追いつけば無関係になる短命な値なので保存しない。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? LastCompactedAtUtc { get; set; }
+
+        /// <summary>
         /// 最後にセッションに接続した時刻（過去バッファの誤検出防止用）
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
@@ -209,6 +221,21 @@ namespace TerminalHub.Models
         /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public SessionContextUsage? ContextUsage { get; set; }
+
+        /// <summary>
+        /// 表示中のコンテキスト量が「畳む前の値」かどうか。
+        /// PostCompact を受けたのに、記録から採れた値が畳む前の発話のままなら true。
+        ///
+        /// 記録が追いつけば、採れる値は畳んだ記録そのもの（FromCompactBoundary）か、
+        /// 畳んだ後の発話（compact より新しい時刻）のどちらかになるので、自然に false へ戻る。
+        /// 時刻の前後だけで判定すると、compact_boundary の時刻が PostCompact hook より
+        /// わずかに古いために「追いついたのに未確定のまま」になるため、種別も見る。
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsContextUsageStaleAfterCompact =>
+            LastCompactedAtUtc is { } compactedAt
+            && ContextUsage is { FromCompactBoundary: false } usage
+            && usage.LastActivityUtc < compactedAt;
 
         /// <summary>
         /// Claude Code の hook が知らせてきたトランスクリプトのパス。

@@ -724,4 +724,5 @@
   <data name="SessionList.Badge.ContextCacheExpiringFormat" xml:space="preserve"><value>キャッシュが切れるまで約{0}分。切れると次回の読み込みが約20倍のコストになります。</value></data>
   <data name="SessionList.Badge.ContextCacheCold" xml:space="preserve"><value>キャッシュ切れ。次回は再読み込みになります。</value></data>
   <data name="SessionList.Badge.ContextRemainingFormat" xml:space="preserve"><value>{0}K・{1}分</value></data>
+  <data name="SessionList.Badge.ContextAfterCompact" xml:space="preserve"><value>コンパクト直後です。畳んだ後のサイズはこのセッションが次に発話するまで記録に現れないため、表示しているのは畳む前の値です。</value></data>
 </root>

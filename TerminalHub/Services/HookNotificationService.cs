@@ -248,6 +248,10 @@ public class HookNotificationService : IHookNotificationService
     private async Task HandlePostCompactEventAsync(SessionInfo session, HookNotification notification)
     {
         session.IsCompacting = false;
+        // 畳んだ事実を覚えておく。Claude Code は畳んだ直後にトランスクリプトへ何も書かず、
+        // 次の発話までコンテキスト量バッジが畳む前の値のままになるため、その間を
+        // 「未確定」と表示するのに使う（SessionInfo.IsContextUsageStaleAfterCompact）
+        session.LastCompactedAtUtc = DateTime.UtcNow;
         await SendSessionHookWebhookAsync(session, notification);
         _logger.LogDebug("PostCompact イベント処理（compact完了）: Session={SessionName}", session.GetDisplayName());
     }
