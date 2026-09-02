@@ -1048,7 +1048,7 @@
                             <div class="tab-pane fade show active">
                                 <p class="text-muted small mb-3">
                                     <i class="bi bi-flask me-1"></i>
-                                    実験的な機能です。音声入力とカーソルパッド自動切替は<strong>このデバイスのみ</strong>（LocalStorage 保存）で、PC とモバイルで別々に設定できます。
+                                    実験的な機能です。音声入力とカーソルパッド関連は<strong>このデバイスのみ</strong>（LocalStorage 保存）で、PC とモバイルで別々に設定できます。
                                 </p>
 
                                 <div class="mb-4">
@@ -1079,6 +1079,23 @@
                                         <i class="bi bi-info-circle me-1"></i>
                                         許可待ち/選択待ちのプロンプトが出た瞬間に、そのセッションに<strong>カーソルパッドタブが既にある場合だけ</strong>そこへ自動で切り替えます（無ければ何もしません）。
                                         ↑↓←→/Enter でそのまま応答でき、タッチ操作のモバイルで便利です。このデバイスのみ。
+                                    </p>
+                                </div>
+
+                                <hr />
+
+                                <div class="mb-4">
+                                    <h6 class="mb-2">カーソルパッドを常に表示</h6>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="alwaysShowCursorPad" id="alwaysShowCursorPadSwitch">
+                                        <label class="form-check-label" for="alwaysShowCursorPadSwitch">
+                                            下部パネルに閉じられないカーソルパッドタブを常に用意する
+                                        </label>
+                                    </div>
+                                    <p class="text-muted small mt-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        カーソルパッドタブは保存されないため、通常は開くたびに＋メニューから追加が必要です。
+                                        ON にすると起動時に自動で用意され、閉じるボタンも出ません（上の「入力待ちで自動切替」と組み合わせるとモバイルで常に使えます）。このデバイスのみ。
                                     </p>
                                 </div>
 
@@ -1460,6 +1477,7 @@
     private bool slashAutocompleteEnabled = false;
     private bool promoteSessionOnOpenEnabled = false;
     private bool autoSwitchCursorPadEnabled = false;
+    private bool alwaysShowCursorPad = false;
     // TerminalHub MCP タブ: 配布する instructions（空欄=既定テンプレを配布）
     private string mcpInstructions = "";
     private bool captureRawStreamEnabled = false;
@@ -1483,6 +1501,7 @@
     [Parameter] public EventCallback<int> OnSidebarWidthPercentChanged { get; set; }
     [Parameter] public EventCallback<bool> OnVoiceInputEnabledChanged { get; set; }
     [Parameter] public EventCallback<bool> OnAutoSwitchCursorPadChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnAlwaysShowCursorPadChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
@@ -1583,6 +1602,7 @@
             var localExperimental = await LocalStorageService.LoadExperimentalSettingsAsync();
             voiceInputEnabled = localExperimental?.VoiceInputEnabled ?? settings.Special.VoiceInputEnabled;
             autoSwitchCursorPadEnabled = localExperimental?.AutoSwitchToCursorPadOnWait ?? false;
+            alwaysShowCursorPad = localExperimental?.AlwaysShowCursorPad ?? false;
 
             // セッション表示設定
             // 未知の SortMode 値は lastAccessed にフォールバック（UI ラジオの未選択状態を防ぐ）
@@ -1964,6 +1984,7 @@
             {
                 VoiceInputEnabled = voiceInputEnabled,
                 AutoSwitchToCursorPadOnWait = autoSwitchCursorPadEnabled,
+                AlwaysShowCursorPad = alwaysShowCursorPad,
             });
 
             // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
@@ -1998,6 +2019,9 @@
 
             // カーソルパッド自動切替設定の変更を通知
             await OnAutoSwitchCursorPadChanged.InvokeAsync(autoSwitchCursorPadEnabled);
+
+            // カーソルパッド常時表示設定の変更を通知
+            await OnAlwaysShowCursorPadChanged.InvokeAsync(alwaysShowCursorPad);
 
             // テーマの変更を通知
             await OnThemeChanged.InvokeAsync(theme);

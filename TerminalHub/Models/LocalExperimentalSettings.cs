@@ -15,5 +15,11 @@ namespace TerminalHub.Models
 
         /// <summary>セッションが入力待ち(許可/選択)になった時、既存のカーソルパッドタブへ自動で切り替える(デバイス別)。</summary>
         public bool AutoSwitchToCursorPadOnWait { get; set; } = false;
+
+        /// <summary>
+        /// カーソルパッドタブを常に表示する(デバイス別)。ON なら起動時に閉じられないカーソルパッドタブを
+        /// 自動で用意する(タブは永続化されないため、モバイルで毎回＋から追加する手間を省く)。
+        /// </summary>
+        public bool AlwaysShowCursorPad { get; set; } = false;
     }
 }
