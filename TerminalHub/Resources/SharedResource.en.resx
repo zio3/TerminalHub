@@ -136,6 +136,12 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Enable webhook notifications</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointsLabel" xml:space="preserve"><value>Endpoints</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointsHelp" xml:space="preserve"><value>The same payload is sent to every enabled endpoint. Use the switch to pause an endpoint.</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointEnabled" xml:space="preserve"><value>Send to this endpoint</value></data>
+  <data name="Settings.Notifications.Webhook.NamePlaceholder" xml:space="preserve"><value>Name (optional)</value></data>
+  <data name="Settings.Notifications.Webhook.Add" xml:space="preserve"><value>Add endpoint</value></data>
+  <data name="Settings.Notifications.Webhook.Remove" xml:space="preserve"><value>Remove</value></data>
 
   <!-- Settings: Sessions Tab -->
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>Session list sort order</value></data>
@@ -305,7 +311,7 @@
   <data name="Settings.Message.PermissionDenied" xml:space="preserve"><value>Notifications denied</value></data>
   <data name="Settings.Message.OpenFolderErrorFormat" xml:space="preserve"><value>Could not open folder: {0}</value></data>
   <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>Notification threshold must be 0 or greater</value></data>
-  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Please enter a Webhook URL</value></data>
+  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Please enter at least one enabled Webhook endpoint</value></data>
   <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>The specified path does not exist</value></data>
   <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>The specified folder does not exist.</value></data>
   <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>This folder has already been added</value></data>
