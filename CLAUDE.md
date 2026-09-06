@@ -181,7 +181,8 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
 1. 設定ダイアログを開く
 2. 「通知」タブを選択
 3. 「WebHook通知を有効にする」をオン
-4. URLを入力して保存
+4. 送信先を追加して URL（と任意の名前）を入力し保存。送信先は複数登録でき、行ごとのスイッチで個別に ON/OFF できる。同じペイロードを有効な送信先すべてへ並列に送る（宛先ごとのイベント絞り込みは受信側で行う）
+   - 旧形式（単一 `url`）の設定は読み込み時に `endpoints` へ自動移行される（`AppSettingsService.MigrateWebhookSettings`）
 
 #### Webhookペイロード仕様
 
