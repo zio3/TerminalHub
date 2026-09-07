@@ -133,6 +133,8 @@
     [Parameter] public Guid? CurrentSessionId { get; set; }
     /// <summary>入力テキストの下書きをセッションごとに保持するか（true=セッション固定, false=全セッション共有）。</summary>
     [Parameter] public bool PerSessionInputText { get; set; } = true;
+    /// <summary>カーソルパッドタブを常に表示する(試験機能・デバイス別)。true なら閉じられないタブとして自動で用意する。</summary>
+    [Parameter] public bool AlwaysShowCursorPad { get; set; }
 
     // TextInputPanelのイベント
     [Parameter] public EventCallback<string> OnSendInput { get; set; }
@@ -170,6 +172,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        EnsureCursorPadTab();
+
         if (CurrentSessionId.HasValue && _previousLoadedSessionId != CurrentSessionId)
         {
             _previousLoadedSessionId = CurrentSessionId;
@@ -279,16 +283,44 @@
             return;
         }
 
-        var newTab = new BottomPanelTabInfo
-        {
-            Id = Guid.NewGuid().ToString(),
-            Type = BottomPanelTabType.CursorPad,
-            DisplayName = L["BottomPanel.Tab.CursorPad"],
-            IsDefault = false
-        };
+        var newTab = CreateCursorPadTab(isDefault: false);
         Tabs.Add(newTab);
         ActiveTabId = newTab.Id;
         StateHasChanged();
+    }
+
+    private BottomPanelTabInfo CreateCursorPadTab(bool isDefault) => new()
+    {
+        Id = Guid.NewGuid().ToString(),
+        Type = BottomPanelTabType.CursorPad,
+        DisplayName = L["BottomPanel.Tab.CursorPad"],
+        IsDefault = isDefault
+    };
+
+    /// <summary>
+    /// 「カーソルパッドを常に表示」(AlwaysShowCursorPad) をタブ一覧へ反映する。
+    /// ON: タブが無ければ閉じられない(IsDefault)タブとして追加する。アクティブタブは変えない
+    ///     (起動直後に入力欄が隠れると困るため。切替は「入力待ちで自動切替」の役目)。
+    /// OFF: 既存タブは残すが、閉じられるように IsDefault を落とすだけ(勝手に消さない)。
+    /// </summary>
+    private void EnsureCursorPadTab()
+    {
+        var existing = Tabs.FirstOrDefault(t => t.Type == BottomPanelTabType.CursorPad);
+        if (AlwaysShowCursorPad)
+        {
+            if (existing == null)
+            {
+                Tabs.Add(CreateCursorPadTab(isDefault: true));
+            }
+            else
+            {
+                existing.IsDefault = true;
+            }
+        }
+        else if (existing != null && existing.IsDefault)
+        {
+            existing.IsDefault = false;
+        }
     }
 
     private async Task AddMemoTab()
