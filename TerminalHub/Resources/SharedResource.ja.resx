@@ -136,6 +136,12 @@
   <data name="Settings.Notifications.Webhook.Header" xml:space="preserve"><value>Webhook 設定</value></data>
   <data name="Settings.Notifications.Webhook.Enable" xml:space="preserve"><value>Webhook 通知を有効にする</value></data>
   <data name="Settings.Notifications.Webhook.UrlLabel" xml:space="preserve"><value>Webhook URL</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointsLabel" xml:space="preserve"><value>送信先</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointsHelp" xml:space="preserve"><value>同じ内容を有効な送信先すべてへ送ります。スイッチで送信先ごとに一時停止できます。</value></data>
+  <data name="Settings.Notifications.Webhook.EndpointEnabled" xml:space="preserve"><value>この送信先へ送る</value></data>
+  <data name="Settings.Notifications.Webhook.NamePlaceholder" xml:space="preserve"><value>名前（任意）</value></data>
+  <data name="Settings.Notifications.Webhook.Add" xml:space="preserve"><value>送信先を追加</value></data>
+  <data name="Settings.Notifications.Webhook.Remove" xml:space="preserve"><value>削除</value></data>
 
   <!-- Settings: Sessions Tab -->
   <data name="Settings.Sessions.SortOrder.Label" xml:space="preserve"><value>セッション一覧の並び順</value></data>
@@ -305,7 +311,7 @@
   <data name="Settings.Message.PermissionDenied" xml:space="preserve"><value>通知が拒否されました</value></data>
   <data name="Settings.Message.OpenFolderErrorFormat" xml:space="preserve"><value>フォルダを開けませんでした: {0}</value></data>
   <data name="Settings.Message.ThresholdNegative" xml:space="preserve"><value>通知時間は 0 以上にしてください</value></data>
-  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>Webhook URL を入力してください</value></data>
+  <data name="Settings.Message.WebhookUrlRequired" xml:space="preserve"><value>有効な送信先を1件以上入力してください</value></data>
   <data name="Settings.Message.PathNotExists" xml:space="preserve"><value>指定されたパスが存在しません</value></data>
   <data name="Settings.Message.FolderNotExists" xml:space="preserve"><value>指定されたフォルダが存在しません。</value></data>
   <data name="Settings.Message.FolderDuplicate" xml:space="preserve"><value>このフォルダは既に追加されています</value></data>

@@ -45,7 +45,7 @@ namespace TerminalHub.Services
             }
 
             // WebHook通知（出力解析ベースの疑似 complete）
-            if (webhookSettings.Enabled)
+            if (webhookSettings.GetActiveEndpoints().Any())
             {
                 await SendWebHookEventAsync(session, "complete", elapsedSeconds);
             }
@@ -106,7 +106,7 @@ namespace TerminalHub.Services
         {
             var webhookSettings = GetWebhookSettings();
 
-            if (!webhookSettings.Enabled || string.IsNullOrEmpty(webhookSettings.Url))
+            if (!webhookSettings.GetActiveEndpoints().Any())
             {
                 return;
             }

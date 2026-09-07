@@ -127,9 +127,46 @@ public class NotificationSettings
 /// </summary>
 public class WebhookSettings
 {
+    /// <summary>Webhook 通知の全体スイッチ。OFF なら宛先の個別 ON/OFF に関わらず送らない。</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// 旧形式（単一 URL）。読み込み時に <see cref="Endpoints"/> へ移行し、以後は空で保存する
+    /// （AppSettingsService.MigrateWebhookSettings）。古いバージョンで開いても壊れないよう項目自体は残す。
+    /// </summary>
     public string Url { get; set; } = "";
+
+    /// <summary>旧形式のカスタムヘッダー。<see cref="Url"/> と一緒に移行する。</summary>
     public Dictionary<string, string>? Headers { get; set; }
+
+    /// <summary>送信先の一覧。同じペイロードを有効な宛先すべてへ並列に送る。</summary>
+    public List<WebhookEndpoint> Endpoints { get; set; } = new();
+
+    /// <summary>実際に送信対象となる宛先（全体スイッチ ON かつ個別 ON かつ URL あり）。</summary>
+    public IEnumerable<WebhookEndpoint> GetActiveEndpoints()
+    {
+        if (!Enabled) return Enumerable.Empty<WebhookEndpoint>();
+        return Endpoints.Where(e => e.Enabled && !string.IsNullOrWhiteSpace(e.Url));
+    }
+}
+
+/// <summary>
+/// Webhook の送信先1件。用途別（LED 装置・Discord 中継など）に複数登録し、個別に ON/OFF できる。
+/// </summary>
+public class WebhookEndpoint
+{
+    /// <summary>この宛先へ送るか（全体スイッチとは別）。</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>設定画面とログで宛先を見分けるための表示名（任意）。</summary>
+    public string Name { get; set; } = "";
+
+    public string Url { get; set; } = "";
+
+    public Dictionary<string, string>? Headers { get; set; }
+
+    /// <summary>ログ用の表示名。Name が空なら URL で代用する。</summary>
+    public string GetDisplayLabel() => string.IsNullOrWhiteSpace(Name) ? Url : Name;
 }
 
 /// <summary>

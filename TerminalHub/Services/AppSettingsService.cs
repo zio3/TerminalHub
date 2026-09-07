@@ -119,6 +119,7 @@ public class AppSettingsService : IAppSettingsService
 
                 var json = File.ReadAllText(_settingsFilePath);
                 _cachedSettings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                MigrateWebhookSettings(_cachedSettings);
                 _lastReadTime = DateTime.Now;
                 return _cachedSettings;
             }
@@ -129,6 +130,34 @@ public class AppSettingsService : IAppSettingsService
                 return _cachedSettings;
             }
         }
+    }
+
+    /// <summary>
+    /// 旧形式の Webhook 設定（単一 Url + Headers）を Endpoints へ移行する。
+    /// 読み込み時に毎回呼ぶ（冪等）。移行後は Url/Headers を空にするので、次の保存で新形式だけが残る。
+    /// </summary>
+    private void MigrateWebhookSettings(AppSettings settings)
+    {
+        var webhook = settings.Webhook;
+        if (webhook == null || string.IsNullOrWhiteSpace(webhook.Url))
+        {
+            return;
+        }
+
+        webhook.Endpoints ??= new List<WebhookEndpoint>();
+        if (!webhook.Endpoints.Any(e => string.Equals(e.Url, webhook.Url, StringComparison.OrdinalIgnoreCase)))
+        {
+            webhook.Endpoints.Insert(0, new WebhookEndpoint
+            {
+                Enabled = true,
+                Name = "",
+                Url = webhook.Url,
+                Headers = webhook.Headers
+            });
+            _logger.LogInformation("Webhook 設定を複数宛先形式へ移行: {Url}", webhook.Url);
+        }
+        webhook.Url = "";
+        webhook.Headers = null;
     }
 
     public void SaveSettings(AppSettings settings)
@@ -154,32 +183,17 @@ public class AppSettingsService : IAppSettingsService
     public async Task SendWebhookAsync(WebhookPayload p)
     {
         var settings = GetSettings();
-        var webhook = settings.Webhook;
-        if (webhook?.Enabled != true || string.IsNullOrEmpty(webhook.Url))
+        var endpoints = settings.Webhook?.GetActiveEndpoints().ToList();
+        if (endpoints == null || endpoints.Count == 0)
         {
-            _logger.LogDebug("Webhook通知をスキップ（無効または未設定）");
+            _logger.LogDebug("Webhook通知をスキップ（無効または宛先なし）");
             return;
         }
 
+        // ペイロードは全宛先で共通（宛先ごとの絞り込みは受信側で行う）。JSON は一度だけ組み立てる。
+        string json;
         try
         {
-            var httpClient = _httpClientFactory.CreateClient();
-            // Webhook 先が無応答でもバックグラウンド送信が長時間ブロックしないよう 10 秒で打ち切る
-            // （HttpClient 既定の 100 秒を避ける）。Claude Hook 経路・非ClaudeCode 経路の両方がここを通る。
-            httpClient.Timeout = TimeSpan.FromSeconds(10);
-
-            // ヘッダーを設定
-            if (webhook.Headers != null)
-            {
-                foreach (var header in webhook.Headers)
-                {
-                    if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                    {
-                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
-                    }
-                }
-            }
-
             // ワイヤー上の JSON を組み立て（timestamp / elapsedMinutes はここで付与）
             var wire = new
             {
@@ -196,31 +210,65 @@ public class AppSettingsService : IAppSettingsService
                 timestamp = DateTime.UtcNow,
                 folderPath = p.FolderPath
             };
+            json = JsonSerializer.Serialize(wire, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Webhookペイロードの組み立てに失敗: Event={Event}", p.EventType);
+            return;
+        }
 
-            var json = JsonSerializer.Serialize(wire, JsonOptions);
+        // 宛先ごとに独立して送る（1件の遅延・失敗が他に波及しないよう並列）。
+        // 各宛先の送信は内部で全例外を握り潰すので WhenAll は失敗しない。
+        await Task.WhenAll(endpoints.Select(e => SendToEndpointAsync(e, p.EventType, json)));
+    }
+
+    /// <summary>1宛先へ送信する。結果はログにのみ残す（リトライ・UI 通知はしない）。</summary>
+    private async Task SendToEndpointAsync(WebhookEndpoint endpoint, string eventType, string json)
+    {
+        var label = endpoint.GetDisplayLabel();
+        try
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            // Webhook 先が無応答でもバックグラウンド送信が長時間ブロックしないよう 10 秒で打ち切る
+            // （HttpClient 既定の 100 秒を避ける）。Claude Hook 経路・非ClaudeCode 経路の両方がここを通る。
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+
+            // ヘッダーを設定
+            if (endpoint.Headers != null)
+            {
+                foreach (var header in endpoint.Headers)
+                {
+                    if (!header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                    {
+                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                    }
+                }
+            }
+
             using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-            _logger.LogDebug("Webhook送信: {Url}, Event={Event}", webhook.Url, p.EventType);
+            _logger.LogDebug("Webhook送信: {Label}, Event={Event}", label, eventType);
 
-            using var response = await httpClient.PostAsync(webhook.Url, content);
+            using var response = await httpClient.PostAsync(endpoint.Url, content);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogDebug("Webhook送信成功: {Event} -> {Url}", p.EventType, webhook.Url);
+                _logger.LogDebug("Webhook送信成功: {Event} -> {Label}", eventType, label);
             }
             else
             {
-                _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Url}", response.StatusCode, webhook.Url);
+                _logger.LogWarning("Webhook送信失敗: {StatusCode} - {Label}", response.StatusCode, label);
             }
         }
         catch (TaskCanceledException ex)
         {
             // HttpClient.Timeout（10秒）超過は TaskCanceledException で来る。原因切り分けのため個別ログにする。
-            _logger.LogWarning(ex, "Webhook送信タイムアウト（10秒超過）: {Url}", webhook.Url);
+            _logger.LogWarning(ex, "Webhook送信タイムアウト（10秒超過）: {Label}", label);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Webhook送信エラー: {Url}", webhook.Url);
+            _logger.LogError(ex, "Webhook送信エラー: {Label}", label);
         }
     }
 }

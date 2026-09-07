@@ -436,8 +436,30 @@
                     @if (webHookEnabled)
                     {
                         <div class="mb-3">
-                            <label class="form-label">@L["Settings.Notifications.Webhook.UrlLabel"]</label>
-                            <input type="url" class="form-control" @bind="webHookUrl" placeholder="https://example.com/webhook" />
+                            <label class="form-label">@L["Settings.Notifications.Webhook.EndpointsLabel"]</label>
+                            <p class="text-muted small mb-2">@L["Settings.Notifications.Webhook.EndpointsHelp"]</p>
+                            @for (var i = 0; i < webHookEndpoints.Count; i++)
+                            {
+                                var ep = webHookEndpoints[i];
+                                var idx = i;
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <div class="form-check form-switch mb-0" title="@L["Settings.Notifications.Webhook.EndpointEnabled"]">
+                                        <input class="form-check-input" type="checkbox" @bind="ep.Enabled" id="@($"webHookEp{idx}")">
+                                    </div>
+                                    <input type="text" class="form-control form-control-sm" style="max-width: 160px;"
+                                           @bind="ep.Name" placeholder="@L["Settings.Notifications.Webhook.NamePlaceholder"]" />
+                                    <input type="url" class="form-control form-control-sm flex-grow-1"
+                                           @bind="ep.Url" placeholder="https://example.com/webhook" />
+                                    <button type="button" class="btn btn-outline-danger btn-sm" title="@L["Settings.Notifications.Webhook.Remove"]"
+                                            @onclick="() => webHookEndpoints.RemoveAt(idx)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    @onclick="() => webHookEndpoints.Add(new WebhookEndpoint())">
+                                <i class="bi bi-plus-lg me-1"></i>@L["Settings.Notifications.Webhook.Add"]
+                            </button>
                         </div>
                     }
 
@@ -1399,7 +1421,8 @@
     private int thresholdSeconds = 60;
     private bool browserNotificationEnabled = true;
     private bool webHookEnabled = false;
-    private string webHookUrl = "";
+    // 送信先一覧（編集用コピー。保存時にそのまま書き戻す）
+    private List<WebhookEndpoint> webHookEndpoints = new();
     private string saveMessage = "";
     private bool saveSuccess = false;
     private Dictionary<string, List<CustomCommand>> editingCommands = new();
@@ -1588,7 +1611,10 @@
 
             // Webhook設定
             webHookEnabled = settings.Webhook.Enabled;
-            webHookUrl = settings.Webhook.Url ?? "";
+            // 旧形式(Url)は AppSettingsService が読み込み時に Endpoints へ移行済み
+            webHookEndpoints = settings.Webhook.Endpoints
+                .Select(e => new WebhookEndpoint { Enabled = e.Enabled, Name = e.Name, Url = e.Url, Headers = e.Headers })
+                .ToList();
 
             // 特殊設定
             // ClaudeModeSwitchKey は過去バージョンで "plan" 等の廃止された値が
@@ -1821,7 +1847,7 @@
                 return;
             }
 
-            if (webHookEnabled && string.IsNullOrWhiteSpace(webHookUrl))
+            if (webHookEnabled && !webHookEndpoints.Any(e => e.Enabled && !string.IsNullOrWhiteSpace(e.Url)))
             {
                 saveMessage = L["Settings.Message.WebhookUrlRequired"];
                 saveSuccess = false;
@@ -1868,7 +1894,11 @@
                 Webhook = new WebhookSettings
                 {
                     Enabled = webHookEnabled,
-                    Url = webHookUrl ?? ""
+                    // URL 空の行は保存しない（追加だけして未入力のまま閉じた行の掃除）
+                    Endpoints = webHookEndpoints
+                        .Where(e => !string.IsNullOrWhiteSpace(e.Url))
+                        .Select(e => new WebhookEndpoint { Enabled = e.Enabled, Name = e.Name?.Trim() ?? "", Url = e.Url.Trim(), Headers = e.Headers })
+                        .ToList()
                 },
                 Special = new SpecialSettings
                 {
