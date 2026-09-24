@@ -248,6 +248,24 @@ public class HookNotificationService : IHookNotificationService
     private async Task HandlePostCompactEventAsync(SessionInfo session, HookNotification notification)
     {
         session.IsCompacting = false;
+
+        // 出力解析が拾ったスピナー行（"Running PreCompact hooks…" 等）をここで消す。
+        // 手動の /compact はターンではないので Stop が来ず、hook 経路ではこの行を消す機会が
+        // 他にない（8秒タイムアウトの保険は Circuit 依存で当てにならない場面がある）。
+        // Stop と同様にクールダウンも立て、遅れて届いた compact 中のスピナー出力で
+        // 再セットされるのを防ぐ（auto-compact の途中なら次のフレームで復帰する）。
+        if (session.ProcessingStatus != null || session.ProcessingStartTime.HasValue)
+        {
+            _logger.LogDebug(
+                "[ステータスクリア] きっかけ: HookNotificationService(PostCompact イベント), セッション: {SessionName}, 旧ステータス: {OldStatus}",
+                session.GetDisplayName(),
+                session.ProcessingStatus ?? "(なし)");
+            session.LastStopEventTime = DateTime.Now;
+            session.ProcessingStartTime = null;
+            session.ProcessingStatus = null;
+            session.ProcessingElapsedSeconds = null;
+            session.LastProcessingUpdateTime = null;
+        }
         // 畳んだ事実を覚えておく。Claude Code は畳んだ直後にトランスクリプトへ何も書かず、
         // 次の発話までコンテキスト量バッジが畳む前の値のままになるため、その間を
         // 「未確定」と表示するのに使う（SessionInfo.IsContextUsageStaleAfterCompact）
