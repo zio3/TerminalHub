@@ -4,6 +4,7 @@ using TerminalHub.Components;
 using TerminalHub.Models;
 using TerminalHub.Helpers;
 using System.Text.Json;
+using System.Reflection;
 using Serilog;
 using Serilog.Events;
 
@@ -243,6 +244,14 @@ builder.Services
 
 
 var app = builder.Build();
+
+// 利用者からログをもらったときに版を特定できるよう、起動時にアプリのバージョンを1行残す
+// （InformationalVersion は "1.0.80+<commit>" 形式。プレビュー版の識別にコミットも有用なのでそのまま出す）
+var appVersion = System.Reflection.Assembly.GetExecutingAssembly()
+    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+    ?.InformationalVersion ?? "不明";
+app.Logger.LogInformation("[起動] TerminalHub v{Version}, .NET {Runtime}, OS {OS}",
+    appVersion, Environment.Version, Environment.OSVersion.VersionString);
 
 // dev/prod で保存先が切り替わるため、どのDBを開いたかを起動時に残す
 app.Logger.LogInformation("[DB] 使用するDB: Environment={Environment}, FullPath={DbPath}",
