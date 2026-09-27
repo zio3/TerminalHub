@@ -11,9 +11,23 @@ namespace TerminalHub.Services;
 /// <param name="TextLength">本文の文字数（エンベロープ込み）</param>
 /// <param name="ResendAllowed">期限切れ時に Enter を再送してよいか（書き込み時に宛先が idle だった配送だけ true）</param>
 /// <param name="Attempt">0=最初の書き込み、1=Enter 再送後の再監視</param>
+/// <param name="InputSequence">
+/// 自分の Enter を書き終えた時点の ConPTY 入力通し番号。再送直前にこれが進んでいれば、
+/// 人間のキー入力や別の送信が入力欄に触れているので再送しない（入力欄の所有権の証拠）。
+/// </param>
 public sealed record SubmitWatchEntry(
     Guid TargetSessionId, string Tag, DateTime WrittenAt, int TextLength,
-    bool ResendAllowed = false, int Attempt = 0);
+    bool ResendAllowed = false, int Attempt = 0, long InputSequence = 0)
+{
+    /// <summary>監視器が振る一意番号。再送中の同一性判定に使う（本文や時刻が同じでも区別する）。</summary>
+    public long Seq { get; init; }
+
+    /// <summary>
+    /// 期限切れで Enter 再送の処理に入っているが、まだ再送が完了していない。
+    /// この間も待ち行列に残しておく（遅れて届いた提出確認を取りこぼさないため）。
+    /// </summary>
+    public bool Resending { get; init; }
+}
 
 /// <summary>
 /// 配送の「本文＋Enter を書いた」と「相手が提出を認めた（UserPromptSubmit hook）」を突き合わせる
@@ -35,6 +49,11 @@ public sealed record SubmitWatchEntry(
 /// 突き合わせは宛先ごとの FIFO。同じ宛先へ短時間に2件書いた場合、UserPromptSubmit 1回で
 /// 古い方から1件だけ確認済みにする（相手 CLI はプロンプトごとに UserPromptSubmit を撃つので
 /// 件数は一致するのが正常。ずれた分は期限切れとして WARN に現れる）。
+///
+/// **期限切れ→再送→再監視の間も項目は行列に残す**。外してしまうと、その隙に届いた提出確認が
+/// 行き場を失い（1件なら取りこぼして誤 WARN、複数件なら後続を誤って確認済みにして FIFO がずれる）、
+/// 不要な再送や再送漏れにつながる。再送対象は <see cref="SubmitWatchEntry.Resending"/> を立てて
+/// 保持し、<see cref="Confirm"/> はその状態でも最古の1件として外す（＝再送の中止条件になる）。
 /// </summary>
 public sealed class SubmitWatch
 {
@@ -50,7 +69,8 @@ public sealed class SubmitWatch
 
     private static readonly Regex EnvelopeIdPattern = new(@"#([0-9a-f]{12})\b", RegexOptions.Compiled);
 
-    private readonly Dictionary<Guid, Queue<SubmitWatchEntry>> _pending = new();
+    private readonly Dictionary<Guid, List<SubmitWatchEntry>> _pending = new();
+    private long _nextSeq;
 
     /// <summary>本文からログ用の札を作る（エンベロープの #ID があればそれ、無ければ先頭 24 文字）。</summary>
     public static string MakeTag(string text)
@@ -64,63 +84,124 @@ public sealed class SubmitWatch
 
     /// <summary>本文＋Enter を書き終えた直後に呼ぶ。</summary>
     public SubmitWatchEntry Arm(Guid targetSessionId, string text, DateTime writtenAtUtc,
-        bool resendAllowed = false, int attempt = 0)
+        bool resendAllowed = false, long inputSequence = 0)
     {
         var entry = new SubmitWatchEntry(
-            targetSessionId, MakeTag(text), writtenAtUtc, text.Length, resendAllowed, attempt);
-        if (!_pending.TryGetValue(targetSessionId, out var queue))
+            targetSessionId, MakeTag(text), writtenAtUtc, text.Length, resendAllowed, 0, inputSequence)
         {
-            queue = new Queue<SubmitWatchEntry>();
-            _pending[targetSessionId] = queue;
-        }
-        queue.Enqueue(entry);
+            Seq = ++_nextSeq,
+        };
+        ListFor(targetSessionId).Add(entry);
         return entry;
     }
 
     /// <summary>
-    /// Enter を再送したあとの再監視。札と文字数はそのまま、再送不可・試行回数+1 で積み直す。
-    /// </summary>
-    public SubmitWatchEntry Rearm(SubmitWatchEntry previous, DateTime writtenAtUtc)
-    {
-        var entry = previous with { WrittenAt = writtenAtUtc, ResendAllowed = false, Attempt = previous.Attempt + 1 };
-        if (!_pending.TryGetValue(entry.TargetSessionId, out var queue))
-        {
-            queue = new Queue<SubmitWatchEntry>();
-            _pending[entry.TargetSessionId] = queue;
-        }
-        queue.Enqueue(entry);
-        return entry;
-    }
-
-    /// <summary>
-    /// 宛先の UserPromptSubmit を受けたときに呼ぶ。待っている配送があれば最古の1件を確認済みにして返す。
-    /// 待ちが無ければ null（人間が打ったプロンプト等。観測対象外）。
+    /// 宛先の UserPromptSubmit を受けたときに呼ぶ。待っている配送があれば最古の1件（再送中でも）を
+    /// 確認済みにして返す。待ちが無ければ null（人間が打ったプロンプト等。観測対象外）。
     /// </summary>
     public SubmitWatchEntry? Confirm(Guid targetSessionId)
     {
-        if (!_pending.TryGetValue(targetSessionId, out var queue) || queue.Count == 0)
+        if (!_pending.TryGetValue(targetSessionId, out var list) || list.Count == 0)
             return null;
-        var entry = queue.Dequeue();
-        if (queue.Count == 0)
+        var entry = list[0];
+        list.RemoveAt(0);
+        if (list.Count == 0)
             _pending.Remove(targetSessionId);
         return entry;
     }
 
-    /// <summary>期限を過ぎても確認が来ていない配送を取り除いて返す（WARN ログ用）。</summary>
+    /// <summary>
+    /// 期限を過ぎても確認が来ていない配送を返す。
+    /// - 再送を許された配送（初回・未再送）は**行列に残したまま**再送中の印を付けて返す。
+    ///   再送の完了は <see cref="FinishResend"/>、取りやめは <see cref="CancelResend"/> で伝える。
+    ///   既に再送中のものは二度と返さない。
+    /// - それ以外は行列から外して返す（呼び出し側は WARN を出すだけ）。
+    /// </summary>
     public IReadOnlyList<SubmitWatchEntry> Expire(DateTime nowUtc)
     {
         var expired = new List<SubmitWatchEntry>();
-        foreach (var (target, queue) in _pending.ToList())
+        foreach (var (target, list) in _pending.ToList())
         {
-            while (queue.Count > 0 && nowUtc - queue.Peek().WrittenAt >= Threshold)
-                expired.Add(queue.Dequeue());
-            if (queue.Count == 0)
+            for (var i = 0; i < list.Count; i++)
+            {
+                var e = list[i];
+                if (e.Resending || nowUtc - e.WrittenAt < Threshold)
+                    continue;
+
+                if (e.ResendAllowed && e.Attempt == 0)
+                {
+                    var marked = e with { Resending = true };
+                    list[i] = marked;
+                    expired.Add(marked);
+                }
+                else
+                {
+                    list.RemoveAt(i);
+                    i--;
+                    expired.Add(e);
+                }
+            }
+            if (list.Count == 0)
                 _pending.Remove(target);
         }
         return expired;
     }
 
-    /// <summary>テスト・診断用。宛先で確認待ちになっている件数。</summary>
+    /// <summary>その配送がまだ確認待ちに残っているか（再送直前の「まだ提出確認が来ていない」判定）。</summary>
+    public bool IsPending(SubmitWatchEntry entry) => Find(entry, out _, out _) >= 0;
+
+    /// <summary>
+    /// Enter を再送し終えたときに呼ぶ。行列内の同じ位置で再監視（再送不可・試行回数+1・時刻更新）に
+    /// 置き換えて返す。既に提出確認で外れていれば null（再送と提出確認が同時だった。害はない）。
+    /// </summary>
+    public SubmitWatchEntry? FinishResend(SubmitWatchEntry entry, DateTime writtenAtUtc, long inputSequence)
+    {
+        var i = Find(entry, out _, out var list);
+        if (i < 0)
+            return null;
+        var rearmed = list![i] with
+        {
+            WrittenAt = writtenAtUtc,
+            ResendAllowed = false,
+            Attempt = entry.Attempt + 1,
+            Resending = false,
+            InputSequence = inputSequence,
+        };
+        list[i] = rearmed;
+        return rearmed;
+    }
+
+    /// <summary>再送を取りやめて監視を終える（宛先が処理中・許可待ち・他の入力あり等）。外せたら true。</summary>
+    public bool CancelResend(SubmitWatchEntry entry)
+    {
+        var i = Find(entry, out var target, out var list);
+        if (i < 0)
+            return false;
+        list!.RemoveAt(i);
+        if (list.Count == 0)
+            _pending.Remove(target);
+        return true;
+    }
+
+    /// <summary>テスト・診断用。宛先で確認待ちになっている件数（再送中を含む）。</summary>
     public int PendingCount(Guid targetSessionId) =>
-        _pending.TryGetValue(targetSessionId, out var q) ? q.Count : 0;
+        _pending.TryGetValue(targetSessionId, out var list) ? list.Count : 0;
+
+    private List<SubmitWatchEntry> ListFor(Guid targetSessionId)
+    {
+        if (!_pending.TryGetValue(targetSessionId, out var list))
+        {
+            list = new List<SubmitWatchEntry>();
+            _pending[targetSessionId] = list;
+        }
+        return list;
+    }
+
+    private int Find(SubmitWatchEntry entry, out Guid target, out List<SubmitWatchEntry>? list)
+    {
+        target = entry.TargetSessionId;
+        if (!_pending.TryGetValue(target, out list))
+            return -1;
+        return list.FindIndex(e => e.Seq == entry.Seq);
+    }
 }

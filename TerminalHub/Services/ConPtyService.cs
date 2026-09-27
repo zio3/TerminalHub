@@ -407,6 +407,15 @@ namespace TerminalHub.Services
             }
         }
 
+        private long _inputSequence;
+
+        /// <summary>
+        /// この ConPTY へ書き込んだ回数の通し番号（経路を問わない: UI のキー入力・テキスト送信・MCP 配送・
+        /// システム通知すべて）。「自分が書いた後に誰かが書いたか」を判定するために使う
+        /// （Enter 再送ウォッチドッグが、人間の入力と混線しないことを確かめる根拠）。
+        /// </summary>
+        public long InputSequence => Interlocked.Read(ref _inputSequence);
+
         /// <summary>
         /// ConPtyにデータを書き込みます（デフォルトで即時送信）
         /// </summary>
@@ -436,6 +445,8 @@ namespace TerminalHub.Services
             {
                 if (_writer == null || IsDisposed)
                     return;
+
+                Interlocked.Increment(ref _inputSequence);
 
                 // 長い文字列を一括で流し込むと受け手（conhost の入力バッファ / CLI）が取りこぼすため、
                 // 分割して間隔を空けながら送る。CHUNK_SIZE/INTER_CHUNK_DELAY_MS は実測で調整された値で

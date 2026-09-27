@@ -306,9 +306,13 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         SubmitWatchEntry? entry = null;
         if (hookDriven)
         {
+            // 自分の Enter を書き終えた直後の通し番号。再送直前にこれが進んでいたら、人間のキー入力や
+            // 別の送信が入力欄に触れているので再送しない（入力欄がまだこの配送のものである根拠）。
+            var inputSequence = target.ConPtySession?.InputSequence ?? 0;
             lock (_submitWatchLock)
             {
-                entry = _submitWatch.Arm(target.SessionId, item.Text, DateTime.UtcNow, resendAllowed: idle);
+                entry = _submitWatch.Arm(target.SessionId, item.Text, DateTime.UtcNow,
+                    resendAllowed: idle, inputSequence: inputSequence);
             }
         }
 
@@ -357,8 +361,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
 
     /// <summary>
     /// 期限を過ぎても提出確認が来ない配送を処理する（掃除タイマーから呼ぶ）。
-    /// 再送を許された配送（書き込み時 idle・未再送）は Enter だけを1回再送して再監視に入れる。
-    /// それ以外（処理中だった / 再送済み）は WARN を出して終わる。
+    /// 再送を許された配送（書き込み時 idle・未再送）は行列に残したまま（<see cref="SubmitWatchEntry.Resending"/>）
+    /// Enter だけを1回再送して再監視に入れる。それ以外（処理中だった / 再送済み）は既に行列から
+    /// 外れているので WARN を出して終わる。
     /// </summary>
     private async Task HandleUnconfirmedSubmitsAsync()
     {
@@ -373,17 +378,24 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             var name = target?.GetDisplayName() ?? entry.TargetSessionId.ToString();
             var waited = (DateTime.UtcNow - entry.WrittenAt).TotalSeconds;
 
-            if (entry.ResendAllowed && entry.Attempt == 0 && target != null)
+            if (entry.Resending)
             {
-                await ResendEnterAsync(target, entry, waited);
-                continue;
+                if (target != null)
+                {
+                    await ResendEnterAsync(target, entry, waited);
+                    continue;
+                }
+                lock (_submitWatchLock)
+                {
+                    _submitWatch.CancelResend(entry);
+                }
             }
 
             _logger.LogWarning(
                 "[配送] 提出未確認: {Target} {Tag} 書き込みから {Seconds:0}秒たっても UserPromptSubmit が来ない（{Reason}。相手の入力欄に本文が残っていないか確認）",
                 name, entry.Tag, waited,
                 entry.Attempt > 0 ? "Enter を再送しても提出されない"
-                    : entry.ResendAllowed ? "宛先が消えたため再送できない"
+                    : entry.Resending ? "宛先が消えたため再送できない"
                     : "宛先が処理中だったため再送しない");
         }
     }
@@ -391,42 +403,77 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     /// <summary>
     /// Enter だけを1回再送する（Enter 再送ウォッチドッグの本体）。
     /// - 本文は再送しない（入力欄に残っている本文と二重連結になる）。
-    /// - 宛先が許可・選択待ちに変わっていたら送らない（Enter が承認や選択の確定になる）。
     /// - 宛先ロックを取って送る（他の配送の本文と Enter の間に割り込まない）。
+    /// - **書く直前に、ロックの中で全部の条件をもう一度見る**（期限切れ判定からここまでの間に
+    ///   状態が変わりうる）:
+    ///   1. 提出確認がまだ来ていない（遅れて届いた UserPromptSubmit は行列から外すので、ここで分かる）
+    ///   2. 宛先が idle のまま（処理中に変わっていたら相手のキューに載っただけの可能性が高い）
+    ///   3. 許可・選択待ちに変わっていない（Enter が承認や選択の確定になる）
+    ///   4. 自分の Enter 以降、この ConPTY に誰も書いていない（人間のキー入力・UI 送信・別の配送が
+    ///      入力欄に触れていたら、その内容を勝手に確定送信することになる）
+    ///   どれか1つでも崩れていたら再送せず監視を終える（WARN）。
     /// - 再送後は Attempt=1 で再監視し、それでも来なければ WARN で終わる（再送は1回だけ）。
     /// </summary>
     private async Task ResendEnterAsync(SessionInfo target, SubmitWatchEntry entry, double waited)
     {
-        var conpty = target.ConPtySession;
-        if (conpty == null || target.IsWaitingForUserInput)
-        {
-            _logger.LogWarning(
-                "[配送] 提出未確認: {Target} {Tag} 書き込みから {Seconds:0}秒たっても UserPromptSubmit が来ないが、宛先が{State}のため Enter は再送しない",
-                target.GetDisplayName(), entry.Tag, waited,
-                conpty == null ? "未接続" : "許可/選択待ち");
-            return;
-        }
-
         var gate = GetWriteLock(target.SessionId);
         await gate.WaitAsync();
         try
         {
-            // ロック待ちの間に状態が変わっていることがあるので、書く直前にもう一度見る。
-            if (target.ConPtySession == null || target.IsWaitingForUserInput)
-                return;
+            lock (_submitWatchLock)
+            {
+                if (!_submitWatch.IsPending(entry))
+                {
+                    _logger.LogDebug(
+                        "[配送] 再送前に提出確認が届いたため Enter は再送しない: {Target} {Tag}",
+                        target.GetDisplayName(), entry.Tag);
+                    return;
+                }
+            }
 
-            await target.ConPtySession.WriteAsync("\r");
+            var conpty = target.ConPtySession;
+            var reason =
+                conpty == null ? "未接続"
+                : target.IsWaitingForUserInput ? "許可/選択待ち"
+                : !IsIdle(target) ? "処理中"
+                : conpty.InputSequence != entry.InputSequence ? "自分の Enter 以降に別の入力（人間のキー入力・UI 送信・別の配送）があった"
+                : null;
+            if (reason != null)
+            {
+                lock (_submitWatchLock)
+                {
+                    _submitWatch.CancelResend(entry);
+                }
+                _logger.LogWarning(
+                    "[配送] 提出未確認: {Target} {Tag} 書き込みから {Seconds:0}秒たっても UserPromptSubmit が来ないが、{Reason}ため Enter は再送しない（相手の入力欄に本文が残っていないか確認）",
+                    target.GetDisplayName(), entry.Tag, waited, reason);
+                return;
+            }
+
+            await conpty.WriteAsync("\r");
+
+            SubmitWatchEntry? rearmed;
+            lock (_submitWatchLock)
+            {
+                rearmed = _submitWatch.FinishResend(entry, DateTime.UtcNow, conpty.InputSequence);
+            }
+            if (rearmed == null)
+            {
+                _logger.LogDebug(
+                    "[配送] Enter 再送と同時に提出確認が届いた（空の Enter が1回入っただけで害はない）: {Target} {Tag}",
+                    target.GetDisplayName(), entry.Tag);
+                return;
+            }
             _logger.LogWarning(
                 "[配送] Enter 再送: {Target} {Tag} 書き込みから {Seconds:0}秒たっても UserPromptSubmit が来ないため Enter だけを1回再送した",
                 target.GetDisplayName(), entry.Tag, waited);
-
-            lock (_submitWatchLock)
-            {
-                _submitWatch.Rearm(entry, DateTime.UtcNow);
-            }
         }
         catch (Exception ex)
         {
+            lock (_submitWatchLock)
+            {
+                _submitWatch.CancelResend(entry);
+            }
             _logger.LogWarning(ex, "[配送] Enter 再送に失敗: {Target} {Tag}", target.GetDisplayName(), entry.Tag);
         }
         finally
