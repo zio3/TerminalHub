@@ -407,14 +407,35 @@ namespace TerminalHub.Services
             }
         }
 
+        private long _inputSequence;
+
+        /// <summary>
+        /// この ConPTY へ書き込んだ回数の通し番号（経路を問わない: UI のキー入力・テキスト送信・MCP 配送・
+        /// システム通知すべて）。「自分が書いた後に誰かが書いたか」を判定するために使う
+        /// （Enter 再送ウォッチドッグが、人間の入力と混線しないことを確かめる根拠）。
+        /// </summary>
+        public long InputSequence => Interlocked.Read(ref _inputSequence);
+
         /// <summary>
         /// ConPtyにデータを書き込みます（デフォルトで即時送信）
         /// </summary>
         /// <param name="input">送信するデータ</param>
-        public async Task WriteAsync(string input)
+        public Task WriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
+
+        /// <summary>
+        /// <see cref="InputSequence"/> が <paramref name="expectedSequence"/> のままのときだけ書き込む
+        /// （条件付き書き込み）。比較と書き込みを同じ書き込みロックの中で行うので、比較の直後に
+        /// 別経路（UI のキー入力等）が割り込んで先に書く、という隙間がない。
+        /// Enter 再送ウォッチドッグが「自分の Enter 以降に誰も書いていない」ことを保証したまま
+        /// Enter を足すために使う。書けたら true、番号が進んでいた・破棄済みなら false。
+        /// </summary>
+        public Task<bool> TryWriteIfUnchangedAsync(string input, long expectedSequence) =>
+            WriteCoreAsync(input, expectedSequence);
+
+        private async Task<bool> WriteCoreAsync(string input, long? expectedSequence)
         {
             if (_writer == null || IsDisposed)
-                return;
+                return false;
 
             // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ。
             // 待機中に Dispose されると SemaphoreSlim.Dispose では解放されないため、
@@ -425,17 +446,23 @@ namespace TerminalHub.Services
             }
             catch (OperationCanceledException)
             {
-                return; // Dispose により待機がキャンセルされた
+                return false; // Dispose により待機がキャンセルされた
             }
             catch (ObjectDisposedException)
             {
-                return; // 破棄済みなら何もしない（Cancel 後に CTS が破棄されたケースを含む）
+                return false; // 破棄済みなら何もしない（Cancel 後に CTS が破棄されたケースを含む）
             }
 
             try
             {
                 if (_writer == null || IsDisposed)
-                    return;
+                    return false;
+
+                // 条件付き書き込み: ロックを取った後で番号を見る（ここが排他区間の中である点が肝心）。
+                if (expectedSequence.HasValue && Interlocked.Read(ref _inputSequence) != expectedSequence.Value)
+                    return false;
+
+                Interlocked.Increment(ref _inputSequence);
 
                 // 長い文字列を一括で流し込むと受け手（conhost の入力バッファ / CLI）が取りこぼすため、
                 // 分割して間隔を空けながら送る。CHUNK_SIZE/INTER_CHUNK_DELAY_MS は実測で調整された値で
@@ -466,11 +493,13 @@ namespace TerminalHub.Services
 
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
+                return true;
             }
             catch (Exception ex) when (ex is ObjectDisposedException or IOException)
             {
                 // 書き込みループの途中で Dispose され _writer/パイプが破棄されたケース。
                 // 呼び出し元(UIイベント/MCP send_to_session)へ例外を伝播させず握りつぶす
+                return false;
             }
             finally
             {
