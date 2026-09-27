@@ -410,7 +410,10 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     ///   2. 宛先が idle のまま（処理中に変わっていたら相手のキューに載っただけの可能性が高い）
     ///   3. 許可・選択待ちに変わっていない（Enter が承認や選択の確定になる）
     ///   4. 自分の Enter 以降、この ConPTY に誰も書いていない（人間のキー入力・UI 送信・別の配送が
-    ///      入力欄に触れていたら、その内容を勝手に確定送信することになる）
+    ///      入力欄に触れていたら、その内容を勝手に確定送信することになる）。これは宛先ロックでは
+    ///      防げない（UI のキー入力は宛先ロックを通らず ConPTY に直接書く）ので、
+    ///      <see cref="ConPtySession.TryWriteIfUnchangedAsync"/> で**番号の比較と Enter の書き込みを
+    ///      ConPTY 側の同じ排他区間で**行う。
     ///   どれか1つでも崩れていたら再送せず監視を終える（WARN）。
     /// - 再送後は Attempt=1 で再監視し、それでも来なければ WARN で終わる（再送は1回だけ）。
     /// </summary>
@@ -436,8 +439,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 conpty == null ? "未接続"
                 : target.IsWaitingForUserInput ? "許可/選択待ち"
                 : !IsIdle(target) ? "処理中"
-                : conpty.InputSequence != entry.InputSequence ? "自分の Enter 以降に別の入力（人間のキー入力・UI 送信・別の配送）があった"
                 : null;
+            if (reason == null && !await conpty!.TryWriteIfUnchangedAsync("\r", entry.InputSequence))
+                reason = "自分の Enter 以降に別の入力（人間のキー入力・UI 送信・別の配送）があった";
             if (reason != null)
             {
                 lock (_submitWatchLock)
@@ -450,12 +454,10 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 return;
             }
 
-            await conpty.WriteAsync("\r");
-
             SubmitWatchEntry? rearmed;
             lock (_submitWatchLock)
             {
-                rearmed = _submitWatch.FinishResend(entry, DateTime.UtcNow, conpty.InputSequence);
+                rearmed = _submitWatch.FinishResend(entry, DateTime.UtcNow, conpty!.InputSequence);
             }
             if (rearmed == null)
             {
