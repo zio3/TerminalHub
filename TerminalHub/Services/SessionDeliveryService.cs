@@ -441,7 +441,7 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 : !IsIdle(target) ? "処理中"
                 : null;
             if (reason == null && !await conpty!.TryWriteIfUnchangedAsync("\r", entry.InputSequence))
-                reason = "自分の Enter 以降に別の入力（人間のキー入力・UI 送信・別の配送）があった";
+                reason = "自分の Enter 以降に別の入力（人間のキー入力・UI 送信・別の配送）があった、または ConPTY へ書き込めなかった（破棄済み・パイプ切断）";
             if (reason != null)
             {
                 lock (_submitWatchLock)
