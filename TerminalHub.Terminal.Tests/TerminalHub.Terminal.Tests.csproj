@@ -33,6 +33,7 @@
     <Compile Include="..\TerminalHub\Services\SlashCommandFilter.cs" Link="SlashCommandFilter.cs" />
     <Compile Include="..\TerminalHub\Services\TerminalCommandLine.cs" Link="TerminalCommandLine.cs" />
     <Compile Include="..\TerminalHub\Services\DeliveryQueue.cs" Link="DeliveryQueue.cs" />
+    <Compile Include="..\TerminalHub\Services\SubmitWatch.cs" Link="SubmitWatch.cs" />
     <!-- MCP 接続キー入り設定 JSON の組み立て（純ロジック）検証用。McpConfigService が AppDataPaths を参照する -->
     <Compile Include="..\TerminalHub\Services\McpConfigService.cs" Link="McpConfigService.cs" />
     <Compile Include="..\TerminalHub\Services\AppDataPaths.cs" Link="AppDataPaths.cs" />
