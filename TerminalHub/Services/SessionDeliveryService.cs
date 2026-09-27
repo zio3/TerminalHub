@@ -86,6 +86,13 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     public const string SystemWriterName = "TerminalHub (system)";
 
     private readonly DeliveryQueue _queue = new();
+    /// <summary>
+    /// 配送の「書いた」と「相手が提出を認めた（UserPromptSubmit）」の突き合わせ。観測だけで再送はしない。
+    /// 書き込み側（宛先ロック内）と hook 側（イベントスレッド）と掃除タイマーから触るので
+    /// <see cref="_submitWatchLock"/> で囲む。
+    /// </summary>
+    private readonly SubmitWatch _submitWatch = new();
+    private readonly object _submitWatchLock = new();
     private readonly Dictionary<Guid, SemaphoreSlim> _writeLocks = new();
     private readonly ISessionManager _sessionManager;
     private readonly IContextRepository _contextRepository;
@@ -145,6 +152,8 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
 
     private void OnHookNotification(object? sender, HookNotificationEventArgs e)
     {
+        ObserveSubmit(e.Notification);
+
         // hook ハンドラ本体が待ちフラグを更新した後に呼ばれる想定。配送は投げっぱなしで良い
         // （失敗しても次の掃除タイマーが拾う）。
         //
@@ -269,12 +278,86 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             // （入力欄に置いて人間が確認する用途はセッション専用コマンドの insertToInputOnly が担う）。
             await Task.Delay(SubmitDelay);
             await conpty.WriteAsync("\r");
+            ArmSubmitWatch(target, item);
             return WriteResult.Delivered;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[配送] 書き込みに失敗: {Target}", target.GetDisplayName());
             return WriteResult.Failed;
+        }
+    }
+
+    /// <summary>
+    /// 書き込み成功を Info で1行残し、提出（UserPromptSubmit）待ちとして記録する。
+    /// 従来は成功時に何もログが無く、「Enter が呑まれて未提出」の事後調査で送った時刻すら
+    /// 追えなかった。hook を持たない CLI は UserPromptSubmit が来ないので記録しない
+    /// （WARN が必ず出る誤検知になる）。
+    /// </summary>
+    private void ArmSubmitWatch(SessionInfo target, DeliveryItem item)
+    {
+        var hookDriven = target.TerminalType is TerminalType.ClaudeCode or TerminalType.CodexCLI;
+        var status = target.ProcessingStatus == null ? "idle" : "処理中";
+        SubmitWatchEntry? entry = null;
+        if (hookDriven)
+        {
+            lock (_submitWatchLock)
+            {
+                entry = _submitWatch.Arm(target.SessionId, item.Text, DateTime.UtcNow);
+            }
+        }
+
+        _logger.LogInformation(
+            "[配送] 書き込み完了: {Target} {Tag} ({Length}文字, 宛先は{Status}{Watch})",
+            target.GetDisplayName(),
+            entry?.Tag ?? SubmitWatch.MakeTag(item.Text),
+            item.Text.Length,
+            status,
+            hookDriven ? "・提出確認待ち" : "・hook無しのため提出確認なし");
+    }
+
+    /// <summary>宛先の UserPromptSubmit を提出の ACK として突き合わせる。</summary>
+    private void ObserveSubmit(HookNotification notification)
+    {
+        // サブエージェント内部の UserPromptSubmit（Codex が agent_id 付きで撃つ）はメインの提出ではない。
+        if (notification.GetEventType() != HookEventType.UserPromptSubmit || notification.AgentId != null)
+            return;
+
+        SubmitWatchEntry? entry;
+        lock (_submitWatchLock)
+        {
+            entry = _submitWatch.Confirm(notification.SessionId);
+        }
+        if (entry == null)
+            return;
+
+        var elapsed = DateTime.UtcNow - entry.WrittenAt;
+        _logger.LogDebug(
+            "[配送] 提出確認: {Target} {Tag} (書き込みから {ElapsedMs}ms)",
+            _sessionManager.GetSessionInfo(entry.TargetSessionId)?.GetDisplayName() ?? entry.TargetSessionId.ToString(),
+            entry.Tag,
+            (long)elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// 期限を過ぎても提出確認が来ない配送を WARN に出す（掃除タイマーから呼ぶ）。
+    /// 本文が相手の入力欄に残ったまま Enter が呑まれた疑い。宛先が処理中だった場合は
+    /// 相手側キューで遅れているだけのこともある（書き込み完了ログの「宛先は処理中」で判別）。
+    /// </summary>
+    private void ReportUnconfirmedSubmits()
+    {
+        IReadOnlyList<SubmitWatchEntry> expired;
+        lock (_submitWatchLock)
+        {
+            expired = _submitWatch.Expire(DateTime.UtcNow);
+        }
+        foreach (var entry in expired)
+        {
+            _logger.LogWarning(
+                "[配送] 提出未確認: {Target} {Tag} 書き込みから {Seconds:0}秒たっても UserPromptSubmit が来ない（Enter が呑まれた疑い。相手の入力欄に本文が残っていないか確認）",
+                _sessionManager.GetSessionInfo(entry.TargetSessionId)?.GetDisplayName() ?? entry.TargetSessionId.ToString(),
+                entry.Tag,
+                (DateTime.UtcNow - entry.WrittenAt).TotalSeconds);
         }
     }
 
@@ -351,6 +434,9 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
     {
         try
         {
+            // 提出未確認の観測は待ち行列と無関係に毎回見る（宛先ロック不要）。
+            ReportUnconfirmedSubmits();
+
             foreach (var targetId in _queue.PendingTargets())
             {
                 // **配送中の項目を失効させないため、宛先のロックを取ってから剥がす。**
