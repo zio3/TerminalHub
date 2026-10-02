@@ -82,6 +82,10 @@
                         OnDeleteSession="DeleteArchivedSession"
                         OnDeleteAllSessions="DeleteAllArchivedSessions"
                         OnClose="() => showArchivedSessionsDialog = false" />
+<IdleSessionsDialog IsVisible="showIdleSessionsDialog"
+                    Sessions="@GetActiveSessionsForIdleDialog()"
+                    OnExitSessions="ExitIdleSessions"
+                    OnClose="() => showIdleSessionsDialog = false" />
 <CommitInfoDialog IsVisible="showCommitInfoDialog"
                   FolderPath="@commitInfoFolderPath"
                   Info="@commitInfo"
@@ -121,6 +125,7 @@
                      OnGitStatusRefresh="RefreshGitStatus"
                      OnSessionExpandedChanged="HandleSessionExpandedChanged"
                      OnShowArchivedSessions="() => showArchivedSessionsDialog = true"
+                     OnShowIdleSessions="() => showIdleSessionsDialog = true"
                      OnMobileSidebarClose="CloseMobileSidebar" />
 
         <!-- サイドバースプリッター -->
@@ -263,6 +268,7 @@
     private bool showSessionSettingsDialog = false;
     private Guid? settingsSessionId = null;
     private bool showArchivedSessionsDialog = false;
+    private bool showIdleSessionsDialog = false;
 
     private HashSet<string> checkedScripts = new HashSet<string>();
 
@@ -2224,6 +2230,57 @@
     private List<SessionInfo> GetArchivedSessions()
     {
         return SessionManager.GetAllSessions().Where(s => s.IsArchived).ToList();
+    }
+
+    private List<SessionInfo> GetActiveSessionsForIdleDialog()
+    {
+        return SessionManager.GetAllSessions().Where(s => !s.IsArchived).ToList();
+    }
+
+    /// <summary>
+    /// 放置セッション整理ダイアログでチェックされたセッションへ終了コマンドを送る。
+    /// プロセスを kill せず CLI 自身に終わらせる（会話の保存や子プロセスの後始末を CLI に任せる）。
+    /// 本文と Enter の間隔は MCP 配送（SessionDeliveryService.SubmitDelay）に合わせる。
+    /// 送るだけで、終了したかどうかは追わない（CLI 側がバックグラウンド作業の確認で止める場合があるため、
+    /// 結果はターミナルで見てもらう）。
+    /// </summary>
+    private async Task ExitIdleSessions(List<(Guid SessionId, string Command)> targets)
+    {
+        showIdleSessionsDialog = false;
+        var sent = 0;
+        var tasks = new List<Task>();
+        foreach (var (sessionId, command) in targets)
+        {
+            var sessionInfo = SessionManager.GetSessionInfo(sessionId);
+            var conpty = sessionInfo?.ConPtySession;
+            if (sessionInfo == null || conpty == null || conpty.HasExited)
+            {
+                Logger.LogDebug("[放置整理] 宛先が停止済みのため送らない: SessionId={SessionId}", sessionId);
+                continue;
+            }
+            sent++;
+            var name = sessionInfo.GetDisplayName();
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await conpty.WriteAsync(command);
+                    await Task.Delay(400);
+                    await conpty.WriteAsync("\r");
+                    Logger.LogInformation("[放置整理] 終了コマンド送信: {Session} {Command}", name, command);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "[放置整理] 終了コマンド送信に失敗: {Session} {Command}", name, command);
+                }
+            }));
+        }
+        await Task.WhenAll(tasks);
+        if (sent > 0)
+        {
+            toast?.ShowSuccess(string.Format(L["IdleSessions.SentToastFormat"], sent));
+        }
+        StateHasChanged();
     }
 
     [JSInvokable]

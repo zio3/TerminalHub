@@ -1,0 +1,328 @@
+@using TerminalHub.Models
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<SharedResource> L
+
+@*
+    放置セッションの整理ダイアログ。
+    Claude Code 等の CLI を多数立ち上げたままにするとメモリを食う（1 本 200〜400MB）ので、
+    「最後に触ってからの経過時間」を並べて見せ、人間がチェックしたセッションに終了コマンド
+    （/exit・/quit・exit）を送る。自動終了はしない: Claude Code 側の /loop や cron 予約、
+    バックグラウンド作業は TerminalHub から見えず、放置に見えても生きている仕事があるため。
+    どれにそれが仕掛かっているかは人間が知っているので、判断は人間に残す。
+    プロセスが終わってもセッション枠は残り、--continue 起動で会話は復元できる。
+*@
+
+<div class="modal fade @(IsVisible ? "show" : "")" tabindex="-1" style="@(IsVisible ? "display: block;" : "display: none;")" @onmousedown="OnBackdropMouseDown" @onmouseup="OnBackdropMouseUp">
+    <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-hourglass-split me-2"></i>@L["IdleSessions.Title"]</h5>
+                <button type="button" class="btn-close" @onclick="Close"></button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                @if (_rows.Count > 0)
+                {
+                    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                        <div class="form-check me-2">
+                            <input type="checkbox" class="form-check-input" id="selectAllIdle"
+                                   checked="@IsAllSelected"
+                                   @onchange="ToggleSelectAll" />
+                            <label class="form-check-label small" for="selectAllIdle">@L["IdleSessions.SelectAll"]</label>
+                        </div>
+                        <div class="input-group input-group-sm" style="width: auto;">
+                            <span class="input-group-text">@L["IdleSessions.ThresholdLabel"]</span>
+                            <input type="number" class="form-control" style="width: 5em;" min="0" step="0.5"
+                                   value="@thresholdHours" @onchange="OnThresholdChanged" />
+                            <span class="input-group-text">@L["IdleSessions.ThresholdUnit"]</span>
+                            <button class="btn btn-outline-secondary" type="button" @onclick="SelectByThreshold"
+                                    title="@L["IdleSessions.SelectByThresholdTooltip"]">
+                                <i class="bi bi-check2-square"></i>
+                            </button>
+                        </div>
+                        @if (selectedSessionIds.Count > 0)
+                        {
+                            <span class="small text-muted">@string.Format(L["IdleSessions.SelectedCountFormat"], selectedSessionIds.Count)</span>
+                        }
+                    </div>
+
+                    <div class="list-group">
+                        @foreach (var row in _rows)
+                        {
+                            <div class="list-group-item @(row.CanExit ? "" : "text-muted")">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div class="form-check me-2" @onclick:stopPropagation="true">
+                                        <input type="checkbox" class="form-check-input"
+                                               disabled="@(!row.CanExit)"
+                                               checked="@selectedSessionIds.Contains(row.Session.SessionId)"
+                                               @onchange="() => ToggleSelection(row.Session.SessionId)" />
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">
+                                            @row.Session.GetDisplayName()
+                                            <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">@GetTerminalTypeLabel(row.Session.TerminalType)</span>
+                                            <span class="badge @row.StateBadgeClass ms-1" style="font-size: 0.7rem;">@row.StateLabel</span>
+                                        </h6>
+                                        <small class="text-muted">
+                                            <i class="bi bi-clock me-1"></i>@string.Format(L["IdleSessions.IdleForFormat"], FormatIdle(row.Idle), row.Session.LastAccessedAt.ToString("MM/dd HH:mm"))
+                                        </small>
+                                        @if (!string.IsNullOrEmpty(row.Session.Memo))
+                                        {
+                                            <div class="small text-muted mt-1 text-truncate" style="max-width: 36em;">
+                                                <i class="bi bi-sticky me-1"></i>@row.Session.Memo
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="small text-muted text-nowrap ms-2">
+                                        @if (row.ExitCommand != null)
+                                        {
+                                            <code>@row.ExitCommand</code>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-hourglass" style="font-size: 3rem;"></i>
+                        <p class="mt-3">@L["IdleSessions.Empty"]</p>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <span class="small text-muted me-auto"><i class="bi bi-info-circle me-1"></i>@L["IdleSessions.FooterNote"]</span>
+                <button type="button" class="btn btn-outline-danger" disabled="@(selectedSessionIds.Count == 0)" @onclick="ConfirmExitSelected">
+                    <i class="bi bi-power me-1"></i>@L["IdleSessions.ExitSelected"]
+                </button>
+                <button type="button" class="btn btn-secondary" @onclick="Close">@L["Common.Close"]</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (IsVisible)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@* 終了確認ダイアログ *@
+@if (showExitConfirm)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@L["IdleSessions.Confirm.Title"]</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@string.Format(L["IdleSessions.Confirm.BodyFormat"], selectedSessionIds.Count)</p>
+                    <ul class="small mb-2">
+                        @foreach (var row in _rows.Where(r => selectedSessionIds.Contains(r.Session.SessionId)))
+                        {
+                            <li>@row.Session.GetDisplayName() <code>@row.ExitCommand</code></li>
+                        }
+                    </ul>
+                    <p class="text-warning small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>@L["IdleSessions.Confirm.Note"]</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showExitConfirm = false">@L["Common.Cancel"]</button>
+                    <button type="button" class="btn btn-danger" @onclick="ExecuteExit">@L["IdleSessions.Confirm.Execute"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" style="z-index: 1055;"></div>
+}
+
+@code {
+    /// <summary>既定の放置とみなす時間（時間）。ダイアログ内で変更できる。</summary>
+    public const double DefaultThresholdHours = 2.0;
+
+    [Parameter] public bool IsVisible { get; set; }
+    /// <summary>アーカイブされていない全セッション。</summary>
+    [Parameter] public List<SessionInfo> Sessions { get; set; } = new();
+    /// <summary>チェックされたセッションへ終了コマンドを送る（(SessionId, コマンド) の一覧）。</summary>
+    [Parameter] public EventCallback<List<(Guid SessionId, string Command)>> OnExitSessions { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private sealed record Row(SessionInfo Session, TimeSpan Idle, string StateLabel, string StateBadgeClass, string? ExitCommand, bool CanExit);
+
+    private readonly List<Row> _rows = new();
+    private readonly HashSet<Guid> selectedSessionIds = new();
+    private double thresholdHours = DefaultThresholdHours;
+    private bool showExitConfirm = false;
+    private bool isMouseDownOnBackdrop = false;
+    private bool _wasVisible = false;
+
+    protected override void OnParametersSet()
+    {
+        RefreshRows();
+        if (IsVisible && !_wasVisible)
+        {
+            // 開いた瞬間に「閾値以上放置かつ idle」を初期選択にする。閉じている間に状態が変わるので毎回やり直す。
+            selectedSessionIds.Clear();
+            SelectByThreshold();
+        }
+        _wasVisible = IsVisible;
+    }
+
+    private void RefreshRows()
+    {
+        var now = DateTime.Now;
+        _rows.Clear();
+        foreach (var s in Sessions.Where(s => !s.IsArchived).OrderByDescending(s => now - s.LastAccessedAt))
+        {
+            _rows.Add(BuildRow(s, now));
+        }
+        // 終了できなくなったものが選択に残らないようにする
+        selectedSessionIds.RemoveWhere(id => !_rows.Any(r => r.Session.SessionId == id && r.CanExit));
+    }
+
+    private Row BuildRow(SessionInfo s, DateTime now)
+    {
+        var idle = now - s.LastAccessedAt;
+        if (idle < TimeSpan.Zero) idle = TimeSpan.Zero;
+        var command = GetExitCommand(s.TerminalType);
+
+        if (s.ConPtySession == null || s.ConPtySession.HasExited)
+            return new Row(s, idle, L["IdleSessions.State.Stopped"], "bg-dark", command, false);
+        if (command == null)
+            return new Row(s, idle, L["IdleSessions.State.Unsupported"], "bg-secondary", null, false);
+        if (s.IsWaitingForUserInput)
+            return new Row(s, idle, L["IdleSessions.State.Waiting"], "bg-warning text-dark", command, true);
+        if (s.ProcessingStartTime != null || s.ProcessingStatus != null)
+            return new Row(s, idle, L["IdleSessions.State.Processing"], "bg-primary", command, true);
+        return new Row(s, idle, L["IdleSessions.State.Idle"], "bg-success", command, true);
+    }
+
+    /// <summary>
+    /// 種別ごとの終了コマンド。プロセスを kill するのではなく CLI 自身に終わらせる
+    /// （会話の保存・MCP 切断・子プロセスの後始末を CLI に任せる）。
+    /// </summary>
+    private static string? GetExitCommand(TerminalType type) => type switch
+    {
+        TerminalType.ClaudeCode => "/exit",
+        TerminalType.CodexCLI => "/quit",
+        TerminalType.Terminal => "exit",
+        TerminalType.GeminiCLI => "exit", // 廃止済み。通常ターミナルとして起動する
+        _ => null, // Antigravity / Grok は終了コマンドが未確認なので対象外
+    };
+
+    private bool IsIdleRow(Row r) => r.CanExit && r.StateLabel == L["IdleSessions.State.Idle"].Value;
+
+    /// <summary>閾値以上放置している idle のセッションだけを選択状態にする（処理中・許可待ちは選ばない）。</summary>
+    private void SelectByThreshold()
+    {
+        var threshold = TimeSpan.FromHours(Math.Max(0, thresholdHours));
+        selectedSessionIds.Clear();
+        foreach (var r in _rows.Where(r => IsIdleRow(r) && r.Idle >= threshold))
+        {
+            selectedSessionIds.Add(r.Session.SessionId);
+        }
+    }
+
+    private void OnThresholdChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var h) && h >= 0)
+        {
+            thresholdHours = h;
+            SelectByThreshold();
+        }
+    }
+
+    private void ToggleSelection(Guid id)
+    {
+        if (!selectedSessionIds.Remove(id))
+        {
+            selectedSessionIds.Add(id);
+        }
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (IsAllSelected)
+        {
+            selectedSessionIds.Clear();
+        }
+        else
+        {
+            foreach (var r in _rows.Where(r => r.CanExit))
+            {
+                selectedSessionIds.Add(r.Session.SessionId);
+            }
+        }
+    }
+
+    private bool IsAllSelected
+    {
+        get
+        {
+            var selectable = _rows.Where(r => r.CanExit).ToList();
+            return selectable.Count > 0 && selectable.All(r => selectedSessionIds.Contains(r.Session.SessionId));
+        }
+    }
+
+    private void ConfirmExitSelected()
+    {
+        if (selectedSessionIds.Count == 0) return;
+        showExitConfirm = true;
+    }
+
+    private async Task ExecuteExit()
+    {
+        var targets = _rows
+            .Where(r => r.CanExit && r.ExitCommand != null && selectedSessionIds.Contains(r.Session.SessionId))
+            .Select(r => (r.Session.SessionId, r.ExitCommand!))
+            .ToList();
+        showExitConfirm = false;
+        selectedSessionIds.Clear();
+        if (targets.Count > 0)
+        {
+            await OnExitSessions.InvokeAsync(targets);
+        }
+    }
+
+    private string FormatIdle(TimeSpan idle)
+    {
+        if (idle.TotalMinutes < 1)
+            return L["IdleSessions.IdleJustNow"];
+        if (idle.TotalHours < 1)
+            return string.Format(L["IdleSessions.IdleMinutesFormat"], (int)idle.TotalMinutes);
+        if (idle.TotalDays < 1)
+            return string.Format(L["IdleSessions.IdleHoursMinutesFormat"], (int)idle.TotalHours, idle.Minutes);
+        return string.Format(L["IdleSessions.IdleDaysHoursFormat"], (int)idle.TotalDays, idle.Hours);
+    }
+
+    private static string GetTerminalTypeLabel(TerminalType type) => type switch
+    {
+        TerminalType.ClaudeCode => "Claude",
+        TerminalType.CodexCLI => "Codex",
+        TerminalType.GeminiCLI => "Gemini",
+        TerminalType.Antigravity => "Antigravity",
+        TerminalType.Grok => "Grok",
+        _ => "Terminal",
+    };
+
+    private async Task Close()
+    {
+        showExitConfirm = false;
+        await OnClose.InvokeAsync();
+    }
+
+    private void OnBackdropMouseDown()
+    {
+        isMouseDownOnBackdrop = true;
+    }
+
+    private void OnBackdropMouseUp()
+    {
+        if (isMouseDownOnBackdrop)
+        {
+            _ = Close();
+        }
+        isMouseDownOnBackdrop = false;
+    }
+}

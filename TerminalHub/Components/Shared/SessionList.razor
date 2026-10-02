@@ -68,6 +68,21 @@
                     <span class="badge bg-secondary ms-1">@archivedCount</span>
                 }
             </button>
+            <button class="btn btn-outline-secondary" type="button" @onclick="() => OnShowIdleSessions.InvokeAsync()"
+                    title="@L["SessionList.IdleTooltip"]">
+                <i class="bi bi-hourglass-split"></i>
+                @{
+                    // 既定閾値（2時間）以上放置されている稼働中セッションの数。ダイアログの初期選択と同じ基準
+                    var idleNow = DateTime.Now;
+                    var idleCount = Sessions.Count(s => !s.IsArchived
+                        && s.ConPtySession != null && !s.ConPtySession.HasExited
+                        && (idleNow - s.LastAccessedAt).TotalHours >= IdleSessionsDialog.DefaultThresholdHours);
+                }
+                @if (idleCount > 0)
+                {
+                    <span class="badge bg-secondary ms-1">@idleCount</span>
+                }
+            </button>
         </div>
     </div>
 
@@ -438,6 +453,7 @@
     [Parameter] public EventCallback<Guid> OnSessionSettings { get; set; }
     [Parameter] public EventCallback<(Guid sessionId, bool isExpanded)> OnSessionExpandedChanged { get; set; }
     [Parameter] public EventCallback OnShowArchivedSessions { get; set; }
+    [Parameter] public EventCallback OnShowIdleSessions { get; set; }
     [Parameter] public EventCallback OnMobileSidebarClose { get; set; }
 
     private string GetTerminalTypeBadge(TerminalType terminalType)

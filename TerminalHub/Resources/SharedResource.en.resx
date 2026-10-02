@@ -731,4 +731,29 @@
   <data name="SessionList.Badge.ContextCacheCold" xml:space="preserve"><value>Cache expired. The next turn will re-read the whole context.</value></data>
   <data name="SessionList.Badge.ContextRemainingFormat" xml:space="preserve"><value>{0}K &#183; {1}m</value></data>
   <data name="SessionList.Badge.ContextAfterCompact" xml:space="preserve"><value>Just compacted. The size after compaction does not appear in the transcript until this session speaks again, so the number shown is the pre-compaction value.</value></data>
+  <data name="SessionList.IdleTooltip" xml:space="preserve"><value>Clean up idle sessions</value></data>
+  <data name="IdleSessions.Title" xml:space="preserve"><value>Clean up idle sessions</value></data>
+  <data name="IdleSessions.SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="IdleSessions.ThresholdLabel" xml:space="preserve"><value>Idle for</value></data>
+  <data name="IdleSessions.ThresholdUnit" xml:space="preserve"><value>h or more</value></data>
+  <data name="IdleSessions.SelectByThresholdTooltip" xml:space="preserve"><value>Select waiting sessions idle for at least this long (processing / permission-pending ones are skipped)</value></data>
+  <data name="IdleSessions.SelectedCountFormat" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="IdleSessions.IdleForFormat" xml:space="preserve"><value>Idle {0} (last activity {1})</value></data>
+  <data name="IdleSessions.IdleJustNow" xml:space="preserve"><value>under a minute</value></data>
+  <data name="IdleSessions.IdleMinutesFormat" xml:space="preserve"><value>{0} min</value></data>
+  <data name="IdleSessions.IdleHoursMinutesFormat" xml:space="preserve"><value>{0} h {1} min</value></data>
+  <data name="IdleSessions.IdleDaysHoursFormat" xml:space="preserve"><value>{0} d {1} h</value></data>
+  <data name="IdleSessions.State.Idle" xml:space="preserve"><value>Waiting</value></data>
+  <data name="IdleSessions.State.Processing" xml:space="preserve"><value>Processing</value></data>
+  <data name="IdleSessions.State.Waiting" xml:space="preserve"><value>Permission/selection pending</value></data>
+  <data name="IdleSessions.State.Stopped" xml:space="preserve"><value>Stopped</value></data>
+  <data name="IdleSessions.State.Unsupported" xml:space="preserve"><value>No exit command</value></data>
+  <data name="IdleSessions.Empty" xml:space="preserve"><value>No sessions</value></data>
+  <data name="IdleSessions.FooterNote" xml:space="preserve"><value>Exiting the process keeps the session entry; the conversation can be resumed on restart</value></data>
+  <data name="IdleSessions.ExitSelected" xml:space="preserve"><value>Exit checked sessions</value></data>
+  <data name="IdleSessions.Confirm.Title" xml:space="preserve"><value>Send exit command</value></data>
+  <data name="IdleSessions.Confirm.BodyFormat" xml:space="preserve"><value>Send an exit command to {0} sessions.</value></data>
+  <data name="IdleSessions.Confirm.Note" xml:space="preserve"><value>Scheduled timers or background work inside the CLI will be lost. The CLI may stop at a confirmation prompt, so check the terminal afterwards.</value></data>
+  <data name="IdleSessions.Confirm.Execute" xml:space="preserve"><value>Send</value></data>
+  <data name="IdleSessions.SentToastFormat" xml:space="preserve"><value>Sent an exit command to {0} sessions</value></data>
 </root>
