@@ -279,13 +279,15 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
             var conpty = target.ConPtySession;
             if (conpty == null || conpty.HasExited || target.IsWaitingForUserInput)
                 return false;
-            if (!await conpty.TryWriteAsync(text))
+            // 本文の書き込みに振られた通し番号（書き込みと同じ排他区間で確定する。ロック解放後に
+            // InputSequence を読み直すと、その隙間に入った人間の入力まで取り込んだ番号になる）。
+            // Enter はこれが進んでいない（＝割り込みが無い）ときだけ書く。比較と書き込みも ConPTY 側の
+            // 同じ排他区間で行われる
+            var sequence = await conpty.TryWriteAsync(text);
+            if (sequence == null)
                 return false;
-            // 本文を書き終えた直後の通し番号。Enter はこれが進んでいない（＝人間のキー入力等が
-            // 割り込んでいない）ときだけ書く。番号の比較と書き込みは ConPTY 側の同じ排他区間で行われる
-            var sequence = conpty.InputSequence;
             await Task.Delay(SubmitDelay);
-            if (await conpty.TryWriteIfUnchangedAsync("\r", sequence))
+            if (await conpty.TryWriteIfUnchangedAsync("\r", sequence.Value))
                 return true;
             _logger.LogWarning(
                 "[配送] 直接書き込み: 本文のあとに別の入力があったため Enter を送らない（本文は入力欄に残る）: {Target}",

@@ -423,10 +423,13 @@ namespace TerminalHub.Services
         public Task WriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
 
         /// <summary>
-        /// <see cref="WriteAsync"/> と同じだが成否を返す（破棄済み・パイプ切断なら false）。
-        /// 「送れた件数」を正しく数えたい呼び出し元（放置セッション整理の終了コマンド等）が使う。
+        /// <see cref="WriteAsync"/> と同じだが、書けたらこの書き込みに振られた <see cref="InputSequence"/> を、
+        /// 破棄済み・パイプ切断なら null を返す。番号は書き込みと同じ排他区間で確定するので、
+        /// 戻り値をそのまま <see cref="TryWriteIfUnchangedAsync"/> に渡せば「この書き込みの直後に誰も
+        /// 書いていないときだけ次を書く」が隙間なく成立する（ロック解放後に <see cref="InputSequence"/> を
+        /// 読み直すと、その間の割り込みを取り込んだ番号になってしまう）。
         /// </summary>
-        public Task<bool> TryWriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
+        public Task<long?> TryWriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
 
         /// <summary>
         /// <see cref="InputSequence"/> が <paramref name="expectedSequence"/> のままのときだけ書き込む
@@ -435,13 +438,16 @@ namespace TerminalHub.Services
         /// Enter 再送ウォッチドッグが「自分の Enter 以降に誰も書いていない」ことを保証したまま
         /// Enter を足すために使う。書けたら true、番号が進んでいた・破棄済みなら false。
         /// </summary>
-        public Task<bool> TryWriteIfUnchangedAsync(string input, long expectedSequence) =>
-            WriteCoreAsync(input, expectedSequence);
+        public async Task<bool> TryWriteIfUnchangedAsync(string input, long expectedSequence) =>
+            await WriteCoreAsync(input, expectedSequence) != null;
 
-        private async Task<bool> WriteCoreAsync(string input, long? expectedSequence)
+        /// <summary>
+        /// 書き込みの本体。書けたらこの書き込みに振った通し番号、書かなかった／書けなかったら null。
+        /// </summary>
+        private async Task<long?> WriteCoreAsync(string input, long? expectedSequence)
         {
             if (_writer == null || IsDisposed)
-                return false;
+                return null;
 
             // 複数経路(UI/MCP等)からの同時書き込みを直列化し、チャンクの混線を防ぐ。
             // 待機中に Dispose されると SemaphoreSlim.Dispose では解放されないため、
@@ -452,23 +458,23 @@ namespace TerminalHub.Services
             }
             catch (OperationCanceledException)
             {
-                return false; // Dispose により待機がキャンセルされた
+                return null; // Dispose により待機がキャンセルされた
             }
             catch (ObjectDisposedException)
             {
-                return false; // 破棄済みなら何もしない（Cancel 後に CTS が破棄されたケースを含む）
+                return null; // 破棄済みなら何もしない（Cancel 後に CTS が破棄されたケースを含む）
             }
 
             try
             {
                 if (_writer == null || IsDisposed)
-                    return false;
+                    return null;
 
                 // 条件付き書き込み: ロックを取った後で番号を見る（ここが排他区間の中である点が肝心）。
                 if (expectedSequence.HasValue && Interlocked.Read(ref _inputSequence) != expectedSequence.Value)
-                    return false;
+                    return null;
 
-                Interlocked.Increment(ref _inputSequence);
+                var sequence = Interlocked.Increment(ref _inputSequence);
 
                 // 長い文字列を一括で流し込むと受け手（conhost の入力バッファ / CLI）が取りこぼすため、
                 // 分割して間隔を空けながら送る。CHUNK_SIZE/INTER_CHUNK_DELAY_MS は実測で調整された値で
@@ -499,13 +505,13 @@ namespace TerminalHub.Services
 
                 // 統計情報を更新
                 TotalBytesWritten += Encoding.UTF8.GetByteCount(input);
-                return true;
+                return sequence;
             }
             catch (Exception ex) when (ex is ObjectDisposedException or IOException)
             {
                 // 書き込みループの途中で Dispose され _writer/パイプが破棄されたケース。
                 // 呼び出し元(UIイベント/MCP send_to_session)へ例外を伝播させず握りつぶす
-                return false;
+                return null;
             }
             finally
             {
