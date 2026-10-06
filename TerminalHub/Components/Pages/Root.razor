@@ -1990,6 +1990,14 @@
                 }
             }
         }
+        catch (Exception ex) when (ex is ObjectDisposedException or JSDisconnectedException)
+        {
+            // セッション切替と同時に届いた出力が、破棄直後の xterm（JS 参照）へ書こうとして失敗した
+            // 想定内の競合（SelectSession は activeTerminal を _terminalWriteLock の外で破棄する）。
+            // 落ちたチャンクは切替直後のバッファ復元で描き直されるので表示欠落にはならない。
+            // 回路切断（JSDisconnectedException）も同様に実害がないため Debug に留める。
+            Logger.LogDebug(ex, "[ProcessReceivedData] 切替/切断中の出力を破棄: SessionId={SessionId}", sessionId);
+        }
         catch (Exception ex)
         {
             // ここは ConPTY 出力のホットパス。1セッションの失敗で受信ループ全体を止めないよう
