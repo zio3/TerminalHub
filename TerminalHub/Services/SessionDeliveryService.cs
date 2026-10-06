@@ -45,7 +45,10 @@ public interface ISessionDeliveryService
     /// <summary>
     /// UI 操作から宛先セッションへ「1 行＋Enter」を書く（放置セッション整理の終了コマンド等）。
     /// MCP 配送と同じ宛先ロックを取るので、配送の本文と Enter の間に割り込まず、逆に配送から
-    /// 割り込まれもしない。エンベロープは付けず、積まず（宛先が待ち状態なら false で即戻る）、
+    /// 割り込まれもしない。人間のキー入力（UI から ConPTY へ直接書く経路）はこのロックを通らないので、
+    /// Enter は <see cref="ConPtySession.TryWriteIfUnchangedAsync"/> で「本文のあと誰も書いていない」
+    /// ときだけ送る（割り込まれたら Enter を送らず false。本文は入力欄に残るだけで、他人の入力を
+    /// 勝手に確定させない）。エンベロープは付けず、積まず（宛先が待ち状態なら false で即戻る）、
     /// 提出監視（SubmitWatch）にも載せない（/exit 等は UserPromptSubmit が来ないため誤 WARN になる）。
     /// 本文と Enter の両方が書けたときだけ true。
     /// </summary>
@@ -278,8 +281,16 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
                 return false;
             if (!await conpty.TryWriteAsync(text))
                 return false;
+            // 本文を書き終えた直後の通し番号。Enter はこれが進んでいない（＝人間のキー入力等が
+            // 割り込んでいない）ときだけ書く。番号の比較と書き込みは ConPTY 側の同じ排他区間で行われる
+            var sequence = conpty.InputSequence;
             await Task.Delay(SubmitDelay);
-            return await conpty.TryWriteAsync("\r");
+            if (await conpty.TryWriteIfUnchangedAsync("\r", sequence))
+                return true;
+            _logger.LogWarning(
+                "[配送] 直接書き込み: 本文のあとに別の入力があったため Enter を送らない（本文は入力欄に残る）: {Target}",
+                target.GetDisplayName());
+            return false;
         }
         catch (Exception ex)
         {

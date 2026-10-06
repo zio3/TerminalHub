@@ -2271,7 +2271,7 @@
                 else
                 {
                     Interlocked.Increment(ref failed);
-                    Logger.LogWarning("[放置整理] 終了コマンドを送れなかった（停止済み・許可待ち・書き込み失敗）: {Session} {Command}", name, command);
+                    Logger.LogWarning("[放置整理] 終了コマンドを送れなかった（停止済み・許可待ち・別の入力と重なった・書き込み失敗）: {Session} {Command}", name, command);
                 }
             }));
         }

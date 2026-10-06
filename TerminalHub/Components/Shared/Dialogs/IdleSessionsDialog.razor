@@ -6,7 +6,8 @@
     放置セッションの整理ダイアログ。
     Claude Code 等の CLI を多数立ち上げたままにするとメモリを食う（1 本 200〜400MB）ので、
     「最後に触ってからの経過時間」を並べて見せ、人間がチェックしたセッションに終了コマンド
-    （/exit・/quit・exit）を送る。自動終了はしない: Claude Code 側の /loop や cron 予約、
+    （/exit・/quit・exit）を送る。処理中は選べるが初期選択にはせず、許可・選択待ちと停止済みは
+    選べない（待ちに Enter を送ると承認や選択の確定になる）。自動終了はしない: Claude Code 側の /loop や cron 予約、
     バックグラウンド作業は TerminalHub から見えず、放置に見えても生きている仕事があるため。
     どれにそれが仕掛かっているかは人間が知っているので、判断は人間に残す。
     プロセスが終わってもセッション枠は残り、--continue 起動で会話は復元できる。
@@ -191,7 +192,10 @@
         if (command == null)
             return new Row(s, idle, L["IdleSessions.State.Unsupported"], "bg-secondary", null, false);
         if (s.IsWaitingForUserInput)
-            return new Row(s, idle, L["IdleSessions.State.Waiting"], "bg-warning text-dark", command, true);
+        {
+            // 許可・選択待ちには送らない（Enter が承認や選択の確定になる。送信側も待ち状態なら拒否する）
+            return new Row(s, idle, L["IdleSessions.State.Waiting"], "bg-warning text-dark", command, false);
+        }
         if (s.ProcessingStartTime != null || s.ProcessingStatus != null)
             return new Row(s, idle, L["IdleSessions.State.Processing"], "bg-primary", command, true);
         return new Row(s, idle, L["IdleSessions.State.Idle"], "bg-success", command, true);
