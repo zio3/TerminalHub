@@ -587,6 +587,8 @@
   <data name="GitChanges.OpenFileTooltip" xml:space="preserve"><value>Open with default app</value></data>
   <data name="GitChanges.FileNotFoundFormat" xml:space="preserve"><value>File not found: {0}</value></data>
   <data name="GitChanges.OpenErrorFormat" xml:space="preserve"><value>Failed to open file: {0}</value></data>
+  <data name="GitChanges.OpenFolderTooltip" xml:space="preserve"><value>Open folder in Explorer</value></data>
+  <data name="GitChanges.FolderOpenedFormat" xml:space="preserve"><value>Opened folder: {0}</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>Untracked</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>Modified</value></data>
   <data name="GitChanges.Status.Added" xml:space="preserve"><value>Added</value></data>
