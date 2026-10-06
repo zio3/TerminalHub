@@ -423,6 +423,12 @@ namespace TerminalHub.Services
         public Task WriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
 
         /// <summary>
+        /// <see cref="WriteAsync"/> と同じだが成否を返す（破棄済み・パイプ切断なら false）。
+        /// 「送れた件数」を正しく数えたい呼び出し元（放置セッション整理の終了コマンド等）が使う。
+        /// </summary>
+        public Task<bool> TryWriteAsync(string input) => WriteCoreAsync(input, expectedSequence: null);
+
+        /// <summary>
         /// <see cref="InputSequence"/> が <paramref name="expectedSequence"/> のままのときだけ書き込む
         /// （条件付き書き込み）。比較と書き込みを同じ書き込みロックの中で行うので、比較の直後に
         /// 別経路（UI のキー入力等）が割り込んで先に書く、という隙間がない。

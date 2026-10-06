@@ -756,4 +756,5 @@
   <data name="IdleSessions.Confirm.Note" xml:space="preserve"><value>Scheduled timers or background work inside the CLI will be lost. The CLI may stop at a confirmation prompt, so check the terminal afterwards.</value></data>
   <data name="IdleSessions.Confirm.Execute" xml:space="preserve"><value>Send</value></data>
   <data name="IdleSessions.SentToastFormat" xml:space="preserve"><value>Sent an exit command to {0} sessions</value></data>
+  <data name="IdleSessions.SendFailedToastFormat" xml:space="preserve"><value>Could not send to {0} sessions (stopped, permission pending, or write failed)</value></data>
 </root>

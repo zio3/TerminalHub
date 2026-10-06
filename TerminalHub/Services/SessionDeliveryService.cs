@@ -41,6 +41,15 @@ public interface ISessionDeliveryService
     /// <see cref="ContextNotifyPolicy"/> 参照）。
     /// </summary>
     Task NotifyContextStatusAsync(string contextId, string status, Guid? writerSessionId = null);
+
+    /// <summary>
+    /// UI 操作から宛先セッションへ「1 行＋Enter」を書く（放置セッション整理の終了コマンド等）。
+    /// MCP 配送と同じ宛先ロックを取るので、配送の本文と Enter の間に割り込まず、逆に配送から
+    /// 割り込まれもしない。エンベロープは付けず、積まず（宛先が待ち状態なら false で即戻る）、
+    /// 提出監視（SubmitWatch）にも載せない（/exit 等は UserPromptSubmit が来ないため誤 WARN になる）。
+    /// 本文と Enter の両方が書けたときだけ true。
+    /// </summary>
+    Task<bool> WriteLineDirectAsync(SessionInfo target, string text);
 }
 
 /// <summary>
@@ -254,6 +263,33 @@ public sealed class SessionDeliveryService : ISessionDeliveryService, IHostedSer
         NotReady,
         /// <summary>書き込み自体が失敗した。**再試行しない**（本文が途中まで届いている可能性がある）。</summary>
         Failed,
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> WriteLineDirectAsync(SessionInfo target, string text)
+    {
+        var gate = GetWriteLock(target.SessionId);
+        await gate.WaitAsync();
+        try
+        {
+            // ロック待ちの間に状態が変わりうるので、取ってから見る
+            var conpty = target.ConPtySession;
+            if (conpty == null || conpty.HasExited || target.IsWaitingForUserInput)
+                return false;
+            if (!await conpty.TryWriteAsync(text))
+                return false;
+            await Task.Delay(SubmitDelay);
+            return await conpty.TryWriteAsync("\r");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[配送] 直接書き込みに失敗: {Target}", target.GetDisplayName());
+            return false;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>

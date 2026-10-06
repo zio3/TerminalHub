@@ -756,4 +756,5 @@
   <data name="IdleSessions.Confirm.Note" xml:space="preserve"><value>CLI 側にタイマー予約やバックグラウンド作業があると失われます。確認待ちで止まることもあるので、送った後はターミナルを確認してください。</value></data>
   <data name="IdleSessions.Confirm.Execute" xml:space="preserve"><value>送信</value></data>
   <data name="IdleSessions.SentToastFormat" xml:space="preserve"><value>{0} 件のセッションに終了コマンドを送りました</value></data>
+  <data name="IdleSessions.SendFailedToastFormat" xml:space="preserve"><value>{0} 件のセッションには送れませんでした（停止済み・許可待ち・書き込み失敗）</value></data>
 </root>
