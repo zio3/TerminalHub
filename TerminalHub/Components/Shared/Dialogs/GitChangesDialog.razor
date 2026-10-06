@@ -65,6 +65,12 @@
                                         @* 削除済みファイルは実体が無いため開けない *@
                                         @file.FilePath
                                     }
+                                    else if (IsDirectoryEntry(file))
+                                    {
+                                        @* 未追跡ディレクトリは git status が中身をまとめて1行（末尾 /）で出す。クリックでフォルダを開く *@
+                                        <a href="" class="text-decoration-none" title="@L["GitChanges.OpenFolderTooltip"]"
+                                           @onclick="() => OpenFileAsync(file)" @onclick:preventDefault><i class="bi bi-folder me-1"></i>@file.FilePath</a>
+                                    }
                                     else
                                     {
                                         <a href="" class="text-decoration-none" title="@L["GitChanges.OpenFileTooltip"]"
@@ -244,7 +250,11 @@
                 return; // 古い応答: 破棄
             _repoRoot = repoRoot;
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(repoRoot, file.FilePath));
-            if (!File.Exists(fullPath))
+
+            // 未追跡ディレクトリ（git status が「dir/」の1行で出す）はファイルではないので File.Exists で弾かれていた。
+            // ディレクトリならエクスプローラーで開く（UseShellExecute はフォルダも開ける）
+            var isDirectory = Directory.Exists(fullPath);
+            if (!isDirectory && !File.Exists(fullPath))
             {
                 openError = string.Format(L["GitChanges.FileNotFoundFormat"], fullPath);
                 return;
@@ -257,7 +267,8 @@
                 FileName = fullPath,
                 UseShellExecute = true,
             });
-            await OnShowSuccessToast.InvokeAsync(string.Format(L["Root.Toast.FileOpenedFormat"], fullPath));
+            await OnShowSuccessToast.InvokeAsync(string.Format(
+                L[isDirectory ? "GitChanges.FolderOpenedFormat" : "Root.Toast.FileOpenedFormat"], fullPath));
         }
         catch (Exception ex)
         {
@@ -269,6 +280,10 @@
             isOpening = false;
         }
     }
+
+    /// <summary>git status が未追跡ディレクトリをまとめて出した行（パス末尾が /）か</summary>
+    private static bool IsDirectoryEntry(GitChangedFile file)
+        => file.FilePath.EndsWith('/') || file.FilePath.EndsWith('\\');
 
     // 表示は「作業ツリー側の状態」を優先し、ステージ済みのみの場合はステージ側を使う
     private static char EffectiveStatus(GitChangedFile file)

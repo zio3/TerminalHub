@@ -587,6 +587,8 @@
   <data name="GitChanges.OpenFileTooltip" xml:space="preserve"><value>既定のアプリで開く</value></data>
   <data name="GitChanges.FileNotFoundFormat" xml:space="preserve"><value>ファイルが見つかりません: {0}</value></data>
   <data name="GitChanges.OpenErrorFormat" xml:space="preserve"><value>ファイルを開けませんでした: {0}</value></data>
+  <data name="GitChanges.OpenFolderTooltip" xml:space="preserve"><value>フォルダをエクスプローラーで開く</value></data>
+  <data name="GitChanges.FolderOpenedFormat" xml:space="preserve"><value>フォルダを開きました: {0}</value></data>
   <data name="GitChanges.Status.Untracked" xml:space="preserve"><value>未追跡</value></data>
   <data name="GitChanges.Status.Modified" xml:space="preserve"><value>変更</value></data>
   <data name="GitChanges.Status.Added" xml:space="preserve"><value>追加</value></data>
