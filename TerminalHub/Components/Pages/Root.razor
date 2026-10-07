@@ -1473,8 +1473,19 @@
         var beforeInfo = SessionManager.GetSessionInfo(sessionId);
         var wasConnected = beforeInfo?.IsConnecting == true
             || beforeInfo?.ConPtySession is { HasExited: false };
+        // プロセスが終わった（/exit・Ctrl+C・放置整理）セッション。クリックで起動し直す対象
+        var wasExited = beforeInfo?.IsConnecting != true
+            && beforeInfo?.ConPtySession is { HasExited: true };
 
-        await SelectSession(sessionId);
+        // 表示中のセッションが終了済みなら、同じセッションの再クリックでも再初期化を通して
+        // 起動し直す（SelectSession は同一セッションを no-op にするので forceReinit で押し通す。
+        // 設定保存→再起動と同じ経路）。それ以外の再クリックは従来どおり何もしない
+        await SelectSession(sessionId, forceReinit: wasAlreadyActive && wasExited);
+
+        if (wasExited && activeSessionId == sessionId && beforeInfo != null)
+        {
+            toast?.ShowInfo(string.Format(L["Root.Toast.SessionReconnectedFormat"], beforeInfo.GetDisplayName()));
+        }
 
         if (wasAlreadyActive)
             return;
@@ -3842,9 +3853,16 @@
             }
         };
         
-        _processExitedHandler = (sender, args) =>
+        _processExitedHandler = async (sender, args) =>
         {
             Logger.LogDebug("ConPty process exited: SessionId={SessionId}", args.SessionId);
+            // 一覧の「薄く表示（未接続）」は描画時に HasExited を見るだけなので、終わった瞬間に
+            // 描き直して「クリックすれば再接続できる状態」が見えるようにする
+            try { await InvokeAsync(StateHasChanged); }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+            {
+                // Circuit 破棄中。描き直す先が無いだけなので無視する
+            }
         };
 
         // ConPtyConnectionServiceのイベントハンドラーを設定
