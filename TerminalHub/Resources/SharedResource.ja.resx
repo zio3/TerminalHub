@@ -748,9 +748,8 @@
   <data name="IdleSessions.State.Idle" xml:space="preserve"><value>待機中</value></data>
   <data name="IdleSessions.State.Processing" xml:space="preserve"><value>処理中</value></data>
   <data name="IdleSessions.State.Waiting" xml:space="preserve"><value>許可/選択待ち</value></data>
-  <data name="IdleSessions.State.Stopped" xml:space="preserve"><value>停止済み</value></data>
   <data name="IdleSessions.State.Unsupported" xml:space="preserve"><value>終了コマンド未対応</value></data>
-  <data name="IdleSessions.Empty" xml:space="preserve"><value>セッションがありません</value></data>
+  <data name="IdleSessions.Empty" xml:space="preserve"><value>起動中のセッションがありません</value></data>
   <data name="IdleSessions.FooterNote" xml:space="preserve"><value>プロセスを終了してもセッション枠は残り、再起動時に会話を引き継げます</value></data>
   <data name="IdleSessions.ExitSelected" xml:space="preserve"><value>チェックしたセッションを終了</value></data>
   <data name="IdleSessions.Confirm.Title" xml:space="preserve"><value>終了コマンドの送信</value></data>

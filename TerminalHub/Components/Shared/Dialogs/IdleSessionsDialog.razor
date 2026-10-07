@@ -6,7 +6,8 @@
     放置セッションの整理ダイアログ。
     Claude Code 等の CLI を多数立ち上げたままにするとメモリを食う（1 本 200〜400MB）ので、
     「最後に触ってからの経過時間」を並べて見せ、人間がチェックしたセッションに終了コマンド
-    （/exit・/quit・exit）を送る。処理中は選べるが初期選択にはせず、許可・選択待ちと停止済みは
+    （/exit・/quit・exit）を送る。並べるのはプロセスが動いているセッションだけ（停止済みはメモリを
+    食っておらず終了させるものも無いので出さない）。処理中は選べるが初期選択にはせず、許可・選択待ちは
     選べない（待ちに Enter を送ると承認や選択の確定になる）。自動終了はしない: Claude Code 側の /loop や cron 予約、
     バックグラウンド作業は TerminalHub から見えず、放置に見えても生きている仕事があるため。
     どれにそれが仕掛かっているかは人間が知っているので、判断は人間に残す。
@@ -173,7 +174,8 @@
     {
         var now = DateTime.Now;
         _rows.Clear();
-        foreach (var s in Sessions.Where(s => !s.IsArchived).OrderByDescending(s => now - s.LastAccessedAt))
+        // 停止済み（プロセス未起動・終了済み）は出さない: メモリを使っておらず、送る終了コマンドも無い
+        foreach (var s in Sessions.Where(s => !s.IsArchived && IsRunning(s)).OrderByDescending(s => now - s.LastAccessedAt))
         {
             _rows.Add(BuildRow(s, now));
         }
@@ -181,14 +183,14 @@
         selectedSessionIds.RemoveWhere(id => !_rows.Any(r => r.Session.SessionId == id && r.CanExit));
     }
 
+    private static bool IsRunning(SessionInfo s) => s.ConPtySession != null && !s.ConPtySession.HasExited;
+
     private Row BuildRow(SessionInfo s, DateTime now)
     {
         var idle = now - s.LastAccessedAt;
         if (idle < TimeSpan.Zero) idle = TimeSpan.Zero;
         var command = GetExitCommand(s.TerminalType);
 
-        if (s.ConPtySession == null || s.ConPtySession.HasExited)
-            return new Row(s, idle, L["IdleSessions.State.Stopped"], "bg-dark", command, false);
         if (command == null)
             return new Row(s, idle, L["IdleSessions.State.Unsupported"], "bg-secondary", null, false);
         if (s.IsWaitingForUserInput)
