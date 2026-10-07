@@ -748,9 +748,8 @@
   <data name="IdleSessions.State.Idle" xml:space="preserve"><value>Waiting</value></data>
   <data name="IdleSessions.State.Processing" xml:space="preserve"><value>Processing</value></data>
   <data name="IdleSessions.State.Waiting" xml:space="preserve"><value>Permission/selection pending</value></data>
-  <data name="IdleSessions.State.Stopped" xml:space="preserve"><value>Stopped</value></data>
   <data name="IdleSessions.State.Unsupported" xml:space="preserve"><value>No exit command</value></data>
-  <data name="IdleSessions.Empty" xml:space="preserve"><value>No sessions</value></data>
+  <data name="IdleSessions.Empty" xml:space="preserve"><value>No running sessions</value></data>
   <data name="IdleSessions.FooterNote" xml:space="preserve"><value>Exiting the process keeps the session entry; the conversation can be resumed on restart</value></data>
   <data name="IdleSessions.ExitSelected" xml:space="preserve"><value>Exit checked sessions</value></data>
   <data name="IdleSessions.Confirm.Title" xml:space="preserve"><value>Send exit command</value></data>
