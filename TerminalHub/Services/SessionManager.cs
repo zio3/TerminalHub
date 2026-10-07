@@ -419,8 +419,12 @@ namespace TerminalHub.Services
                     return null;
                 }
 
-                // 既にConPtyセッションが存在する場合はそれを返す
-                if (_sessions.TryGetValue(sessionId, out var existingSession))
+                // 既にConPtyセッションが存在し、プロセスも生きていればそれを返す。
+                // 終了済み（/exit・Ctrl+C・放置整理の終了コマンド等でプロセスが終わった）なら
+                // 無いものとして下の遅延初期化に落とし、古い ConPTY を片付けて起動し直す。
+                // 一覧でセッションをクリックするだけで再接続できるようにするため
+                // （以前は死んだ画面が出たまま、設定ダイアログの再起動を経ないと使えなかった）
+                if (_sessions.TryGetValue(sessionId, out var existingSession) && !existingSession.HasExited)
                 {
                     _logger.LogDebug("既存セッションを再利用: SessionId={SessionId}", sessionId);
                     return existingSession;
@@ -447,8 +451,8 @@ namespace TerminalHub.Services
                         return null;
                     }
 
-                    // ダブルチェックロッキング
-                    if (_sessions.TryGetValue(sessionId, out var existingSession))
+                    // ダブルチェックロッキング（こちらも生きているときだけ再利用）
+                    if (_sessions.TryGetValue(sessionId, out var existingSession) && !existingSession.HasExited)
                     {
                         _logger.LogDebug("既存セッションを再利用 (ダブルチェック): SessionId={SessionId}", sessionId);
                         return existingSession;
@@ -459,6 +463,15 @@ namespace TerminalHub.Services
                 }
 
                 NotifySessionsChanged();
+
+                // 終了済みの ConPTY が残っていれば片付け、画面バッファと処理状態も起動し直し用に戻す
+                // （再起動・再作成と同じ手順。生きているものはここに来ない）
+                if (sessionInfo.ConPtySession != null || _sessions.ContainsKey(sessionId))
+                {
+                    _logger.LogInformation("終了済みセッションを再接続します: SessionId={SessionId}", sessionId);
+                    await DisposeExistingSessionAsync(sessionId, sessionInfo);
+                    ResetRuntimeStateForRelaunch(sessionInfo);
+                }
 
                 // 新規セッション起動時は HasContinueErrorOccurred フラグをリセット
                 // （新しいセッションで --continue を再度試行できるようにする）
@@ -989,6 +1002,22 @@ namespace TerminalHub.Services
         /// <summary>
         /// セッションオプションを準備（--continueオプションの除外判定含む）
         /// </summary>
+        /// <summary>
+        /// プロセスを起動し直す前に、前のプロセスの画面バッファと処理状態を捨てる。
+        /// 再起動・再作成・終了済みセッションの再接続（GetSessionAsync）で共通。
+        /// </summary>
+        private static void ResetRuntimeStateForRelaunch(SessionInfo sessionInfo)
+        {
+            sessionInfo.ClearTerminalBuffer();
+            sessionInfo.ProcessingStatus = null;
+            sessionInfo.ProcessingStartTime = null;
+            sessionInfo.ProcessingElapsedSeconds = null;
+            sessionInfo.LastProcessingUpdateTime = null;
+            sessionInfo.ClearWaitingForUserInput();
+            // 起動し直すと全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
+            sessionInfo.ClearRunningSubagents();
+        }
+
         private Dictionary<string, string> PrepareSessionOptions(SessionInfo sessionInfo, bool removeContinueOption = false)
         {
             // 呼び出し後の設定保存で、生成するコマンドと実行時スナップショットが変わらないよう複製する。
@@ -1034,14 +1063,7 @@ namespace TerminalHub.Services
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
 
                 // セッション再作成時はバッファと状態をクリア
-                sessionInfo.ClearTerminalBuffer();
-                sessionInfo.ProcessingStatus = null;
-                sessionInfo.ProcessingStartTime = null;
-                sessionInfo.ProcessingElapsedSeconds = null;
-                sessionInfo.LastProcessingUpdateTime = null;
-                sessionInfo.ClearWaitingForUserInput();
-                // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
-                sessionInfo.ClearRunningSubagents();
+                ResetRuntimeStateForRelaunch(sessionInfo);
 
                 var (cols, rows) = ResolveInitialSize();
                 sessionInfo.ResizeTerminalBuffer(cols, rows); // ConPTY と同じサイズで始める（上と同じ理由）
@@ -1109,14 +1131,7 @@ namespace TerminalHub.Services
                 await DisposeExistingSessionAsync(sessionId, sessionInfo);
 
                 // セッション再起動時はバッファと状態をクリア
-                sessionInfo.ClearTerminalBuffer();
-                sessionInfo.ProcessingStatus = null;
-                sessionInfo.ProcessingStartTime = null;
-                sessionInfo.ProcessingElapsedSeconds = null;
-                sessionInfo.LastProcessingUpdateTime = null;
-                sessionInfo.ClearWaitingForUserInput();
-                // 再起動で全サブエージェントは消えるため、稼働追跡もリセット（取りこぼし時の復旧経路）
-                sessionInfo.ClearRunningSubagents();
+                ResetRuntimeStateForRelaunch(sessionInfo);
 
                 // セッション再起動時は HasContinueErrorOccurred フラグをリセット
                 // （新しいセッションで --continue を再度試行できるようにする）

@@ -688,6 +688,7 @@
   <data name="Root.Toast.SessionCreated" xml:space="preserve"><value>セッションを作成しました</value></data>
   <data name="Root.Toast.SessionCreateFailed" xml:space="preserve"><value>セッション作成に失敗しました</value></data>
   <data name="Root.Toast.SessionSettingsSaved" xml:space="preserve"><value>セッション設定を保存しました</value></data>
+  <data name="Root.Toast.SessionReconnectedFormat" xml:space="preserve"><value>{0} を再接続しました</value></data>
   <data name="Root.Toast.SessionRecreatedWithoutContinue" xml:space="preserve"><value>--continue オプションなしでセッションを再作成しました</value></data>
   <data name="Root.Toast.SessionRecreateFailed" xml:space="preserve"><value>セッション再作成に失敗しました</value></data>
   <data name="Root.Toast.SessionRecreateErrorFormat" xml:space="preserve"><value>セッション再作成エラー: {0}</value></data>

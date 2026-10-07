@@ -119,7 +119,29 @@ namespace TerminalHub.Services
         
         // プロセス情報
         public int ProcessId => _process?.Id ?? -1;
-        public bool HasExited => _process?.HasExited ?? true;
+
+        /// <summary>
+        /// プロセスが終わっている（または起動していない・破棄済み）か。
+        /// Dispose は _process を null にしないので、破棄済みインスタンスの Process.HasExited を読むと
+        /// InvalidOperationException になる。_disposeState は Dispose の先頭で立つため、先に IsDisposed を
+        /// 見れば破棄と並行して読まれても「終了済み」として安全に答えられる
+        /// （一覧の薄い表示・放置整理・GetSessionAsync の再接続判定が読む）。
+        /// </summary>
+        public bool HasExited
+        {
+            get
+            {
+                if (IsDisposed) return true;
+                try
+                {
+                    return _process?.HasExited ?? true;
+                }
+                catch (InvalidOperationException)
+                {
+                    return true; // IsDisposed 判定と Process.Dispose の隙間に入ったケース
+                }
+            }
+        }
         
         // 統計情報
         public long TotalBytesRead { get; private set; } = 0;
