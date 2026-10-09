@@ -240,7 +240,34 @@ builder.Services
             return Task.CompletedTask;
         };
     })
-    .WithTools<TerminalHub.Mcp.SessionMessagingTools>();
+    .WithTools<TerminalHub.Mcp.SessionMessagingTools>()
+    // ツール呼び出しの引数を本体へ渡す前に入力スキーマと照合する。
+    // SDK は必須引数の欠落を引数束縛の ArgumentException にして、クライアントには
+    // "An error occurred invoking 'send_to_session'." という汎用文しか返さない。
+    // 呼び出し側の LLM はそれでは直せず同じ誤りで再試行を繰り返す（引数名 targetSessionId を
+    // sessionId と書いて 6 連続失敗した実害あり・2026-10-09）ので、ここで引数名を列挙した
+    // エラーにして返し、1 回で立ち直れるようにする。
+    .WithRequestFilters(filters => filters.AddCallToolFilter(next => async (context, cancellationToken) =>
+    {
+        var tool = context.MatchedPrimitive as ModelContextProtocol.Server.McpServerTool;
+        var toolName = context.Params?.Name;
+        if (tool != null && toolName != null)
+        {
+            var problem = TerminalHub.Mcp.McpToolArgumentCheck.Describe(
+                toolName, tool.ProtocolTool.InputSchema, context.Params?.Arguments?.Keys);
+            if (problem != null)
+            {
+                var logger = context.Services?.GetService<ILoggerFactory>()?.CreateLogger("TerminalHub.Mcp.ArgumentCheck");
+                logger?.LogWarning("MCP ツール呼び出しの引数誤り: {Problem}", problem);
+                return new ModelContextProtocol.Protocol.CallToolResult
+                {
+                    IsError = true,
+                    Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = problem }],
+                };
+            }
+        }
+        return await next(context, cancellationToken);
+    }));
 
 
 var app = builder.Build();
