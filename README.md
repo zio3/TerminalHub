@@ -9,7 +9,7 @@
 
 🌐 **[Landing Page](https://zio3.github.io/TerminalHub/landing/)** · 📥 **[Download](https://github.com/zio3/TerminalHub/releases/latest)** · 💬 **[Discord](https://discord.gg/juCcFNXJg7)**
 
-TerminalHub is a Windows desktop application that brings multi-session management to Claude Code / Gemini CLI / Codex CLI through a single GUI. It uses the Windows ConPTY API to deliver session management, status monitoring, and notifications — without needing `tmux`.
+TerminalHub is a Windows desktop application that brings multi-session management to Claude Code / Codex CLI / Antigravity / Grok through a single GUI. It uses the Windows ConPTY API to deliver session management, status monitoring, and notifications — without needing `tmux`.
 
 Just run the installer — no .NET installation required.
 
@@ -42,13 +42,16 @@ On macOS / Linux you can manage multiple sessions with `tmux` + tools like `clau
 
 ### AI CLI Integration
 
-| Feature | Claude Code | Gemini CLI | Codex CLI |
-|---------|:-----------:|:----------:|:---------:|
+| Feature | Claude Code | Codex CLI | Antigravity / Grok |
+|---------|:-----------:|:---------:|:------------------:|
 | Session management | ✓ | ✓ | ✓ |
-| Real-time status detection | ✓ | ✓ | – |
-| Token usage / elapsed time display | ✓ | ✓ | – |
-| Completion notification | ✓ | ✓ | ✓ |
+| Real-time status detection (hook-based) | ✓ | ✓ | – |
+| Token usage / elapsed time display | ✓ | elapsed only | – |
+| Completion notification | ✓ | ✓ | – |
 | GUI option configuration | ✓ | ✓ | ✓ |
+| Session-to-session messaging (MCP) | ✓ | ✓ | – |
+
+> Gemini CLI support was removed after the CLI was discontinued upstream. Existing Gemini sessions start as plain terminals.
 
 - Processing / idle / input-waiting states are detected and displayed in real time
 - Inactive sessions show a notification bell when processing finishes
@@ -117,7 +120,7 @@ npm start
 ### Creating a session
 1. Click the "New Session" button
 2. Pick a working directory
-3. Choose a session type (Terminal / Claude Code / Gemini CLI / Codex CLI)
+3. Choose a session type (Terminal / Claude Code / Codex CLI / Antigravity / Grok)
 4. Set options as needed
 
 ### Managing sessions
