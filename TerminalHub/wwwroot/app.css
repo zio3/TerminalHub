@@ -230,7 +230,8 @@ h1:focus {
     position: relative;
 }
 
-.terminal-redraw-btn {
+.terminal-redraw-btn,
+.terminal-diag-btn {
     position: absolute;
     top: 4px;
     right: 10px;
@@ -247,12 +248,19 @@ h1:focus {
     transition: opacity 0.2s ease, background-color 0.2s ease;
 }
 
-.terminal-redraw-btn:hover {
+.terminal-redraw-btn:hover,
+.terminal-diag-btn:hover {
     opacity: 0.9;
     background-color: rgba(255, 255, 255, 0.08);
 }
 
-.terminal-redraw-btn:focus {
+/* 診断ボタンは再描画ボタンの左隣。見た目は同じ（通常ほぼ透明・hover で出現） */
+.terminal-diag-btn {
+    right: 36px;
+}
+
+.terminal-redraw-btn:focus,
+.terminal-diag-btn:focus {
     outline: none;
     opacity: 0.9;
 }

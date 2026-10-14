@@ -263,6 +263,48 @@ class FlowControlManager {
 // グローバルフロー制御マネージャー
 window.flowControlManager = new FlowControlManager();
 
+// 診断用: 表示まわりの直近イベント（スクロール位置の変化・ホイール・書き込み・リサイズ）を
+// セッション別に 200 件だけ覚えておく小さなリング。「この画面を保存」で xterm の実バッファと
+// 一緒に書き出し、「スクロールが飛んだのか・飛んでいないのに位置が動いたのか・その時 write が
+// 何文字来ていたか」を事後に読めるようにする。ターミナルを作り直しても履歴は消さない
+// （セッション切替のたびに xterm が作り直されるため、消すと切替直後の証拠が残らない）。
+class TerminalDiagTrail {
+    constructor() {
+        this.max = 200;
+        this.trails = {};
+    }
+    push(sessionId, type, detail) {
+        let list = this.trails[sessionId];
+        if (!list) { list = this.trails[sessionId] = []; }
+        list.push(Object.assign({ t: new Date().toISOString(), type }, detail || {}));
+        if (list.length > this.max) { list.splice(0, list.length - this.max); }
+    }
+    // 小さな write は毎秒何件も来てリングを埋めるので、2 秒以内の連続分は 1 件にまとめる。
+    // 復元やまとめ書きのような大きな write はそのまま 1 件として残す。
+    pushWrite(sessionId, len, state) {
+        if (len >= 4096) {
+            this.push(sessionId, 'write', Object.assign({ len }, state));
+            return;
+        }
+        const list = this.trails[sessionId];
+        const last = list && list.length > 0 ? list[list.length - 1] : null;
+        const now = Date.now();
+        if (last && last.type === 'writes' && now - last.t0 < 2000) {
+            last.n += 1;
+            last.len += len;
+            last.t = new Date(now).toISOString();
+            last.ydisp = state.ydisp;
+            last.baseY = state.baseY;
+            return;
+        }
+        this.push(sessionId, 'writes', Object.assign({ n: 1, len, t0: now }, state));
+    }
+    get(sessionId) {
+        return (this.trails[sessionId] || []).slice();
+    }
+}
+window.terminalDiagTrail = new TerminalDiagTrail();
+
 // WebGL コンテキスト生存数トラッカー（診断用・加算のみ）。
 // xterm の WebglAddon はターミナルごとに WebGL コンテキストを1個持つ。開いたターミナルが
 // 増えてブラウザの同時 WebGL コンテキスト上限（ソフト上限。実測で ~20 本あたりから）を超えると、
@@ -977,6 +1019,21 @@ window.terminalFunctions = {
             // 選択テキストの右クリックメニュー（パスっぽい選択のときだけ出す）
             attachSelectionContextMenu(term, element, sessionId);
 
+            // 診断用イベント履歴（window.terminalDiagTrail 参照）。ホイールは xterm が処理する前の
+            // 生イベントを passive で覗くだけで、挙動には影響しない。
+            const diagTrail = window.terminalDiagTrail;
+            diagTrail.push(sessionId, 'init', { cols: term.cols, rows: term.rows });
+            term.onScroll((ydisp) => {
+                const buf = term.buffer.active;
+                diagTrail.push(sessionId, 'scroll', { ydisp, baseY: buf.baseY, length: buf.length });
+            });
+            const onDiagWheel = (ev) => {
+                const buf = term.buffer.active;
+                diagTrail.push(sessionId, 'wheel', { dy: Math.round(ev.deltaY), mode: ev.deltaMode, ydisp: buf.viewportY, baseY: buf.baseY });
+            };
+            element.addEventListener('wheel', onDiagWheel, { passive: true });
+            element._diagWheelDetach = () => element.removeEventListener('wheel', onDiagWheel);
+
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
 
@@ -1031,6 +1088,7 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
+                window.terminalDiagTrail.push(sessionId, 'resize', { cols: size.cols, rows: size.rows });
                 notifyResize(size.cols, size.rows, 'onResize', '');
             });
 
@@ -1154,6 +1212,10 @@ window.terminalFunctions = {
                 // フロー制御: 書き込み前にバイト数を加算
                 window.flowControlManager.beforeWrite(sessionId, dataLength);
 
+                // 診断用イベント履歴: 書き込み直前の表示位置を添えて残す
+                const bufBeforeWrite = term.buffer.active;
+                window.terminalDiagTrail.pushWrite(sessionId, dataLength, { ydisp: bufBeforeWrite.viewportY, baseY: bufBeforeWrite.baseY });
+
                 // サーバー側の状態バッファが復元順序を保証するため、ANSIシーケンスを
                 // 加工せず、そのままxtermへ渡す。
                 term.write(data, () => {
@@ -1233,6 +1295,7 @@ window.terminalFunctions = {
 
         // フロー制御のクリーンアップ
         window.flowControlManager.remove(sessionId);
+        window.terminalDiagTrail.push(sessionId, 'dispose', {});
 
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
@@ -1277,6 +1340,9 @@ window.terminalFunctions = {
             if (typeof terminalDiv._selectionMenuDetach === 'function') {
                 terminalDiv._selectionMenuDetach();
             }
+            if (typeof terminalDiv._diagWheelDetach === 'function') {
+                terminalDiv._diagWheelDetach();
+            }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
             }
@@ -1287,6 +1353,40 @@ window.terminalFunctions = {
     // ターミナル破棄関数
     destroyTerminal: function(sessionId) {
         this.cleanupTerminal(sessionId);
+    },
+
+    // 診断用: xterm 側の「実際に見えている状態」を取り出す（「この画面を保存」から呼ぶ）。
+    // サーバーのエミュレータが持つ画面と突き合わせ、崩れ・飛びがどちら側の問題かを切り分ける材料。
+    // text は全行（スクロールバック込み）の平文。装飾は落とす。
+    captureDiagnostics: function(sessionId) {
+        const info = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
+        const events = window.terminalDiagTrail.get(sessionId);
+        if (!info || !info.terminal) {
+            return { available: false, events };
+        }
+        const term = info.terminal;
+        const buf = term.buffer.active;
+        const lines = [];
+        for (let i = 0; i < buf.length; i++) {
+            const line = buf.getLine(i);
+            lines.push(line ? line.translateToString(true) : '');
+        }
+        return {
+            available: true,
+            cols: term.cols,
+            rows: term.rows,
+            viewportY: buf.viewportY,
+            baseY: buf.baseY,
+            length: buf.length,
+            cursorX: buf.cursorX,
+            cursorY: buf.cursorY,
+            bufferType: buf.type,
+            scrollbackOption: term.options.scrollback,
+            hasWebgl: !!info.webglAddon,
+            visible: info.container ? info.container.style.display !== 'none' : null,
+            text: lines.join('\n'),
+            events
+        };
     },
 
     // ターミナルをリフレッシュ（バッファ復元後の表示更新用）

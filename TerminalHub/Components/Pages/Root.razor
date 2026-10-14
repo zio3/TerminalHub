@@ -174,6 +174,15 @@
                             @onclick="() => RecreateTerminal(activeSessionId.Value)">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
+                    @* 診断用「この画面を保存」。表示がおかしいと感じた瞬間に押すと、xterm の実バッファ・
+                       エミュレータの画面・生出力リング・直近イベント履歴をログフォルダ配下 diag/ へ 1 束で残す。
+                       表示には何も影響しない（読み取りだけ）。 *@
+                    <button type="button"
+                            class="terminal-diag-btn"
+                            title="@L["Root.Terminal.Diag.Title"]"
+                            @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
+                        <i class="bi bi-camera"></i>
+                    </button>
                 }
             </div>
 
@@ -3625,6 +3634,43 @@
         || (eventType == HookEventType.PermissionRequest && permissionRequestRequiresUserInput)
         || (eventType == HookEventType.Notification
             && ClassifyNotificationBell(message) == SessionBellKind.Confirm);
+
+    /// <summary>
+    /// 「この画面を保存」。ブラウザ側 xterm の状態を取り、サーバー側のエミュレータ・生出力リングと
+    /// 一緒に診断ダンプとして書き出す（<see cref="TerminalDiagnosticsDump"/>）。
+    /// 稀にしか起きない表示の異常を、起きた瞬間に 1 操作で証拠に残すための入口。
+    /// </summary>
+    private async Task CaptureTerminalDiagnostics(Guid sessionId)
+    {
+        var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session == null)
+        {
+            return;
+        }
+
+        TerminalClientDiagnostics? client = null;
+        try
+        {
+            client = await TerminalService.CaptureClientDiagnosticsAsync(sessionId);
+        }
+        catch (Exception ex)
+        {
+            // ブラウザ側が取れなくてもサーバー側の分だけは残す
+            Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
+        }
+
+        var folder = TerminalDiagnosticsDump.WriteBundle(session, client, "manual");
+        if (folder != null)
+        {
+            Logger.LogInformation("[Diag] 診断ダンプを保存: {Folder} (xterm viewportY={ViewportY} baseY={BaseY} length={Length})",
+                folder, client?.ViewportY, client?.BaseY, client?.Length);
+            toast?.ShowSuccess(string.Format(L["Root.Toast.DiagSavedFormat"], folder));
+        }
+        else
+        {
+            toast?.ShowError(L["Root.Toast.DiagFailed"]);
+        }
+    }
 
     private void ShowSessionSettingsDialog(Guid sessionId)
     {

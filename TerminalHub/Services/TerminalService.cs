@@ -166,6 +166,12 @@ namespace TerminalHub.Services
             }
         }
 
+        public async Task<TerminalClientDiagnostics?> CaptureClientDiagnosticsAsync(Guid sessionId)
+        {
+            return await _jsRuntime.InvokeAsync<TerminalClientDiagnostics?>(
+                "terminalFunctions.captureDiagnostics", sessionId.ToString());
+        }
+
         public async Task RefreshTerminalAsync(Guid sessionId)
         {
             try

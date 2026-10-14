@@ -678,6 +678,9 @@
   <data name="Root.Toast.TerminalDisposeErrorFormat" xml:space="preserve"><value>ターミナル破棄エラー: {0}</value></data>
   <data name="Root.Toast.TerminalRecreated" xml:space="preserve"><value>ターミナルを再作成しました</value></data>
   <data name="Root.Terminal.Redraw.Title" xml:space="preserve"><value>表示が崩れた場合に再描画します</value></data>
+  <data name="Root.Terminal.Diag.Title" xml:space="preserve"><value>この画面を保存（表示がおかしいときの診断用。ログフォルダの diag に書き出します）</value></data>
+  <data name="Root.Toast.DiagSavedFormat" xml:space="preserve"><value>診断ダンプを保存しました: {0}</value></data>
+  <data name="Root.Toast.DiagFailed" xml:space="preserve"><value>診断ダンプの保存に失敗しました（ログを確認してください）</value></data>
   <data name="Root.Toast.SelectSessionFirst" xml:space="preserve"><value>このセッションを選択してからターミナルを再作成してください</value></data>
   <data name="Root.Toast.TerminalRecreateErrorFormat" xml:space="preserve"><value>ターミナル再作成エラー: {0}</value></data>
   <data name="Root.Toast.WorktreeCreatedFormat" xml:space="preserve"><value>Worktree '{0}' を作成しました</value></data>
