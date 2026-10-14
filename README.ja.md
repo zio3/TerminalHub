@@ -9,7 +9,7 @@
 
 🌐 **[ランディングページ](https://zio3.github.io/TerminalHub/landing/)** · 📥 **[ダウンロード](https://github.com/zio3/TerminalHub/releases/latest)** · 💬 **[Discord](https://discord.gg/juCcFNXJg7)**
 
-TerminalHub は、Claude Code / Gemini CLI / Codex CLI の複数セッションを GUI で一元管理できる Windows デスクトップアプリケーションです。Windows ConPTY API を使用し、tmux なしでセッション管理・状態監視・通知を実現します。
+TerminalHub は、Claude Code / Codex CLI / Antigravity / Grok の複数セッションを GUI で一元管理できる Windows デスクトップアプリケーションです。Windows ConPTY API を使用し、tmux なしでセッション管理・状態監視・通知を実現します。
 
 インストーラーを実行するだけで使用できます（.NET のインストール不要）
 
@@ -41,13 +41,16 @@ macOS / Linux では tmux + claude-tmux 等で複数セッションを管理で�
 
 ### AI CLI 統合
 
-| 機能 | Claude Code | Gemini CLI | Codex CLI |
-|------|:-----------:|:----------:|:---------:|
+| 機能 | Claude Code | Codex CLI | Antigravity / Grok |
+|------|:-----------:|:---------:|:------------------:|
 | セッション管理 | o | o | o |
-| 処理状態のリアルタイム検出 | o | o | - |
-| トークン使用量 / 処理時間の表示 | o | o | - |
-| 処理完了通知 | o | o | o |
+| 処理状態のリアルタイム検出（hook 連携） | o | o | - |
+| トークン使用量 / 処理時間の表示 | o | 処理時間のみ | - |
+| 処理完了通知 | o | o | - |
 | オプション GUI 設定 | o | o | o |
+| セッション間メッセージング（MCP） | o | o | - |
+
+> Gemini CLI は本家の提供終了にともない対応を終了しました。既存の Gemini セッションは通常のターミナルとして起動します。
 
 - 処理中 / 待機中 / 入力待ちをリアルタイムで検出・表示
 - 非アクティブセッションの処理完了を通知ベルで表示
@@ -116,7 +119,7 @@ npm start
 ### セッションの作成
 1. 「新しいセッションを作成」ボタンをクリック
 2. 作業フォルダを選択
-3. セッションタイプを選択（Terminal / Claude Code / Gemini CLI / Codex CLI）
+3. セッションタイプを選択（Terminal / Claude Code / Codex CLI / Antigravity / Grok）
 4. 必要に応じてオプションを設定
 
 ### セッションの管理
