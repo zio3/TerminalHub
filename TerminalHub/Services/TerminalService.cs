@@ -168,8 +168,52 @@ namespace TerminalHub.Services
 
         public async Task<TerminalClientDiagnostics?> CaptureClientDiagnosticsAsync(Guid sessionId)
         {
-            return await _jsRuntime.InvokeAsync<TerminalClientDiagnostics?>(
-                "terminalFunctions.captureDiagnostics", sessionId.ToString());
+            var id = sessionId.ToString();
+            var result = await _jsRuntime.InvokeAsync<TerminalClientDiagnostics?>(
+                "terminalFunctions.captureDiagnostics", id);
+            if (result == null || !result.Available || result.TextLength <= 0)
+            {
+                return result;
+            }
+
+            // 本文は JS 側に保留されているのでチャンクで取り出す（1 回の戻り値が SignalR の受信上限を
+            // 超えると回線が切断されるため。JS 側のコメント参照）。チャンクの終端はサロゲートペアを
+            // 割らないよう JS が調整するので、次の開始位置は戻り値の nextStart を使う。
+            var sb = new System.Text.StringBuilder(result.TextLength);
+            try
+            {
+                var start = 0;
+                var guard = 0;
+                while (true)
+                {
+                    var chunk = await _jsRuntime.InvokeAsync<DiagTextChunk?>(
+                        "terminalFunctions.readDiagnosticsTextChunk", id, start, result.TextChunkSize);
+                    if (chunk == null)
+                    {
+                        break;
+                    }
+                    sb.Append(chunk.Chunk);
+                    if (chunk.Done || chunk.NextStart <= start || ++guard > 10000)
+                    {
+                        break;
+                    }
+                    start = chunk.NextStart;
+                }
+                result.Text = sb.ToString();
+            }
+            catch
+            {
+                try { await _jsRuntime.InvokeVoidAsync("terminalFunctions.discardDiagnosticsText", id); } catch { /* 片付け失敗は無視 */ }
+                throw;
+            }
+            return result;
+        }
+
+        private sealed class DiagTextChunk
+        {
+            public string? Chunk { get; set; }
+            public int NextStart { get; set; }
+            public bool Done { get; set; }
         }
 
         public async Task RefreshTerminalAsync(Guid sessionId)

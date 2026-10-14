@@ -1031,8 +1031,10 @@ window.terminalFunctions = {
                 const buf = term.buffer.active;
                 diagTrail.push(sessionId, 'wheel', { dy: Math.round(ev.deltaY), mode: ev.deltaMode, ydisp: buf.viewportY, baseY: buf.baseY });
             };
-            element.addEventListener('wheel', onDiagWheel, { passive: true });
-            element._diagWheelDetach = () => element.removeEventListener('wheel', onDiagWheel);
+            // xterm.js 6 はホイールでスクロールすると内部要素で stopPropagation() するため、
+            // バブリングでは外側の要素に届かない。capture で先に覗く（Codex レビュー P2）。
+            element.addEventListener('wheel', onDiagWheel, { passive: true, capture: true });
+            element._diagWheelDetach = () => element.removeEventListener('wheel', onDiagWheel, { capture: true });
 
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
@@ -1358,6 +1360,10 @@ window.terminalFunctions = {
     // 診断用: xterm 側の「実際に見えている状態」を取り出す（「この画面を保存」から呼ぶ）。
     // サーバーのエミュレータが持つ画面と突き合わせ、崩れ・飛びがどちら側の問題かを切り分ける材料。
     // text は全行（スクロールバック込み）の平文。装飾は落とす。
+    // 全行の平文は最大で 1MB を超えうる（5000 行 x 190 桁 x 全角）。Blazor Server の JS→C# 戻り値も
+    // SignalR の受信上限（Program.cs で 1MiB）の対象で、超えると回線ごと切断されて証拠を失うため、
+    // 本文はここで保留しておき readDiagnosticsTextChunk でチャンクに分けて取り出す（Codex レビュー P1）。
+    // 戻り値には本文の長さとチャンク数だけを載せる。
     captureDiagnostics: function(sessionId) {
         const info = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
         const events = window.terminalDiagTrail.get(sessionId);
@@ -1371,6 +1377,10 @@ window.terminalFunctions = {
             const line = buf.getLine(i);
             lines.push(line ? line.translateToString(true) : '');
         }
+        const text = lines.join('\n');
+        const chunkSize = 100000;
+        window.terminalDiagPendingText = window.terminalDiagPendingText || {};
+        window.terminalDiagPendingText[sessionId] = text;
         return {
             available: true,
             cols: term.cols,
@@ -1384,9 +1394,38 @@ window.terminalFunctions = {
             scrollbackOption: term.options.scrollback,
             hasWebgl: !!info.webglAddon,
             visible: info.container ? info.container.style.display !== 'none' : null,
-            text: lines.join('\n'),
+            textLength: text.length,
+            textChunkSize: chunkSize,
+            textChunkCount: Math.ceil(text.length / chunkSize),
             events
         };
+    },
+
+    // captureDiagnostics で保留した本文を start 文字目から chunkSize 文字だけ返す。最後まで渡したら保留を捨てる。
+    // チャンク境界はサロゲートペアを割らない（高位サロゲートで終わるなら 1 文字手前で切る）ので、
+    // 呼び出し側は次の開始位置に戻り値の nextStart を使う。
+    readDiagnosticsTextChunk: function(sessionId, start, chunkSize) {
+        const pending = window.terminalDiagPendingText && window.terminalDiagPendingText[sessionId];
+        if (typeof pending !== 'string') {
+            return null;
+        }
+        let end = Math.min(start + chunkSize, pending.length);
+        if (end < pending.length) {
+            const code = pending.charCodeAt(end - 1);
+            if (code >= 0xD800 && code <= 0xDBFF) { end -= 1; }
+        }
+        const chunk = pending.substring(start, end);
+        if (end >= pending.length) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
+        return { chunk, nextStart: end, done: end >= pending.length };
+    },
+
+    // 途中で失敗したときに保留を捨てる
+    discardDiagnosticsText: function(sessionId) {
+        if (window.terminalDiagPendingText) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
     },
 
     // ターミナルをリフレッシュ（バッファ復元後の表示更新用）
