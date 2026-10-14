@@ -1298,6 +1298,9 @@ window.terminalFunctions = {
         // フロー制御のクリーンアップ
         window.flowControlManager.remove(sessionId);
         window.terminalDiagTrail.push(sessionId, 'dispose', {});
+        if (window.terminalDiagPendingText) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
 
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
@@ -1379,8 +1382,18 @@ window.terminalFunctions = {
         }
         const text = lines.join('\n');
         const chunkSize = 100000;
+        // 保留にはトークンと時刻を付ける。同じセッションで取得中に再度押されても先行分と混ざらないよう、
+        // チャンク読み出しはトークン一致を要求する。回線切断などで回収されなかった保留は、次の保留作成時に
+        // 60 秒超のものを捨てる（cleanupTerminal でも捨てる）。（Codex レビュー 2 周目 P2 x2）
         window.terminalDiagPendingText = window.terminalDiagPendingText || {};
-        window.terminalDiagPendingText[sessionId] = text;
+        const now = Date.now();
+        for (const key of Object.keys(window.terminalDiagPendingText)) {
+            if (now - window.terminalDiagPendingText[key].createdAt > 60000) {
+                delete window.terminalDiagPendingText[key];
+            }
+        }
+        const textToken = now.toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        window.terminalDiagPendingText[sessionId] = { text, token: textToken, createdAt: now };
         return {
             available: true,
             cols: term.cols,
@@ -1395,6 +1408,7 @@ window.terminalFunctions = {
             hasWebgl: !!info.webglAddon,
             visible: info.container ? info.container.style.display !== 'none' : null,
             textLength: text.length,
+            textToken,
             textChunkSize: chunkSize,
             textChunkCount: Math.ceil(text.length / chunkSize),
             events
@@ -1404,11 +1418,13 @@ window.terminalFunctions = {
     // captureDiagnostics で保留した本文を start 文字目から chunkSize 文字だけ返す。最後まで渡したら保留を捨てる。
     // チャンク境界はサロゲートペアを割らない（高位サロゲートで終わるなら 1 文字手前で切る）ので、
     // 呼び出し側は次の開始位置に戻り値の nextStart を使う。
-    readDiagnosticsTextChunk: function(sessionId, start, chunkSize) {
-        const pending = window.terminalDiagPendingText && window.terminalDiagPendingText[sessionId];
-        if (typeof pending !== 'string') {
+    // token が保留のものと違えば null（取得中に別の保存が始まって保留が差し替わった＝先行分は失敗扱い）。
+    readDiagnosticsTextChunk: function(sessionId, token, start, chunkSize) {
+        const entry = window.terminalDiagPendingText && window.terminalDiagPendingText[sessionId];
+        if (!entry || entry.token !== token || typeof entry.text !== 'string') {
             return null;
         }
+        const pending = entry.text;
         let end = Math.min(start + chunkSize, pending.length);
         if (end < pending.length) {
             const code = pending.charCodeAt(end - 1);

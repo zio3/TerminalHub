@@ -180,6 +180,7 @@
                     <button type="button"
                             class="terminal-diag-btn"
                             title="@L["Root.Terminal.Diag.Title"]"
+                            disabled="@_diagCapturing"
                             @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
                         <i class="bi bi-camera"></i>
                     </button>
@@ -3640,35 +3641,51 @@
     /// 一緒に診断ダンプとして書き出す（<see cref="TerminalDiagnosticsDump"/>）。
     /// 稀にしか起きない表示の異常を、起きた瞬間に 1 操作で証拠に残すための入口。
     /// </summary>
+    // 取得中はボタンを無効にして再入を防ぐ（本文のチャンク取得が終わる前に再度押されると
+    // JS 側の保留が差し替わり、先行分が途中で失敗する）
+    private bool _diagCapturing;
+
     private async Task CaptureTerminalDiagnostics(Guid sessionId)
     {
+        if (_diagCapturing)
+        {
+            return;
+        }
         var session = sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session == null)
         {
             return;
         }
 
-        TerminalClientDiagnostics? client = null;
+        _diagCapturing = true;
         try
         {
-            client = await TerminalService.CaptureClientDiagnosticsAsync(sessionId);
-        }
-        catch (Exception ex)
-        {
-            // ブラウザ側が取れなくてもサーバー側の分だけは残す
-            Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
-        }
+            TerminalClientDiagnostics? client = null;
+            try
+            {
+                client = await TerminalService.CaptureClientDiagnosticsAsync(sessionId);
+            }
+            catch (Exception ex)
+            {
+                // ブラウザ側が取れなくてもサーバー側の分だけは残す
+                Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
+            }
 
-        var folder = TerminalDiagnosticsDump.WriteBundle(session, client, "manual");
-        if (folder != null)
-        {
-            Logger.LogInformation("[Diag] 診断ダンプを保存: {Folder} (xterm viewportY={ViewportY} baseY={BaseY} length={Length})",
-                folder, client?.ViewportY, client?.BaseY, client?.Length);
-            toast?.ShowSuccess(string.Format(L["Root.Toast.DiagSavedFormat"], folder));
+            var folder = TerminalDiagnosticsDump.WriteBundle(session, client, "manual");
+            if (folder != null)
+            {
+                Logger.LogInformation("[Diag] 診断ダンプを保存: {Folder} (xterm viewportY={ViewportY} baseY={BaseY} length={Length})",
+                    folder, client?.ViewportY, client?.BaseY, client?.Length);
+                toast?.ShowSuccess(string.Format(L["Root.Toast.DiagSavedFormat"], folder));
+            }
+            else
+            {
+                toast?.ShowError(L["Root.Toast.DiagFailed"]);
+            }
         }
-        else
+        finally
         {
-            toast?.ShowError(L["Root.Toast.DiagFailed"]);
+            _diagCapturing = false;
         }
     }
 

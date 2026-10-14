@@ -32,6 +32,8 @@ namespace TerminalHub.Services
         /// TerminalService がチャンクで取り出して埋める。</summary>
         public string? Text { get; set; }
         public int TextLength { get; set; }
+        /// <summary>JS 側の保留本文を識別するトークン。チャンク読み出し時に一致を要求する。</summary>
+        public string? TextToken { get; set; }
         public int TextChunkSize { get; set; }
         public int TextChunkCount { get; set; }
         /// <summary>ブラウザ側の直近イベント履歴（スクロール・ホイール・書き込み・リサイズ）。そのまま書き出す。</summary>
