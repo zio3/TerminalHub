@@ -187,10 +187,11 @@ namespace TerminalHub.Services
                 while (true)
                 {
                     var chunk = await _jsRuntime.InvokeAsync<DiagTextChunk?>(
-                        "terminalFunctions.readDiagnosticsTextChunk", id, start, result.TextChunkSize);
+                        "terminalFunctions.readDiagnosticsTextChunk", id, result.TextToken, start, result.TextChunkSize);
                     if (chunk == null)
                     {
-                        break;
+                        // 保留が差し替わった／期限切れで捨てられた。不完全な本文を正常として保存しない
+                        throw new InvalidOperationException("診断本文の取得が途中で失われました（同じセッションで別の保存が始まったか、保留が期限切れ）");
                     }
                     sb.Append(chunk.Chunk);
                     if (chunk.Done || chunk.NextStart <= start || ++guard > 10000)
