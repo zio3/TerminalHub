@@ -27,8 +27,13 @@ namespace TerminalHub.Services
         public int? ScrollbackOption { get; set; }
         public bool? HasWebgl { get; set; }
         public bool? Visible { get; set; }
-        /// <summary>xterm の全行（スクロールバック込み）を平文にしたもの。装飾は落とす。</summary>
+        /// <summary>xterm の全行（スクロールバック込み）を平文にしたもの。装飾は落とす。
+        /// JS からは直接返らず、<see cref="TextLength"/> と <see cref="TextChunkSize"/> を使って
+        /// TerminalService がチャンクで取り出して埋める。</summary>
         public string? Text { get; set; }
+        public int TextLength { get; set; }
+        public int TextChunkSize { get; set; }
+        public int TextChunkCount { get; set; }
         /// <summary>ブラウザ側の直近イベント履歴（スクロール・ホイール・書き込み・リサイズ）。そのまま書き出す。</summary>
         public JsonElement? Events { get; set; }
     }
