@@ -263,6 +263,122 @@ class FlowControlManager {
 // グローバルフロー制御マネージャー
 window.flowControlManager = new FlowControlManager();
 
+// 診断用: 表示まわりの直近イベント（スクロール位置の変化・ホイール・書き込み・リサイズ）を
+// セッション別に 1000 件だけ覚えておく小さなリング。「この画面を保存」で xterm の実バッファと
+// 一緒に書き出し、「スクロールが飛んだのか・飛んでいないのに位置が動いたのか・その時 write が
+// 何文字来ていたか」を事後に読めるようにする。ターミナルを作り直しても履歴は消さない
+// （セッション切替のたびに xterm が作り直されるため、消すと切替直後の証拠が残らない）。
+//
+// 件数を食う scroll / wheel / 小さな write は短時間の連続分を 1 件に畳み込む（初回ダンプでは
+// 出力 1 行ごとの scroll が 200 件を 4 分半で埋め、肝心の瞬間が消えていた）。代わりに
+// 「最下部追従が外れた瞬間（detach）」「戻った瞬間（reattach）」は畳み込まず必ず 1 件残し、
+// 直前のホイール・書き込みからの経過 ms を添える。異常に気づくのは 1 テンポ遅れるのが普通
+// なので、数分前の遷移が残っていることを最優先にしている。
+class TerminalDiagTrail {
+    constructor() {
+        this.max = 1000;
+        this.trails = {};
+        // セッション別の追従状態: atBottom(直近の scroll で最下部にいたか) / lastWheelAt / lastWriteAt と、
+        // 畳み込み先の集約イベント（open*）。scroll と wheel と小さな write は実際には交互に来るので
+        // 「直前のイベントが同種なら畳む」では畳めない。種類ごとに畳み込み先を覚えておき、
+        // それ以外の種類（init / detach / reattach / 大きな write / resize / dispose）が入ったら
+        // すべて閉じて、前後関係が読めるようにする。
+        this.states = {};
+    }
+    state(sessionId) {
+        let s = this.states[sessionId];
+        if (!s) {
+            s = this.states[sessionId] = { atBottom: null, lastWheelAt: 0, lastWriteAt: 0, openScrolls: null, openWheel: null, openWrites: null };
+        }
+        return s;
+    }
+    push(sessionId, type, detail) {
+        let list = this.trails[sessionId];
+        if (!list) { list = this.trails[sessionId] = []; }
+        if (type !== 'scrolls' && type !== 'wheel' && type !== 'writes') {
+            const s = this.state(sessionId);
+            s.openScrolls = null; s.openWheel = null; s.openWrites = null;
+        }
+        const entry = Object.assign({ t: new Date().toISOString(), type }, detail || {});
+        list.push(entry);
+        if (list.length > this.max) { list.splice(0, list.length - this.max); }
+        return entry;
+    }
+    // ターミナル作成直後。新しい xterm は最下部にいるので追従状態を「追従中」に戻す
+    // （復元中に外れればその瞬間が detach として残る）。
+    pushInit(sessionId, cols, rows) {
+        this.state(sessionId).atBottom = true;
+        this.push(sessionId, 'init', { cols, rows });
+    }
+    // xterm の onScroll。最下部追従の遷移は単独で残し、それ以外は 2 秒以内の連続分を 1 件にまとめる
+    // （from/to で位置の変化、n で件数、baseYDelta で出力による押し上げ量が読める）。
+    pushScroll(sessionId, ydisp, baseY, length) {
+        const s = this.state(sessionId);
+        const now = Date.now();
+        const atBottom = ydisp >= baseY;
+        if (s.atBottom !== null && atBottom !== s.atBottom) {
+            s.atBottom = atBottom;
+            this.push(sessionId, atBottom ? 'reattach' : 'detach', {
+                ydisp, baseY, length,
+                sinceWheelMs: s.lastWheelAt ? now - s.lastWheelAt : null,
+                sinceWriteMs: s.lastWriteAt ? now - s.lastWriteAt : null
+            });
+            return;
+        }
+        s.atBottom = atBottom;
+        const open = s.openScrolls;
+        if (open && now - open.lastAt < 2000) {
+            open.n += 1;
+            open.lastAt = now;
+            open.t = new Date(now).toISOString();
+            open.to = { ydisp, baseY, length };
+            return;
+        }
+        s.openScrolls = this.push(sessionId, 'scrolls', { n: 1, lastAt: now, from: { ydisp, baseY, length }, to: { ydisp, baseY, length } });
+    }
+    // ホイール。同じ向きで 1 秒以内の連続分は 1 件にまとめる（dy は合計）。
+    pushWheel(sessionId, dy, mode, ydisp, baseY) {
+        const s = this.state(sessionId);
+        const now = Date.now();
+        s.lastWheelAt = now;
+        const open = s.openWheel;
+        if (open && now - open.lastAt < 1000 && Math.sign(open.dy) === Math.sign(dy)) {
+            open.n += 1;
+            open.dy += dy;
+            open.lastAt = now;
+            open.t = new Date(now).toISOString();
+            open.to = { ydisp, baseY };
+            return;
+        }
+        s.openWheel = this.push(sessionId, 'wheel', { n: 1, lastAt: now, dy, mode, from: { ydisp, baseY }, to: { ydisp, baseY } });
+    }
+    // 小さな write は毎秒何件も来てリングを埋めるので、2 秒以内の連続分は 1 件にまとめる。
+    // 復元やまとめ書きのような大きな write はそのまま 1 件として残す。
+    pushWrite(sessionId, len, state) {
+        const now = Date.now();
+        const s = this.state(sessionId);
+        s.lastWriteAt = now;
+        if (len >= 4096) {
+            this.push(sessionId, 'write', Object.assign({ len }, state));
+            return;
+        }
+        const open = s.openWrites;
+        if (open && now - open.t0 < 2000) {
+            open.n += 1;
+            open.len += len;
+            open.t = new Date(now).toISOString();
+            open.ydisp = state.ydisp;
+            open.baseY = state.baseY;
+            return;
+        }
+        s.openWrites = this.push(sessionId, 'writes', Object.assign({ n: 1, len, t0: now }, state));
+    }
+    get(sessionId) {
+        return (this.trails[sessionId] || []).slice();
+    }
+}
+window.terminalDiagTrail = new TerminalDiagTrail();
+
 // WebGL コンテキスト生存数トラッカー（診断用・加算のみ）。
 // xterm の WebglAddon はターミナルごとに WebGL コンテキストを1個持つ。開いたターミナルが
 // 増えてブラウザの同時 WebGL コンテキスト上限（ソフト上限。実測で ~20 本あたりから）を超えると、
@@ -977,6 +1093,23 @@ window.terminalFunctions = {
             // 選択テキストの右クリックメニュー（パスっぽい選択のときだけ出す）
             attachSelectionContextMenu(term, element, sessionId);
 
+            // 診断用イベント履歴（window.terminalDiagTrail 参照）。ホイールは xterm が処理する前の
+            // 生イベントを passive で覗くだけで、挙動には影響しない。
+            const diagTrail = window.terminalDiagTrail;
+            diagTrail.pushInit(sessionId, term.cols, term.rows);
+            term.onScroll((ydisp) => {
+                const buf = term.buffer.active;
+                diagTrail.pushScroll(sessionId, ydisp, buf.baseY, buf.length);
+            });
+            const onDiagWheel = (ev) => {
+                const buf = term.buffer.active;
+                diagTrail.pushWheel(sessionId, Math.round(ev.deltaY), ev.deltaMode, buf.viewportY, buf.baseY);
+            };
+            // xterm.js 6 はホイールでスクロールすると内部要素で stopPropagation() するため、
+            // バブリングでは外側の要素に届かない。capture で先に覗く（Codex レビュー P2）。
+            element.addEventListener('wheel', onDiagWheel, { passive: true, capture: true });
+            element._diagWheelDetach = () => element.removeEventListener('wheel', onDiagWheel, { capture: true });
+
             // リサイズ診断用: 最後に通知したサイズと通知元を記録
             let lastNotifiedSize = { cols: 0, rows: 0, source: '', time: 0 };
 
@@ -1031,6 +1164,7 @@ window.terminalFunctions = {
             
             // xterm.jsのリサイズイベントリスナーを追加
             term.onResize((size) => {
+                window.terminalDiagTrail.push(sessionId, 'resize', { cols: size.cols, rows: size.rows });
                 notifyResize(size.cols, size.rows, 'onResize', '');
             });
 
@@ -1154,6 +1288,10 @@ window.terminalFunctions = {
                 // フロー制御: 書き込み前にバイト数を加算
                 window.flowControlManager.beforeWrite(sessionId, dataLength);
 
+                // 診断用イベント履歴: 書き込み直前の表示位置を添えて残す
+                const bufBeforeWrite = term.buffer.active;
+                window.terminalDiagTrail.pushWrite(sessionId, dataLength, { ydisp: bufBeforeWrite.viewportY, baseY: bufBeforeWrite.baseY });
+
                 // サーバー側の状態バッファが復元順序を保証するため、ANSIシーケンスを
                 // 加工せず、そのままxtermへ渡す。
                 term.write(data, () => {
@@ -1233,6 +1371,10 @@ window.terminalFunctions = {
 
         // フロー制御のクリーンアップ
         window.flowControlManager.remove(sessionId);
+        window.terminalDiagTrail.push(sessionId, 'dispose', {});
+        if (window.terminalDiagPendingText) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
 
         // ResizeObserverのクリーンアップ
         window.resizeObserverManager.remove(sessionId);
@@ -1277,6 +1419,9 @@ window.terminalFunctions = {
             if (typeof terminalDiv._selectionMenuDetach === 'function') {
                 terminalDiv._selectionMenuDetach();
             }
+            if (typeof terminalDiv._diagWheelDetach === 'function') {
+                terminalDiv._diagWheelDetach();
+            }
             while (terminalDiv.firstChild) {
                 terminalDiv.removeChild(terminalDiv.firstChild);
             }
@@ -1287,6 +1432,90 @@ window.terminalFunctions = {
     // ターミナル破棄関数
     destroyTerminal: function(sessionId) {
         this.cleanupTerminal(sessionId);
+    },
+
+    // 診断用: xterm 側の「実際に見えている状態」を取り出す（「この画面を保存」から呼ぶ）。
+    // サーバーのエミュレータが持つ画面と突き合わせ、崩れ・飛びがどちら側の問題かを切り分ける材料。
+    // text は全行（スクロールバック込み）の平文。装飾は落とす。
+    // 全行の平文は最大で 1MB を超えうる（5000 行 x 190 桁 x 全角）。Blazor Server の JS→C# 戻り値も
+    // SignalR の受信上限（Program.cs で 1MiB）の対象で、超えると回線ごと切断されて証拠を失うため、
+    // 本文はここで保留しておき readDiagnosticsTextChunk でチャンクに分けて取り出す（Codex レビュー P1）。
+    // 戻り値には本文の長さとチャンク数だけを載せる。
+    captureDiagnostics: function(sessionId) {
+        const info = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
+        const events = window.terminalDiagTrail.get(sessionId);
+        if (!info || !info.terminal) {
+            return { available: false, events };
+        }
+        const term = info.terminal;
+        const buf = term.buffer.active;
+        const lines = [];
+        for (let i = 0; i < buf.length; i++) {
+            const line = buf.getLine(i);
+            lines.push(line ? line.translateToString(true) : '');
+        }
+        const text = lines.join('\n');
+        const chunkSize = 100000;
+        // 保留にはトークンと時刻を付ける。同じセッションで取得中に再度押されても先行分と混ざらないよう、
+        // チャンク読み出しはトークン一致を要求する。回線切断などで回収されなかった保留は、次の保留作成時に
+        // 60 秒超のものを捨てる（cleanupTerminal でも捨てる）。（Codex レビュー 2 周目 P2 x2）
+        window.terminalDiagPendingText = window.terminalDiagPendingText || {};
+        const now = Date.now();
+        for (const key of Object.keys(window.terminalDiagPendingText)) {
+            if (now - window.terminalDiagPendingText[key].createdAt > 60000) {
+                delete window.terminalDiagPendingText[key];
+            }
+        }
+        const textToken = now.toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        window.terminalDiagPendingText[sessionId] = { text, token: textToken, createdAt: now };
+        return {
+            available: true,
+            cols: term.cols,
+            rows: term.rows,
+            viewportY: buf.viewportY,
+            baseY: buf.baseY,
+            length: buf.length,
+            cursorX: buf.cursorX,
+            cursorY: buf.cursorY,
+            bufferType: buf.type,
+            scrollbackOption: term.options.scrollback,
+            hasWebgl: !!info.webglAddon,
+            visible: info.container ? info.container.style.display !== 'none' : null,
+            textLength: text.length,
+            textToken,
+            textChunkSize: chunkSize,
+            textChunkCount: Math.ceil(text.length / chunkSize),
+            events
+        };
+    },
+
+    // captureDiagnostics で保留した本文を start 文字目から chunkSize 文字だけ返す。最後まで渡したら保留を捨てる。
+    // チャンク境界はサロゲートペアを割らない（高位サロゲートで終わるなら 1 文字手前で切る）ので、
+    // 呼び出し側は次の開始位置に戻り値の nextStart を使う。
+    // token が保留のものと違えば null（取得中に別の保存が始まって保留が差し替わった＝先行分は失敗扱い）。
+    readDiagnosticsTextChunk: function(sessionId, token, start, chunkSize) {
+        const entry = window.terminalDiagPendingText && window.terminalDiagPendingText[sessionId];
+        if (!entry || entry.token !== token || typeof entry.text !== 'string') {
+            return null;
+        }
+        const pending = entry.text;
+        let end = Math.min(start + chunkSize, pending.length);
+        if (end < pending.length) {
+            const code = pending.charCodeAt(end - 1);
+            if (code >= 0xD800 && code <= 0xDBFF) { end -= 1; }
+        }
+        const chunk = pending.substring(start, end);
+        if (end >= pending.length) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
+        return { chunk, nextStart: end, done: end >= pending.length };
+    },
+
+    // 途中で失敗したときに保留を捨てる
+    discardDiagnosticsText: function(sessionId) {
+        if (window.terminalDiagPendingText) {
+            delete window.terminalDiagPendingText[sessionId];
+        }
     },
 
     // ターミナルをリフレッシュ（バッファ復元後の表示更新用）
