@@ -455,6 +455,44 @@ app.MapPost("/api/hook/codex/{sessionId:guid}",
     return Results.NoContent();
 });
 
+// 入力欄へのファイルドロップの受け口。ブラウザはドロップされたファイルのフルパスを渡さないため、
+// 中身をそのまま（application/octet-stream・1 リクエスト 1 ファイル）受け取ってアプリ設定フォルダ配下
+// drops\yyyyMMdd\ に保存し、そのパスを返す。ブラウザ側（helpers.js の fileDrop）がパスを入力欄へ挿入する。
+// 上限 20MB（超えたら 413）。同一 PC のローカル利用前提で認証は hook API と同じく置かないが、
+// 他サイトのページから localhost へ投げ込まれる CSRF（drops へのファイル置き・ディスク消費）は塞ぐ:
+// Content-Type を application/octet-stream に限定する（CORS の安全な型ではないので他オリジンからは
+// プリフライトが必要になり、CORS を許可していないこのサーバーでは通らない）。加えて Origin ヘッダが
+// あれば自分のホスト（Host ヘッダ）と一致することを求める。
+app.MapPost("/api/drop", async (HttpRequest request, string? name, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!string.Equals(request.ContentType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+    }
+    var origin = request.Headers.Origin.ToString();
+    if (!string.IsNullOrEmpty(origin) &&
+        !(Uri.TryCreate(origin, UriKind.Absolute, out var originUri) &&
+          string.Equals(originUri.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+    {
+        logger.LogWarning("[Drop] 他オリジンからの要求を拒否: Origin={Origin} Host={Host}", origin, request.Host.Value);
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
+    var dropsRoot = AppDataPaths.GetDropsFolder();
+    try
+    {
+        var now = DateTime.Now;
+        var path = await DroppedFileStore.SaveAsync(dropsRoot, name, request.Body, request.ContentLength, now, ct);
+        DroppedFileStore.CleanupOldFolders(dropsRoot, now);
+        logger.LogInformation("[Drop] ファイルを保存: {Path} ({Length} bytes)", path, request.ContentLength);
+        return Results.Ok(new { path });
+    }
+    catch (DroppedFileTooLargeException)
+    {
+        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+    }
+});
+
 // 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
 // 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
 app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>

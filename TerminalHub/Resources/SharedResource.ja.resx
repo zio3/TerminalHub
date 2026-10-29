@@ -638,6 +638,10 @@
   <data name="TextInput.VoiceInput.Tooltip" xml:space="preserve"><value>音声入力（押している間録音）</value></data>
   <data name="TextInput.Send" xml:space="preserve"><value>送信</value></data>
   <data name="TextInput.ModeSwitch.TooltipFormat" xml:space="preserve"><value>モード切替 ({0})</value></data>
+  <data name="TextInput.Drop.TooLargeFormat" xml:space="preserve"><value>{0} は大きすぎます（上限 {1} MB）</value></data>
+  <data name="TextInput.Drop.FolderNotSupported" xml:space="preserve"><value>フォルダはドロップできません（ファイルのみ）</value></data>
+  <data name="TextInput.Drop.FailedFormat" xml:space="preserve"><value>{0} の保存に失敗しました</value></data>
+  <data name="TextInput.Drop.InsertedToOtherSession" xml:space="preserve"><value>セッションが切り替わったため、ドロップ元のセッションの入力欄に挿入しました</value></data>
 
   <!-- BottomPanels: MemoPanel -->
   <data name="MemoPanel.Placeholder" xml:space="preserve"><value>メモ… (Enter で改行、自動保存)</value></data>

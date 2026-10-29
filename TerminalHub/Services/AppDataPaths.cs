@@ -23,6 +23,17 @@ namespace TerminalHub.Services
         }
 
         /// <summary>
+        /// 入力欄へドロップされたファイルの保存先ルート（<see cref="DroppedFileStore"/>）。
+        /// 配下は日付フォルダ（yyyyMMdd）で区切られ、7 日より古いものは掃除される。dev/prod で分けない。
+        /// </summary>
+        public static string GetDropsFolder()
+        {
+            var path = Path.Combine(UserDataRoot, "drops");
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        /// <summary>
         /// ユーザープラグイン（リンク化の .js）を置くフォルダ。dev/prod で分けない。
         /// アプリ更新で消えないよう wwwroot ではなくユーザーデータ側に置く
         /// （公開リポジトリに社内 URL 等を入れずに済む、という狙いもある）。
