@@ -92,9 +92,17 @@
         pointer-events: none;
         z-index: 5;
     }
+    /* モバイル: textarea は app.css で高さ 60px に固定されるため、textarea を包む箱が余りを吸ってボタン行が
+       画面最下段（iPhone のホームインジケータ上）へ押し出され、スワイプ領域と重なって押しづらい。
+       箱を伸ばさず、ボタン行を textarea の直下に置く。 */
+    @@media (max-width: 768px) {
+        .text-input-panel > .text-input-body {
+            flex-grow: 0 !important;
+        }
+    }
 </style>
-<div class="p-3 h-100 d-flex flex-column">
-    <div class="flex-grow-1 d-flex flex-column">
+<div class="text-input-panel p-3 h-100 d-flex flex-column">
+    <div class="text-input-body flex-grow-1 d-flex flex-column">
         <div class="flex-grow-1 d-flex flex-column position-relative">
             <textarea id="@($"inputText-{PanelId}")"
                       class="form-control flex-grow-1"
