@@ -28,6 +28,8 @@ public sealed class DroppedFileStoreTests : IDisposable
     [InlineData(null, "file")]
     [InlineData("..", "file")]
     [InlineData("日本語 名前.pdf", "日本語 名前.pdf")]
+    [InlineData("$(rm -rf x);`id`&&y|z.txt", "__rm -rf x___id___y_z.txt")]
+    [InlineData("report (final) v2.docx", "report _final_ v2.docx")]
     public void SanitizeFileName_ブラウザ由来の名前を安全な形にする(string? input, string expected)
     {
         Assert.Equal(expected, DroppedFileStore.SanitizeFileName(input));

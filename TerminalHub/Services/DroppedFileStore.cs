@@ -19,6 +19,9 @@ namespace TerminalHub.Services
 
         private const string DateFolderFormat = "yyyyMMdd";
 
+        /// <summary>シェル（cmd / PowerShell / bash）やプロンプトで特別な意味を持ちうる記号。ファイル名から '_' に置き換える。</summary>
+        private static readonly HashSet<char> ShellSpecialChars = new("`$;&|<>^(){}[]!'\"%#~@=,+");
+
         /// <summary>
         /// ブラウザから届いたファイル名を Windows のファイル名として安全な形に整える。
         /// パス区切りより後ろだけを使い、使えない文字は '_' に置き換え、末尾のドットと空白を落とす。
@@ -33,11 +36,15 @@ namespace TerminalHub.Services
                 s = s[(cut + 1)..];
             }
 
+            // Windows で使えない文字に加え、シェルやプロンプトで特別な意味を持つ記号も '_' にする。
+            // 保存先パスはそのまま入力欄に挿入され CLI へ渡るので、名前由来の記号で意味が変わらないようにする
+            // （ブラウザ側の引用符付けに頼らない）。空白・ドット・ハイフン・各言語の文字はそのまま
             var invalid = Path.GetInvalidFileNameChars();
             var chars = s.ToCharArray();
             for (var i = 0; i < chars.Length; i++)
             {
-                if (Array.IndexOf(invalid, chars[i]) >= 0 || char.IsControl(chars[i]))
+                var c = chars[i];
+                if (Array.IndexOf(invalid, c) >= 0 || char.IsControl(c) || ShellSpecialChars.Contains(c))
                 {
                     chars[i] = '_';
                 }
