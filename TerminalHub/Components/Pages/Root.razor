@@ -168,6 +168,14 @@
                    通常はほぼ透明、hover で出現する控えめな存在感を狙う。 *@
                 @if (activeSessionId != null)
                 {
+                    @* いまの表示をそのまま別ウィンドウに固定する（一覧や表を見ながら進める用途）。
+                       Blazor を経由せず素の onclick で開く（ポップアップブロック回避。terminal.js の openSnapshotWindow）。 *@
+                    <button type="button"
+                            class="terminal-snapshot-btn"
+                            title="@L["Root.Terminal.Snapshot.Title"]"
+                            onclick="terminalFunctions.openSnapshotWindow('@activeSessionId')">
+                        <i class="bi bi-pin-angle"></i>
+                    </button>
                     <button type="button"
                             class="terminal-redraw-btn"
                             title="@L["Root.Terminal.Redraw.Title"]"

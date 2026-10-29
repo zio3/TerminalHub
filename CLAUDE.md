@@ -150,6 +150,7 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
 6. **データチャンキング**: ConPTY WriteAsyncは切り捨て防止のため256文字でチャンクしてフラッシュし、チャンク間に20msの間隔を空ける（受け手の取りこぼし対策。最後のチャンクの後は待たない）
 7. **入力欄へのファイルドロップ**: ブラウザはドロップされたファイルのフルパスを渡さないため、中身を `POST /api/drop`（octet-stream・1 ファイル・20MB 上限）で受けて `%LOCALAPPDATA%\TerminalHub\drops\yyyyMMdd\` に保存し、その保存先パスを入力欄へ挿入する（`DroppedFileStore` / helpers.js の `fileDrop`）。7 日より古い日付フォルダは保存時に掃除。作業フォルダには書かない。テキストのドロップはブラウザの既定動作のまま
 8. **入力欄の Tab / Shift+Tab**: フォーカス移動ではなくターミナルへ送る（`\t` / `ESC [ Z`。helpers.js の `tabToTerminal` が keydown の capture 段階で横取りし、`TextInputPanel.OnTabKey` 経由で `KeySequencePresets` の `Tab` / `ShiftTab` を送る）。Tab の既定動作は同期で起きるため Blazor の `@onkeydown:preventDefault` では止まらない。スラッシュ補完ポップアップ表示中の素の Tab は候補確定、Ctrl / Alt 併用は素通し
+9. **表示の固定ビューア**: ターミナル右上のピンボタンで、いまの表示（スクロールバック込み）を別ウィンドウに固定する。`GET /api/terminal/{sessionId}/snapshot` がセッション切替の復元と同じ直列化（`SessionInfo.GetTerminalBuffer`）を返し、`wwwroot/terminal-snapshot.html` が読み取り専用の xterm に 1 回だけ流し込む（以後更新しない）。列数は取得時のまま固定、行数だけウィンドウに合わせる。`window.open` はポップアップブロック回避のため Blazor を経由せず素の onclick から呼ぶ（terminal.js の `openSnapshotWindow`）
 
 ### JavaScriptファイル
 - `wwwroot/js/terminal.js`: XTerm.js初期化、ターミナル管理、リサイズ処理、WebLinksAddon
