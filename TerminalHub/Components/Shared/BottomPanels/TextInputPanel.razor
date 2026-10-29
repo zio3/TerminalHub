@@ -100,6 +100,7 @@
                       class="form-control flex-grow-1"
                       data-input-area
                       data-slash-open="@(SlashPopupOpen ? "1" : "0")"
+                      data-session-id="@(SessionId?.ToString() ?? "")"
                       @bind="inputText"
                       @bind:event="oninput"
                       @onkeydown="OnTextAreaKeyDown"
@@ -256,6 +257,15 @@
     [Parameter] public EventCallback OnModeSwitch { get; set; }
     [Parameter] public EventCallback OnAltV { get; set; }
     [Parameter] public List<CustomCommand> CustomCommands { get; set; } = new();
+    /// <summary>
+    /// この入力欄の下書きが属するセッション（セッション別の下書きが有効なときだけ）。textarea の data-session-id に出し、
+    /// ファイルドロップの保存完了が遅れて別セッションに切り替わっていたら、JS は挿入せず <see cref="OnLateDropInsert"/> へ回す。
+    /// </summary>
+    [Parameter] public Guid? SessionId { get; set; }
+    /// <summary>ドロップ元のセッションから切り替わった後に届いた保存先パス。親がそのセッションの下書きへ追記する。</summary>
+    [Parameter] public EventCallback<LateDropInsert> OnLateDropInsert { get; set; }
+
+    public sealed record LateDropInsert(Guid SessionId, string Text);
 
     private string inputText
     {
@@ -279,6 +289,7 @@
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
     private bool _fileDropRegistered = false;
+    private DotNetObjectReference<TextInputPanel>? _fileDropDotNetRef;
 
     // ===== スラッシュコマンド補完（スパイク） =====
     private List<SlashCommandItem> _slashSuggestions = new();
@@ -723,18 +734,33 @@
         try
         {
             var maxMb = DroppedFileStore.MaxBytes / (1024 * 1024);
+            _fileDropDotNetRef ??= DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("fileDrop.register", $"inputText-{PanelId}", new
             {
                 maxBytes = DroppedFileStore.MaxBytes,
                 tooLarge = string.Format(L["TextInput.Drop.TooLargeFormat"], "{0}", maxMb),
                 folderNotSupported = L["TextInput.Drop.FolderNotSupported"].Value,
-                failed = L["TextInput.Drop.FailedFormat"].Value
-            });
+                failed = L["TextInput.Drop.FailedFormat"].Value,
+                insertedToOtherSession = L["TextInput.Drop.InsertedToOtherSession"].Value
+            }, _fileDropDotNetRef);
             _fileDropRegistered = true;
         }
         catch
         {
             // 登録失敗はドロップが効かないだけ（回線切断時の例外含め無視）
+        }
+    }
+
+    /// <summary>
+    /// JS から: 保存完了時に textarea の data-session-id がドロップ時と違っていた（切替済み）。
+    /// 今の下書きには入れず、ドロップ元セッションの下書きへ追記してもらう（Codex レビュー P2）。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnDroppedPathForSession(string sessionId, string text)
+    {
+        if (Guid.TryParse(sessionId, out var sid) && !string.IsNullOrEmpty(text))
+        {
+            await OnLateDropInsert.InvokeAsync(new LateDropInsert(sid, text));
         }
     }
 
@@ -862,6 +888,7 @@
             }
             catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
         }
+        _fileDropDotNetRef?.Dispose();
 
         if (voiceInitialized)
         {

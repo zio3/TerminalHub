@@ -468,8 +468,9 @@ window.fileDrop = {
     _format: function (template, name) {
         return (template || '').replace('{0}', name);
     },
-    // opts: { maxBytes, tooLarge('{0}'=名前), folderNotSupported, failed('{0}'=名前) }
-    register: function (textareaId, opts) {
+    // opts: { maxBytes, tooLarge('{0}'=名前), folderNotSupported, failed('{0}'=名前), insertedToOtherSession }
+    // dotNetRef: TextInputPanel。保存完了がセッション切替の後に届いたとき OnDroppedPathForSession(sessionId, text) を呼ぶ。
+    register: function (textareaId, opts, dotNetRef) {
         var ta = document.getElementById(textareaId);
         if (!ta) return;
         if (this._handlers[textareaId]) { this.unregister(textareaId); }
@@ -503,6 +504,21 @@ window.fileDrop = {
             if (hadFolder) { self._showMessage(ta, opts.folderNotSupported || 'Folders are not supported'); }
             if (files.length === 0) return;
 
+            // textarea はセッション切替でも作り直されず下書きだけ差し替わる。保存の応答を待つ間に別セッションへ
+            // 切り替わっていたら、そのまま挿入すると別セッションの下書きに混入するので、ドロップ時のセッションを覚えて
+            // おき、違っていれば .NET 側でドロップ元の下書きへ追記してもらう（Codex レビュー P2）。
+            // data-session-id が空（セッション別の下書きが無効）なら下書きは共有なのでそのまま挿入する。
+            var sessionAtDrop = ta.dataset.sessionId || '';
+            var deliver = function (text) {
+                var sessionNow = ta.dataset.sessionId || '';
+                if (!sessionAtDrop || sessionNow === sessionAtDrop) {
+                    self._insert(ta, text);
+                    return Promise.resolve();
+                }
+                self._showMessage(ta, opts.insertedToOtherSession || 'Inserted into the session where it was dropped');
+                if (!dotNetRef) return Promise.resolve();
+                return dotNetRef.invokeMethodAsync('OnDroppedPathForSession', sessionAtDrop, text);
+            };
             var maxBytes = opts.maxBytes || (20 * 1024 * 1024);
             var pending = files.slice();
             var next = function () {
@@ -522,7 +538,7 @@ window.fileDrop = {
                     return res.json();
                 }).then(function (json) {
                     if (!json || !json.path) throw new Error('no path');
-                    self._insert(ta, self._quote(json.path) + ' ');
+                    return deliver(self._quote(json.path) + ' ');
                 }).catch(function (err) {
                     console.warn('[fileDrop] 保存に失敗:', file.name, err);
                     self._showMessage(ta, self._format(opts.failed, file.name) || ('Failed: ' + file.name));

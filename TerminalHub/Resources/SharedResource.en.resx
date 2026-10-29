@@ -641,6 +641,7 @@
   <data name="TextInput.Drop.TooLargeFormat" xml:space="preserve"><value>{0} is too large (limit {1} MB)</value></data>
   <data name="TextInput.Drop.FolderNotSupported" xml:space="preserve"><value>Folders cannot be dropped (files only)</value></data>
   <data name="TextInput.Drop.FailedFormat" xml:space="preserve"><value>Failed to save {0}</value></data>
+  <data name="TextInput.Drop.InsertedToOtherSession" xml:space="preserve"><value>The session changed, so the path was inserted into the input of the session where it was dropped</value></data>
 
   <!-- BottomPanels: MemoPanel -->
   <data name="MemoPanel.Placeholder" xml:space="preserve"><value>Memo... (Enter for newline, auto-saved)</value></data>

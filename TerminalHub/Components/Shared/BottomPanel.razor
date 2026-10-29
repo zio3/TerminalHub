@@ -99,7 +99,9 @@
                             OnEscape="OnEscape"
                             OnModeSwitch="OnModeSwitch"
                             OnAltV="OnAltV"
-                            CustomCommands="CustomCommands" />
+                            CustomCommands="CustomCommands"
+                            SessionId="@(PerSessionInputText ? CurrentSessionId : null)"
+                            OnLateDropInsert="@(e => AppendTextInputPanelText(tab.Id, e.SessionId, e.Text))" />
         }
         else if (tab.Type == BottomPanelTabType.CommandPrompt || tab.Type == BottomPanelTabType.PowerShell)
         {
@@ -451,6 +453,16 @@
     private void SetTextInputPanelText(string panelId, string text)
     {
         textInputPanelTexts[TextKey(panelId)] = text;
+    }
+
+    /// <summary>
+    /// ファイルドロップの保存完了がセッション切替の後に届いたとき、今の下書きではなくドロップ元セッションの下書きへ末尾追記する。
+    /// セッション別の下書きが有効なときだけ呼ばれる（鍵は TextKey と同じ形）。
+    /// </summary>
+    private void AppendTextInputPanelText(string panelId, Guid sessionId, string text)
+    {
+        var key = $"{panelId}@{sessionId}";
+        textInputPanelTexts[key] = (textInputPanelTexts.TryGetValue(key, out var existing) ? existing : "") + text;
     }
 
     private string GetMemoBody(Guid memoId)
