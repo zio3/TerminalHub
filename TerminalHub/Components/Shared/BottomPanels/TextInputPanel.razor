@@ -297,6 +297,9 @@
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
     private bool _fileDropRegistered = false;
+    // Tab / Shift+Tab をターミナルへ送る横取り（helpers.js の tabToTerminal）
+    private bool _tabKeyRegistered = false;
+    private DotNetObjectReference<TextInputPanel>? _tabKeyDotNetRef;
     private DotNetObjectReference<TextInputPanel>? _fileDropDotNetRef;
 
     // ===== スラッシュコマンド補完（スパイク） =====
@@ -524,9 +527,8 @@
             shouldPreventDefault = true;
             await OnEscapeClick();
         }
-        // モード切替（ClaudeCodeモードのみ）- Alt+M または Shift+Tab（設定による）
-        else if ((ClaudeModeSwitchKey == "altM" && e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey) ||
-                 (ClaudeModeSwitchKey == "shiftTab" && e.Key == "Tab" && e.ShiftKey && !e.CtrlKey && !e.AltKey))
+        // モード切替（ClaudeCodeモードのみ）- Alt+M。Shift+Tab は JS 横取り（OnTabKey）側で扱う
+        else if (ClaudeModeSwitchKey == "altM" && e.Key == "m" && e.AltKey && !e.CtrlKey && !e.ShiftKey)
         {
             if (TerminalType == TerminalType.ClaudeCode)
             {
@@ -714,6 +716,7 @@
         if (firstRender)
         {
             await TryRegisterFileDrop();
+            await TryRegisterTabKey();
         }
 
         if (firstRender && VoiceInputEnabled)
@@ -734,6 +737,41 @@
             }
             catch { /* 同上（バインド失敗＝機能縮退のみ） */ }
         }
+    }
+
+    // Tab / Shift+Tab をターミナルへ送る（helpers.js の tabToTerminal）。
+    // Tab の既定動作（フォーカス移動）は同期で起きるので Blazor の preventDefault では止まらず、JS 側で横取りする。
+    private async Task TryRegisterTabKey()
+    {
+        try
+        {
+            _tabKeyDotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("tabToTerminal.register", $"inputText-{PanelId}", _tabKeyDotNetRef);
+            _tabKeyRegistered = true;
+        }
+        catch
+        {
+            // 登録失敗は Tab がブラウザ既定のフォーカス移動に戻るだけ（回線切断時の例外含め無視）
+        }
+    }
+
+    /// <summary>
+    /// JS から: 入力欄で Tab（shift=false）/ Shift+Tab（shift=true）が押された。ターミナルへ送る。
+    /// Shift+Tab がモード切替キーに設定されている Claude Code セッションでは既存のモード切替経路を通す
+    /// （送る内容は同じ ESC [ Z だが、ボタンの押下表示を揃えるため）。
+    /// </summary>
+    [JSInvokable]
+    public async Task OnTabKey(bool shift)
+    {
+        if (shift && ClaudeModeSwitchKey == "shiftTab" && TerminalType == TerminalType.ClaudeCode)
+        {
+            await OnModeSwitchClick();
+        }
+        else
+        {
+            await OnSendCustomKey.InvokeAsync(shift ? "ShiftTab" : "Tab");
+        }
+        StateHasChanged();
     }
 
     // 入力欄へのファイルドロップ（helpers.js の fileDrop）。文言はこちらで解決して JS に渡す。
@@ -897,6 +935,16 @@
             catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
         }
         _fileDropDotNetRef?.Dispose();
+
+        if (_tabKeyRegistered)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("tabToTerminal.unregister", $"inputText-{PanelId}");
+            }
+            catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
+        }
+        _tabKeyDotNetRef?.Dispose();
 
         if (voiceInitialized)
         {
