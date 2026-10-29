@@ -411,6 +411,39 @@ window.slashAutocomplete = {
     }
 };
 
+// 入力欄の Tab / Shift+Tab をフォーカス移動に使わず、ターミナルへキーとして送る。
+// Tab はブラウザの既定動作（次の要素へフォーカス移動）が同期で起きるため、Blazor Server の
+// @onkeydown:preventDefault ではその打鍵を止められない（サーバー往復のため）。slashAutocomplete と同じく
+// keydown の capture 段階で止めて .NET の OnTabKey(shift) へ通知する。
+// スラッシュ補完ポップアップ表示中の素の Tab は候補確定に使うので slashAutocomplete に譲る（Shift+Tab は譲らない）。
+// Ctrl / Alt 併用はブラウザやアプリの他機能に任せて素通し。
+window.tabToTerminal = {
+    _handlers: {},
+    register: function (textareaId, dotNetRef) {
+        var ta = document.getElementById(textareaId);
+        if (!ta) return;
+        if (this._handlers[textareaId]) {
+            this.unregister(textareaId);
+        }
+        var handler = function (e) {
+            if (e.key !== 'Tab' || e.ctrlKey || e.altKey) return;
+            if (!e.shiftKey && ta.dataset.slashOpen === '1') return;
+            e.preventDefault();
+            e.stopPropagation();
+            dotNetRef.invokeMethodAsync('OnTabKey', !!e.shiftKey);
+        };
+        ta.addEventListener('keydown', handler, true);
+        this._handlers[textareaId] = { ta: ta, handler: handler };
+    },
+    unregister: function (textareaId) {
+        var h = this._handlers[textareaId];
+        if (h) {
+            h.ta.removeEventListener('keydown', h.handler, true);
+            delete this._handlers[textareaId];
+        }
+    }
+};
+
 // 入力欄へのファイルドロップ。ブラウザはドロップされたファイルのフルパスを渡さない（名前と中身だけ）ので、
 // 中身を /api/drop に送ってアプリ設定フォルダ配下へ保存してもらい、返ってきた保存先パスを入力欄の
 // カーソル位置へ挿入する（Windows Terminal にファイルを落としたときの「パスが入る」に相当）。
