@@ -72,6 +72,26 @@
     .slashac-item.active .slashac-desc {
         color: rgba(255, 255, 255, .85);
     }
+
+    /* ファイルドロップ: 受け付け中の枠と、断り・失敗の短いメッセージ（helpers.js の fileDrop が付け外しする） */
+    textarea.file-drop-over {
+        outline: 2px dashed var(--bs-primary, #0d6efd);
+        outline-offset: -2px;
+    }
+
+    .file-drop-msg {
+        position: absolute;
+        left: 8px;
+        bottom: 8px;
+        max-width: calc(100% - 16px);
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--bs-warning-bg-subtle, #fff3cd);
+        color: var(--bs-warning-text-emphasis, #664d03);
+        font-size: .8rem;
+        pointer-events: none;
+        z-index: 5;
+    }
 </style>
 <div class="p-3 h-100 d-flex flex-column">
     <div class="flex-grow-1 d-flex flex-column">
@@ -258,6 +278,7 @@
     private bool isVoiceRecording = false;
     private DotNetObjectReference<TextInputPanel>? dotNetRef;
     private bool voiceInitialized = false;
+    private bool _fileDropRegistered = false;
 
     // ===== スラッシュコマンド補完（スパイク） =====
     private List<SlashCommandItem> _slashSuggestions = new();
@@ -671,6 +692,11 @@
             await TryRegisterSlashAutocomplete();
         }
 
+        if (firstRender)
+        {
+            await TryRegisterFileDrop();
+        }
+
         if (firstRender && VoiceInputEnabled)
         {
             await InitVoiceInput();
@@ -688,6 +714,27 @@
                     $"inputText-{PanelId}", dotNetRef);
             }
             catch { /* 同上（バインド失敗＝機能縮退のみ） */ }
+        }
+    }
+
+    // 入力欄へのファイルドロップ（helpers.js の fileDrop）。文言はこちらで解決して JS に渡す。
+    private async Task TryRegisterFileDrop()
+    {
+        try
+        {
+            var maxMb = DroppedFileStore.MaxBytes / (1024 * 1024);
+            await JS.InvokeVoidAsync("fileDrop.register", $"inputText-{PanelId}", new
+            {
+                maxBytes = DroppedFileStore.MaxBytes,
+                tooLarge = string.Format(L["TextInput.Drop.TooLargeFormat"], "{0}", maxMb),
+                folderNotSupported = L["TextInput.Drop.FolderNotSupported"].Value,
+                failed = L["TextInput.Drop.FailedFormat"].Value
+            });
+            _fileDropRegistered = true;
+        }
+        catch
+        {
+            // 登録失敗はドロップが効かないだけ（回線切断時の例外含め無視）
         }
     }
 
@@ -806,6 +853,15 @@
             }
         }
         _slashDotNetRef?.Dispose();
+
+        if (_fileDropRegistered)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("fileDrop.unregister", $"inputText-{PanelId}");
+            }
+            catch { /* Dispose 経路。JSDisconnectedException 等は無視 */ }
+        }
 
         if (voiceInitialized)
         {

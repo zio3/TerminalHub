@@ -455,6 +455,27 @@ app.MapPost("/api/hook/codex/{sessionId:guid}",
     return Results.NoContent();
 });
 
+// 入力欄へのファイルドロップの受け口。ブラウザはドロップされたファイルのフルパスを渡さないため、
+// 中身をそのまま（application/octet-stream・1 リクエスト 1 ファイル）受け取ってアプリ設定フォルダ配下
+// drops\yyyyMMdd\ に保存し、そのパスを返す。ブラウザ側（helpers.js の fileDrop）がパスを入力欄へ挿入する。
+// 上限 20MB（超えたら 413）。同一 PC のローカル利用前提で認証は hook API と同じく置かない。
+app.MapPost("/api/drop", async (HttpRequest request, string? name, ILogger<Program> logger, CancellationToken ct) =>
+{
+    var dropsRoot = AppDataPaths.GetDropsFolder();
+    try
+    {
+        var now = DateTime.Now;
+        var path = await DroppedFileStore.SaveAsync(dropsRoot, name, request.Body, request.ContentLength, now, ct);
+        DroppedFileStore.CleanupOldFolders(dropsRoot, now);
+        logger.LogInformation("[Drop] ファイルを保存: {Path} ({Length} bytes)", path, request.ContentLength);
+        return Results.Ok(new { path });
+    }
+    catch (DroppedFileTooLargeException)
+    {
+        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+    }
+});
+
 // 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
 // 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
 app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>

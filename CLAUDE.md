@@ -148,6 +148,7 @@ TerminalHubは、Windows ConPTY統合により複数のターミナルセッシ�
 4. **Git Worktree対応**: セッションは親ディレクトリの兄弟としてgit worktreeを作成可能
 5. **出力解析**: Claude Code/Codex CLI出力のトークン使用量と処理時間のリアルタイム解析
 6. **データチャンキング**: ConPTY WriteAsyncは切り捨て防止のため256文字でチャンクしてフラッシュし、チャンク間に20msの間隔を空ける（受け手の取りこぼし対策。最後のチャンクの後は待たない）
+7. **入力欄へのファイルドロップ**: ブラウザはドロップされたファイルのフルパスを渡さないため、中身を `POST /api/drop`（octet-stream・1 ファイル・20MB 上限）で受けて `%LOCALAPPDATA%\TerminalHub\drops\yyyyMMdd\` に保存し、その保存先パスを入力欄へ挿入する（`DroppedFileStore` / helpers.js の `fileDrop`）。7 日より古い日付フォルダは保存時に掃除。作業フォルダには書かない。テキストのドロップはブラウザの既定動作のまま
 
 ### JavaScriptファイル
 - `wwwroot/js/terminal.js`: XTerm.js初期化、ターミナル管理、リサイズ処理、WebLinksAddon

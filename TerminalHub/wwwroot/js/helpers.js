@@ -410,3 +410,138 @@ window.slashAutocomplete = {
         if (ta) ta.focus();
     }
 };
+
+// 入力欄へのファイルドロップ。ブラウザはドロップされたファイルのフルパスを渡さない（名前と中身だけ）ので、
+// 中身を /api/drop に送ってアプリ設定フォルダ配下へ保存してもらい、返ってきた保存先パスを入力欄の
+// カーソル位置へ挿入する（Windows Terminal にファイルを落としたときの「パスが入る」に相当）。
+// テキストのドロップ（エディタからパス文字列を引きずってきた等）は files が無いので触らず、
+// ブラウザの既定動作（そのまま挿入）に任せる。
+// ドロップが入力欄から外れても、ブラウザがファイルを開いて画面ごと置き換わらないよう、
+// 最初の register でページ全体の file ドロップの既定動作を止める（1 回だけ）。
+window.fileDrop = {
+    _handlers: {},
+    _pageGuardInstalled: false,
+    _hasFiles: function (e) {
+        var dt = e.dataTransfer;
+        if (!dt || !dt.types) return false;
+        for (var i = 0; i < dt.types.length; i++) {
+            if (dt.types[i] === 'Files') return true;
+        }
+        return false;
+    },
+    _installPageGuard: function () {
+        if (this._pageGuardInstalled) return;
+        this._pageGuardInstalled = true;
+        var self = this;
+        document.addEventListener('dragover', function (e) {
+            if (self._hasFiles(e)) { e.preventDefault(); }
+        });
+        document.addEventListener('drop', function (e) {
+            if (self._hasFiles(e)) { e.preventDefault(); }
+        });
+    },
+    // 空白や引用符などを含むパスは二重引用符で包む（CLI にそのまま渡せる形）。
+    _quote: function (path) {
+        if (/[\s"'&|<>^()]/.test(path)) {
+            return '"' + path.replace(/"/g, '""') + '"';
+        }
+        return path;
+    },
+    _insert: function (ta, text) {
+        var start = ta.selectionStart, end = ta.selectionEnd;
+        if (typeof start !== 'number') { start = end = ta.value.length; }
+        ta.setRangeText(text, start, end, 'end');
+        // Blazor の @bind:event="oninput" に拾わせる
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.focus();
+    },
+    _showMessage: function (ta, text) {
+        var host = ta.parentElement || document.body;
+        var old = host.querySelector('.file-drop-msg');
+        if (old) old.remove();
+        var div = document.createElement('div');
+        div.className = 'file-drop-msg';
+        div.textContent = text;
+        host.appendChild(div);
+        setTimeout(function () { if (div.parentElement) div.remove(); }, 5000);
+    },
+    _format: function (template, name) {
+        return (template || '').replace('{0}', name);
+    },
+    // opts: { maxBytes, tooLarge('{0}'=名前), folderNotSupported, failed('{0}'=名前) }
+    register: function (textareaId, opts) {
+        var ta = document.getElementById(textareaId);
+        if (!ta) return;
+        if (this._handlers[textareaId]) { this.unregister(textareaId); }
+        this._installPageGuard();
+        var self = this;
+        opts = opts || {};
+
+        var onDragOver = function (e) {
+            if (!self._hasFiles(e)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            ta.classList.add('file-drop-over');
+        };
+        var onDragLeave = function () { ta.classList.remove('file-drop-over'); };
+        var onDrop = function (e) {
+            ta.classList.remove('file-drop-over');
+            if (!self._hasFiles(e)) return;   // テキストのドロップは既定動作に任せる
+            e.preventDefault();
+            e.stopPropagation();
+
+            // フォルダは中身が取れないので断る（Chrome では size 0・type 空の File として届く）
+            var items = e.dataTransfer.items;
+            var files = [];
+            var hadFolder = false;
+            for (var i = 0; i < e.dataTransfer.files.length; i++) {
+                var f = e.dataTransfer.files[i];
+                var entry = items && items[i] && items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+                if (entry && entry.isDirectory) { hadFolder = true; continue; }
+                files.push(f);
+            }
+            if (hadFolder) { self._showMessage(ta, opts.folderNotSupported || 'Folders are not supported'); }
+            if (files.length === 0) return;
+
+            var maxBytes = opts.maxBytes || (20 * 1024 * 1024);
+            var pending = files.slice();
+            var next = function () {
+                if (pending.length === 0) return;
+                var file = pending.shift();
+                if (file.size > maxBytes) {
+                    self._showMessage(ta, self._format(opts.tooLarge, file.name) || (file.name + ' is too large'));
+                    next();
+                    return;
+                }
+                fetch('/api/drop?name=' + encodeURIComponent(file.name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: file
+                }).then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(function (json) {
+                    if (!json || !json.path) throw new Error('no path');
+                    self._insert(ta, self._quote(json.path) + ' ');
+                }).catch(function (err) {
+                    console.warn('[fileDrop] 保存に失敗:', file.name, err);
+                    self._showMessage(ta, self._format(opts.failed, file.name) || ('Failed: ' + file.name));
+                }).then(next);
+            };
+            next();
+        };
+
+        ta.addEventListener('dragover', onDragOver);
+        ta.addEventListener('dragleave', onDragLeave);
+        ta.addEventListener('drop', onDrop);
+        this._handlers[textareaId] = { ta: ta, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop };
+    },
+    unregister: function (textareaId) {
+        var h = this._handlers[textareaId];
+        if (!h) return;
+        h.ta.removeEventListener('dragover', h.onDragOver);
+        h.ta.removeEventListener('dragleave', h.onDragLeave);
+        h.ta.removeEventListener('drop', h.onDrop);
+        delete this._handlers[textareaId];
+    }
+};
