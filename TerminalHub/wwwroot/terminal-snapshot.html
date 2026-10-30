@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Terminal snapshot</title>
+<!--
+  ターミナル表示の固定ビューア。
+  本体の右上「この表示を別ウィンドウで固定」ボタンから開かれ、GET /api/terminal/{GUID}/snapshot で
+  その瞬間のエミュレータ内容（スクロールバック込みの ANSI）を 1 回だけ取得して読み取り専用の xterm に流し込む。
+  以後は一切更新しないので、本体がいくら進んでもここは固定のまま（一覧や表を見ながら作業を進める用途）。
+
+  列数は取得時のままに固定する（折り返し直しをすると表の見た目が変わるため）。ウィンドウが狭ければ横スクロール。
+  行数だけはウィンドウの高さに合わせる（行数の変更は内容を折り返し直さない）。
+  本体と同じ xterm バージョン・フォント・テーマ・Unicode11(VS16) で開く。WebGL は使わない
+  （静的表示には不要で、本体側の WebGL コンテキスト上限を食わないため）。
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.9.0/lib/addon-unicode11.js"></script>
+<script src="js/unicode-vs16.js"></script>
+<style>
+  /* 本体 app.css の合成フォント TermMix と同じ定義（このページは app.css を読まない） */
+  @font-face {
+    font-family: 'TermMix';
+    src: local('Cascadia Mono'), local('Consolas');
+  }
+  @font-face {
+    font-family: 'TermMix';
+    src: local('Segoe UI Symbol'), local('Yu Gothic UI'), local('Meiryo UI'), local('BIZ UDGothic');
+    unicode-range: U+2460-24FF, U+3200-32FF;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { background: #1e1e1e; color: #d4d4d4; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+  #bar { flex: 0 0 auto; display: flex; gap: 12px; align-items: baseline; padding: 4px 10px; font-size: 12px; color: #9a9a9a; background: #252526; border-bottom: 1px solid #333; white-space: nowrap; overflow: hidden; }
+  #name { color: #d4d4d4; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  #term { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 0 0 4px; }
+  #msg { padding: 16px; font-size: 14px; }
+  .err { color: #f14c4c; }
+</style>
+</head>
+<body>
+<div id="bar"><span id="name"></span><span id="when"></span><span id="size"></span></div>
+<div id="term"></div>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get('session') || '';
+  const fontSize = Math.max(8, Math.min(32, parseInt(params.get('fontSize') || '14', 10) || 14));
+
+  function showMessage(text, isError) {
+    const host = $('term');
+    host.innerHTML = '';
+    const div = document.createElement('div');
+    div.id = 'msg';
+    if (isError) div.className = 'err';
+    div.textContent = text;
+    host.appendChild(div);
+  }
+
+  if (!/^[0-9a-fA-F-]{36}$/.test(sessionId)) {
+    showMessage('セッション ID が指定されていません。', true);
+    return;
+  }
+
+  fetch('/api/terminal/' + encodeURIComponent(sessionId) + '/snapshot', { cache: 'no-store' })
+    .then((r) => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(render)
+    .catch((e) => showMessage('取得に失敗しました: ' + (e && e.message ? e.message : e), true));
+
+  function render(data) {
+    const cols = data.cols || 120;
+    const when = data.capturedAt ? new Date(data.capturedAt) : new Date();
+    const whenText = when.toLocaleString();
+    document.title = (data.name || 'Terminal') + ' - ' + whenText;
+    $('name').textContent = data.name || '';
+    $('when').textContent = whenText;
+    $('size').textContent = cols + ' x ' + (data.rows || '?');
+
+    const term = new Terminal({
+      cursorBlink: false,
+      disableStdin: true,
+      fontSize: fontSize,
+      fontFamily: "TermMix, 'Cascadia Mono', Consolas, monospace",
+      scrollback: 10000,
+      scrollOnInput: false,
+      scrollOnOutput: false,
+      scrollOnEraseInDisplay: true,
+      theme: {
+        background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#1e1e1e',
+        black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510',
+        blue: '#2472c8', magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5',
+        brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b',
+        brightYellow: '#f5f543', brightBlue: '#3b8eea', brightMagenta: '#d670d6',
+        brightCyan: '#29b8db', brightWhite: '#e5e5e5'
+      },
+      cols: cols,
+      rows: data.rows || 30,
+      convertEol: false,
+      windowsPty: { backend: 'conpty' },
+      allowProposedApi: true
+    });
+    if (typeof window.registerUnicode11Vs16 === 'function') {
+      window.registerUnicode11Vs16(term);
+    } else if (window.Unicode11Addon) {
+      term.loadAddon(new Unicode11Addon.Unicode11Addon());
+      term.unicode.activeVersion = '11';
+    }
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open($('term'));
+
+    // 行数だけウィンドウに合わせる（列数は取得時のまま。折り返しを変えない）
+    function fitRows() {
+      const dims = fitAddon.proposeDimensions();
+      if (dims && dims.rows > 0 && dims.rows !== term.rows) {
+        term.resize(cols, dims.rows);
+      }
+    }
+
+    // 内容は取得時の行数のまま流し込む。直列化の末尾で元のカーソル位置が復元されるが、
+    // xterm は行数を減らすときカーソルより下の行を捨てるため、カーソルが上の行にあるまま縮めると
+    // 固定したはずの内容が消える（Codex レビュー P2）。流し込み後にカーソルを最下行へ移してから隠し、
+    // それが済んでから行数合わせとリサイズ追従を始める。以後、内容は更新しない。
+    term.write(data.content || '', () => {
+      term.write('\x1b[' + term.rows + ';1H\x1b[?25l', () => {
+        fitRows();
+        window.addEventListener('resize', fitRows);
+        term.scrollToBottom();
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>

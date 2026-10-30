@@ -493,6 +493,27 @@ app.MapPost("/api/drop", async (HttpRequest request, string? name, ILogger<Progr
     }
 });
 
+// ターミナル表示の固定ビューア（wwwroot/terminal-snapshot.html）用: その瞬間のエミュレータ内容を返す。
+// セッション切替時の復元と同じ直列化（スクロールバック込みの ANSI）なので、本体の xterm と同じ絵になる。
+// 1 回取って終わり（以後の更新は無い）。本体側のバッファには触らない。
+app.MapGet("/api/terminal/{sessionId:guid}/snapshot", (Guid sessionId, ISessionManager sessionManager) =>
+{
+    var session = sessionManager.GetSessionInfo(sessionId);
+    if (session == null)
+    {
+        return Results.NotFound($"セッションが見つかりません: {sessionId}");
+    }
+    var (cols, rows) = session.TerminalBufferSize2D;
+    return Results.Json(new
+    {
+        name = session.GetDisplayName(),
+        cols,
+        rows,
+        capturedAt = DateTimeOffset.Now,
+        content = session.GetTerminalBuffer()
+    });
+});
+
 // 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
 // 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
 app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>

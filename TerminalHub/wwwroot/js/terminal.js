@@ -1229,6 +1229,21 @@ window.terminalFunctions = {
     },
     
     // ターミナルクリーンアップ関数
+    // ターミナル表示の固定ビューア（wwwroot/terminal-snapshot.html）を別ウィンドウで開く。
+    // Blazor の @onclick 経由（サーバー往復の後）だとユーザー操作の文脈が切れてポップアップブロックに掛かるため、
+    // ボタンの素の onclick からここを同期で呼ぶ。サイズはいま表示中のターミナル領域に合わせる。
+    openSnapshotWindow: function(sessionId) {
+        const entry = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
+        const fontSize = entry && entry.terminal ? entry.terminal.options.fontSize : 14;
+        const container = document.getElementById('terminal-' + sessionId);
+        const rect = container ? container.getBoundingClientRect() : null;
+        const width = Math.max(480, Math.round(rect ? rect.width + 24 : 1000));
+        const height = Math.max(320, Math.round(rect ? rect.height + 40 : 700));
+        const url = '/terminal-snapshot.html?session=' + encodeURIComponent(sessionId) + '&fontSize=' + encodeURIComponent(fontSize);
+        const features = 'popup,noopener,noreferrer,width=' + width + ',height=' + height;
+        window.open(url, '_blank', features);
+    },
+
     cleanupTerminal: function(sessionId) {
 
         // フロー制御のクリーンアップ
