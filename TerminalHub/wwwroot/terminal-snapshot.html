@@ -122,13 +122,15 @@
         term.resize(cols, dims.rows);
       }
     }
-    fitRows();
-    window.addEventListener('resize', fitRows);
 
-    // 内容を流し込み、カーソルを隠して末尾を表示する。以後は更新しない。
+    // 内容は取得時の行数のまま流し込む。直列化の末尾で元のカーソル位置が復元されるが、
+    // xterm は行数を減らすときカーソルより下の行を捨てるため、カーソルが上の行にあるまま縮めると
+    // 固定したはずの内容が消える（Codex レビュー P2）。流し込み後にカーソルを最下行へ移してから隠し、
+    // それが済んでから行数合わせとリサイズ追従を始める。以後、内容は更新しない。
     term.write(data.content || '', () => {
-      term.write('\x1b[?25l', () => {
+      term.write('\x1b[' + term.rows + ';1H\x1b[?25l', () => {
         fitRows();
+        window.addEventListener('resize', fitRows);
         term.scrollToBottom();
       });
     });
