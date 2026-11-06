@@ -308,6 +308,29 @@ window.setTerminalLinkCopyMode = function (enabled) {
     terminalLinkCopyMode = !!enabled;
 };
 
+// .md のパスをクリックしたとき、既定アプリではなく TerminalHub の Markdown ビューア
+// （wwwroot/markdown-viewer.html、別ウィンドウ・自動更新）で開くか。デバイス別設定（既定 ON）として
+// Blazor 側から setMarkdownViewerEnabled で反映される。OFF でも右クリックメニューからは開ける。
+// コピー動作モードより優先する（ビューアはブラウザ内で完結するので、モバイルでも役に立つ）。
+let markdownViewerEnabled = true;
+window.setMarkdownViewerEnabled = function (enabled) {
+    markdownViewerEnabled = !!enabled;
+};
+
+// 末尾の行番号表記（README.md:12）は C# 側の解決で落とされるので、ここでも許容する
+function isMarkdownPath(text) {
+    return /\.(md|markdown)(?::\d+)*$/i.test((text || '').trim());
+}
+
+function openMarkdownViewer(sessionId, path) {
+    // パスの解決（セッションの作業フォルダ基準・実在チェック）はビューア側が API 経由で行う。
+    // ここで C# に問い合わせてから開くと、クリックから window.open までが非同期になりポップアップブロックに掛かる
+    const width = Math.min(960, Math.max(480, Math.round((window.screen.availWidth || 1200) * 0.6)));
+    const height = Math.max(480, Math.round((window.screen.availHeight || 900) * 0.9));
+    const url = '/markdown-viewer.html?session=' + encodeURIComponent(sessionId) + '&path=' + encodeURIComponent((path || '').trim());
+    window.open(url, '_blank', 'popup,noopener,noreferrer,width=' + width + ',height=' + height);
+}
+
 // リンク活性化を左クリックだけに限定するガード。
 // xterm はリンクの activate を呼ぶ前にマウスボタンを見ないため、素通しにすると
 // 右クリック（コンテキストメニューを出したいだけ）や中クリックでもリンクが開いてしまう。
@@ -549,13 +572,21 @@ function setupCommitHashDetection(term, sessionId) {
     }
 }
 function activateTerminalPath(sessionId, path) {
+    if (markdownViewerEnabled && isMarkdownPath(path)) {
+        openMarkdownViewer(sessionId, path);
+        return;
+    }
     if (terminalLinkCopyMode) {
         // コピー動作モード: URL と同様に開かずコピーする（モバイル全画面向け）
         copyLinkToClipboard(path);
         return;
     }
+    openTerminalPathWithApp(sessionId, path);
+}
+
+// C# 側でセッションのフォルダ基準に解決し、フォルダ=Explorer / ファイル=既定アプリ で開く
+function openTerminalPathWithApp(sessionId, path) {
     if (window.terminalHubDotNetRef) {
-        // C# 側でセッションのフォルダ基準に解決し、フォルダ=Explorer / ファイル=既定アプリ で開く
         window.terminalHubDotNetRef.invokeMethodAsync('OnTerminalPathClick', sessionId, path)
             .catch(err => console.error('[Path Detection] open failed:', err));
     }
@@ -777,11 +808,24 @@ function pathTokenAtCell(term, col, row) {
 // パス対象の共通コンテキストメニュー項目（コピー / 開く / フルパスをコピー / フォルダを開く）。
 // 選択テキストにもパスリンクにも同じメニューを出すため共通化する。
 function buildPathMenuItems(sessionId, text) {
-    return [
+    const items = [
         { label: 'コピー', action: () => copyLinkToClipboard(text) },
+    ];
+    if (isMarkdownPath(text)) {
+        // .md は「開く」が設定どおり（ビューア or 既定アプリ）で、もう一方をメニューに出す
+        if (markdownViewerEnabled) {
+            items.push({ label: '開く', action: () => openMarkdownViewer(sessionId, text) });
+            items.push({ label: 'アプリで開く', action: () => openTerminalPathWithApp(sessionId, text) });
+        } else {
+            items.push({ label: '開く', action: () => activateTerminalPath(sessionId, text) });
+            items.push({ label: 'ビューアで開く', action: () => openMarkdownViewer(sessionId, text) });
+        }
+    } else {
         // 「開く」はリンク左クリックと同じ経路（C# 側でセッションのフォルダ基準に解決し、
         // フォルダ=Explorer / ファイル=既定アプリ。実在しなければ警告トースト）
-        { label: '開く', action: () => activateTerminalPath(sessionId, text) },
+        items.push({ label: '開く', action: () => activateTerminalPath(sessionId, text) });
+    }
+    items.push(
         {
             label: 'フルパスをコピー',
             action: () => {
@@ -801,7 +845,8 @@ function buildPathMenuItems(sessionId, text) {
                     .catch(err => console.error('[Path Detection] open folder failed:', err));
             }
         },
-    ];
+    );
+    return items;
 }
 
 // URL 対象のコンテキストメニュー項目。メニューから選ぶ操作は意図が明示されているため、
