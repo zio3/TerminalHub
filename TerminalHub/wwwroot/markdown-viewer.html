@@ -69,6 +69,7 @@
 
   let since = null;       // 前回取得したファイル更新時刻（ticks の文字列。JS の数値では桁落ちするため文字列のまま）
   let loaded = false;     // 一度でも描画できたか（以降のエラーは表示を壊さず状態表示だけにする）
+  let lastStatus = '';    // 直近の正常状態の表示（一時エラーから復旧したときに戻す）
   let timer = null;
 
   function showMessage(text, isError) {
@@ -130,45 +131,54 @@
     loaded = true;
 
     const when = data.modifiedAt ? new Date(data.modifiedAt) : new Date();
-    setStatus('更新 ' + when.toLocaleTimeString(), 'live');
+    lastStatus = '更新 ' + when.toLocaleTimeString();
+    setStatus(lastStatus, 'live');
   }
 
+  // 1 回分の取得。例外は外に出さない（ここで reject すると呼び出し側のポーリングが止まるため。Codex レビュー P2）
   async function load() {
     const url = '/api/terminal/' + encodeURIComponent(sessionId) + '/markdown?path=' + encodeURIComponent(path)
       + (since ? '&since=' + encodeURIComponent(since) : '');
-    let r;
     try {
-      r = await fetch(url, { cache: 'no-store' });
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.status === 204) {
+        // 未更新。一時エラー（503 等）のあとに復旧した場合はここに来るので、警告表示を正常に戻す（Codex レビュー P3）
+        if (loaded) setStatus(lastStatus, 'live');
+        return;
+      }
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        if (!loaded) showMessage('取得に失敗しました: HTTP ' + r.status + (text ? ' ' + text : ''), true);
+        else setStatus('更新を取得できません（HTTP ' + r.status + '）', 'stale');
+        return;
+      }
+      // 本文の受信中に切れると r.json() が投げるので、ここも同じ catch に入れる
+      const data = await r.json();
+      since = data.modified || null;
+      render(data);
     } catch (e) {
       if (!loaded) showMessage('取得に失敗しました: ' + (e && e.message ? e.message : e), true);
       else setStatus('接続できません（再試行中）', 'stale');
-      return;
     }
-    if (r.status === 204) return; // 未更新
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      if (!loaded) showMessage('取得に失敗しました: HTTP ' + r.status + (text ? ' ' + text : ''), true);
-      else setStatus('更新を取得できません（HTTP ' + r.status + '）', 'stale');
-      return;
-    }
-    const data = await r.json();
-    since = data.modified || null;
-    render(data);
   }
 
+  // 次回のポーリングを必ず登録する（load の成否に関わらず）
   function schedule() {
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
-      // 隠れている間はポーリングしない（戻ってきたときに即時に取り直す）
-      if (document.visibilityState === 'visible') await load();
-      schedule();
+      try {
+        // 隠れている間はポーリングしない（戻ってきたときに即時に取り直す）
+        if (document.visibilityState === 'visible') await load();
+      } finally {
+        schedule();
+      }
     }, POLL_MS);
   }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') load();
   });
 
-  load().then(schedule);
+  load().finally(schedule);
 })();
 </script>
 </body>
