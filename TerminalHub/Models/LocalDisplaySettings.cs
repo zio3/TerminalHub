@@ -22,5 +22,12 @@ namespace TerminalHub.Models
         /// このデバイス専用設定で、app-settings 側のフォールバック値は持たない (null=false 扱い)。
         /// </summary>
         public bool? TerminalLinkCopyMode { get; set; }
+
+        /// <summary>
+        /// ターミナル内の .md パスのクリックを、既定のアプリではなく TerminalHub の Markdown ビューア
+        /// （別ウィンドウ・自動更新）で開く。OFF でも右クリックメニューからビューアで開ける。
+        /// このデバイス専用設定で、app-settings 側のフォールバック値は持たない (null=true 扱い)。
+        /// </summary>
+        public bool? MarkdownViewerEnabled { get; set; }
     }
 }

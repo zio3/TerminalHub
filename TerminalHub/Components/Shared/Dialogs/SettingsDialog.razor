@@ -378,6 +378,18 @@
                                         @L["Settings.Display.TerminalLinkCopyMode.Help"]
                                     </small>
                                 </div>
+
+                                <div class="mb-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" @bind="markdownViewerEnabled" id="markdownViewerEnabled">
+                                        <label class="form-check-label" for="markdownViewerEnabled">
+                                            <i class="bi bi-markdown me-1"></i>@L["Settings.Display.MarkdownViewer.Label"]
+                                        </label>
+                                    </div>
+                                    <small class="text-muted">
+                                        @L["Settings.Display.MarkdownViewer.Help"]
+                                    </small>
+                                </div>
                             </div>
                         }
                         else if (activeTab == "notifications")
@@ -1476,6 +1488,7 @@
     private bool hideInputPanel = false;
     private bool perSessionInputText = true;
     private bool terminalLinkCopyMode = false;
+    private bool markdownViewerEnabled = true;
     private string defaultFolderPath = "";
     private string? defaultFolderPathWarning = null;
     private List<string> favoriteFolders = new();
@@ -1672,6 +1685,8 @@
             sidebarWidthPercent = localDisplay?.SidebarWidthPercent ?? settings.General.SidebarWidthPercent;
             // ターミナル内URLのコピー動作モードはこのデバイス専用（app-settings のシード無し）
             terminalLinkCopyMode = localDisplay?.TerminalLinkCopyMode ?? false;
+            // .md クリックをビューアで開くかもこのデバイス専用（既定 ON）
+            markdownViewerEnabled = localDisplay?.MarkdownViewerEnabled ?? true;
 
             // カスタムコマンド
             editingCommands = settings.Commands.CommandsByTerminalType
@@ -2003,10 +2018,12 @@
                 TerminalHeightPercent = terminalHeightPercent,
                 SidebarWidthPercent = sidebarWidthPercent,
                 TerminalLinkCopyMode = terminalLinkCopyMode,
+                MarkdownViewerEnabled = markdownViewerEnabled,
             });
 
-            // ターミナル内URLのコピー動作モードを即時反映（再読み込み不要にする）
+            // ターミナル内URLのコピー動作モードと .md ビューアの設定を即時反映（再読み込み不要にする）
             await JSRuntime.InvokeVoidAsync("setTerminalLinkCopyMode", terminalLinkCopyMode);
+            await JSRuntime.InvokeVoidAsync("setMarkdownViewerEnabled", markdownViewerEnabled);
 
             // 音声入力・カーソルパッド自動切替もデバイス別設定として LocalStorage に保存する
             // (app-settings 側の VoiceInputEnabled は新デバイス初回アクセス時のシードとして機能する)

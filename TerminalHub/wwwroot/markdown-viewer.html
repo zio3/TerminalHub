@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Markdown</title>
+<!--
+  Markdown ビューア。
+  ターミナル出力中の .md パスをクリックしたときに別ウィンドウで開かれ、
+  GET /api/terminal/{GUID}/markdown?path=... でセッションの作業フォルダ基準に解決した中身を取得して描画する。
+  AI が書き進めている途中の文書を眺める用途のため、表示中は数秒おきにポーリングして更新があれば描き直す
+  （since に前回の更新時刻を渡し、未更新なら 204 で帰ってくるので軽い）。
+  読み取り専用。編集機能は持たせない（エディタの劣化版にしないため。TerminalHub は利用者のファイルに書かない）。
+  描画は marked（GFM）+ DOMPurify。相対パスの画像は今のところ解決しない（必要になったら API を足す）。
+-->
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #1e1e1e; --fg: #d4d4d4; --muted: #9a9a9a; --bar: #252526; --border: #3a3a3a;
+    --code-bg: #2a2a2a; --link: #4fc1ff; --quote: #6a9955; --head: #e5e5e5;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; font-size: 15px; line-height: 1.6; display: flex; flex-direction: column; }
+  #bar { position: sticky; top: 0; z-index: 1; flex: 0 0 auto; display: flex; gap: 12px; align-items: baseline; padding: 6px 16px; font-size: 12px; color: var(--muted); background: var(--bar); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+  #name { color: var(--head); font-weight: 600; font-size: 13px; }
+  #path { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
+  #status { flex: 0 0 auto; }
+  #status.live::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #23d18b; margin-right: 5px; vertical-align: 1px; }
+  #status.stale::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #f5f543; margin-right: 5px; vertical-align: 1px; }
+  #doc { flex: 1 1 auto; max-width: 920px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px 16px 48px; }
+  #msg { padding: 24px 16px; font-size: 14px; color: var(--muted); }
+  #msg.err { color: #f14c4c; }
+
+  #doc h1, #doc h2, #doc h3, #doc h4, #doc h5, #doc h6 { color: var(--head); line-height: 1.3; margin: 1.4em 0 0.6em; font-weight: 600; }
+  #doc h1 { font-size: 1.7em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  #doc h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
+  #doc h3 { font-size: 1.2em; }
+  #doc h1:first-child, #doc h2:first-child { margin-top: 0.2em; }
+  #doc p, #doc ul, #doc ol, #doc table, #doc pre, #doc blockquote { margin: 0 0 1em; }
+  #doc a { color: var(--link); text-decoration: none; }
+  #doc a:hover { text-decoration: underline; }
+  #doc code { font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace; font-size: 0.9em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+  #doc pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
+  #doc pre code { background: none; padding: 0; font-size: 0.88em; }
+  #doc blockquote { border-left: 4px solid var(--border); color: var(--muted); padding: 0.1em 1em; margin-left: 0; }
+  #doc table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+  #doc th, #doc td { border: 1px solid var(--border); padding: 6px 10px; vertical-align: top; }
+  #doc th { background: var(--code-bg); color: var(--head); }
+  #doc tr:nth-child(even) td { background: rgba(255, 255, 255, 0.025); }
+  #doc hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+  #doc img { max-width: 100%; height: auto; }
+  #doc ul, #doc ol { padding-left: 1.6em; }
+  #doc li + li { margin-top: 0.15em; }
+  #doc input[type="checkbox"] { margin-right: 0.4em; }
+  #doc del { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="bar"><span id="name"></span><span id="path"></span><span id="status"></span></div>
+<div id="doc"></div>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get('session') || '';
+  const path = params.get('path') || '';
+  const POLL_MS = 2000;
+
+  let since = null;       // 前回取得したファイル更新時刻（ticks の文字列。JS の数値では桁落ちするため文字列のまま）
+  let loaded = false;     // 一度でも描画できたか（以降のエラーは表示を壊さず状態表示だけにする）
+  let lastStatus = '';    // 直近の正常状態の表示（一時エラーから復旧したときに戻す）
+  let timer = null;
+
+  function showMessage(text, isError) {
+    const doc = $('doc');
+    doc.innerHTML = '';
+    const div = document.createElement('div');
+    div.id = 'msg';
+    if (isError) div.className = 'err';
+    div.textContent = text;
+    doc.appendChild(div);
+  }
+
+  function setStatus(text, cls) {
+    const el = $('status');
+    el.textContent = text;
+    el.className = cls || '';
+  }
+
+  if (!/^[0-9a-fA-F-]{36}$/.test(sessionId) || !path) {
+    showMessage('セッション ID かパスが指定されていません。', true);
+    return;
+  }
+  if (!window.marked || !window.DOMPurify) {
+    showMessage('描画ライブラリ（marked / DOMPurify）を読み込めませんでした。ネットワーク接続を確認してください。', true);
+    return;
+  }
+
+  marked.setOptions({ gfm: true, breaks: false });
+
+  function render(data) {
+    const name = data.name || path;
+    document.title = name;
+    $('name').textContent = name;
+    $('path').textContent = data.fullPath || '';
+    $('path').title = data.fullPath || '';
+
+    // 更新前にスクロール位置を控える。末尾付近を見ていたら更新後も末尾へ追従する
+    // （AI が書き足している文書を眺める用途）。そうでなければ位置を保つ。
+    const root = document.scrollingElement || document.documentElement;
+    const atBottom = root.scrollHeight - root.clientHeight - root.scrollTop < 48;
+    const top = root.scrollTop;
+
+    const html = DOMPurify.sanitize(marked.parse(data.content || ''), { ADD_ATTR: ['target'] });
+    const doc = $('doc');
+    doc.innerHTML = html;
+    // 外部リンクは別タブで開く（このウィンドウを離れると戻れないため）。ページ内アンカーはそのまま
+    doc.querySelectorAll('a[href]').forEach((a) => {
+      const href = a.getAttribute('href') || '';
+      if (href.startsWith('#')) return;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+    });
+
+    if (loaded && atBottom) {
+      root.scrollTop = root.scrollHeight;
+    } else if (loaded) {
+      root.scrollTop = top;
+    }
+    loaded = true;
+
+    const when = data.modifiedAt ? new Date(data.modifiedAt) : new Date();
+    lastStatus = '更新 ' + when.toLocaleTimeString();
+    setStatus(lastStatus, 'live');
+  }
+
+  // 1 回分の取得。例外は外に出さない（ここで reject すると呼び出し側のポーリングが止まるため。Codex レビュー P2）
+  async function load() {
+    const url = '/api/terminal/' + encodeURIComponent(sessionId) + '/markdown?path=' + encodeURIComponent(path)
+      + (since ? '&since=' + encodeURIComponent(since) : '');
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.status === 204) {
+        // 未更新。一時エラー（503 等）のあとに復旧した場合はここに来るので、警告表示を正常に戻す（Codex レビュー P3）
+        if (loaded) setStatus(lastStatus, 'live');
+        return;
+      }
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        if (!loaded) showMessage('取得に失敗しました: HTTP ' + r.status + (text ? ' ' + text : ''), true);
+        else setStatus('更新を取得できません（HTTP ' + r.status + '）', 'stale');
+        return;
+      }
+      // 本文の受信中に切れると r.json() が投げるので、ここも同じ catch に入れる
+      const data = await r.json();
+      since = data.modified || null;
+      render(data);
+    } catch (e) {
+      if (!loaded) showMessage('取得に失敗しました: ' + (e && e.message ? e.message : e), true);
+      else setStatus('接続できません（再試行中）', 'stale');
+    }
+  }
+
+  // 次回のポーリングを必ず登録する（load の成否に関わらず）
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        // 隠れている間はポーリングしない（戻ってきたときに即時に取り直す）
+        if (document.visibilityState === 'visible') await load();
+      } finally {
+        schedule();
+      }
+    }, POLL_MS);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') load();
+  });
+
+  load().finally(schedule);
+})();
+</script>
+</body>
+</html>

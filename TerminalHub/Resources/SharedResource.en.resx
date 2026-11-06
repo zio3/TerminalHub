@@ -113,6 +113,8 @@
   <data name="Settings.Display.TerminalFontSize.Help" xml:space="preserve"><value>Size of terminal text (8px–28px).</value></data>
   <data name="Settings.Display.TerminalLinkCopyMode.Label" xml:space="preserve"><value>Copy terminal URLs and paths on tap (don't open)</value></data>
   <data name="Settings.Display.TerminalLinkCopyMode.Help" xml:space="preserve"><value>For fullscreen mobile shortcuts where you can't navigate back. File/folder paths are copied too. Saved per device (browser).</value></data>
+  <data name="Settings.Display.MarkdownViewer.Label" xml:space="preserve"><value>Open Markdown files (.md) in the built-in viewer on click</value></data>
+  <data name="Settings.Display.MarkdownViewer.Help" xml:space="preserve"><value>Clicking a .md path in the terminal opens it in TerminalHub's viewer (separate window, auto-refresh) instead of the default app. Use the right-click menu to open it with the app. When off, the viewer is still available from the right-click menu. Saved per device (browser).</value></data>
   <data name="Settings.Display.SidebarWidth.Label" xml:space="preserve"><value>Sidebar width</value></data>
   <data name="Settings.Display.SidebarWidth.Help" xml:space="preserve"><value>Width of the session list (15%–70%). You can also drag the border.</value></data>
   <data name="Settings.Display.TerminalHeightRatio.Label" xml:space="preserve"><value>Terminal / input panel ratio</value></data>

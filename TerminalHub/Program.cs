@@ -514,6 +514,59 @@ app.MapGet("/api/terminal/{sessionId:guid}/snapshot", (Guid sessionId, ISessionM
     });
 });
 
+// Markdown ビューア（wwwroot/markdown-viewer.html）用: ターミナル出力中の .md 表記をセッションの作業フォルダ基準で
+// 解決して中身を返す。解決規則はターミナル内パスのクリックと同じ（TerminalPathResolver）。
+// 読み取り専用（利用者のファイルには何も書かない）。対象は拡張子 .md / .markdown のファイルだけに絞る。
+// since に前回応答の modified（更新時刻の ticks。JS の数値では桁落ちするので文字列）を渡すと、未更新なら 204 を返す
+// （ビューアが数秒おきにポーリングするため、変わっていなければ本文を送らない）。
+app.MapGet("/api/terminal/{sessionId:guid}/markdown", (Guid sessionId, string? path, string? since, ISessionManager sessionManager) =>
+{
+    const long maxBytes = 5L * 1024 * 1024;
+    var session = sessionManager.GetSessionInfo(sessionId);
+    if (session == null)
+    {
+        return Results.NotFound($"セッションが見つかりません: {sessionId}");
+    }
+    var resolved = TerminalPathResolver.Resolve(session.FolderPath, path);
+    if (resolved == null || !File.Exists(resolved))
+    {
+        return Results.NotFound($"ファイルが見つかりません: {path}");
+    }
+    var ext = Path.GetExtension(resolved);
+    if (!ext.Equals(".md", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest("Markdown ファイル（.md / .markdown）ではありません");
+    }
+    var info = new FileInfo(resolved);
+    if (info.Length > maxBytes)
+    {
+        return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+    }
+    var modified = info.LastWriteTimeUtc.Ticks.ToString();
+    if (since != null && since == modified)
+    {
+        return Results.NoContent();
+    }
+    string content;
+    try
+    {
+        // 書き込み中（共有違反）は一時的な失敗として 503 を返し、ビューアは次のポーリングで取り直す
+        content = File.ReadAllText(resolved);
+    }
+    catch (IOException)
+    {
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+    return Results.Json(new
+    {
+        name = info.Name,
+        fullPath = resolved,
+        modified,
+        modifiedAt = new DateTimeOffset(info.LastWriteTimeUtc).ToLocalTime(),
+        content
+    });
+});
+
 // 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
 // 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
 app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>
