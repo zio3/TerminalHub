@@ -20,11 +20,12 @@ if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
     set "CHROME_PATH=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 )
 
-:: ポートが既に使用中かチェック（LISTENINGのみ - ローカルアドレス列で完全一致）
+:: ポートが既に使用中かチェック
+:: localhost 側（127.0.0.1 / [::1]）の LISTENING だけを見る。Tailscale などが別アドレス（100.x.x.x 等）で同じポートを使っていても
+:: 「起動済み」と誤判定しないようにする。末尾の空白まで含めて一致させ、:50801 など別ポートへの誤一致も防ぐ
 set PORT_IN_USE=0
-for /f "tokens=2" %%a in ('netstat -ano ^| findstr "LISTENING" 2^>nul') do (
-    echo %%a | findstr /E ":%HTTP_PORT%" >nul 2>&1
-    if !errorlevel!==0 set PORT_IN_USE=1
+for /f "tokens=*" %%a in ('netstat -an ^| findstr "LISTENING" ^| findstr /C:"127.0.0.1:%HTTP_PORT% " /C:"[::1]:%HTTP_PORT% " 2^>nul') do (
+    set PORT_IN_USE=1
 )
 
 if !PORT_IN_USE!==1 (
