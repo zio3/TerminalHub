@@ -14,6 +14,10 @@
   行数だけはウィンドウの高さに合わせる（行数の変更は内容を折り返し直さない）。
   本体と同じ xterm バージョン・フォント・テーマ・Unicode11(VS16) で開く。WebGL は使わない
   （静的表示には不要で、本体側の WebGL コンテキスト上限を食わないため）。
+
+  本体のスクロール位置（scrollUp=最下行から遡った行数）とマウス選択範囲（sel=開始列,開始行,終了列,終了行。
+  行はバッファ末尾からの行数）を URL で受け取り、流し込みと行数合わせが済んだあとに再現する。
+  末尾からの行数で受けるのは、こちらの行数（rows）がウィンドウ高さで変わり先頭からの絶対行がずれるため。
 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
@@ -49,6 +53,12 @@
   const params = new URLSearchParams(location.search);
   const sessionId = params.get('session') || '';
   const fontSize = Math.max(8, Math.min(32, parseInt(params.get('fontSize') || '14', 10) || 14));
+  const scrollUp = Math.max(0, parseInt(params.get('scrollUp') || '0', 10) || 0);
+  // sel=開始列,開始行(末尾から),終了列,終了行(末尾から)。4 つそろった非負整数以外は無視
+  const selParts = (params.get('sel') || '').split(',').map((s) => parseInt(s, 10));
+  const sel = selParts.length === 4 && selParts.every((n) => Number.isInteger(n) && n >= 0)
+    ? { startX: selParts[0], startFromEnd: selParts[1], endX: selParts[2], endFromEnd: selParts[3] }
+    : null;
 
   function showMessage(text, isError) {
     const host = $('term');
@@ -127,13 +137,46 @@
     // xterm は行数を減らすときカーソルより下の行を捨てるため、カーソルが上の行にあるまま縮めると
     // 固定したはずの内容が消える（Codex レビュー P2）。流し込み後にカーソルを最下行へ移してから隠し、
     // それが済んでから行数合わせとリサイズ追従を始める。以後、内容は更新しない。
+    // 本体のスクロール位置と選択範囲の再現は 2 段階。流し込み直後（取得時の行数のまま）はバッファの形が本体と同じなので
+    // ここで「末尾からの行数」を先頭からの絶対行に直し、行数合わせの後に適用する。行数合わせは末尾側で行を
+    // 出し入れする（増やすときはスクロールバックから戻す、足りなければ下に空行を足す。減らすときは上へ送る）だけで
+    // 先頭からの絶対行は動かないため、この順なら本体と同じ行を指せる。
     term.write(data.content || '', () => {
       term.write('\x1b[' + term.rows + ';1H\x1b[?25l', () => {
+        const target = resolveViewTarget();
         fitRows();
         window.addEventListener('resize', fitRows);
-        term.scrollToBottom();
+        applyViewTarget(target);
       });
     });
+
+    function resolveViewTarget() {
+      const buf = term.buffer.active;
+      const target = { topLine: null, selection: null };
+      if (scrollUp > 0) {
+        target.topLine = Math.max(0, buf.baseY - scrollUp);
+      }
+      if (sel) {
+        const startY = buf.length - sel.startFromEnd;
+        const endY = buf.length - sel.endFromEnd;
+        const length = (endY * cols + sel.endX) - (startY * cols + sel.startX);
+        if (startY >= 0 && length > 0) {
+          target.selection = { x: sel.startX, y: startY, length };
+        }
+      }
+      return target;
+    }
+
+    function applyViewTarget(target) {
+      if (target.selection) {
+        term.select(target.selection.x, target.selection.y, target.selection.length);
+      }
+      if (target.topLine !== null) {
+        term.scrollToLine(Math.min(target.topLine, term.buffer.active.baseY));
+      } else {
+        term.scrollToBottom();
+      }
+    }
   }
 })();
 </script>
