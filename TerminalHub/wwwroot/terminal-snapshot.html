@@ -18,6 +18,8 @@
   本体のスクロール位置（scrollUp=最下行から遡った行数）とマウス選択範囲（sel=開始列,開始行,終了列,終了行。
   行はバッファ末尾からの行数）を URL で受け取り、流し込みと行数合わせが済んだあとに再現する。
   末尾からの行数で受けるのは、こちらの行数（rows）がウィンドウ高さで変わり先頭からの絶対行がずれるため。
+  それでも本体と行がずれるケース（列数変更で本体だけ履歴を折り返し直している、クリックから取得までに出力が進んだ）が
+  あるので、先頭表示行と選択開始行のテキスト（top / selText）も受け取り、計算位置の近傍で一致する行を探して補正する。
 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" />
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
@@ -53,12 +55,19 @@
   const params = new URLSearchParams(location.search);
   const sessionId = params.get('session') || '';
   const fontSize = Math.max(8, Math.min(32, parseInt(params.get('fontSize') || '14', 10) || 14));
-  const scrollUp = Math.max(0, parseInt(params.get('scrollUp') || '0', 10) || 0);
+  // 数値パラメータは 10 進の非負整数そのものだけを受け付ける（"10junk" のような部分一致は無視。Codex レビュー P3）
+  const uint = (s) => (/^\d{1,9}$/.test(s || '') ? parseInt(s, 10) : null);
+  const scrollUp = uint(params.get('scrollUp')) || 0;
   // sel=開始列,開始行(末尾から),終了列,終了行(末尾から)。4 つそろった非負整数以外は無視
-  const selParts = (params.get('sel') || '').split(',').map((s) => parseInt(s, 10));
-  const sel = selParts.length === 4 && selParts.every((n) => Number.isInteger(n) && n >= 0)
+  const selParts = (params.get('sel') || '').split(',').map(uint);
+  const sel = selParts.length === 4 && selParts.every((n) => n !== null)
     ? { startX: selParts[0], startFromEnd: selParts[1], endX: selParts[2], endFromEnd: selParts[3] }
     : null;
+  // 行の照合用テキスト（本体の先頭表示行 / 選択開始行）。行数の勘定だけでは外れるケースの補正に使う（後述）
+  const ANCHOR_MAX = 120;
+  const normalizeAnchor = (s) => (s || '').trim().slice(0, ANCHOR_MAX);
+  const topAnchor = normalizeAnchor(params.get('top'));
+  const selAnchor = normalizeAnchor(params.get('selText'));
 
   function showMessage(text, isError) {
     const host = $('term');
@@ -125,12 +134,23 @@
     term.loadAddon(fitAddon);
     term.open($('term'));
 
-    // 行数だけウィンドウに合わせる（列数は取得時のまま。折り返しを変えない）
+    // 行数だけウィンドウに合わせる（列数は取得時のまま。折り返しを変えない）。
+    // 戻り値は先頭から切り捨てられた行数（scrollback 上限に達した状態で行数を減らしたときだけ 0 以外）。
+    // xterm は行数変更で選択を消すので、あれば控えておいて切り捨て分をずらして戻す（Codex レビュー P2）。
     function fitRows() {
       const dims = fitAddon.proposeDimensions();
-      if (dims && dims.rows > 0 && dims.rows !== term.rows) {
-        term.resize(cols, dims.rows);
+      if (!(dims && dims.rows > 0 && dims.rows !== term.rows)) return 0;
+      const buf = term.buffer.active;
+      const lengthBefore = buf.length;
+      const selPos = term.hasSelection() ? term.getSelectionPosition() : null;
+      term.resize(cols, dims.rows);
+      const trimmed = Math.max(0, lengthBefore - buf.length);
+      if (selPos) {
+        const startY = selPos.start.y - trimmed;
+        const length = (selPos.end.y * cols + selPos.end.x) - (selPos.start.y * cols + selPos.start.x);
+        if (startY >= 0 && length > 0) term.select(selPos.start.x, startY, length);
       }
+      return trimmed;
     }
 
     // 内容は取得時の行数のまま流し込む。直列化の末尾で元のカーソル位置が復元されるが、
@@ -140,39 +160,57 @@
     // 本体のスクロール位置と選択範囲の再現は 2 段階。流し込み直後（取得時の行数のまま）はバッファの形が本体と同じなので
     // ここで「末尾からの行数」を先頭からの絶対行に直し、行数合わせの後に適用する。行数合わせは末尾側で行を
     // 出し入れする（増やすときはスクロールバックから戻す、足りなければ下に空行を足す。減らすときは上へ送る）だけで
-    // 先頭からの絶対行は動かないため、この順なら本体と同じ行を指せる。
+    // 先頭からの絶対行は動かない（scrollback 上限に達していて減らすときだけ先頭が切られるので、その分は fitRows が返す）。
     term.write(data.content || '', () => {
       term.write('\x1b[' + term.rows + ';1H\x1b[?25l', () => {
         const target = resolveViewTarget();
-        fitRows();
+        const trimmed = fitRows();
         window.addEventListener('resize', fitRows);
-        applyViewTarget(target);
+        applyViewTarget(target, trimmed);
       });
     });
+
+    // 期待行 expectedY の近傍で、表示テキストが anchor に一致する行を探す（近い順。見つからなければ expectedY のまま）。
+    // 「末尾からの行数」は、本体の xterm が列数変更で履歴を折り返し直している・ピン留めのクリックから取得までに
+    // 出力が進んだ、といった場合に本体とずれる（Codex レビュー P2）。行のテキストで照合してその分を補正する。
+    const ANCHOR_SEARCH = 60;
+    function findAnchorRow(expectedY, anchor) {
+      if (!anchor) return expectedY;
+      const buf = term.buffer.active;
+      const textAt = (y) => {
+        const line = y >= 0 && y < buf.length ? buf.getLine(y) : null;
+        return line ? normalizeAnchor(line.translateToString(true)) : null;
+      };
+      for (let d = 0; d <= ANCHOR_SEARCH; d++) {
+        if (textAt(expectedY - d) === anchor) return expectedY - d;
+        if (d > 0 && textAt(expectedY + d) === anchor) return expectedY + d;
+      }
+      return expectedY;
+    }
 
     function resolveViewTarget() {
       const buf = term.buffer.active;
       const target = { topLine: null, selection: null };
       if (scrollUp > 0) {
-        target.topLine = Math.max(0, buf.baseY - scrollUp);
+        target.topLine = findAnchorRow(Math.max(0, buf.baseY - scrollUp), topAnchor);
       }
-      if (sel) {
-        const startY = buf.length - sel.startFromEnd;
-        const endY = buf.length - sel.endFromEnd;
+      if (sel && sel.startX < cols && sel.endX <= cols) {
+        const startY = findAnchorRow(buf.length - sel.startFromEnd, selAnchor);
+        const endY = startY + (sel.startFromEnd - sel.endFromEnd);
         const length = (endY * cols + sel.endX) - (startY * cols + sel.startX);
-        if (startY >= 0 && length > 0) {
+        if (startY >= 0 && endY < buf.length + (sel.endX === 0 ? 1 : 0) && length > 0) {
           target.selection = { x: sel.startX, y: startY, length };
         }
       }
       return target;
     }
 
-    function applyViewTarget(target) {
+    function applyViewTarget(target, trimmed) {
       if (target.selection) {
-        term.select(target.selection.x, target.selection.y, target.selection.length);
+        term.select(target.selection.x, target.selection.y - trimmed, target.selection.length);
       }
       if (target.topLine !== null) {
-        term.scrollToLine(Math.min(target.topLine, term.buffer.active.baseY));
+        term.scrollToLine(Math.max(0, Math.min(target.topLine - trimmed, term.buffer.active.baseY)));
       } else {
         term.scrollToBottom();
       }

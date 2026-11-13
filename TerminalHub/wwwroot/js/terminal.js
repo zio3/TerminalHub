@@ -1292,14 +1292,22 @@ window.terminalFunctions = {
         let url = '/terminal-snapshot.html?session=' + encodeURIComponent(sessionId) + '&fontSize=' + encodeURIComponent(fontSize);
         if (term) {
             const buf = term.buffer.active;
+            // 行の照合用に、その行の表示テキストも添える（ビューア側が行数の勘定のずれを補正する手掛かり。先頭 120 字）
+            const lineText = (y) => {
+                const line = buf.getLine(y);
+                return line ? line.translateToString(true).trim().slice(0, 120) : '';
+            };
             // 最下行まで見ている状態（追従中）なら 0。遡っていれば遡った行数
             const scrollUp = Math.max(0, buf.baseY - buf.viewportY);
-            if (scrollUp > 0) url += '&scrollUp=' + scrollUp;
+            if (scrollUp > 0) {
+                url += '&scrollUp=' + scrollUp + '&top=' + encodeURIComponent(lineText(buf.viewportY));
+            }
             if (term.hasSelection()) {
                 const pos = term.getSelectionPosition();
                 if (pos) {
                     // 選択の始点・終点（終点は排他）。y は末尾からの行数に直して渡す
-                    url += '&sel=' + [pos.start.x, buf.length - pos.start.y, pos.end.x, buf.length - pos.end.y].join(',');
+                    url += '&sel=' + [pos.start.x, buf.length - pos.start.y, pos.end.x, buf.length - pos.end.y].join(',')
+                        + '&selText=' + encodeURIComponent(lineText(pos.start.y));
                 }
             }
         }
