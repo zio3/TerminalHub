@@ -1277,14 +1277,42 @@ window.terminalFunctions = {
     // ターミナル表示の固定ビューア（wwwroot/terminal-snapshot.html）を別ウィンドウで開く。
     // Blazor の @onclick 経由（サーバー往復の後）だとユーザー操作の文脈が切れてポップアップブロックに掛かるため、
     // ボタンの素の onclick からここを同期で呼ぶ。サイズはいま表示中のターミナル領域に合わせる。
+    // いまのスクロール位置とマウス選択範囲もビューアに引き継ぐ（スクロールバックを遡って眺めていた箇所や、
+    // 選んでいた行をそのまま固定したい用途）。行は「バッファ最下行から何行上か」で渡す。本体とビューアは
+    // scrollback が同じ 5000 行で内容も同じ直列化なので末尾からの行数はそろうが、ビューア側の行数（rows）は
+    // ウィンドウ高さに合わせて変わるため、先頭からの絶対行では一致しない。
     openSnapshotWindow: function(sessionId) {
         const entry = window.multiSessionTerminals && window.multiSessionTerminals[sessionId];
-        const fontSize = entry && entry.terminal ? entry.terminal.options.fontSize : 14;
+        const term = entry && entry.terminal ? entry.terminal : null;
+        const fontSize = term ? term.options.fontSize : 14;
         const container = document.getElementById('terminal-' + sessionId);
         const rect = container ? container.getBoundingClientRect() : null;
         const width = Math.max(480, Math.round(rect ? rect.width + 24 : 1000));
         const height = Math.max(320, Math.round(rect ? rect.height + 40 : 700));
-        const url = '/terminal-snapshot.html?session=' + encodeURIComponent(sessionId) + '&fontSize=' + encodeURIComponent(fontSize);
+        let url = '/terminal-snapshot.html?session=' + encodeURIComponent(sessionId) + '&fontSize=' + encodeURIComponent(fontSize);
+        if (term) {
+            const buf = term.buffer.active;
+            // 行の照合用に、その行の表示テキストも添える（ビューア側が行数の勘定のずれを補正する手掛かり。先頭 120 文字）。
+            // 正規化はビューア側（terminal-snapshot.html の normalizeAnchor）と同じにする。切り出しはコードポイント単位
+            //（String.slice だとサロゲートペアの絵文字を割って encodeURIComponent が URIError になる）
+            const lineText = (y) => {
+                const line = buf.getLine(y);
+                return line ? Array.from(line.translateToString(true).trim()).slice(0, 120).join('') : '';
+            };
+            // 最下行まで見ている状態（追従中）なら 0。遡っていれば遡った行数
+            const scrollUp = Math.max(0, buf.baseY - buf.viewportY);
+            if (scrollUp > 0) {
+                url += '&scrollUp=' + scrollUp + '&top=' + encodeURIComponent(lineText(buf.viewportY));
+            }
+            if (term.hasSelection()) {
+                const pos = term.getSelectionPosition();
+                if (pos) {
+                    // 選択の始点・終点（終点は排他）。y は末尾からの行数に直して渡す
+                    url += '&sel=' + [pos.start.x, buf.length - pos.start.y, pos.end.x, buf.length - pos.end.y].join(',')
+                        + '&selText=' + encodeURIComponent(lineText(pos.start.y));
+                }
+            }
+        }
         const features = 'popup,noopener,noreferrer,width=' + width + ',height=' + height;
         window.open(url, '_blank', features);
     },
