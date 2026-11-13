@@ -1292,10 +1292,12 @@ window.terminalFunctions = {
         let url = '/terminal-snapshot.html?session=' + encodeURIComponent(sessionId) + '&fontSize=' + encodeURIComponent(fontSize);
         if (term) {
             const buf = term.buffer.active;
-            // 行の照合用に、その行の表示テキストも添える（ビューア側が行数の勘定のずれを補正する手掛かり。先頭 120 字）
+            // 行の照合用に、その行の表示テキストも添える（ビューア側が行数の勘定のずれを補正する手掛かり。先頭 120 文字）。
+            // 正規化はビューア側（terminal-snapshot.html の normalizeAnchor）と同じにする。切り出しはコードポイント単位
+            //（String.slice だとサロゲートペアの絵文字を割って encodeURIComponent が URIError になる）
             const lineText = (y) => {
                 const line = buf.getLine(y);
-                return line ? line.translateToString(true).trim().slice(0, 120) : '';
+                return line ? Array.from(line.translateToString(true).trim()).slice(0, 120).join('') : '';
             };
             // 最下行まで見ている状態（追従中）なら 0。遡っていれば遡った行数
             const scrollUp = Math.max(0, buf.baseY - buf.viewportY);
