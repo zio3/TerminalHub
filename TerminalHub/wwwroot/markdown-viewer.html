@@ -26,9 +26,12 @@
   #name { color: var(--head); font-weight: 600; font-size: 13px; }
   #path { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
   #status { flex: 0 0 auto; }
+  #width { flex: 0 0 auto; cursor: pointer; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; font: inherit; font-size: 12px; }
+  #width:hover { color: var(--head); border-color: var(--muted); }
   #status.live::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #23d18b; margin-right: 5px; vertical-align: 1px; }
   #status.stale::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #f5f543; margin-right: 5px; vertical-align: 1px; }
   #doc { flex: 1 1 auto; max-width: 920px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px 16px 48px; }
+  body.wide #doc { max-width: none; padding-left: 32px; padding-right: 32px; }
   #msg { padding: 24px 16px; font-size: 14px; color: var(--muted); }
   #msg.err { color: #f14c4c; }
 
@@ -37,15 +40,19 @@
   #doc h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
   #doc h3 { font-size: 1.2em; }
   #doc h1:first-child, #doc h2:first-child { margin-top: 0.2em; }
-  #doc p, #doc ul, #doc ol, #doc table, #doc pre, #doc blockquote { margin: 0 0 1em; }
+  #doc p, #doc ul, #doc ol, #doc .table-wrap, #doc pre, #doc blockquote { margin: 0 0 1em; }
   #doc a { color: var(--link); text-decoration: none; }
   #doc a:hover { text-decoration: underline; }
   #doc code { font-family: 'Cascadia Mono', Consolas, 'Courier New', monospace; font-size: 0.9em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
   #doc pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
   #doc pre code { background: none; padding: 0; font-size: 0.88em; }
   #doc blockquote { border-left: 4px solid var(--border); color: var(--muted); padding: 0.1em 1em; margin-left: 0; }
-  #doc table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+  /* 表は描画後に .table-wrap で包み、幅が足りなければ横スクロールさせる（表自体を display:block にすると
+     列幅が本文幅に押し込められ、短い列が 1 文字幅まで潰れる）。短いセルは折り返さない（render で付与） */
+  #doc .table-wrap { overflow-x: auto; max-width: 100%; }
+  #doc table { border-collapse: collapse; }
   #doc th, #doc td { border: 1px solid var(--border); padding: 6px 10px; vertical-align: top; }
+  #doc th.nowrap, #doc td.nowrap { white-space: nowrap; }
   #doc th { background: var(--code-bg); color: var(--head); }
   #doc tr:nth-child(even) td { background: rgba(255, 255, 255, 0.025); }
   #doc hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
@@ -57,7 +64,7 @@
 </style>
 </head>
 <body>
-<div id="bar"><span id="name"></span><span id="path"></span><span id="status"></span></div>
+<div id="bar"><span id="name"></span><span id="path"></span><button id="width" type="button"></button><span id="status"></span></div>
 <div id="doc"></div>
 <script>
 (function () {
@@ -71,6 +78,23 @@
   let loaded = false;     // 一度でも描画できたか（以降のエラーは表示を壊さず状態表示だけにする）
   let lastStatus = '';    // 直近の正常状態の表示（一時エラーから復旧したときに戻す）
   let timer = null;
+
+  // 本文の幅: 既定は読みやすさ優先の固定幅（920px）。幅の広い表が多い文書向けにウィンドウ全幅へ切り替えられる。
+  // 選択はこのブラウザに記憶する（ビューアは別ウィンドウで毎回開き直すため）。
+  const WIDE_KEY = 'terminalhub.markdown-viewer.wide';
+  function applyWide(wide) {
+    document.body.classList.toggle('wide', wide);
+    $('width').textContent = wide ? '\u5e45: \u5168\u5e45' : '\u5e45: \u56fa\u5b9a';
+    $('width').title = wide ? '\u56fa\u5b9a\u5e45\u306b\u3059\u308b' : '\u30a6\u30a3\u30f3\u30c9\u30a6\u306e\u5168\u5e45\u3067\u8868\u793a\u3059\u308b';
+  }
+  let wideMode = false;
+  try { wideMode = localStorage.getItem(WIDE_KEY) === '1'; } catch { /* 保存できない環境では既定のまま */ }
+  applyWide(wideMode);
+  $('width').addEventListener('click', () => {
+    wideMode = !wideMode;
+    applyWide(wideMode);
+    try { localStorage.setItem(WIDE_KEY, wideMode ? '1' : '0'); } catch { /* 同上 */ }
+  });
 
   function showMessage(text, isError) {
     const doc = $('doc');
@@ -121,6 +145,18 @@
       if (href.startsWith('#')) return;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+    });
+    // 表: 横スクロール用のラッパーで包み、短いセル（数値・パス・短い語句）は折り返さない。
+    // ブラウザの自動レイアウトは長文の列に幅を全部渡すため、何もしないと短い列が 1 文字ずつ縦に並んでしまう。
+    // 長いセルはこれまでどおり折り返す（全部 nowrap にすると長文の行が横に伸び切るため）。
+    doc.querySelectorAll('table').forEach((table) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+      table.querySelectorAll('th, td').forEach((cell) => {
+        if (Array.from(cell.textContent.trim()).length <= 40) cell.classList.add('nowrap');
+      });
     });
 
     if (loaded && atBottom) {
