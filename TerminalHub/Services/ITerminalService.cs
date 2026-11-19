@@ -56,5 +56,11 @@ namespace TerminalHub.Services
         /// ターミナルの表示をリフレッシュする（バッファ復元後の表示更新用）
         /// </summary>
         Task RefreshTerminalAsync(Guid sessionId);
+
+        /// <summary>
+        /// 診断用: ブラウザ側 xterm の実状態（表示位置・行数・全行の平文・直近イベント履歴）を取り出す。
+        /// ターミナルが無ければ Available=false のものを返す。
+        /// </summary>
+        Task<TerminalClientDiagnostics?> CaptureClientDiagnosticsAsync(Guid sessionId);
     }
 }

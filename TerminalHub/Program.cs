@@ -25,6 +25,7 @@ var logsFolder = AppDataPaths.GetLogsFolder(
 var logPath = Path.Combine(logsFolder, "terminalhub-.log");
 // 生チャンクリングの自動ダンプ保存先（logs[-dev]\raw-ring\。xterm 崩れ調査用）
 RawRingDump.LogsFolder = logsFolder;
+TerminalDiagnosticsDump.LogsFolder = logsFolder;
 builder.Host.UseSerilog((context, configuration) =>
 {
     // シンクは Async でラップする（フリーズ調査の実験を兼ねた対策）。

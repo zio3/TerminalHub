@@ -231,7 +231,8 @@ h1:focus {
 }
 
 .terminal-redraw-btn,
-.terminal-snapshot-btn {
+.terminal-snapshot-btn,
+.terminal-diag-btn {
     position: absolute;
     top: 4px;
     right: 10px;
@@ -249,13 +250,15 @@ h1:focus {
 }
 
 .terminal-redraw-btn:hover,
-.terminal-snapshot-btn:hover {
+.terminal-snapshot-btn:hover,
+.terminal-diag-btn:hover {
     opacity: 0.9;
     background-color: rgba(255, 255, 255, 0.08);
 }
 
 .terminal-redraw-btn:focus,
-.terminal-snapshot-btn:focus {
+.terminal-snapshot-btn:focus,
+.terminal-diag-btn:focus {
     outline: none;
     opacity: 0.9;
 }
@@ -263,6 +266,11 @@ h1:focus {
 /* 固定ビューアのボタンは再描画ボタンの左隣。見た目は同じ（通常ほぼ透明・hover で出現） */
 .terminal-snapshot-btn {
     right: 36px;
+}
+
+/* 診断ボタンはさらにその左隣（再描画・固定ビューア・診断の順に右から並ぶ） */
+.terminal-diag-btn {
+    right: 62px;
 }
 
 /* ===========================================
