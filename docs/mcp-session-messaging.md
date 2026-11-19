@@ -4,6 +4,8 @@ TerminalHub 本体プロセスに HTTP MCP サーバーを同居させ、**別�
 
 主なユースケース: **Claude で仕様を書いてファイル化し、その絶対パスを Codex のセッションへ送って実装させる** といったエージェント間の受け渡し（オーケストレーション）。
 
+> **Claude Code 公式のセッション間メッセージングとの棲み分け**（2026-11 時点）: Claude Code には公式の cross-session messaging（`ListAgents` / `SendMessage`、入力時の `@` 宛先指定）があり、ネイティブ Windows も v2.1.234 以降で対応済み（同一 PC 内は名前付きパイプ。WSL2 内とネイティブ Windows のセッション同士は届かない）。**Claude Code 同士で同じ PC 内なら公式で足りる。** TerminalHub の MCP を使う意味があるのは、Codex など**異種 CLI が混在する**場合（TUI の入力欄へ書いて Enter を押す配送なので相手の種類を問わない）、依頼単位の**完了通知**（contextId）が要る場合、**配送台帳**（`get_delivery`）で真偽を検証したい場合、セッション一覧・メモ・自己紹介カードといった **TerminalHub の UI と一体の情報**を AI に読み書きさせたい場合。公式ドキュメント: https://code.claude.com/docs/en/cross-session-messaging
+
 ---
 
 ## 設計方針（最小構成）
