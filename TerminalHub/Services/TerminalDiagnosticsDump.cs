@@ -55,6 +55,40 @@ namespace TerminalHub.Services
     /// </summary>
     public static class TerminalDiagnosticsDump
     {
+        /// <summary>
+        /// サーバー側の証拠を「ボタンを押した瞬間」に固定したもの。ブラウザ側の本文はチャンクで何往復もして
+        /// 取り出すため、その間に出力が進むとエミュレータ画面と生出力リングが別の時点になってしまう
+        /// （大量出力ではリングから追い出されもする）。先に <see cref="CaptureServer"/> で写しを取り、
+        /// 保存時はその写しを使う（Codex レビュー P2）。
+        /// </summary>
+        public sealed class ServerSnapshot
+        {
+            public DateTime CapturedAt { get; init; }
+            public string Replay { get; init; } = "";
+            public string? RawRingJson { get; init; }
+            public int Cols { get; init; }
+            public int Rows { get; init; }
+            public int ReplayChars { get; init; }
+            public int? RawRingEntries { get; init; }
+        }
+
+        /// <summary>サーバー側の証拠を今この時点で写し取る。ブラウザ側の取得（await）より前に呼ぶこと。</summary>
+        public static ServerSnapshot CaptureServer(SessionInfo session)
+        {
+            var (cols, rows) = session.TerminalBufferSize2D;
+            var export = RawRingExport.Build(session);
+            return new ServerSnapshot
+            {
+                CapturedAt = DateTime.Now,
+                Replay = session.GetTerminalBuffer(),
+                RawRingJson = export != null ? RawRingExport.Serialize(export) : null,
+                Cols = cols,
+                Rows = rows,
+                ReplayChars = session.TerminalBufferSize,
+                RawRingEntries = session.TerminalRawRing?.Count,
+            };
+        }
+
         /// <summary>保存先ルート（ログフォルダ）。Program.cs 起動時に設定する。未設定なら何もしない。</summary>
         public static string? LogsFolder { get; set; }
 
@@ -72,7 +106,7 @@ namespace TerminalHub.Services
         /// <summary>
         /// セッションの診断一式をフォルダに書き出し、そのパスを返す。失敗したら null。
         /// </summary>
-        public static string? WriteBundle(SessionInfo session, TerminalClientDiagnostics? client, string reason)
+        public static string? WriteBundle(SessionInfo session, ServerSnapshot server, TerminalClientDiagnostics? client, string reason)
         {
             try
             {
@@ -88,12 +122,10 @@ namespace TerminalHub.Services
                     var folder = Path.Combine(root, $"diag-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{shortId}-{reason}");
                     Directory.CreateDirectory(folder);
 
-                    File.WriteAllText(Path.Combine(folder, "emulator-replay.txt"), session.GetTerminalBuffer());
-
-                    var export = RawRingExport.Build(session);
-                    if (export != null)
+                    File.WriteAllText(Path.Combine(folder, "emulator-replay.txt"), server.Replay);
+                    if (server.RawRingJson != null)
                     {
-                        File.WriteAllText(Path.Combine(folder, "rawring.json"), RawRingExport.Serialize(export));
+                        File.WriteAllText(Path.Combine(folder, "rawring.json"), server.RawRingJson);
                     }
 
                     if (client?.Text != null)
@@ -105,20 +137,21 @@ namespace TerminalHub.Services
                         File.WriteAllText(Path.Combine(folder, "client-events.json"), JsonSerializer.Serialize(events, JsonOptions));
                     }
 
-                    var (cols, rows) = session.TerminalBufferSize2D;
                     var state = new
                     {
-                        capturedAt = DateTime.Now,
+                        // サーバー側の写しを取った時刻（ボタン押下の瞬間）。ブラウザ側の取得完了はこれより後
+                        capturedAt = server.CapturedAt,
+                        writtenAt = DateTime.Now,
                         reason,
                         sessionId = session.SessionId,
                         name = session.GetDisplayName(),
                         terminalType = session.TerminalType.ToString(),
                         server = new
                         {
-                            cols,
-                            rows,
-                            replayChars = session.TerminalBufferSize,
-                            rawRingEntries = session.TerminalRawRing?.Count,
+                            cols = server.Cols,
+                            rows = server.Rows,
+                            replayChars = server.ReplayChars,
+                            rawRingEntries = server.RawRingEntries,
                             hasExited = session.ConPtySession?.HasExited,
                             processingStatus = session.ProcessingStatus,
                             isWaitingForUserInput = session.IsWaitingForUserInput,

@@ -3628,6 +3628,9 @@
         _diagCapturing = true;
         try
         {
+            // サーバー側の証拠はブラウザ側の取得（何往復もする）より先に写し取る。取得中も出力は進むため、
+            // 後から読むと xterm の本文と別の時点の画面になってしまう
+            var server = TerminalDiagnosticsDump.CaptureServer(session);
             TerminalClientDiagnostics? client = null;
             try
             {
@@ -3639,7 +3642,7 @@
                 Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
             }
 
-            var folder = TerminalDiagnosticsDump.WriteBundle(session, client, "manual");
+            var folder = TerminalDiagnosticsDump.WriteBundle(session, server, client, "manual");
             if (folder != null)
             {
                 Logger.LogInformation("[Diag] 診断ダンプを保存: {Folder} (xterm viewportY={ViewportY} baseY={BaseY} length={Length})",
