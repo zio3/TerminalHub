@@ -276,6 +276,8 @@ window.flowControlManager = new FlowControlManager();
 // なので、数分前の遷移が残っていることを最優先にしている。
 class TerminalDiagTrail {
     constructor() {
+        // 設定「開発ツール > ターミナル診断」。false の間は push が何もしない（Root が起動時と保存時に setEnabled する）。
+        this.enabled = false;
         this.max = 1000;
         this.trails = {};
         // セッション別の追従状態: atBottom(直近の scroll で最下部にいたか) / lastWheelAt / lastWriteAt と、
@@ -292,7 +294,15 @@ class TerminalDiagTrail {
         }
         return s;
     }
+    setEnabled(enabled) {
+        this.enabled = !!enabled;
+        if (!this.enabled) {
+            this.trails = {};
+            this.states = {};
+        }
+    }
     push(sessionId, type, detail) {
+        if (!this.enabled) return null;
         let list = this.trails[sessionId];
         if (!list) { list = this.trails[sessionId] = []; }
         if (type !== 'scrolls' && type !== 'wheel' && type !== 'writes') {
@@ -378,6 +388,9 @@ class TerminalDiagTrail {
     }
 }
 window.terminalDiagTrail = new TerminalDiagTrail();
+window.setTerminalDiagEnabled = function (enabled) {
+    window.terminalDiagTrail.setEnabled(enabled);
+};
 
 // WebGL コンテキスト生存数トラッカー（診断用・加算のみ）。
 // xterm の WebglAddon はターミナルごとに WebGL コンテキストを1個持つ。開いたターミナルが

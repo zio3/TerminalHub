@@ -118,3 +118,9 @@
 - エンドポイント: `Program.cs`（`/api/debug/raw-ring`）
 - テスト: `TerminalHub.Terminal.Tests/RawChunkRingTests.cs`
   （リング動作＋孤児フラグメント現象の再現・防御経路の回帰）
+
+## 有効化（2026-11-28 以降）
+
+リングの記録・`/api/debug/raw-ring`・ターミナル右上の「この画面を保存」ボタン・ブラウザ側のイベント履歴は、
+設定「特殊 > 開発ツール > ターミナル診断を有効にする」が ON のときだけ動く（`DevTools.TerminalDiagnostics`、既定 OFF）。
+OFF の間は `RawChunkRing.CaptureEnabled=false` で何も溜まらず、再同期時の自動保存も行わない。調査するときは先に ON にしてから再現させること。

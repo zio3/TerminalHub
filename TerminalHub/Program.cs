@@ -296,6 +296,8 @@ app.Logger.LogInformation("[DB] 使用するDB: Environment={Environment}, FullP
 
     // 生ストリームキャプチャの永続設定も起動時に反映（設定画面を開くまで効かない、を避ける）
     app.Services.GetRequiredService<IRawStreamCaptureService>().SetEnabled(appSettings.DevTools.CaptureRawStream);
+    // ターミナル診断（生出力リングの記録）も同様に起動時に反映。開発ツール OFF なら単独 ON でも効かない
+    TerminalHub.Terminal.RawChunkRing.CaptureEnabled = appSettings.DevTools.Enabled && appSettings.DevTools.TerminalDiagnostics;
 }
 
 // Configure the HTTP request pipeline.
@@ -570,14 +572,24 @@ app.MapGet("/api/terminal/{sessionId:guid}/markdown", (Guid sessionId, string? p
 
 // 診断用: 生チャンクリングのダンプ取得（xterm 表示崩れの事後調査。docs/raw-chunk-ring.md 参照）。
 // 一覧でセッションを確認し、崩れたセッションの GUID を指定して取り出す。
+// いずれも設定「開発ツール > ターミナル診断」が ON のときだけ応答する（OFF の間はリングに何も溜まらない）
+const string rawRingDisabledMessage = "ターミナル診断が無効です（設定 > 特殊 > 開発ツール > ターミナル診断 を ON にしてください）";
 app.MapGet("/api/debug/raw-ring", (ISessionManager sessionManager) =>
 {
+    if (!TerminalHub.Terminal.RawChunkRing.CaptureEnabled)
+    {
+        return Results.NotFound(rawRingDisabledMessage);
+    }
     var lines = sessionManager.GetAllSessions()
         .Select(s => $"{s.SessionId}  entries={s.TerminalRawRing?.Count ?? 0}  {s.GetDisplayName()}");
     return Results.Text(string.Join(Environment.NewLine, lines), "text/plain; charset=utf-8");
 });
 app.MapGet("/api/debug/raw-ring/{sessionId:guid}", (Guid sessionId, ISessionManager sessionManager) =>
 {
+    if (!TerminalHub.Terminal.RawChunkRing.CaptureEnabled)
+    {
+        return Results.NotFound(rawRingDisabledMessage);
+    }
     var session = sessionManager.GetSessionInfo(sessionId);
     var ring = session?.TerminalRawRing;
     if (session == null || ring == null)
@@ -594,6 +606,10 @@ app.MapGet("/api/debug/raw-ring/{sessionId:guid}", (Guid sessionId, ISessionMana
 // wwwroot/rawring-replay.html に読み込ませれば TerminalHub 本体なしで同じ絵を再現できる。
 app.MapGet("/api/debug/raw-ring/{sessionId:guid}/export", (Guid sessionId, ISessionManager sessionManager) =>
 {
+    if (!TerminalHub.Terminal.RawChunkRing.CaptureEnabled)
+    {
+        return Results.NotFound(rawRingDisabledMessage);
+    }
     var session = sessionManager.GetSessionInfo(sessionId);
     if (session == null)
     {
@@ -616,6 +632,10 @@ app.MapGet("/api/debug/raw-ring/{sessionId:guid}/export", (Guid sessionId, ISess
 // タイミング依存（レース・xterm の書き込みキュー消化との交錯等）の崩れを検証する用途。
 app.MapPost("/api/debug/raw-ring/{sessionId:guid}/replay", (Guid sessionId, string? pacing, ISessionManager sessionManager) =>
 {
+    if (!TerminalHub.Terminal.RawChunkRing.CaptureEnabled)
+    {
+        return Results.NotFound(rawRingDisabledMessage);
+    }
     var session = sessionManager.GetSessionInfo(sessionId);
     if (session?.TerminalRawRing == null)
     {

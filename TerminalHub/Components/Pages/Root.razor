@@ -56,7 +56,8 @@
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
                 OnAutoSwitchCursorPadChanged="HandleAutoSwitchCursorPadChanged"
                 OnAlwaysShowCursorPadChanged="HandleAlwaysShowCursorPadChanged"
-                OnThemeChanged="HandleThemeChanged" />
+                OnThemeChanged="HandleThemeChanged"
+                OnTerminalDiagnosticsChanged="HandleTerminalDiagnosticsChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog"
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -184,14 +185,17 @@
                     </button>
                     @* 診断用「この画面を保存」。表示がおかしいと感じた瞬間に押すと、xterm の実バッファ・
                        エミュレータの画面・生出力リング・直近イベント履歴をログフォルダ配下 diag/ へ 1 束で残す。
-                       表示には何も影響しない（読み取りだけ）。 *@
-                    <button type="button"
-                            class="terminal-diag-btn"
-                            title="@L["Root.Terminal.Diag.Title"]"
-                            disabled="@_diagCapturing"
-                            @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
-                        <i class="bi bi-camera"></i>
-                    </button>
+                       表示には何も影響しない（読み取りだけ）。設定「開発ツール > ターミナル診断」が ON のときだけ出す。 *@
+                    @if (terminalDiagEnabled)
+                    {
+                        <button type="button"
+                                class="terminal-diag-btn"
+                                title="@L["Root.Terminal.Diag.Title"]"
+                                disabled="@_diagCapturing"
+                                @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
+                            <i class="bi bi-camera"></i>
+                        </button>
+                    }
                 }
             </div>
 
@@ -631,6 +635,7 @@
                 contextCacheAware = appSettings.Sessions.ContextCacheAware;
                 contextMinSizeK = ClampContextMinSizeK(appSettings.Sessions.ContextMinSizeK);
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
+                terminalDiagEnabled = appSettings.DevTools.Enabled && appSettings.DevTools.TerminalDiagnostics;
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
                 // PC とモバイルで別々のフォントサイズ等を持てるようにするため。
@@ -643,6 +648,8 @@
                 await JSRuntime.InvokeVoidAsync("setTerminalLinkCopyMode", localDisplay?.TerminalLinkCopyMode ?? false);
                 // .md クリックをビューアで開くか（このデバイス専用、既定 ON）を JS 側へ反映
                 await JSRuntime.InvokeVoidAsync("setMarkdownViewerEnabled", localDisplay?.MarkdownViewerEnabled ?? true);
+                // ターミナル診断（開発ツール）の ON/OFF を JS 側の履歴記録へ反映
+                await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", terminalDiagEnabled);
                 if (localDisplay == null)
                 {
                     // 初回アクセス: 現在のサーバー側設定をこのデバイスの初期値として保存
@@ -2585,7 +2592,7 @@
 
             // 再同期＝xterm への注入の瞬間は表示崩れ（分断シーケンスの孤児化）が起きうる容疑区間なので、
             // 生チャンクリングをこのタイミングで自動保存し、後からリングが流れて証拠を失うのを防ぐ
-            var dumpPath = RawRingDump.WriteDump(session, "resync");
+            var dumpPath = TerminalHub.Terminal.RawChunkRing.CaptureEnabled ? RawRingDump.WriteDump(session, "resync") : null;
             if (dumpPath != null)
             {
                 Logger.LogInformation("[RawRing] 再同期時の生チャンクリングを保存: {Path}", dumpPath);
@@ -3615,6 +3622,22 @@
     // 取得中はボタンを無効にして再入を防ぐ（本文のチャンク取得が終わる前に再度押されると
     // JS 側の保留が差し替わり、先行分が途中で失敗する）
     private bool _diagCapturing;
+    // 設定「開発ツール > ターミナル診断」。OFF の間は保存ボタンを出さず、JS 側の履歴も記録しない
+    private bool terminalDiagEnabled;
+
+    private async Task HandleTerminalDiagnosticsChanged(bool enabled)
+    {
+        terminalDiagEnabled = enabled;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", enabled);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "[Diag] JS 側の有効化切替に失敗（無視）");
+        }
+        StateHasChanged();
+    }
 
     private async Task CaptureTerminalDiagnostics(Guid sessionId)
     {
