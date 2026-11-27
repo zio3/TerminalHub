@@ -456,6 +456,39 @@ public sealed class VtParser
                 case 2004:
                     _grid.BracketedPaste = set;
                     break;
+                case 1:
+                    _grid.ApplicationCursorKeys = set;
+                    break;
+                case 1004:
+                    _grid.FocusEvents = set;
+                    break;
+                case 9:
+                case 1000:
+                case 1002:
+                case 1003:
+                    // xterm と同じく有効なプロトコルは 1 つ。別のプロトコルの解除は現在の有効状態を変えない
+                    if (set)
+                    {
+                        _grid.MouseProtocol = mode;
+                    }
+                    else if (_grid.MouseProtocol == mode)
+                    {
+                        _grid.MouseProtocol = 0;
+                    }
+                    break;
+                case 1005:
+                case 1006:
+                case 1015:
+                case 1016:
+                    if (set)
+                    {
+                        _grid.MouseEncoding = mode;
+                    }
+                    else if (_grid.MouseEncoding == mode)
+                    {
+                        _grid.MouseEncoding = 0;
+                    }
+                    break;
                 case 47:
                 case 1047:
                 case 1049:
@@ -468,7 +501,7 @@ public sealed class VtParser
                         _grid.ExitAltScreen();
                     }
                     break;
-                    // 1000系(マウス) 等は状態に影響しないので無視
+                    // それ以外（?7 自動折返し、?12 点滅 等）は未対応
             }
         }
     }

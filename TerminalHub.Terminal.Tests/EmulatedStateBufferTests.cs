@@ -319,6 +319,38 @@ public class EmulatedStateBufferTests
         Assert.Contains("\x1b[?2004l", buf.SerializeForReplay());
     }
 
+    [Fact]
+    public void Mouse_and_input_modes_are_restored_and_cleared_by_RIS()
+    {
+        var buf = Create();
+        var replay = buf.SerializeForReplay();
+        Assert.DoesNotContain("[?1h", replay); // 既定（無効）は出さない
+        Assert.DoesNotContain("[?100", replay);
+
+        // Codex TUI 風: ボタン追跡 + SGR 符号化 + フォーカス通知 + アプリケーションカーソルキー
+        buf.Append("\x1b[?1002h\x1b[?1006h\x1b[?1004h\x1b[?1h");
+        replay = buf.SerializeForReplay();
+        Assert.Contains("\x1b[?1002h", replay);
+        Assert.Contains("\x1b[?1006h", replay);
+        Assert.Contains("\x1b[?1004h", replay);
+        Assert.Contains("\x1b[?1h", replay);
+
+        // 別のプロトコルの解除は有効状態を変えない。有効なプロトコル自身の解除で無効になる
+        buf.Append("\x1b[?1000l");
+        Assert.Contains("\x1b[?1002h", buf.SerializeForReplay());
+        buf.Append("\x1b[?1002l");
+        Assert.DoesNotContain("[?1002h", buf.SerializeForReplay());
+
+        // RIS で全部既定へ
+        buf.Append("\x1b[?1003h");
+        buf.Append("\u001bc");
+        replay = buf.SerializeForReplay();
+        Assert.DoesNotContain("[?1003h", replay);
+        Assert.DoesNotContain("[?1006h", replay);
+        Assert.DoesNotContain("[?1004h", replay);
+        Assert.DoesNotContain("[?1h", replay);
+    }
+
     // ---- alt-screen ----
 
     [Fact]

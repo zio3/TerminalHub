@@ -48,6 +48,25 @@ public static class AnsiSerializer
 
         // bracketed paste（xterm 側のモード。RIS や新規 xterm では既定の無効に戻っているので元の値へ）
         sb.Append(grid.BracketedPaste ? "\x1b[?2004h" : "\x1b[?2004l");
+        // アプリケーションカーソルキー・フォーカス通知・マウス追跡も同じ理由で復元する。復元先は新規 xterm か
+        // RIS 直後（いずれも既定＝無効）なので、有効なものだけ出す。固定ビューア（terminal-snapshot.html）は
+        // 読み取り専用なので流し込み後にこれらを自分で解除する（マウス追跡が残ると文字選択が効かなくなる）。
+        if (grid.ApplicationCursorKeys)
+        {
+            sb.Append("\x1b[?1h");
+        }
+        if (grid.FocusEvents)
+        {
+            sb.Append("\x1b[?1004h");
+        }
+        if (grid.MouseProtocol != 0)
+        {
+            sb.Append("\x1b[?").Append(grid.MouseProtocol).Append('h');
+        }
+        if (grid.MouseEncoding != 0)
+        {
+            sb.Append("\x1b[?").Append(grid.MouseEncoding).Append('h');
+        }
 
         // カーソル表示状態
         sb.Append(grid.CursorVisible ? "\x1b[?25h" : "\x1b[?25l");
