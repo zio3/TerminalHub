@@ -466,28 +466,13 @@ public sealed class VtParser
                 case 1000:
                 case 1002:
                 case 1003:
-                    // xterm と同じく有効なプロトコルは 1 つ。別のプロトコルの解除は現在の有効状態を変えない
-                    if (set)
-                    {
-                        _grid.MouseProtocol = mode;
-                    }
-                    else if (_grid.MouseProtocol == mode)
-                    {
-                        _grid.MouseProtocol = 0;
-                    }
+                    // xterm.js と同じ意味論: 有効なプロトコルは 1 つで、どのプロトコルの l でも無効になる
+                    _grid.MouseProtocol = set ? mode : 0;
                     break;
-                case 1005:
                 case 1006:
-                case 1015:
                 case 1016:
-                    if (set)
-                    {
-                        _grid.MouseEncoding = mode;
-                    }
-                    else if (_grid.MouseEncoding == mode)
-                    {
-                        _grid.MouseEncoding = 0;
-                    }
+                    // 同上。1005(UTF-8) と 1015(urxvt) は xterm.js 6 が h/l とも無視するので追跡しない
+                    _grid.MouseEncoding = set ? mode : 0;
                     break;
                 case 47:
                 case 1047:

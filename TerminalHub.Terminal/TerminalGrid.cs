@@ -34,11 +34,11 @@ public sealed class TerminalGrid
     public bool BracketedPaste { get; set; }
     // 同じく xterm 側の入力モード。RIS で xterm が既定へ戻すため、直列化で CLI が要求していた状態に戻す。
     // マウスは xterm と同じく「有効なプロトコルは 1 つ」（9 / 1000 / 1002 / 1003、0=無効）と
-    // 「座標の符号化は 1 つ」（1005 / 1006 / 1015 / 1016、0=既定）で持つ。
+    // 「座標の符号化は 1 つ」（1006 / 1016、0=既定。1005 / 1015 は xterm.js が無視するので追跡しない）で持つ。
     public bool ApplicationCursorKeys { get; set; }   // ?1
     public bool FocusEvents { get; set; }             // ?1004
     public int MouseProtocol { get; set; }            // ?9 / ?1000 / ?1002 / ?1003
-    public int MouseEncoding { get; set; }            // ?1005 / ?1006 / ?1015 / ?1016
+    public int MouseEncoding { get; set; }            // ?1006 / ?1016
 
     // 現在の描画スタイル（SGR）
     public CellColor CurrentFg;

@@ -335,11 +335,20 @@ public class EmulatedStateBufferTests
         Assert.Contains("\x1b[?1004h", replay);
         Assert.Contains("\x1b[?1h", replay);
 
-        // 別のプロトコルの解除は有効状態を変えない。有効なプロトコル自身の解除で無効になる
+        // xterm.js と同じく、どのプロトコルの l でも無効になる（1002h の後の 1000l で追跡は止まる）
         buf.Append("\x1b[?1000l");
-        Assert.Contains("\x1b[?1002h", buf.SerializeForReplay());
-        buf.Append("\x1b[?1002l");
         Assert.DoesNotContain("[?1002h", buf.SerializeForReplay());
+
+        // 1005 / 1015 は xterm.js が無視するので、有効な 1006 を上書きしない
+        buf.Append("\x1b[?1005h\x1b[?1015h");
+        replay = buf.SerializeForReplay();
+        Assert.Contains("\x1b[?1006h", replay);
+        Assert.DoesNotContain("[?1005h", replay);
+        Assert.DoesNotContain("[?1015h", replay);
+        // 符号化もどの l でも既定へ（1006h の後の 1016l）
+        buf.Append("\x1b[?1016l");
+        Assert.DoesNotContain("[?1006h", buf.SerializeForReplay());
+        buf.Append("\x1b[?1006h");
 
         // RIS で全部既定へ
         buf.Append("\x1b[?1003h");

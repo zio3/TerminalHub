@@ -172,7 +172,7 @@
     // 流し込みの末尾には本体が CLI から受けた入力モード（マウス追跡 ?1000 系・フォーカス通知 ?1004・bracketed paste ?2004・
     // アプリケーションカーソルキー ?1）の復元が含まれる。ここは読み取り専用なので全部解除する（マウス追跡が残ると
     // ドラッグが選択ではなくマウスイベント扱いになり、文字を選べなくなる）。
-    const dropInputModes = '\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l\x1b[?1004l\x1b[?2004l\x1b[?1l';
+    const dropInputModes = '\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1016l\x1b[?1004l\x1b[?2004l\x1b[?1l';
     term.write(data.content || '', () => {
       term.write(dropInputModes + '\x1b[' + term.rows + ';1H\x1b[?25l', () => {
         const target = resolveViewTarget();
