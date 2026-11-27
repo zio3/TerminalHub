@@ -324,6 +324,7 @@ class TerminalDiagTrail {
     // 直近の入力操作（mousedown / keydown / touchstart 等）。履歴には積まず状態として覚え、
     // 追従遷移（detach / reattach）に「直前に何を触っていたか」として添える。
     pushInput(sessionId, detail) {
+        if (!this.enabled) return;
         this.state(sessionId).lastInput = Object.assign({ at: Date.now() }, detail || {});
     }
     // xterm の onScroll。最下部追従の遷移は単独で残し、それ以外は 2 秒以内の連続分を 1 件にまとめる
@@ -1197,6 +1198,9 @@ window.terminalFunctions = {
                 return d;
             };
             term.onScroll((ydisp) => {
+                // 診断 OFF（設定「開発ツール > ターミナル診断」）では何も採らない。スタック採取は onScroll ごとに
+                // 走ると出力中のコストになるので、ここで止める
+                if (!diagTrail.enabled) return;
                 const buf = term.buffer.active;
                 // 同期的に引き起こした DOM イベント（window.event）と呼び出し元の数フレーム。
                 // 追従遷移のときだけ記録に残る（pushScroll 側で判定）。
