@@ -583,6 +583,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // ターミナル診断の ON/OFF を JS 側へ送れていなければ送り直す（切断中に別タブで切り替わった、
+        // 切替通知の JS 呼び出しが失敗した等。再接続後の最初の描画で追いつく。初回は設定読込側で送る）
+        if (!firstRender && !_disposed && _terminalDiagJsValue != terminalDiagEnabled)
+        {
+            await SyncTerminalDiagToJsAsync();
+        }
         if (firstRender)
         {
             // キーボードショートカットを登録
@@ -655,7 +661,7 @@
                 // .md クリックをビューアで開くか（このデバイス専用、既定 ON）を JS 側へ反映
                 await JSRuntime.InvokeVoidAsync("setMarkdownViewerEnabled", localDisplay?.MarkdownViewerEnabled ?? true);
                 // ターミナル診断（開発ツール）の ON/OFF を JS 側の履歴記録へ反映
-                await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", terminalDiagEnabled);
+                await SyncTerminalDiagToJsAsync();
                 if (localDisplay == null)
                 {
                     // 初回アクセス: 現在のサーバー側設定をこのデバイスの初期値として保存
@@ -3631,6 +3637,22 @@
     // 設定「開発ツール > ターミナル診断」。OFF の間は保存ボタンを出さず、JS 側の履歴も記録しない
     private bool terminalDiagEnabled;
     private bool _terminalDiagSubscribed;
+    // JS 側へ最後に送れた値（null=未送信）。terminalDiagEnabled と違う間は OnAfterRenderAsync が送り直す
+    private bool? _terminalDiagJsValue;
+
+    private async Task SyncTerminalDiagToJsAsync()
+    {
+        var value = terminalDiagEnabled;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", value);
+            _terminalDiagJsValue = value;
+        }
+        catch (Exception ex)
+        {
+            // 切断中などで届かなかった。_terminalDiagJsValue は更新せず、次の描画で送り直す
+            Logger.LogDebug(ex, "[Diag] JS 側の有効化切替に失敗（次の描画で再送）");
+        }
 
     // サービスの Changed は保存した Circuit のスレッドから来るので、自分の Circuit へ入り直す
     private void OnTerminalDiagnosticsChanged(bool enabled)
@@ -3649,14 +3671,7 @@
             return;
         }
         terminalDiagEnabled = enabled;
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", enabled);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "[Diag] JS 側の有効化切替に失敗（無視）");
-        }
+        await SyncTerminalDiagToJsAsync();
         StateHasChanged();
     }
 
