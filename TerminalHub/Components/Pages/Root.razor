@@ -3653,6 +3653,7 @@
             // 切断中などで届かなかった。_terminalDiagJsValue は更新せず、次の描画で送り直す
             Logger.LogDebug(ex, "[Diag] JS 側の有効化切替に失敗（次の描画で再送）");
         }
+    }
 
     // サービスの Changed は保存した Circuit のスレッドから来るので、自分の Circuit へ入り直す
     private void OnTerminalDiagnosticsChanged(bool enabled)
