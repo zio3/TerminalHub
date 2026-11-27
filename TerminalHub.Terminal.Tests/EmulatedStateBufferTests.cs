@@ -306,6 +306,60 @@ public class EmulatedStateBufferTests
         Assert.EndsWith("\x1b[?25l", buf.SerializeForReplay());
     }
 
+    [Fact]
+    public void Bracketed_paste_mode_is_restored_and_cleared_by_RIS()
+    {
+        var buf = Create();
+        Assert.Contains("\x1b[?2004l", buf.SerializeForReplay()); // 既定は無効
+
+        buf.Append("\x1b[?2004h"); // CLI が bracketed paste を要求
+        Assert.Contains("\x1b[?2004h", buf.SerializeForReplay());
+
+        buf.Append("\u001bc"); // RIS で xterm 側も既定へ戻るので、直列化も無効に揃う
+        Assert.Contains("\x1b[?2004l", buf.SerializeForReplay());
+    }
+
+    [Fact]
+    public void Mouse_and_input_modes_are_restored_and_cleared_by_RIS()
+    {
+        var buf = Create();
+        var replay = buf.SerializeForReplay();
+        Assert.DoesNotContain("[?1h", replay); // 既定（無効）は出さない
+        Assert.DoesNotContain("[?100", replay);
+
+        // Codex TUI 風: ボタン追跡 + SGR 符号化 + フォーカス通知 + アプリケーションカーソルキー
+        buf.Append("\x1b[?1002h\x1b[?1006h\x1b[?1004h\x1b[?1h");
+        replay = buf.SerializeForReplay();
+        Assert.Contains("\x1b[?1002h", replay);
+        Assert.Contains("\x1b[?1006h", replay);
+        Assert.Contains("\x1b[?1004h", replay);
+        Assert.Contains("\x1b[?1h", replay);
+
+        // xterm.js と同じく、どのプロトコルの l でも無効になる（1002h の後の 1000l で追跡は止まる）
+        buf.Append("\x1b[?1000l");
+        Assert.DoesNotContain("[?1002h", buf.SerializeForReplay());
+
+        // 1005 / 1015 は xterm.js が無視するので、有効な 1006 を上書きしない
+        buf.Append("\x1b[?1005h\x1b[?1015h");
+        replay = buf.SerializeForReplay();
+        Assert.Contains("\x1b[?1006h", replay);
+        Assert.DoesNotContain("[?1005h", replay);
+        Assert.DoesNotContain("[?1015h", replay);
+        // 符号化もどの l でも既定へ（1006h の後の 1016l）
+        buf.Append("\x1b[?1016l");
+        Assert.DoesNotContain("[?1006h", buf.SerializeForReplay());
+        buf.Append("\x1b[?1006h");
+
+        // RIS で全部既定へ
+        buf.Append("\x1b[?1003h");
+        buf.Append("\u001bc");
+        replay = buf.SerializeForReplay();
+        Assert.DoesNotContain("[?1003h", replay);
+        Assert.DoesNotContain("[?1006h", replay);
+        Assert.DoesNotContain("[?1004h", replay);
+        Assert.DoesNotContain("[?1h", replay);
+    }
+
     // ---- alt-screen ----
 
     [Fact]

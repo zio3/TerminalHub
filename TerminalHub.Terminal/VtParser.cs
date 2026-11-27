@@ -453,6 +453,27 @@ public sealed class VtParser
                 case 25:
                     _grid.CursorVisible = set;
                     break;
+                case 2004:
+                    _grid.BracketedPaste = set;
+                    break;
+                case 1:
+                    _grid.ApplicationCursorKeys = set;
+                    break;
+                case 1004:
+                    _grid.FocusEvents = set;
+                    break;
+                case 9:
+                case 1000:
+                case 1002:
+                case 1003:
+                    // xterm.js と同じ意味論: 有効なプロトコルは 1 つで、どのプロトコルの l でも無効になる
+                    _grid.MouseProtocol = set ? mode : 0;
+                    break;
+                case 1006:
+                case 1016:
+                    // 同上。1005(UTF-8) と 1015(urxvt) は xterm.js 6 が h/l とも無視するので追跡しない
+                    _grid.MouseEncoding = set ? mode : 0;
+                    break;
                 case 47:
                 case 1047:
                 case 1049:
@@ -465,7 +486,7 @@ public sealed class VtParser
                         _grid.ExitAltScreen();
                     }
                     break;
-                    // 2004(bracketed paste) 1000系(マウス) 等は状態に影響しないので無視
+                    // それ以外（?7 自動折返し、?12 点滅 等）は未対応
             }
         }
     }

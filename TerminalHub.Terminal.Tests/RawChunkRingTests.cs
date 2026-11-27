@@ -153,7 +153,7 @@ public class RawChunkRingTests
         xterm.Feed("hello\x1b[3");
 
         // ここで再同期が全リセット＋スナップショットを注入（pending 種付けを使わない素朴な注入）
-        xterm.Feed("\x1bc" + buf.SerializeForReplay());
+        xterm.Feed("\u001bc" + buf.SerializeForReplay());
 
         // チャンク2: 分断シーケンスの後半が届く
         buf.Append("1m");
@@ -180,7 +180,7 @@ public class RawChunkRingTests
         xterm.Feed("hello\x1b[3");
 
         var snapshot = buf.BeginReplay();
-        xterm.Feed("\x1bc" + snapshot.Content);
+        xterm.Feed("\u001bc" + snapshot.Content);
         var captured = buf.Append("1m");
         Assert.True(captured); // リプレイ中は live 直接書き込みせずテール経由で届く
         var tail = buf.EndReplay(snapshot);

@@ -2542,7 +2542,7 @@
         {
             // ライブ出力と交錯すると1行ズレ・重複が起きるため、書き込みロック下で
             // スナップショット→テールの順に書き込む（スナップショット以降のライブ出力はテールで届く）
-            // 診断: 再同期は \x1bc(全リセット)+バッファ全量書き直し。ロック「保持」時間が「表示が止まって
+            // 診断: 再同期は ESC c(全リセット)+バッファ全量書き直し。ロック「保持」時間が「表示が止まって
             // 下までスクロールし直す」現象(②)の freeze 実長。バッファが育つほど長くなる想定を実測で確認する。
             // 待機と保持は分けて計測する（待機が長ければ①の別処理がロックを握っていた＝誤帰属を防ぐ）。
             var _resyncWait = System.Diagnostics.Stopwatch.StartNew();
@@ -2561,8 +2561,11 @@
                 string tail;
                 try
                 {
-                    // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット
-                    await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc" + snapshot.Content);
+                    // ESC c (RIS) は xterm.js でスクロールバックを含む完全リセット。
+                    // C# の "\x1bc" は \x が 16 進を 4 桁まで貪欲に読むため ESC + c ではなく 1 文字 U+01BC になり、
+                    // リセットされずにスナップショットが既存バッファへ追記されていた（2026-11-27 の診断ダンプで判明:
+                    // 上スクロール中の再同期で表示位置が最上部へ落ち、本文に U+01BC が残る）。\u001b で書く。
+                    await TerminalService.WriteToTerminalAsync(activeTerminal, "\u001bc" + snapshot.Content);
                 }
                 finally
                 {
@@ -2646,7 +2649,7 @@
                 }
                 // ESC c (RIS) で全リセットしてから、リングのチャンクを1つずつ実経路で流す。
                 // ライブ経路(L1698付近)と同じ WriteToTerminalAsync ＝ チャンクごとに1回の interop 呼び出し。
-                await TerminalService.WriteToTerminalAsync(activeTerminal, "\x1bc");
+                await TerminalService.WriteToTerminalAsync(activeTerminal, "\u001bc"); // "\x1bc" だと U+01BC 1 文字になる（上の再同期と同じ罠）
                 DateTime? prevTime = null;
                 foreach (var e in entries)
                 {
