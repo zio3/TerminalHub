@@ -32,6 +32,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ITerminalDiagnosticsService TerminalDiagnostics
 @inject ISessionRepository SessionRepository
 @inject IExplorerLauncherService ExplorerLauncher
 @inject ISessionDeliveryService SessionDelivery
@@ -56,8 +57,7 @@
                 OnVoiceInputEnabledChanged="HandleVoiceInputEnabledChanged"
                 OnAutoSwitchCursorPadChanged="HandleAutoSwitchCursorPadChanged"
                 OnAlwaysShowCursorPadChanged="HandleAlwaysShowCursorPadChanged"
-                OnThemeChanged="HandleThemeChanged"
-                OnTerminalDiagnosticsChanged="HandleTerminalDiagnosticsChanged" />
+                OnThemeChanged="HandleThemeChanged" />
 <SubSessionDialog IsVisible="showSubSessionDialog"
                          ParentSessionName="@subSessionParentSessionName"
                          ParentSessionId="@subSessionParentSessionId"
@@ -635,7 +635,13 @@
                 contextCacheAware = appSettings.Sessions.ContextCacheAware;
                 contextMinSizeK = ClampContextMinSizeK(appSettings.Sessions.ContextMinSizeK);
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
-                terminalDiagEnabled = appSettings.DevTools.Enabled && appSettings.DevTools.TerminalDiagnostics;
+                // ターミナル診断はプロセス全体の状態（別タブの設定変更も Changed で届く）を正とする
+                terminalDiagEnabled = TerminalDiagnostics.Enabled;
+                if (!_terminalDiagSubscribed)
+                {
+                    TerminalDiagnostics.Changed += OnTerminalDiagnosticsChanged;
+                    _terminalDiagSubscribed = true;
+                }
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
                 // PC とモバイルで別々のフォントサイズ等を持てるようにするため。
@@ -3624,9 +3630,24 @@
     private bool _diagCapturing;
     // 設定「開発ツール > ターミナル診断」。OFF の間は保存ボタンを出さず、JS 側の履歴も記録しない
     private bool terminalDiagEnabled;
+    private bool _terminalDiagSubscribed;
+
+    // サービスの Changed は保存した Circuit のスレッドから来るので、自分の Circuit へ入り直す
+    private void OnTerminalDiagnosticsChanged(bool enabled)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _ = InvokeAsync(() => HandleTerminalDiagnosticsChanged(enabled));
+    }
 
     private async Task HandleTerminalDiagnosticsChanged(bool enabled)
     {
+        if (_disposed)
+        {
+            return;
+        }
         terminalDiagEnabled = enabled;
         try
         {
@@ -3641,7 +3662,8 @@
 
     private async Task CaptureTerminalDiagnostics(Guid sessionId)
     {
-        if (_diagCapturing)
+        // 別タブで OFF にされた直後（Changed がまだ届いていない）にボタンが押された場合はサーバー側の状態で止める
+        if (_diagCapturing || !TerminalDiagnostics.Enabled)
         {
             return;
         }
@@ -3668,6 +3690,11 @@
                 Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
             }
 
+            // ブラウザ側の取得を待つ間に OFF へ変わっていたら書き出さない
+            if (!TerminalDiagnostics.Enabled)
+            {
+                return;
+            }
             var folder = TerminalDiagnosticsDump.WriteBundle(session, server, client, "manual");
             if (folder != null)
             {
@@ -3967,6 +3994,12 @@
         _disposed = true;
         contextUsageTimer?.Dispose();
         contextUsageTimer = null;
+
+        if (_terminalDiagSubscribed)
+        {
+            TerminalDiagnostics.Changed -= OnTerminalDiagnosticsChanged;
+            _terminalDiagSubscribed = false;
+        }
 
         // 保留中のエミュレータ再同期をキャンセル
         _emulatorResyncCts?.Cancel();

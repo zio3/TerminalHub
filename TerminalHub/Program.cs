@@ -188,6 +188,7 @@ builder.Services.AddSingleton<IVersionCheckService, VersionCheckService>();
 
 // 生ストリームキャプチャ（VTエミュレータ検証フィクスチャ採取用のデバッグサービス）
 builder.Services.AddSingleton<IRawStreamCaptureService, RawStreamCaptureService>();
+builder.Services.AddSingleton<ITerminalDiagnosticsService, TerminalDiagnosticsService>();
 
 // スラッシュコマンド補完の候補ソース（headless init から動的取得＋静的辞書フォールバック）
 builder.Services.AddSingleton<SlashCommandProvider>();
@@ -297,7 +298,7 @@ app.Logger.LogInformation("[DB] 使用するDB: Environment={Environment}, FullP
     // 生ストリームキャプチャの永続設定も起動時に反映（設定画面を開くまで効かない、を避ける）
     app.Services.GetRequiredService<IRawStreamCaptureService>().SetEnabled(appSettings.DevTools.CaptureRawStream);
     // ターミナル診断（生出力リングの記録）も同様に起動時に反映。開発ツール OFF なら単独 ON でも効かない
-    TerminalHub.Terminal.RawChunkRing.CaptureEnabled = appSettings.DevTools.Enabled && appSettings.DevTools.TerminalDiagnostics;
+    app.Services.GetRequiredService<ITerminalDiagnosticsService>().SetEnabled(appSettings.DevTools.Enabled && appSettings.DevTools.TerminalDiagnostics);
 }
 
 // Configure the HTTP request pipeline.

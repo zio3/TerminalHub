@@ -17,6 +17,7 @@
 @inject IVersionCheckService VersionCheckService
 @inject MqttService MqttService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ITerminalDiagnosticsService TerminalDiagnostics
 @implements IDisposable
 
 @if (IsVisible)
@@ -1554,8 +1555,6 @@
     [Parameter] public EventCallback<bool> OnAutoSwitchCursorPadChanged { get; set; }
     [Parameter] public EventCallback<bool> OnAlwaysShowCursorPadChanged { get; set; }
     [Parameter] public EventCallback<string> OnThemeChanged { get; set; }
-    /// <summary>ターミナル診断（開発ツール内）の有効・無効。Root がボタン表示と JS 側の記録を切り替える。</summary>
-    [Parameter] public EventCallback<bool> OnTerminalDiagnosticsChanged { get; set; }
 
     // ダイアログが開いている間は設定を再読み込みしないためのフラグ
     private bool _settingsLoaded = false;
@@ -2027,6 +2026,9 @@
                 }
             };
             AppSettingsService.SaveSettings(settings);
+            // ターミナル診断の有効状態は、設定ファイル保存と同じ同期区間で確定させる（この後の JS 呼び出しを待つ間に
+            // 別タブが逆の値を保存すると、ファイルと実際の状態が食い違うため）。各タブの Root へはサービスの Changed で届く
+            TerminalDiagnostics.SetEnabled(devToolsEnabled && terminalDiagnosticsEnabled);
 
             // 表示系4項目はデバイス別設定として LocalStorage にも保存する
             // (app-settings 側の値は新デバイス初回アクセス時のシードとして機能する)
@@ -2055,11 +2057,6 @@
 
             // 生ストリームキャプチャの ON/OFF を即時反映（無効化時はライターを閉じる）
             RawStreamCapture.SetEnabled(captureRawStreamEnabled);
-
-            // ターミナル診断の ON/OFF を即時反映（生出力リングの記録・ボタン表示・ブラウザ側の履歴）
-            var terminalDiagActive = devToolsEnabled && terminalDiagnosticsEnabled;
-            TerminalHub.Terminal.RawChunkRing.CaptureEnabled = terminalDiagActive;
-            await OnTerminalDiagnosticsChanged.InvokeAsync(terminalDiagActive);
 
             // セッションソートモードの変更を通知
             await OnSessionSortModeChanged.InvokeAsync(sessionSortMode);

@@ -317,12 +317,14 @@ class TerminalDiagTrail {
     // ターミナル作成直後。新しい xterm は最下部にいるので追従状態を「追従中」に戻す
     // （復元中に外れればその瞬間が detach として残る）。
     pushInit(sessionId, cols, rows) {
+        if (!this.enabled) return;
         this.state(sessionId).atBottom = true;
         this.push(sessionId, 'init', { cols, rows });
     }
     // xterm の onScroll。最下部追従の遷移は単独で残し、それ以外は 2 秒以内の連続分を 1 件にまとめる
     // （from/to で位置の変化、n で件数、baseYDelta で出力による押し上げ量が読める）。
     pushScroll(sessionId, ydisp, baseY, length) {
+        if (!this.enabled) return;
         const s = this.state(sessionId);
         const now = Date.now();
         const atBottom = ydisp >= baseY;
@@ -348,6 +350,7 @@ class TerminalDiagTrail {
     }
     // ホイール。同じ向きで 1 秒以内の連続分は 1 件にまとめる（dy は合計）。
     pushWheel(sessionId, dy, mode, ydisp, baseY) {
+        if (!this.enabled) return;
         const s = this.state(sessionId);
         const now = Date.now();
         s.lastWheelAt = now;
@@ -365,6 +368,7 @@ class TerminalDiagTrail {
     // 小さな write は毎秒何件も来てリングを埋めるので、2 秒以内の連続分は 1 件にまとめる。
     // 復元やまとめ書きのような大きな write はそのまま 1 件として残す。
     pushWrite(sessionId, len, state) {
+        if (!this.enabled) return;
         const now = Date.now();
         const s = this.state(sessionId);
         s.lastWriteAt = now;
