@@ -274,6 +274,12 @@ window.flowControlManager = new FlowControlManager();
 // 「最下部追従が外れた瞬間（detach）」「戻った瞬間（reattach）」は畳み込まず必ず 1 件残し、
 // 直前のホイール・書き込みからの経過 ms を添える。異常に気づくのは 1 テンポ遅れるのが普通
 // なので、数分前の遷移が残っていることを最優先にしている。
+// 診断履歴に値をそのまま残してよいキー（スクロールや確定・取消に関わる操作キー）。これ以外は分類だけ残す
+const DIAG_OPERATION_KEYS = new Set([
+    'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'Enter', 'Tab', 'Escape', 'Backspace', 'Delete', 'Shift', 'Control', 'Alt', 'Meta'
+]);
+
 class TerminalDiagTrail {
     constructor() {
         // 設定「開発ツール > ターミナル診断」。false の間は push が何もしない（Root が起動時と保存時に setEnabled する）。
@@ -329,10 +335,11 @@ class TerminalDiagTrail {
     }
     // xterm の onScroll。最下部追従の遷移は単独で残し、それ以外は 2 秒以内の連続分を 1 件にまとめる
     // （from/to で位置の変化、n で件数、baseYDelta で出力による押し上げ量が読める）。
-    // cause は「この onScroll を同期的に引き起こした DOM イベントと呼び出し元」。ホイールも出力も無いのに
-    // 表示位置が飛んだ例（2026-11-25 の診断ダンプ: 3441→1874 行、直前のホイールから 26 分）で、
-    // 何が動かしたかが履歴から読めなかったため、遷移の瞬間だけ原因を残す。
-    pushScroll(sessionId, ydisp, baseY, length, cause) {
+    // getCause は「この onScroll を同期的に引き起こした DOM イベントと呼び出し元」を採る関数。ホイールも出力も
+    // 無いのに表示位置が飛んだ例（2026-11-25 の診断ダンプ: 3441→1874 行、直前のホイールから 26 分）で、
+    // 何が動かしたかが履歴から読めなかったため、遷移の瞬間だけ原因を残す。採取（スタック生成）は重いので、
+    // 遷移と判定できたときだけ同期的に呼ぶ（同期なので window.event と呼び出し元のスタックはそのまま残る）。
+    pushScroll(sessionId, ydisp, baseY, length, getCause) {
         if (!this.enabled) return;
         const s = this.state(sessionId);
         const now = Date.now();
@@ -340,6 +347,10 @@ class TerminalDiagTrail {
         if (s.atBottom !== null && atBottom !== s.atBottom) {
             s.atBottom = atBottom;
             const li = s.lastInput;
+            let cause = null;
+            if (typeof getCause === 'function') {
+                try { cause = getCause(); } catch (e) { /* 診断のための採取なので失敗は無視 */ }
+            }
             this.push(sessionId, atBottom ? 'reattach' : 'detach', {
                 ydisp, baseY, length,
                 sinceWheelMs: s.lastWheelAt ? now - s.lastWheelAt : null,
@@ -1191,7 +1202,9 @@ window.terminalFunctions = {
                     d.fromRight = Math.round(r.right - ev.clientX);
                 }
                 if (ev.key !== undefined) {
-                    d.key = ev.key;
+                    // 操作キー（スクロールや確定に関わるもの）だけ値を残す。文字キーは入力内容（パスワード等の
+                    // エコーされない入力を含む）がダンプへ漏れるので「文字キーだった」という分類だけにする
+                    d.key = DIAG_OPERATION_KEYS.has(ev.key) ? ev.key : (ev.key.length === 1 ? '(char)' : '(other)');
                     d.mods = (ev.ctrlKey ? 'C' : '') + (ev.shiftKey ? 'S' : '') + (ev.altKey ? 'A' : '') + (ev.metaKey ? 'M' : '');
                 }
                 if (typeof ev.button === 'number' && ev.type !== 'keydown') d.button = ev.button;
@@ -1203,35 +1216,37 @@ window.terminalFunctions = {
                 if (!diagTrail.enabled) return;
                 const buf = term.buffer.active;
                 // 同期的に引き起こした DOM イベント（window.event）と呼び出し元の数フレーム。
-                // 追従遷移のときだけ記録に残る（pushScroll 側で判定）。
-                let cause = null;
-                try {
+                // 追従遷移のときだけ pushScroll が呼ぶ（通常のスクロールでは採らない）。
+                // window.event はイベント配送中でなければ空で、xterm が描画フレームへ遅らせたスクロール（smooth scroll 等）
+                // では元のイベントも呼び出し元も残らない。原因の断定ではなく相関の手がかりとして読むこと。
+                const getCause = () => {
                     const ev = window.event;
                     // xterm 内部のイベント配送フレーム（_deliver / fire の連鎖）は何段も挟まって肝心の
                     // 呼び出し元を押し出すので除き、xterm 外（terminal.js 等）のフレームだけ数段残す。
-                    // 残らなければ DOM イベント起点（スクロールバー・キー・ホイール）で、event 側に出る。
                     // 既定の stackTraceLimit(10) では xterm 内の段だけで埋まるので、採取の間だけ広げる
                     const prevLimit = Error.stackTraceLimit;
                     Error.stackTraceLimit = 40;
                     let raw = '';
                     try { raw = new Error().stack || ''; } finally { Error.stackTraceLimit = prevLimit; }
-                    const frames = raw.split('\n').slice(2)
+                    // 先頭 4 行は "Error" 行・getCause 自身・pushScroll・この onScroll ハンドラなので読み飛ばす
+                    const frames = raw.split('\n').slice(4)
                         .map(l => l.trim().replace(/^at\s+/, ''));
                     const outside = frames.filter(f => f.indexOf('@xterm/xterm') < 0 && f.indexOf('/xterm.js') < 0);
                     const stack = (outside.slice(0, 4).join(' | ') + ' (xterm内 ' + (frames.length - outside.length) + ' 段)').slice(0, 700);
-                    cause = {
+                    return {
                         event: describeDiagEvent(ev),
                         stack,
                         hasFocus: document.hasFocus(),
                         visibility: document.visibilityState,
                         active: describeDiagEvent({ type: 'active', target: document.activeElement })
                     };
-                } catch (e) { /* 診断のための採取なので失敗は無視 */ }
-                diagTrail.pushScroll(sessionId, ydisp, buf.baseY, buf.length, cause);
+                };
+                diagTrail.pushScroll(sessionId, ydisp, buf.baseY, buf.length, getCause);
             });
             // 入力操作も capture で覗く（xterm は内部で stopPropagation するものがある）。履歴には積まず
             // 「直前の操作」として覚え、追従遷移に添える。
             const onDiagInput = (ev) => {
+                if (!diagTrail.enabled) return;
                 try { diagTrail.pushInput(sessionId, describeDiagEvent(ev)); } catch (e) { /* 同上 */ }
             };
             const diagInputTypes = ['pointerdown', 'mousedown', 'mouseup', 'keydown', 'touchstart', 'focusin'];
