@@ -28,6 +28,10 @@ public sealed class TerminalGrid
     public int CursorRow { get; private set; }
     public int CursorCol { get; private set; }
     public bool CursorVisible { get; set; } = true;
+    // DECSET 2004（bracketed paste）。xterm 側のモードなので描画には影響しないが、切替の復元や
+    // RIS 付きの再同期で xterm が既定（無効）へ戻るため、直列化で元の値に復元できるよう保持する
+    // （無効のままだと貼り付けの改行が素の Enter として届き、CLI が行ごとに送信してしまう）。
+    public bool BracketedPaste { get; set; }
 
     // 現在の描画スタイル（SGR）
     public CellColor CurrentFg;
@@ -698,6 +702,7 @@ public sealed class TerminalGrid
         CursorRow = 0;
         CursorCol = 0;
         CursorVisible = true;
+        BracketedPaste = false;
         CurrentFg = CellColor.Default;
         CurrentBg = CellColor.Default;
         CurrentAttrs = CellAttributes.None;

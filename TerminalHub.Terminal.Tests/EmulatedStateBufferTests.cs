@@ -306,6 +306,19 @@ public class EmulatedStateBufferTests
         Assert.EndsWith("\x1b[?25l", buf.SerializeForReplay());
     }
 
+    [Fact]
+    public void Bracketed_paste_mode_is_restored_and_cleared_by_RIS()
+    {
+        var buf = Create();
+        Assert.Contains("\x1b[?2004l", buf.SerializeForReplay()); // 既定は無効
+
+        buf.Append("\x1b[?2004h"); // CLI が bracketed paste を要求
+        Assert.Contains("\x1b[?2004h", buf.SerializeForReplay());
+
+        buf.Append("\u001bc"); // RIS で xterm 側も既定へ戻るので、直列化も無効に揃う
+        Assert.Contains("\x1b[?2004l", buf.SerializeForReplay());
+    }
+
     // ---- alt-screen ----
 
     [Fact]

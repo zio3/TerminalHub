@@ -46,6 +46,9 @@ public static class AnsiSerializer
             sb.Append("\x1b[").Append(grid.CursorCol).Append('C');
         }
 
+        // bracketed paste（xterm 側のモード。RIS や新規 xterm では既定の無効に戻っているので元の値へ）
+        sb.Append(grid.BracketedPaste ? "\x1b[?2004h" : "\x1b[?2004l");
+
         // カーソル表示状態
         sb.Append(grid.CursorVisible ? "\x1b[?25h" : "\x1b[?25l");
 

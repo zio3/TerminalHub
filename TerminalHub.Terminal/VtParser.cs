@@ -453,6 +453,9 @@ public sealed class VtParser
                 case 25:
                     _grid.CursorVisible = set;
                     break;
+                case 2004:
+                    _grid.BracketedPaste = set;
+                    break;
                 case 47:
                 case 1047:
                 case 1049:
@@ -465,7 +468,7 @@ public sealed class VtParser
                         _grid.ExitAltScreen();
                     }
                     break;
-                    // 2004(bracketed paste) 1000系(マウス) 等は状態に影響しないので無視
+                    // 1000系(マウス) 等は状態に影響しないので無視
             }
         }
     }
