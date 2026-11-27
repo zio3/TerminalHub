@@ -14,6 +14,13 @@ public sealed class RawChunkRing
     /// <summary>リングの1エントリ。Note が非 null ならデータではなくイベントマーカー。</summary>
     public sealed record Entry(long Seq, DateTime TimestampUtc, string Data, string PendingAfter, string? Note);
 
+    /// <summary>
+    /// 記録の全体スイッチ。false の間は Add / Mark が何もしない（既に溜まっている分は保持）。
+    /// TerminalHub 本体が設定「開発ツール > ターミナル診断」から起動時と保存時に反映する。
+    /// 既定 true はライブラリ単体（テスト・診断ツール）で従来どおり動かすため。
+    /// </summary>
+    public static bool CaptureEnabled { get; set; } = true;
+
     private readonly object _lock = new();
     private readonly Queue<Entry> _entries = new();
     private readonly int _maxTotalChars;
@@ -41,6 +48,10 @@ public sealed class RawChunkRing
     /// <summary>出力チャンクを記録する。pendingAfter にはこのチャンク取り込み直後のパーサ未確定文字列を渡す。</summary>
     public void Add(string data, string pendingAfter)
     {
+        if (!CaptureEnabled)
+        {
+            return;
+        }
         lock (_lock)
         {
             _entries.Enqueue(new Entry(_nextSeq++, DateTime.UtcNow, data, pendingAfter, Note: null));
@@ -58,6 +69,10 @@ public sealed class RawChunkRing
     /// </summary>
     public void Mark(string note)
     {
+        if (!CaptureEnabled)
+        {
+            return;
+        }
         lock (_lock)
         {
             _entries.Enqueue(new Entry(_nextSeq++, DateTime.UtcNow, string.Empty, string.Empty, note));

@@ -32,6 +32,7 @@
 @inject IStorageServiceFactory StorageServiceFactory
 @inject IAppSettingsService AppSettingsService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ITerminalDiagnosticsService TerminalDiagnostics
 @inject ISessionRepository SessionRepository
 @inject IExplorerLauncherService ExplorerLauncher
 @inject ISessionDeliveryService SessionDelivery
@@ -184,14 +185,17 @@
                     </button>
                     @* 診断用「この画面を保存」。表示がおかしいと感じた瞬間に押すと、xterm の実バッファ・
                        エミュレータの画面・生出力リング・直近イベント履歴をログフォルダ配下 diag/ へ 1 束で残す。
-                       表示には何も影響しない（読み取りだけ）。 *@
-                    <button type="button"
-                            class="terminal-diag-btn"
-                            title="@L["Root.Terminal.Diag.Title"]"
-                            disabled="@_diagCapturing"
-                            @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
-                        <i class="bi bi-camera"></i>
-                    </button>
+                       表示には何も影響しない（読み取りだけ）。設定「開発ツール > ターミナル診断」が ON のときだけ出す。 *@
+                    @if (terminalDiagEnabled)
+                    {
+                        <button type="button"
+                                class="terminal-diag-btn"
+                                title="@L["Root.Terminal.Diag.Title"]"
+                                disabled="@_diagCapturing"
+                                @onclick="() => CaptureTerminalDiagnostics(activeSessionId.Value)">
+                            <i class="bi bi-camera"></i>
+                        </button>
+                    }
                 }
             </div>
 
@@ -579,6 +583,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // ターミナル診断の ON/OFF を JS 側へ送れていなければ送り直す（切断中に別タブで切り替わった、
+        // 切替通知の JS 呼び出しが失敗した等。再接続後の最初の描画で追いつく。初回は設定読込側で送る）
+        if (!firstRender && !_disposed && _terminalDiagJsValue != terminalDiagEnabled)
+        {
+            await SyncTerminalDiagToJsAsync();
+        }
         if (firstRender)
         {
             // キーボードショートカットを登録
@@ -631,6 +641,13 @@
                 contextCacheAware = appSettings.Sessions.ContextCacheAware;
                 contextMinSizeK = ClampContextMinSizeK(appSettings.Sessions.ContextMinSizeK);
                 hideInputPanel = appSettings.Sessions.HideInputPanel;
+                // ターミナル診断はプロセス全体の状態（別タブの設定変更も Changed で届く）を正とする
+                terminalDiagEnabled = TerminalDiagnostics.Enabled;
+                if (!_terminalDiagSubscribed)
+                {
+                    TerminalDiagnostics.Changed += OnTerminalDiagnosticsChanged;
+                    _terminalDiagSubscribed = true;
+                }
                 perSessionInputText = appSettings.Sessions.PerSessionInputText;
                 // 表示系4項目はデバイス別 (LocalStorage 優先、無ければ app-settings をシード)。
                 // PC とモバイルで別々のフォントサイズ等を持てるようにするため。
@@ -643,6 +660,8 @@
                 await JSRuntime.InvokeVoidAsync("setTerminalLinkCopyMode", localDisplay?.TerminalLinkCopyMode ?? false);
                 // .md クリックをビューアで開くか（このデバイス専用、既定 ON）を JS 側へ反映
                 await JSRuntime.InvokeVoidAsync("setMarkdownViewerEnabled", localDisplay?.MarkdownViewerEnabled ?? true);
+                // ターミナル診断（開発ツール）の ON/OFF を JS 側の履歴記録へ反映
+                await SyncTerminalDiagToJsAsync();
                 if (localDisplay == null)
                 {
                     // 初回アクセス: 現在のサーバー側設定をこのデバイスの初期値として保存
@@ -2585,7 +2604,7 @@
 
             // 再同期＝xterm への注入の瞬間は表示崩れ（分断シーケンスの孤児化）が起きうる容疑区間なので、
             // 生チャンクリングをこのタイミングで自動保存し、後からリングが流れて証拠を失うのを防ぐ
-            var dumpPath = RawRingDump.WriteDump(session, "resync");
+            var dumpPath = TerminalHub.Terminal.RawChunkRing.CaptureEnabled ? RawRingDump.WriteDump(session, "resync") : null;
             if (dumpPath != null)
             {
                 Logger.LogInformation("[RawRing] 再同期時の生チャンクリングを保存: {Path}", dumpPath);
@@ -3615,10 +3634,52 @@
     // 取得中はボタンを無効にして再入を防ぐ（本文のチャンク取得が終わる前に再度押されると
     // JS 側の保留が差し替わり、先行分が途中で失敗する）
     private bool _diagCapturing;
+    // 設定「開発ツール > ターミナル診断」。OFF の間は保存ボタンを出さず、JS 側の履歴も記録しない
+    private bool terminalDiagEnabled;
+    private bool _terminalDiagSubscribed;
+    // JS 側へ最後に送れた値（null=未送信）。terminalDiagEnabled と違う間は OnAfterRenderAsync が送り直す
+    private bool? _terminalDiagJsValue;
+
+    private async Task SyncTerminalDiagToJsAsync()
+    {
+        var value = terminalDiagEnabled;
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("setTerminalDiagEnabled", value);
+            _terminalDiagJsValue = value;
+        }
+        catch (Exception ex)
+        {
+            // 切断中などで届かなかった。_terminalDiagJsValue は更新せず、次の描画で送り直す
+            Logger.LogDebug(ex, "[Diag] JS 側の有効化切替に失敗（次の描画で再送）");
+        }
+    }
+
+    // サービスの Changed は保存した Circuit のスレッドから来るので、自分の Circuit へ入り直す
+    private void OnTerminalDiagnosticsChanged(bool enabled)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _ = InvokeAsync(() => HandleTerminalDiagnosticsChanged(enabled));
+    }
+
+    private async Task HandleTerminalDiagnosticsChanged(bool enabled)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        terminalDiagEnabled = enabled;
+        await SyncTerminalDiagToJsAsync();
+        StateHasChanged();
+    }
 
     private async Task CaptureTerminalDiagnostics(Guid sessionId)
     {
-        if (_diagCapturing)
+        // 別タブで OFF にされた直後（Changed がまだ届いていない）にボタンが押された場合はサーバー側の状態で止める
+        if (_diagCapturing || !TerminalDiagnostics.Enabled)
         {
             return;
         }
@@ -3645,6 +3706,11 @@
                 Logger.LogWarning(ex, "[Diag] ブラウザ側の診断情報の取得に失敗: SessionId={SessionId}", sessionId);
             }
 
+            // ブラウザ側の取得を待つ間に OFF へ変わっていたら書き出さない
+            if (!TerminalDiagnostics.Enabled)
+            {
+                return;
+            }
             var folder = TerminalDiagnosticsDump.WriteBundle(session, server, client, "manual");
             if (folder != null)
             {
@@ -3944,6 +4010,12 @@
         _disposed = true;
         contextUsageTimer?.Dispose();
         contextUsageTimer = null;
+
+        if (_terminalDiagSubscribed)
+        {
+            TerminalDiagnostics.Changed -= OnTerminalDiagnosticsChanged;
+            _terminalDiagSubscribed = false;
+        }
 
         // 保留中のエミュレータ再同期をキャンセル
         _emulatorResyncCts?.Cancel();

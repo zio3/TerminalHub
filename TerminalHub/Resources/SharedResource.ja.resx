@@ -251,6 +251,8 @@
   <data name="Settings.Special.DevTools.Header" xml:space="preserve"><value>開発ツール</value></data>
   <data name="Settings.Special.DevTools.Enable" xml:space="preserve"><value>開発ツールを有効にする</value></data>
   <data name="Settings.Special.DevTools.Help" xml:space="preserve"><value>有効にすると、診断・バッファ・通知テストのタブが表示されます。</value></data>
+  <data name="Settings.Special.DevTools.TerminalDiag.Enable" xml:space="preserve"><value>ターミナル診断を有効にする</value></data>
+  <data name="Settings.Special.DevTools.TerminalDiag.Help" xml:space="preserve"><value>ターミナル右上に「この画面を保存」ボタンが出て、表示崩れやスクロール位置の調査用に、生出力リング（約 1MB/セッション）とブラウザ側のイベント履歴を記録します。OFF の間は記録しません。</value></data>
   <data name="Settings.Special.CaptureRawStream.Enable" xml:space="preserve"><value>生ストリームをキャプチャ（開発用）</value></data>
   <data name="Settings.Special.CaptureRawStream.Help" xml:space="preserve"><value>ターミナルの生出力を %LOCALAPPDATA%\TerminalHub\captures\ に記録します（VTエミュレータ検証用）。再現操作の後は必ずOFFに戻してください。</value></data>
   <data name="Settings.Special.Logs.Header" xml:space="preserve"><value>ログファイル</value></data>

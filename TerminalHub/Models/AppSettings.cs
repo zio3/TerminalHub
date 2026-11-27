@@ -241,6 +241,14 @@ public class DevToolsSettings
     /// <summary>ConPTY 生出力ストリームをファイルへ記録する（VTエミュレータ検証用フィクスチャ採取）。既定 false。</summary>
     public bool CaptureRawStream { get; set; }
 
+    /// <summary>
+    /// ターミナル診断（表示崩れ・スクロール位置の事後調査）。既定 false。
+    /// ON かつ開発ツール有効のときだけ、ターミナル右上の「この画面を保存」ボタン、セッションごとの生出力リング
+    /// （約 1MB/セッション）、ブラウザ側のスクロール・書き込みイベント履歴、/api/debug/raw-ring が生きる。
+    /// OFF の間は記録そのものを止める（調査しない人のメモリと再同期時のファイル書き出しを節約する）。
+    /// </summary>
+    public bool TerminalDiagnostics { get; set; }
+
 }
 
 /// <summary>

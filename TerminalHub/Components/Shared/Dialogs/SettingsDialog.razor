@@ -17,6 +17,7 @@
 @inject IVersionCheckService VersionCheckService
 @inject MqttService MqttService
 @inject IRawStreamCaptureService RawStreamCapture
+@inject ITerminalDiagnosticsService TerminalDiagnostics
 @implements IDisposable
 
 @if (IsVisible)
@@ -1061,6 +1062,20 @@
                                         <i class="bi bi-info-circle me-1"></i>
                                         @L["Settings.Special.DevTools.Help"]
                                     </p>
+                                    @* ターミナル診断は開発ツールの中のさらに任意機能。OFF の間はボタンも記録も出ない *@
+                                    @if (devToolsEnabled)
+                                    {
+                                        <div class="form-check form-switch mt-3">
+                                            <input class="form-check-input" type="checkbox" @bind="terminalDiagnosticsEnabled" id="terminalDiagSwitch">
+                                            <label class="form-check-label" for="terminalDiagSwitch">
+                                                @L["Settings.Special.DevTools.TerminalDiag.Enable"]
+                                            </label>
+                                        </div>
+                                        <p class="text-muted small mt-2 mb-0">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            @L["Settings.Special.DevTools.TerminalDiag.Help"]
+                                        </p>
+                                    }
                                 </div>
 
                                 <hr />
@@ -1517,6 +1532,7 @@
     // TerminalHub MCP タブ: 配布する instructions（空欄=既定テンプレを配布）
     private string mcpInstructions = "";
     private bool captureRawStreamEnabled = false;
+    private bool terminalDiagnosticsEnabled = false;
     private List<SessionInfo> diagnosticSessions = new();
     private int jsTerminalCount = 0;
     // localize 済みの初期メッセージは OnInitialized で設定する (この時点では L インジェクト未完了のため)
@@ -1671,6 +1687,7 @@
                 ? TerminalHub.Mcp.McpInstructionDefaults.Template
                 : settings.Experimental.McpInstructions;
             captureRawStreamEnabled = settings.DevTools.CaptureRawStream;
+            terminalDiagnosticsEnabled = settings.DevTools.TerminalDiagnostics;
 
             // 一般設定
             defaultFolderPath = settings.General.DefaultFolderPath;
@@ -1936,7 +1953,8 @@
                 DevTools = new DevToolsSettings
                 {
                     Enabled = devToolsEnabled,
-                    CaptureRawStream = captureRawStreamEnabled
+                    CaptureRawStream = captureRawStreamEnabled,
+                    TerminalDiagnostics = terminalDiagnosticsEnabled
                 },
                 Experimental = new ExperimentalSettings
                 {
@@ -2008,6 +2026,9 @@
                 }
             };
             AppSettingsService.SaveSettings(settings);
+            // ターミナル診断の有効状態は、設定ファイル保存と同じ同期区間で確定させる（この後の JS 呼び出しを待つ間に
+            // 別タブが逆の値を保存すると、ファイルと実際の状態が食い違うため）。各タブの Root へはサービスの Changed で届く
+            TerminalDiagnostics.SetEnabled(devToolsEnabled && terminalDiagnosticsEnabled);
 
             // 表示系4項目はデバイス別設定として LocalStorage にも保存する
             // (app-settings 側の値は新デバイス初回アクセス時のシードとして機能する)
